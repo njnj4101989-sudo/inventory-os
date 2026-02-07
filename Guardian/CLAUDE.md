@@ -136,7 +136,15 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - Background tasks (reservation expiry + backup sync)
 - Seed scripts (roles, users, suppliers, SKUs)
 - Dockerfile ready for future deployment
-- Next decision: Phase 6B (Web Frontend) or implement service business logic
+- Git: pushed to https://github.com/njnj4101989-sudo/inventory-os
+
+### Session 4 continued — Documentation + SKU pattern update
+- Expanded STEP6 §6.4 with detailed 6B plan (11 tasks, ~45 files, dependency graph, file lists)
+- Updated SKU pattern: `[PRODUCT]-[COLOR]-[SIZE]` → `DesignNo-Color-Size` (e.g. `101-Red-M`)
+  - Updated: STEP1, STEP2, STEP4 (30+ references), seed_data.py, sku_service.py, skus.py
+  - Zero old pattern references remaining (verified)
+- Decision: Start Phase 6B (Web Frontend) with mock data layer
+- Next: Commit docs + start 6B-1 (Vite + React + Tailwind project setup)
 
 ---
 

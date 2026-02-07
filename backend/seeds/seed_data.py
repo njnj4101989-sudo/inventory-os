@@ -34,7 +34,7 @@ SUPPLIERS = [
 
 SKUS = [
     {
-        "sku_code": "BLS-WHT-M",
+        "sku_code": "101-White-M",
         "product_type": "blouse",
         "product_name": "White Cotton Blouse",
         "color": "White",
@@ -43,7 +43,7 @@ SKUS = [
         "base_price": Decimal("250.00"),
     },
     {
-        "sku_code": "BLS-BLK-L",
+        "sku_code": "102-Black-L",
         "product_type": "blouse",
         "product_name": "Black Silk Blouse",
         "color": "Black",
@@ -52,7 +52,7 @@ SKUS = [
         "base_price": Decimal("450.00"),
     },
     {
-        "sku_code": "BLS-RED-S",
+        "sku_code": "103-Red-S",
         "product_type": "blouse",
         "product_name": "Red Cotton Blouse",
         "color": "Red",

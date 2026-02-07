@@ -141,19 +141,20 @@
 
 ## 1.6 SKU Strategy
 
-**Format:** `[PRODUCT]-[COLOR]-[SIZE]`
+**Format:** `DesignNo-Color-Size`
 
 ```
 Examples:
-├── BLS-RED-M    → Blouse, Red, Medium
-├── KRT-BLU-L    → Kurta, Blue, Large
-├── DRS-WHT-FS   → Dress, White, Free Size
+├── 101-Red-M    → Design 101, Red, Medium
+├── 201-Blue-L   → Design 201, Blue, Large
+├── 305-White-FS → Design 305, White, Free Size
 ```
 
 - SKU identifies **product type** (not individual pieces)
 - All identical items share same SKU
 - Individual tracking via **Batch ID**
-- System auto-generates SKU from supervisor input
+- DesignNo is a numeric identifier assigned by supervisor
+- System formats SKU as `{DesignNo}-{Color}-{Size}` from supervisor input
 
 ---
 
@@ -175,7 +176,7 @@ Examples:
 ## 1.8 Inventory State (Computed)
 
 ```
-SKU: BLS-RED-M
+SKU: 101-Red-M
 ├── Total Qty: 150
 ├── Available: 120
 ├── Reserved: 30 (held for orders)

@@ -397,9 +397,9 @@ Response 200:
   "data": [
     {
       "id": "uuid",
-      "sku_code": "BLS-RED-M",
+      "sku_code": "101-Red-M",
       "product_type": "BLS",
-      "product_name": "Red Blouse Medium",
+      "product_name": "Design 101 Red Medium",
       "color": "Red",
       "size": "M",
       "base_price": 450.00,
@@ -420,7 +420,7 @@ Auth: admin, supervisor
 Request:
 {
   "product_type": "BLS",
-  "product_name": "Red Blouse Medium",
+  "product_name": "Design 101 Red Medium",
   "color": "Red",
   "size": "M",
   "description": "Cotton red blouse, regular fit",
@@ -430,12 +430,12 @@ Request:
 Response 201:
 {
   "success": true,
-  "data": { "id": "uuid", "sku_code": "BLS-RED-M", ... },
+  "data": { "id": "uuid", "sku_code": "101-Red-M", ... },
   "message": "SKU created"
 }
 
 Side effects:
-- Auto-generates sku_code from product_type + color + size
+- Auto-generates sku_code as DesignNo-Color-Size
 - Creates inventory_state row with all zeros
 ```
 
@@ -462,7 +462,7 @@ Response 200:
     {
       "id": "uuid",
       "batch_code": "BATCH-0012",
-      "sku": { "id": "uuid", "sku_code": "BLS-RED-M", "product_name": "Red Blouse Medium" },
+      "sku": { "id": "uuid", "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
       "quantity": 50,
       "status": "ASSIGNED",
       "qr_code_data": "https://inv.local/batch/uuid",
@@ -626,14 +626,14 @@ Response: QR code image (PNG) or base64 encoded data
 #### `GET /api/v1/inventory`
 ```
 Auth: admin, supervisor, billing
-Query: ?sku_id=uuid&sku_code=BLS-RED-M&low_stock=true&page=1&page_size=20
+Query: ?sku_id=uuid&sku_code=101-Red-M&low_stock=true&page=1&page_size=20
 
 Response 200:
 {
   "success": true,
   "data": [
     {
-      "sku": { "id": "uuid", "sku_code": "BLS-RED-M", "product_name": "Red Blouse Medium" },
+      "sku": { "id": "uuid", "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
       "total_qty": 150,
       "available_qty": 120,
       "reserved_qty": 30,
@@ -740,7 +740,7 @@ Response 200:
       "status": "pending",
       "items": [
         {
-          "sku": { "sku_code": "BLS-RED-M", "product_name": "Red Blouse Medium" },
+          "sku": { "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
           "quantity": 5,
           "unit_price": 450.00,
           "total_price": 2250.00,
@@ -780,8 +780,8 @@ Response 201:
   "data": {
     "order": { "id": "uuid", "order_number": "ORD-0046", "status": "pending", ... },
     "reservations": [
-      { "sku_code": "BLS-RED-M", "quantity": 5, "status": "active", "expires_at": "..." },
-      { "sku_code": "KRT-BLU-L", "quantity": 3, "status": "active", "expires_at": "..." }
+      { "sku_code": "101-Red-M", "quantity": 5, "status": "active", "expires_at": "..." },
+      { "sku_code": "201-Blue-L", "quantity": 3, "status": "active", "expires_at": "..." }
     ]
   },
   "message": "Order created. Stock reserved."
@@ -886,7 +886,7 @@ Response 200:
       "issued_at": "2026-02-07T14:00:00Z",
       "items": [
         {
-          "sku": { "sku_code": "BLS-RED-M" },
+          "sku": { "sku_code": "101-Red-M" },
           "quantity": 5,
           "unit_price": 450.00,
           "total_price": 2250.00
@@ -974,7 +974,7 @@ Response 200:
 {
   "success": true,
   "data": {
-    "sku_code": "BLS-RED-M",
+    "sku_code": "101-Red-M",
     "period": { "from": "2026-02-01", "to": "2026-02-07" },
     "stock_in": 200,
     "stock_out": 150,
@@ -1001,7 +1001,7 @@ Response 200:
     {
       "id": "uuid",
       "batch_code": "BATCH-0012",
-      "sku": { "sku_code": "BLS-RED-M", "product_name": "Red Blouse Medium" },
+      "sku": { "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
       "quantity": 50,
       "status": "ASSIGNED",
       "assigned_at": "2026-02-07T12:00:00Z"
@@ -1045,7 +1045,7 @@ Response 200:
     {
       "id": "uuid",
       "batch_code": "BATCH-0015",
-      "sku": { "sku_code": "KRT-BLU-L" },
+      "sku": { "sku_code": "201-Blue-L" },
       "quantity": 30,
       "status": "SUBMITTED",
       "tailor": { "full_name": "Amit Singh" },
@@ -1070,14 +1070,14 @@ Auth: X-API-Key
 
 Response 200:
 {
-  "sku_code": "BLS-RED-M",
-  "product_name": "Red Blouse Medium",
+  "sku_code": "101-Red-M",
+  "product_name": "Design 101 Red Medium",
   "available_qty": 120,
   "price": 450.00
 }
 
 Response 404:
-{ "error": "sku_not_found", "detail": "SKU BLS-RED-X does not exist" }
+{ "error": "sku_not_found", "detail": "SKU 101-Red-X does not exist" }
 ```
 
 #### `POST /api/v1/external/reserve`
@@ -1088,7 +1088,7 @@ Request:
 {
   "external_order_ref": "DRS-1234",
   "items": [
-    { "sku_code": "BLS-RED-M", "quantity": 5 }
+    { "sku_code": "101-Red-M", "quantity": 5 }
   ]
 }
 
@@ -1098,16 +1098,16 @@ Response 201:
   "status": "active",
   "expires_at": "2026-02-08T10:00:00Z",
   "items": [
-    { "sku_code": "BLS-RED-M", "quantity": 5, "available": true }
+    { "sku_code": "101-Red-M", "quantity": 5, "available": true }
   ]
 }
 
 Response 409:
 {
   "error": "insufficient_stock",
-  "detail": "BLS-RED-M: requested 5, available 3",
+  "detail": "101-Red-M: requested 5, available 3",
   "items": [
-    { "sku_code": "BLS-RED-M", "quantity": 5, "available_qty": 3 }
+    { "sku_code": "101-Red-M", "quantity": 5, "available_qty": 3 }
   ]
 }
 ```
@@ -1157,7 +1157,7 @@ Request:
 {
   "external_order_ref": "DRS-1234",
   "items": [
-    { "sku_code": "BLS-RED-M", "quantity": 2, "reason": "Customer return - wrong size" }
+    { "sku_code": "101-Red-M", "quantity": 2, "reason": "Customer return - wrong size" }
   ]
 }
 
@@ -1165,7 +1165,7 @@ Response 200:
 {
   "status": "returned",
   "items": [
-    { "sku_code": "BLS-RED-M", "quantity": 2, "new_available_qty": 122 }
+    { "sku_code": "101-Red-M", "quantity": 2, "new_available_qty": 122 }
   ],
   "message": "Return processed"
 }
@@ -1195,7 +1195,7 @@ Response 200:
 {
   "success": false,
   "error": "insufficient_stock",
-  "detail": "BLS-RED-M: requested 5, available 3",
+  "detail": "101-Red-M: requested 5, available 3",
   "timestamp": "2026-02-07T10:00:00Z"
 }
 ```

@@ -96,8 +96,8 @@
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK | Unique identifier |
-| sku_code | VARCHAR(50) | UNIQUE, NOT NULL | BLS-RED-M |
-| product_type | VARCHAR(50) | NOT NULL | BLS, KRT, DRS |
+| sku_code | VARCHAR(50) | UNIQUE, NOT NULL | 101-Red-M (DesignNo-Color-Size) |
+| product_type | VARCHAR(50) | NOT NULL | blouse, kurta, dress |
 | product_name | VARCHAR(200) | NOT NULL | Full product name |
 | color | VARCHAR(50) | NOT NULL | Color |
 | size | VARCHAR(20) | NOT NULL | S, M, L, XL, FS |

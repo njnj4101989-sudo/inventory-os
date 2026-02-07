@@ -32,7 +32,7 @@ async def create_sku(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
-    """Create SKU with auto-generated sku_code (e.g. BLS-RED-M)."""
+    """Create SKU with auto-generated sku_code (e.g. 101-Red-M)."""
     svc = SKUService(db)
     result = await svc.create_sku(req)
     return {"success": True, "data": result}

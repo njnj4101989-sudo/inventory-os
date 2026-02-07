@@ -110,33 +110,216 @@ NO CODE IS WRITTEN UNTIL STEP 6 DOCUMENT IS APPROVED.
 
 ---
 
-## 6.4 Phase 6B — Web Frontend Scaffold (Summary)
+## 6.4 Phase 6B — Web Frontend Scaffold (Detailed)
 
-**Tech:** React 18 | Vite | TailwindCSS | Axios
-**Target:** Runnable app — `npm run dev`
+**Tech:** React 18 | Vite | TailwindCSS | Axios | React Router 6
+**Target:** Runnable app — `npm run dev` → localhost:5173
+**Location:** `inventory-os/frontend/`
+**Data:** Mock data layer (backend APIs are stubs) — flip one flag to switch to real APIs later
 
-| # | Task | Description |
-|---|------|-------------|
-| 6B-1 | Project setup | Vite + React + Tailwind + dependencies |
-| 6B-2 | API client | Axios instance, interceptors, JWT refresh |
-| 6B-3 | Auth context | AuthContext, useAuth hook, login/logout |
-| 6B-4 | Layout | Sidebar (role-filtered), Header, Layout shell |
-| 6B-5 | Routes | Route config, ProtectedRoute guard |
-| 6B-6 | Common components | DataTable, Modal, StatusBadge, SearchInput, Pagination |
-| 6B-7 | Pages (Admin) | DashboardPage, UsersPage |
-| 6B-8 | Pages (Supervisor) | RollsPage, SKUsPage, BatchesPage, SuppliersPage |
-| 6B-9 | Pages (Billing) | OrdersPage, InvoicesPage, ReportsPage |
-| 6B-10 | Pages (Detail) | BatchDetailPage, OrderDetailPage, InventoryPage |
-| 6B-11 | Forms | RollForm, SKUForm, BatchForm, OrderForm, UserForm |
+### Web Roles (3 of 5 have web access)
+
+| Role | Web Access | Sidebar Menu Items |
+|------|:---:|---|
+| Admin | Yes | Dashboard, Users, Roles, Suppliers, Rolls, SKUs, Batches, Inventory, Orders, Invoices, Reports |
+| Supervisor | Yes | Dashboard, Suppliers, Rolls, SKUs, Batches, Inventory, Reports |
+| Billing | Yes | Dashboard, Orders, Invoices, Reports |
+| Tailor | No | Mobile only |
+| Checker | No | Mobile only |
+
+### 6B Tasks Breakdown
+
+| # | Task | Files | Depends On |
+|---|------|-------|------------|
+| 6B-1 | **Project setup** — Vite + React + Tailwind + Axios + Router | 7 files | — |
+| 6B-2 | **API client + mock layer** — Axios instance, JWT interceptor, mock data store, 11 API modules | 13 files | 6B-1 |
+| 6B-3 | **Auth context + hooks** — AuthContext, useAuth, useApi hooks | 3 files | 6B-2 |
+| 6B-4 | **Layout components** — Sidebar (role-filtered), Header, Layout shell | 3 files | 6B-3 |
+| 6B-5 | **Routes + protection** — Route config, ProtectedRoute guard | 2 files | 6B-4 |
+| 6B-6 | **Common components** — DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert | 7 files | 6B-1 |
+| 6B-7 | **Pages (Admin)** — DashboardPage, UsersPage | 2 files | 6B-5, 6B-6 |
+| 6B-8 | **Pages (Supervisor)** — RollsPage, SKUsPage, BatchesPage, SuppliersPage | 4 files | 6B-5, 6B-6 |
+| 6B-9 | **Pages (Billing)** — OrdersPage, InvoicesPage, ReportsPage | 3 files | 6B-5, 6B-6 |
+| 6B-10 | **Pages (Detail)** — BatchDetailPage, InventoryPage | 2 files | 6B-5, 6B-6 |
+| 6B-11 | **Form components** — UserForm, RollForm, SKUForm, BatchForm, OrderForm | 5 files | 6B-6 |
+
+**Total: ~45 files | 11 tasks**
+
+### 6B Dependency Graph
+
+```
+6B-1 (Project Setup)
+  ├──► 6B-2 (API Client + Mocks)
+  │      └──► 6B-3 (Auth Context)
+  │             └──► 6B-4 (Layout)
+  │                    └──► 6B-5 (Routes)
+  │
+  └──► 6B-6 (Common Components)
+
+6B-5 + 6B-6 ──► 6B-7  (Admin Pages)
+6B-5 + 6B-6 ──► 6B-8  (Supervisor Pages)
+6B-5 + 6B-6 ──► 6B-9  (Billing Pages)
+6B-5 + 6B-6 ──► 6B-10 (Detail Pages)
+6B-6         ──► 6B-11 (Forms)
+```
+
+### 6B Task Details
+
+#### 6B-1: Project Setup (7 files)
+```
+frontend/
+├── package.json            ← React 18, Vite, Tailwind, Axios, React Router 6
+├── vite.config.js          ← Dev server config (proxy /api → backend:8000)
+├── tailwind.config.js      ← Theme: blue-600 primary, gray sidebar
+├── postcss.config.js       ← PostCSS + Tailwind + Autoprefixer
+├── index.html              ← Vite entry HTML
+├── .env.example            ← VITE_API_URL, VITE_USE_MOCK=true
+└── src/
+    ├── main.jsx            ← React entry (render App)
+    └── App.jsx             ← Root component (shell)
+```
+**Verify:** `npm run dev` serves on localhost:5173
+
+#### 6B-2: API Client + Mock Layer (13 files)
+```
+src/api/
+├── client.js          ← Axios instance, base URL, JWT header interceptor, 401 refresh
+├── mock.js            ← Mock data store: 5 users, 2 suppliers, 4 rolls, 3 SKUs,
+│                         3 batches, 3 orders, 2 invoices, dashboard stats
+│                         Returns Promise with 200ms delay (simulates network)
+├── auth.js            ← login(), refresh(), logout()
+├── users.js           ← getUsers(), createUser(), updateUser()
+├── roles.js           ← getRoles()
+├── suppliers.js       ← getSuppliers(), createSupplier(), updateSupplier()
+├── rolls.js           ← getRolls(), stockIn(), getRoll()
+├── skus.js            ← getSKUs(), createSKU(), updateSKU()
+├── batches.js         ← getBatches(), createBatch(), assignBatch(), getBatch()
+├── inventory.js       ← getInventory(), getEvents(), adjust(), reconcile()
+├── orders.js          ← getOrders(), createOrder(), shipOrder(), cancelOrder()
+├── invoices.js        ← getInvoices(), markPaid(), downloadPDF()
+└── dashboard.js       ← getSummary(), getTailorPerf(), getMovement()
+```
+**Mock switch:** `const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'`
+**To go live:** Set `VITE_USE_MOCK=false` + `VITE_API_URL=http://localhost:8000/api/v1`
+
+#### 6B-3: Auth Context + Hooks (3 files)
+```
+src/context/AuthContext.jsx   ← Provider: user, token, role, permissions state
+src/hooks/useAuth.js          ← login(), logout(), isAuthenticated, user, role
+src/hooks/useApi.js           ← Generic hook: { data, loading, error, refetch }
+```
+
+#### 6B-4: Layout Components (3 files)
+```
+src/components/layout/
+├── Sidebar.jsx        ← Navigation menu filtered by user.role
+│                         Admin: 11 items | Supervisor: 7 | Billing: 4
+├── Header.jsx         ← Top bar: user name, role badge, logout button
+└── Layout.jsx         ← Page shell: Sidebar + Header + <Outlet/>
+```
+
+#### 6B-5: Routes + Protection (2 files)
+```
+src/routes/
+├── routes.js             ← Route config array: { path, component, requiredRoles[] }
+└── ProtectedRoute.jsx    ← Checks isAuthenticated + role in requiredRoles
+                             No auth → redirect /login
+                             Wrong role → redirect /dashboard
+```
+
+#### 6B-6: Common Components (7 files)
+```
+src/components/common/
+├── DataTable.jsx         ← Sortable columns, row click, loading state
+├── Modal.jsx             ← Overlay dialog: title, body, close, action buttons
+├── StatusBadge.jsx       ← Color-coded: green=active, yellow=pending, red=rejected
+├── SearchInput.jsx       ← Debounced search with clear button
+├── Pagination.jsx        ← Page controls: prev/next, page numbers
+├── LoadingSpinner.jsx    ← Centered spinner
+└── ErrorAlert.jsx        ← Red error banner with dismiss
+```
+
+#### 6B-7: Admin Pages (2 files)
+```
+src/pages/
+├── DashboardPage.jsx     ← 4 summary cards (rolls, batches, orders, revenue)
+│                            + recent activity list
+└── UsersPage.jsx         ← User table (DataTable) + create/edit modal (UserForm)
+                             Admin only (user_manage permission)
+```
+
+#### 6B-8: Supervisor Pages (4 files)
+```
+src/pages/
+├── SuppliersPage.jsx     ← Supplier table + create/edit modal
+├── RollsPage.jsx         ← Roll table + stock-in button → RollForm modal
+├── SKUsPage.jsx          ← SKU table + create/edit → SKUForm modal
+└── BatchesPage.jsx       ← Batch table + create → BatchForm + assign to tailor
+```
+
+#### 6B-9: Billing Pages (3 files)
+```
+src/pages/
+├── OrdersPage.jsx        ← Order table + create → OrderForm + ship/cancel/return
+├── InvoicesPage.jsx      ← Invoice table + mark paid + PDF download placeholder
+└── ReportsPage.jsx       ← Tailor performance table + inventory movement table
+```
+
+#### 6B-10: Detail Pages (2 files)
+```
+src/pages/
+├── BatchDetailPage.jsx   ← Batch timeline (CREATED→...→COMPLETED) + rolls used + QR
+└── InventoryPage.jsx     ← Stock levels table + event log + adjust modal
+```
+
+#### 6B-11: Form Components (5 files)
+```
+src/components/forms/
+├── UserForm.jsx          ← username, full_name, phone, role select
+├── RollForm.jsx          ← fabric_type, color, total_length, cost, supplier select
+├── SKUForm.jsx           ← DesignNo, product_name, color, size, price
+├── BatchForm.jsx         ← SKU select, roll select, pieces_cut, cut_length, notes
+└── OrderForm.jsx         ← source, customer_name, customer_phone, items[]{sku, qty}
+```
+
+### 6B Folder Structure (Complete)
+
+```
+frontend/
+├── public/
+│   └── index.html
+├── src/
+│   ├── main.jsx
+│   ├── App.jsx
+│   ├── api/              (13 files — client + mock + 11 modules)
+│   ├── context/          (1 file — AuthContext)
+│   ├── hooks/            (2 files — useAuth, useApi)
+│   ├── components/
+│   │   ├── layout/       (3 files — Sidebar, Header, Layout)
+│   │   ├── common/       (7 files — DataTable, Modal, Badge, etc.)
+│   │   └── forms/        (5 files — User, Roll, SKU, Batch, Order)
+│   ├── pages/            (13 files — Login + 12 feature pages)
+│   ├── routes/           (2 files — config + ProtectedRoute)
+│   └── utils/            (3 files — constants, formatters, validators)
+├── package.json
+├── vite.config.js
+├── tailwind.config.js
+├── postcss.config.js
+├── .env.example
+└── Dockerfile
+```
 
 ### 6B Completion Criteria
 
 ```
-✅ npm run dev serves app on localhost
-✅ Login page → auth → dashboard redirect
-✅ Role-based sidebar (admin sees all, tailor sees nothing)
-✅ All pages render with placeholder data
-✅ API client wired to backend base URL
+✅ npm run dev serves app on localhost:5173
+✅ Login page → enter admin/test1234 → redirects to Dashboard
+✅ Role-based sidebar (admin=11 items, supervisor=7, billing=4)
+✅ All 13 pages render with mock data
+✅ Create forms work (add row to mock data store)
+✅ ProtectedRoute blocks unauthorized roles
+✅ API client ready to switch from mock to real (one env flag)
+✅ Responsive layout (sidebar collapsible on mobile)
 ```
 
 ---
