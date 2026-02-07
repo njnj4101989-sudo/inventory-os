@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+*.log
+
+# Node (future frontend)
+node_modules/
+.next/
+
+# Android (future mobile)
+*.apk
+.gradle/
+local.properties
+
+# Guardian internal
+project-context.json
+project-context.json.gz
+
+# Windows reserved filenames
+nul

@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    order_number: Mapped[str] = mapped_column(String(50), unique=True)
+    source: Mapped[str] = mapped_column(String(20))
+    external_order_ref: Mapped[str | None] = mapped_column(String(100))
+    customer_name: Mapped[str | None] = mapped_column(String(200))
+    customer_phone: Mapped[str | None] = mapped_column(String(20))
+    customer_address: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Relationships
+    created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
+    items: Mapped[list[OrderItem]] = relationship(back_populates="order")
+    invoices: Mapped[list[Invoice]] = relationship(back_populates="order")
+    reservations: Mapped[list[Reservation]] = relationship(back_populates="order")
