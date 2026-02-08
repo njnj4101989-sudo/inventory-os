@@ -191,12 +191,29 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
   - `SKUsPage.jsx` — DataTable (7 cols, stock avail/reserved) + create/edit modal (6 fields, size dropdown)
   - `BatchesPage.jsx` — DataTable (7 cols) + status filter tabs + create modal (SKU, dynamic rolls) + assign modal (tailor dropdown)
 
-### Phase 6B Progress — 8 of 11 tasks done
-- Build verified: 118 modules, 0 errors, 5.01s
-- ~50 frontend files created
-- Next: 6B-9 (Billing pages: Orders, Invoices, Reports)
-- Then: 6B-10 (Detail pages: BatchDetail, Inventory)
-- Then: 6B-11 (Form components: 5 extracted forms)
+### Session 6 (2026-02-08) — 3 tasks completed (6B-9 through 6B-11)
+- Completed: 6B-9 (Billing pages — 3 files replaced from placeholder)
+  - `OrdersPage.jsx` — DataTable (7 cols), status filter + search, create order modal (customer + dynamic SKU items), detail modal with Ship/Cancel
+  - `InvoicesPage.jsx` — DataTable (8 cols), status filter, detail modal with line items breakdown, Mark as Paid + Download PDF
+  - `ReportsPage.jsx` — Tailor Performance table (5 cols, color-coded rejection rate) + Inventory Movement table (8 cols, green/red)
+- Completed: 6B-10 (Detail pages — 2 files replaced from placeholder)
+  - `BatchDetailPage.jsx` — Back nav, status badge, 4 summary cards, 5-step visual timeline, rolls used table, details section
+  - `InventoryPage.jsx` — DataTable (6 cols), low-stock toggle, SKU search, events modal, Adjust Stock modal, Reconcile button
+- Completed: 6B-11 (Form components — 5 files created + 5 pages refactored)
+  - `components/forms/UserForm.jsx` — username, password, full_name, role select, phone
+  - `components/forms/RollForm.jsx` — fabric_type, color, total_length, unit, cost_per_unit, supplier select, notes
+  - `components/forms/SKUForm.jsx` — product_type, product_name, color, size select, base_price, description
+  - `components/forms/BatchForm.jsx` — SKU select, dynamic rolls (pieces_cut + length_used), notes
+  - `components/forms/OrderForm.jsx` — customer_name, customer_phone, source, dynamic items (sku + qty + price)
+  - Updated: UsersPage, RollsPage, SKUsPage, BatchesPage, OrdersPage — replaced inline forms with extracted components
+  - Cleaned up dead code: removed unused helper functions from all 5 pages
+
+### PHASE 6B COMPLETE — All 11 tasks done
+- Build verified: 126 modules, 0 errors, 4.52s
+- ~55 frontend files created
+- All 11 pages implemented (no more placeholders)
+- 5 reusable form components extracted
+- Next: Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
 
 ---
 
@@ -271,8 +288,8 @@ inventory-os/                      ← PROJECT ROOT
 │       ├── components/
 │       │   ├── layout/    (Sidebar, Header, Layout)
 │       │   ├── common/    (DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert)
-│       │   └── forms/     (pending 6B-11)
-│       ├── pages/         (LoginPage + 11 feature pages — 6 implemented, 5 placeholder)
+│       │   └── forms/     (UserForm, RollForm, SKUForm, BatchForm, OrderForm)
+│       ├── pages/         (LoginPage + 11 feature pages — all implemented)
 │       └── routes/        (routes.js, ProtectedRoute.jsx)
 └── mobile/                        ← Android/Kotlin (Phase 6C, future)
 ```

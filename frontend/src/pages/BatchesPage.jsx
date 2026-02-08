@@ -8,6 +8,7 @@ import Modal from '../components/common/Modal'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
+import BatchForm from '../components/forms/BatchForm'
 
 const COLUMNS = [
   { key: 'batch_code', label: 'Code' },
@@ -142,18 +143,6 @@ export default function BatchesPage() {
     }
   }
 
-  const setRollField = (idx, field, value) => {
-    setCreateForm((f) => {
-      const rolls = [...f.rolls]
-      rolls[idx] = { ...rolls[idx], [field]: value }
-      return { ...f, rolls }
-    })
-  }
-
-  const addRollRow = () => {
-    setCreateForm((f) => ({ ...f, rolls: [...f.rolls, { roll_id: '', pieces_cut: '', length_used: '' }] }))
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -205,36 +194,8 @@ export default function BatchesPage() {
           </>
         }
       >
-        {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-            <select value={createForm.sku_id} onChange={(e) => setCreateForm((f) => ({ ...f, sku_id: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-              <option value="">Select SKU</option>
-              {skuList.map((s) => <option key={s.id} value={s.id}>{s.sku_code} — {s.product_name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Rolls Used</label>
-            {createForm.rolls.map((r, i) => (
-              <div key={i} className="mb-2 grid grid-cols-2 gap-3">
-                <input type="number" placeholder="Pieces cut" value={r.pieces_cut} onChange={(e) => setRollField(i, 'pieces_cut', e.target.value)}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-                <input type="number" step="0.01" placeholder="Length used" value={r.length_used} onChange={(e) => setRollField(i, 'length_used', e.target.value)}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-              </div>
-            ))}
-            <button onClick={addRollRow} className="text-sm text-primary-600 hover:text-primary-700 font-medium">+ Add another roll</button>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <textarea value={createForm.notes} onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-          </div>
-        </div>
+        <BatchForm form={createForm} onChange={setCreateForm} skuList={skuList}
+          error={formError} onDismissError={() => setFormError(null)} />
       </Modal>
 
       {/* Assign Batch Modal */}
