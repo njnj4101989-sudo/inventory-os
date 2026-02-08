@@ -144,7 +144,59 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
   - Updated: STEP1, STEP2, STEP4 (30+ references), seed_data.py, sku_service.py, skus.py
   - Zero old pattern references remaining (verified)
 - Decision: Start Phase 6B (Web Frontend) with mock data layer
-- Next: Commit docs + start 6B-1 (Vite + React + Tailwind project setup)
+
+### Session 5 (2026-02-08) — 8 tasks completed (6B-1 through 6B-8)
+- Completed: 6B-1 (Project setup — 9 files, Vite 6.4 + React 18 + Tailwind 3.4)
+  - `package.json` — React 18, Vite, Tailwind, Axios, React Router 6
+  - `vite.config.js` — dev :5173, proxy /api → :8000
+  - `tailwind.config.js` — blue-600 primary theme
+  - `postcss.config.js`, `index.html`, `.env.example`, `.env`
+  - `src/index.css`, `src/main.jsx`, `src/App.jsx`
+  - Verified: `npm run dev` → Vite ready in 902ms, 0 vulnerabilities
+- Completed: 6B-2 (API client + mock layer — 13 files)
+  - `src/api/client.js` — Axios instance, JWT interceptor, 401 auto-refresh with queue
+  - `src/api/mock.js` — Full mock store: 5 users, 2 suppliers, 4 rolls, 3 SKUs, 3 batches, 3 orders, 2 invoices, dashboard stats
+  - 11 API modules: auth, users, roles, suppliers, rolls, skus, batches, inventory, orders, invoices, dashboard
+  - Mock switch: `VITE_USE_MOCK=true` (default) — set `false` to hit real backend
+  - Fix: exported `PERMISSIONS` const from mock.js
+- Completed: 6B-3 (Auth context + hooks — 3 files + main.jsx update)
+  - `src/context/AuthContext.jsx` — Provider: user, token, role, permissions, login/logout, localStorage persistence
+  - `src/hooks/useAuth.js` — Consumer hook with context guard
+  - `src/hooks/useApi.js` — Generic { data, loading, error, refetch }, immediate/deferred modes
+  - Updated `main.jsx` — AuthProvider wrapping App
+- Completed: 6B-4 (Layout components — 3 files)
+  - `src/components/layout/Sidebar.jsx` — Role-filtered nav (Admin 11, Supervisor 7, Billing 4), collapsible, SVG icons
+  - `src/components/layout/Header.jsx` — User name, color-coded role badge, logout button, sticky
+  - `src/components/layout/Layout.jsx` — Sidebar + Header + Outlet shell with transition
+- Completed: 6B-5 (Routes + protection — 15 files)
+  - `src/routes/routes.js` — 12-route config with requiredRoles[], React.lazy code-splitting
+  - `src/routes/ProtectedRoute.jsx` — Auth guard: no auth → /login, wrong role → /dashboard
+  - `src/pages/LoginPage.jsx` — Full login form with error display, mock hint
+  - 11 placeholder page files (Dashboard through Reports)
+  - Updated `App.jsx` — Suspense + public /login + protected Layout shell + role-guarded routes
+- Completed: 6B-6 (Common components — 7 files)
+  - `DataTable.jsx` — Sortable columns, row click, skeleton loading, empty state
+  - `Modal.jsx` — Overlay dialog, Escape/backdrop close, title, body, footer actions, wide mode
+  - `StatusBadge.jsx` — 15 color mappings (batch/order/invoice/generic statuses)
+  - `SearchInput.jsx` — Debounced (300ms), search icon, clear button
+  - `Pagination.jsx` — Prev/Next, 5 visible page numbers with ellipsis
+  - `LoadingSpinner.jsx` — sm/md/lg, optional text
+  - `ErrorAlert.jsx` — Red banner, warning icon, dismissible
+- Completed: 6B-7 (Admin pages — 2 files replaced from placeholder)
+  - `DashboardPage.jsx` — 4 summary cards (rolls, batches, orders, revenue) + batch pipeline (5-stage) + inventory/revenue panels
+  - `UsersPage.jsx` — DataTable (6 cols) + search + pagination + create/edit modal (5 fields, role dropdown)
+- Completed: 6B-8 (Supervisor pages — 4 files replaced from placeholder)
+  - `SuppliersPage.jsx` — DataTable (6 cols) + search + create/edit modal (4 fields)
+  - `RollsPage.jsx` — DataTable (8 cols, remaining with progress bar) + stock-in modal (7 fields, supplier dropdown)
+  - `SKUsPage.jsx` — DataTable (7 cols, stock avail/reserved) + create/edit modal (6 fields, size dropdown)
+  - `BatchesPage.jsx` — DataTable (7 cols) + status filter tabs + create modal (SKU, dynamic rolls) + assign modal (tailor dropdown)
+
+### Phase 6B Progress — 8 of 11 tasks done
+- Build verified: 118 modules, 0 errors, 5.01s
+- ~50 frontend files created
+- Next: 6B-9 (Billing pages: Orders, Invoices, Reports)
+- Then: 6B-10 (Detail pages: BatchDetail, Inventory)
+- Then: 6B-11 (Form components: 5 extracted forms)
 
 ---
 
@@ -196,43 +248,31 @@ inventory-os/                      ← PROJECT ROOT
 │   ├── CLAUDE.md                  ← This session log
 │   ├── guardian.md                ← Protocols
 │   ├── guardian_init.bat          ← CLI launcher
-│   ├── STEP1_SYSTEM_OVERVIEW.md
-│   ├── STEP2_DATA_MODEL.md
-│   ├── STEP3_EVENT_CONTRACTS.md
-│   ├── STEP4_API_CONTRACTS.md
-│   ├── STEP5_FOLDER_STRUCTURE.md
-│   └── STEP6_SCAFFOLD_PLAN.md
-├── backend/                       ← FastAPI backend (at root level)
+│   ├── STEP1–STEP6 .md files     ← Design blueprints
+├── backend/                       ← FastAPI backend (Phase 6A ✅)
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── config.py              ← Pydantic BaseSettings from .env
-│   │   ├── database.py            ← Async engine, session, Base model
-│   │   └── models/                ← 15 ORM models (6A-3 ✅)
-│   │       ├── __init__.py        ← Exports all 15 model classes
-│   │       ├── role.py, user.py, supplier.py, roll.py
-│   │       ├── sku.py, batch.py, batch_assignment.py
-│   │       ├── batch_roll_consumption.py
-│   │       ├── inventory_event.py, inventory_state.py
-│   │       ├── reservation.py
-│   │       ├── order.py, order_item.py
-│   │       └── invoice.py, invoice_item.py
-│   │   └── schemas/               ← 14 Pydantic schemas (6A-5 ✅)
-│   │       ├── __init__.py        ← BaseSchema, PaginatedParams
-│   │       ├── auth.py, role.py, user.py, supplier.py
-│   │       ├── roll.py, sku.py, batch.py
-│   │       ├── inventory.py, order.py, invoice.py
-│   │       └── dashboard.py, mobile.py, external.py
-│   │   └── core/                  ← Cross-cutting utilities (6A-6 ✅)
-│   │       ├── __init__.py
-│   │       ├── security.py        ← JWT + password hashing
-│   │       ├── permissions.py     ← RBAC matrix + helpers
-│   │       ├── exceptions.py      ← 10 domain exception classes
-│   │       ├── error_handlers.py  ← Global FastAPI exception handlers
-│   │       └── code_generator.py  ← Sequential code generators
-│   ├── migrations/versions/       ← Initial migration (6A-4 ✅)
-│   ├── seeds/                     ← Empty, awaiting 6A-12
-│   ├── requirements.txt
-│   └── alembic.ini
-├── frontend/                      ← React (Phase 6B, future)
+│   │   ├── config.py, database.py, main.py, dependencies.py
+│   │   ├── models/    (15 ORM models)
+│   │   ├── schemas/   (14 Pydantic schemas)
+│   │   ├── services/  (12 service stubs)
+│   │   ├── api/       (13 routers, 46 endpoints)
+│   │   ├── core/      (security, permissions, exceptions, code_gen)
+│   │   └── tasks/     (reservation_expiry, backup_sync)
+│   ├── migrations/, seeds/, Dockerfile
+│   ├── requirements.txt, alembic.ini
+├── frontend/                      ← React app (Phase 6B — 8/11 tasks ✅)
+│   ├── package.json, vite.config.js, tailwind.config.js
+│   ├── postcss.config.js, index.html, .env, .env.example
+│   └── src/
+│       ├── main.jsx, App.jsx, index.css
+│       ├── api/           (13 files — client + mock + 11 modules)
+│       ├── context/       (AuthContext.jsx)
+│       ├── hooks/         (useAuth.js, useApi.js)
+│       ├── components/
+│       │   ├── layout/    (Sidebar, Header, Layout)
+│       │   ├── common/    (DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert)
+│       │   └── forms/     (pending 6B-11)
+│       ├── pages/         (LoginPage + 11 feature pages — 6 implemented, 5 placeholder)
+│       └── routes/        (routes.js, ProtectedRoute.jsx)
 └── mobile/                        ← Android/Kotlin (Phase 6C, future)
 ```

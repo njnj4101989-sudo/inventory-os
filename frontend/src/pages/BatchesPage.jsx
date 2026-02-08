@@ -1,0 +1,265 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getBatches, createBatch, assignBatch } from '../api/batches'
+import { getSKUs } from '../api/skus'
+import { getUsers } from '../api/users'
+import DataTable from '../components/common/DataTable'
+import Modal from '../components/common/Modal'
+import Pagination from '../components/common/Pagination'
+import StatusBadge from '../components/common/StatusBadge'
+import ErrorAlert from '../components/common/ErrorAlert'
+
+const COLUMNS = [
+  { key: 'batch_code', label: 'Code' },
+  {
+    key: 'sku',
+    label: 'SKU',
+    render: (val) => (
+      <div>
+        <span className="font-medium">{val?.sku_code}</span>
+        <span className="ml-1 text-xs text-gray-400">{val?.product_name}</span>
+      </div>
+    ),
+  },
+  { key: 'quantity', label: 'Qty' },
+  {
+    key: 'status',
+    label: 'Status',
+    render: (val) => <StatusBadge status={val} />,
+  },
+  {
+    key: 'assignment',
+    label: 'Tailor',
+    render: (val) => val?.tailor?.full_name || '—',
+  },
+  {
+    key: 'approved_qty',
+    label: 'Approved',
+    render: (val, row) => {
+      if (row.status !== 'COMPLETED') return '—'
+      return <span className="text-green-600 font-medium">{val}</span>
+    },
+  },
+  {
+    key: 'created_at',
+    label: 'Created',
+    render: (val) => val ? new Date(val).toLocaleDateString() : '—',
+  },
+]
+
+const STATUS_FILTERS = ['', 'CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED', 'COMPLETED']
+
+export default function BatchesPage() {
+  const navigate = useNavigate()
+  const [batches, setBatches] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Create modal
+  const [createOpen, setCreateOpen] = useState(false)
+  const [skuList, setSkuList] = useState([])
+  const [createForm, setCreateForm] = useState({ sku_id: '', rolls: [{ roll_id: '', pieces_cut: '', length_used: '' }], notes: '' })
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState(null)
+
+  // Assign modal
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignBatchId, setAssignBatchId] = useState(null)
+  const [tailors, setTailors] = useState([])
+  const [selectedTailor, setSelectedTailor] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await getBatches({ page, page_size: 20, status: statusFilter || undefined })
+      setBatches(res.data.data)
+      setTotal(res.data.total)
+      setPages(res.data.pages)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load batches')
+    } finally {
+      setLoading(false)
+    }
+  }, [page, statusFilter])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    getSKUs({ is_active: true }).then((res) => setSkuList(res.data.data)).catch(() => {})
+    getUsers({ role: 'tailor', is_active: true }).then((res) => setTailors(res.data.data)).catch(() => {})
+  }, [])
+
+  const handleRowClick = (row) => {
+    if (row.status === 'CREATED') {
+      setAssignBatchId(row.id)
+      setSelectedTailor('')
+      setAssignOpen(true)
+    } else {
+      navigate(`/batches/${row.id}`)
+    }
+  }
+
+  // Create batch
+  const handleCreate = async () => {
+    setSaving(true)
+    setFormError(null)
+    try {
+      const rolls = createForm.rolls
+        .filter((r) => r.pieces_cut)
+        .map((r) => ({
+          roll_id: r.roll_id || crypto.randomUUID(),
+          pieces_cut: parseInt(r.pieces_cut),
+          length_used: r.length_used ? parseFloat(r.length_used) : null,
+        }))
+      await createBatch({ sku_id: createForm.sku_id, rolls, notes: createForm.notes || null })
+      setCreateOpen(false)
+      setCreateForm({ sku_id: '', rolls: [{ roll_id: '', pieces_cut: '', length_used: '' }], notes: '' })
+      fetchData()
+    } catch (err) {
+      setFormError(err.response?.data?.detail || 'Failed to create batch')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Assign batch
+  const handleAssign = async () => {
+    setAssigning(true)
+    try {
+      await assignBatch(assignBatchId, selectedTailor)
+      setAssignOpen(false)
+      fetchData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to assign batch')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  const setRollField = (idx, field, value) => {
+    setCreateForm((f) => {
+      const rolls = [...f.rolls]
+      rolls[idx] = { ...rolls[idx], [field]: value }
+      return { ...f, rolls }
+    })
+  }
+
+  const addRollRow = () => {
+    setCreateForm((f) => ({ ...f, rolls: [...f.rolls, { roll_id: '', pieces_cut: '', length_used: '' }] }))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Batches</h1>
+          <p className="mt-1 text-sm text-gray-500">Production batch lifecycle management</p>
+        </div>
+        <button onClick={() => { setFormError(null); setCreateOpen(true) }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+          + Create Batch
+        </button>
+      </div>
+
+      {/* Status filter tabs */}
+      <div className="mt-5 flex gap-2 flex-wrap">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            onClick={() => { setStatusFilter(s); setPage(1) }}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              statusFilter === s
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {s || 'All'}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+
+      <div className="mt-4">
+        <DataTable columns={COLUMNS} data={batches} loading={loading} onRowClick={handleRowClick} emptyText="No batches found." />
+        <Pagination page={page} pages={pages} total={total} onChange={setPage} />
+      </div>
+
+      {/* Create Batch Modal */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create Batch"
+        wide
+        actions={
+          <>
+            <button onClick={() => setCreateOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleCreate} disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              {saving ? 'Creating...' : 'Create Batch'}
+            </button>
+          </>
+        }
+      >
+        {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+            <select value={createForm.sku_id} onChange={(e) => setCreateForm((f) => ({ ...f, sku_id: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+              <option value="">Select SKU</option>
+              {skuList.map((s) => <option key={s.id} value={s.id}>{s.sku_code} — {s.product_name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Rolls Used</label>
+            {createForm.rolls.map((r, i) => (
+              <div key={i} className="mb-2 grid grid-cols-2 gap-3">
+                <input type="number" placeholder="Pieces cut" value={r.pieces_cut} onChange={(e) => setRollField(i, 'pieces_cut', e.target.value)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                <input type="number" step="0.01" placeholder="Length used" value={r.length_used} onChange={(e) => setRollField(i, 'length_used', e.target.value)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+              </div>
+            ))}
+            <button onClick={addRollRow} className="text-sm text-primary-600 hover:text-primary-700 font-medium">+ Add another roll</button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea value={createForm.notes} onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Assign Batch Modal */}
+      <Modal
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        title="Assign Batch to Tailor"
+        actions={
+          <>
+            <button onClick={() => setAssignOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleAssign} disabled={assigning || !selectedTailor} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              {assigning ? 'Assigning...' : 'Assign'}
+            </button>
+          </>
+        }
+      >
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Select Tailor</label>
+          <select value={selectedTailor} onChange={(e) => setSelectedTailor(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+            <option value="">Choose tailor...</option>
+            {tailors.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+          </select>
+        </div>
+      </Modal>
+    </div>
+  )
+}
