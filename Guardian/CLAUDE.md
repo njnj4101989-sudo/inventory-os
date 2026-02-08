@@ -215,6 +215,72 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - 5 reusable form components extracted
 - Next: Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
 
+### Session 7 (2026-02-08) — Bug fixes + feature enhancements (first testing round)
+- **Fix: Reservation expiry background task** — `expire_stale_reservations()` was a stub raising `NotImplementedError`
+  - Implemented: queries active reservations past `expires_at`, sets status → `expired`, decrements `reserved_qty` on `InventoryState`
+  - Task runs every 15 min via asyncio loop — no longer crashes on startup
+- **Clarification: Batch assignment flow** — confirmed web-based Supervisor assignment (T2) is correct per STEP3 §3.4
+  - QR scanning is for Tailor (T3: start work) and Checker (T5: inspect) — Phase 6C mobile
+- **Feature: Unified Users & Roles page** (was showing same data on both tabs)
+  - Removed separate `/roles` route, merged into single "Users & Roles" sidebar item
+  - Sub-tabs: Users (existing table + CRUD) | Roles (new card layout)
+  - Role cards: color-coded per role, show user count + permission count + permission pills
+  - Role CRUD: create with custom name + permissions checklist, edit alias (display_name), delete (guarded — blocks if users assigned)
+  - Backend: added `display_name` (nullable) to Role model, full CRUD endpoints (GET/POST/PATCH/DELETE)
+  - Frontend: `roleDisplayName` in AuthContext, Header shows alias, UserForm dropdown shows alias
+  - 12 files touched for this feature
+- **Feature: Supplier invoice tracking on Rolls**
+  - Added `supplier_invoice_no` (String 50) + `supplier_invoice_date` (Date) to Roll model/schema
+  - RollForm: new row with invoice no. text input + date picker
+  - RollsPage: 2 new table columns (Invoice No., Invoice Date)
+  - Both fields nullable — invoice may arrive later
+- **Feature: SKU pattern upgrade** — `DesignNo-Color-Size` → `ProductType-DesignNo-Color-Size`
+  - New format: `BLS-101-Red-M` (Blouse, Design 101, Red, Medium)
+  - Prevents conflicts when new product types share design numbers (e.g. `KRT-101-Red-M` vs `BLS-101-Red-M`)
+  - SKUForm: new Design No. field, 5 product types (BLS/KRT/SAR/DRS/OTH), live SKU code preview, code-forming fields disabled on edit
+  - Updated: all mock data, seed data, API mock code gen, design docs (STEP1, STEP2, STEP4)
+  - Zero old pattern remnants in active code (verified)
+- **Git:** `c789538` — 27 files changed, 711 insertions, 155 deletions
+- **Build:** 126 modules, 0 errors
+- **Next:** Continue testing, more bug fixes, or Phase 6C/6D
+
+### Session 8 (2026-02-08) — LOT entity + weight-based roll overhaul
+- **Root cause:** Real business tracks rolls by WEIGHT (kg), not LENGTH (meters). Client's manual register showed:
+  - Rolls tracked by weight, palla weight measured per roll
+  - Palla = one cutting layer; `num_pallas = floor(roll_weight / palla_weight)`
+  - Size pattern per palla: `{L:2, XL:6, XXL:6, 3XL:4}` = 18 pieces/palla
+  - Total pieces = total_pallas × pieces_per_palla
+  - LOT groups multiple rolls for cutting → batches are carved from lots
+- **New entity: LOT** (sits between Rolls and Batches)
+  - `Lot` model: lot_code, sku_id, lot_date, design_no, standard_palla_weight, default_size_pattern (JSON), pieces_per_palla, total_pallas, total_pieces, total_weight, status, notes
+  - `LotRoll` join model: lot_id, roll_id, palla_weight, num_pallas, weight_used, waste_weight, size_pattern (JSON nullable), pieces_from_roll
+  - LOT-XXXX code generator, lot_manage permission (admin + supervisor)
+  - Schemas: LotRollInput, LotRollBrief, LotBrief, LotCreate, LotUpdate, LotResponse
+  - Service: LotService (6 methods), API router: 4 endpoints
+- **Roll model → weight-based:**
+  - `total_length` → `total_weight`, `remaining_length` → `remaining_weight` (Numeric 10,3)
+  - `unit` defaults to "kg", `total_length` kept as optional nullable field
+  - RollForm: weight input, cost per kg, optional length field
+  - RollsPage columns: total_weight, remaining_weight with kg display
+- **Batch model updated:**
+  - Added `lot_id` FK, `piece_count`, `color_breakdown` (JSON)
+  - BatchForm: lot selector → shows lot summary → piece count input (removed roll inputs)
+  - BatchesPage: lot column, lot-based creation flow
+  - BatchDetailPage: "Lot Info" section replaces old "Rolls Used" table
+- **Frontend: New LotsPage** (largest page — 12.45 kB built)
+  - DataTable: lot_code, design_no, SKU, pallas, pieces, weight, status, date
+  - Detail modal: summary cards + per-roll breakdown table
+  - Create modal: SKU select, design no, lot date, palla weight, size pattern editor (L/XL/XXL/3XL), roll selector, per-roll palla weight, live auto-calculations
+- **Mock data overhaul:**
+  - 6 weight-based rolls (4 consumed, 2 available)
+  - 1 sample lot (LOT-0001, Design 702, 4 rolls, 24 pallas, 432 pieces)
+  - Batches reference lots with piece_count + color_breakdown
+  - New `lots.js` API module
+- **Files created:** 5 (lot.py model, lot.py schema, lot_service.py, lots.py route, lots.js API)
+- **Files modified:** ~20 (roll.py, batch.py, sku.py, __init__.py, permissions.py, code_generator.py, router.py, services/__init__.py, mock.js, rolls.js, batches.js, RollForm, RollsPage, BatchForm, BatchesPage, BatchDetailPage, LotsPage, routes.js, Sidebar.jsx)
+- **Build:** 128 modules, 0 errors, 8.88s
+- **Next:** Git commit, continue testing, Phase 6C/6D
+
 ---
 
 ## SQLite → PostgreSQL Migration Checklist
@@ -266,30 +332,30 @@ inventory-os/                      ← PROJECT ROOT
 │   ├── guardian.md                ← Protocols
 │   ├── guardian_init.bat          ← CLI launcher
 │   ├── STEP1–STEP6 .md files     ← Design blueprints
-├── backend/                       ← FastAPI backend (Phase 6A ✅)
+├── backend/                       ← FastAPI backend (Phase 6A ✅ + Session 8 LOT entity)
 │   ├── app/
 │   │   ├── config.py, database.py, main.py, dependencies.py
-│   │   ├── models/    (15 ORM models)
-│   │   ├── schemas/   (14 Pydantic schemas)
-│   │   ├── services/  (12 service stubs)
-│   │   ├── api/       (13 routers, 46 endpoints)
+│   │   ├── models/    (17 ORM models — added Lot, LotRoll)
+│   │   ├── schemas/   (15 Pydantic schemas — added lot.py)
+│   │   ├── services/  (13 service classes — added LotService)
+│   │   ├── api/       (14 routers, 50 endpoints — added lots.py)
 │   │   ├── core/      (security, permissions, exceptions, code_gen)
 │   │   └── tasks/     (reservation_expiry, backup_sync)
 │   ├── migrations/, seeds/, Dockerfile
 │   ├── requirements.txt, alembic.ini
-├── frontend/                      ← React app (Phase 6B — 8/11 tasks ✅)
+├── frontend/                      ← React app (Phase 6B ✅ + Session 7-8 updates)
 │   ├── package.json, vite.config.js, tailwind.config.js
 │   ├── postcss.config.js, index.html, .env, .env.example
 │   └── src/
 │       ├── main.jsx, App.jsx, index.css
-│       ├── api/           (13 files — client + mock + 11 modules)
+│       ├── api/           (14 files — client + mock + 12 modules, added lots.js)
 │       ├── context/       (AuthContext.jsx)
 │       ├── hooks/         (useAuth.js, useApi.js)
 │       ├── components/
 │       │   ├── layout/    (Sidebar, Header, Layout)
 │       │   ├── common/    (DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert)
 │       │   └── forms/     (UserForm, RollForm, SKUForm, BatchForm, OrderForm)
-│       ├── pages/         (LoginPage + 11 feature pages — all implemented)
+│       ├── pages/         (LoginPage + 12 feature pages — added LotsPage)
 │       └── routes/        (routes.js, ProtectedRoute.jsx)
 └── mobile/                        ← Android/Kotlin (Phase 6C, future)
 ```

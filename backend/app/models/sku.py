@@ -21,6 +21,7 @@ class SKU(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     # Relationships
+    lots: Mapped[list[Lot]] = relationship(back_populates="sku")
     batches: Mapped[list[Batch]] = relationship(back_populates="sku")
     inventory_state: Mapped[InventoryState | None] = relationship(
         back_populates="sku", uselist=False

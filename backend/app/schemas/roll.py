@@ -19,9 +19,10 @@ class RollCreate(BaseModel):
 
     fabric_type: str
     color: str
-    total_length: Decimal
-    unit: str = "meters"
+    total_weight: Decimal
+    unit: str = "kg"
     cost_per_unit: Decimal | None = None
+    total_length: Decimal | None = None  # Optional reference length
     supplier_id: UUID | None = None
     supplier_invoice_no: str | None = None
     supplier_invoice_date: date | None = None
@@ -48,10 +49,11 @@ class RollResponse(BaseSchema):
     roll_code: str
     fabric_type: str
     color: str
-    total_length: Decimal
-    remaining_length: Decimal
+    total_weight: Decimal
+    remaining_weight: Decimal
     unit: str
     cost_per_unit: Decimal | None = None
+    total_length: Decimal | None = None
     supplier: SupplierBrief | None = None
     supplier_invoice_no: str | None = None
     supplier_invoice_date: date | None = None

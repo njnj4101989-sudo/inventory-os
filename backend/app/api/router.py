@@ -14,6 +14,7 @@ from app.api import (
     suppliers,
     rolls,
     skus,
+    lots,
     batches,
     inventory,
     orders,
@@ -31,6 +32,7 @@ api_router.include_router(roles.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(rolls.router)
 api_router.include_router(skus.router)
+api_router.include_router(lots.router)
 api_router.include_router(batches.router)
 api_router.include_router(inventory.router)
 api_router.include_router(orders.router)

@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.roll import Roll
+from app.models.lot import Lot
 from app.models.batch import Batch
 from app.models.order import Order
 from app.models.invoice import Invoice
@@ -31,6 +32,13 @@ async def next_roll_code(db: AsyncSession) -> str:
     result = await db.execute(select(func.max(Roll.roll_code)))
     current = _extract_number(result.scalar(), "ROLL-")
     return f"ROLL-{current + 1:04d}"
+
+
+async def next_lot_code(db: AsyncSession) -> str:
+    """Generate next LOT-XXXX code."""
+    result = await db.execute(select(func.max(Lot.lot_code)))
+    current = _extract_number(result.scalar(), "LOT-")
+    return f"LOT-{current + 1:04d}"
 
 
 async def next_batch_code(db: AsyncSession) -> str:

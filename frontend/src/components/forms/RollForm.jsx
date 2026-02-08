@@ -22,28 +22,27 @@ export default function RollForm({ form, onChange, suppliers = [], error = null,
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Total Length</label>
-          <input type="number" step="0.01" value={form.total_length} onChange={(e) => set('total_length', e.target.value)} className={INPUT} />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Total Weight (kg)</label>
+          <input type="number" step="0.001" value={form.total_weight} onChange={(e) => set('total_weight', e.target.value)}
+            placeholder="e.g. 28.550" className={INPUT} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-          <select value={form.unit} onChange={(e) => set('unit', e.target.value)} className={INPUT}>
-            <option value="meters">Meters</option>
-            <option value="yards">Yards</option>
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cost per kg (₹)</label>
+          <input type="number" step="0.01" value={form.cost_per_unit} onChange={(e) => set('cost_per_unit', e.target.value)} className={INPUT} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Cost per Unit (₹)</label>
-          <input type="number" step="0.01" value={form.cost_per_unit} onChange={(e) => set('cost_per_unit', e.target.value)} className={INPUT} />
-        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
           <select value={form.supplier_id} onChange={(e) => set('supplier_id', e.target.value)} className={INPUT}>
             <option value="">Select supplier</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Length (optional, meters)</label>
+          <input type="number" step="0.01" value={form.total_length} onChange={(e) => set('total_length', e.target.value)}
+            placeholder="Reference only" className={INPUT} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">

@@ -101,30 +101,32 @@ export default function BatchDetailPage() {
         </div>
       </div>
 
-      {/* Rolls Used */}
+      {/* Lot Info */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Rolls Used</h2>
-        {batch.rolls_used?.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-gray-500">
-                <th className="pb-2 font-medium">Roll Code</th>
-                <th className="pb-2 font-medium">Pieces Cut</th>
-                <th className="pb-2 font-medium">Length Used</th>
-              </tr>
-            </thead>
-            <tbody>
-              {batch.rolls_used.map((r, i) => (
-                <tr key={i} className="border-b last:border-0">
-                  <td className="py-2 font-medium">{r.roll_code}</td>
-                  <td className="py-2">{r.pieces_cut}</td>
-                  <td className="py-2">{r.length_used != null ? `${r.length_used} m` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Lot Info</h2>
+        {batch.lot ? (
+          <div className="space-y-2 text-sm">
+            <div className="flex gap-4">
+              <span className="text-gray-500">Lot:</span>
+              <span className="font-medium">{batch.lot.lot_code}</span>
+              <span className="text-gray-500">Design:</span>
+              <span className="font-medium">{batch.lot.design_no}</span>
+              <span className="text-gray-500">Total Pieces:</span>
+              <span className="font-medium">{batch.lot.total_pieces}</span>
+            </div>
+            {batch.color_breakdown && (
+              <div className="flex gap-2">
+                <span className="text-gray-500">Colors:</span>
+                {Object.entries(batch.color_breakdown).map(([color, qty]) => (
+                  <span key={color} className="rounded bg-gray-100 px-2 py-0.5 text-xs">
+                    {color}: {qty}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
-          <p className="text-sm text-gray-500">No rolls assigned yet.</p>
+          <p className="text-sm text-gray-500">No lot linked.</p>
         )}
       </div>
 

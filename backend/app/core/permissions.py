@@ -16,6 +16,7 @@ PERM_ROLE_MANAGE = "role_manage"
 PERM_SUPPLIER_MANAGE = "supplier_manage"
 PERM_STOCK_IN = "stock_in"
 PERM_ROLL_CUT = "roll_cut"
+PERM_LOT_MANAGE = "lot_manage"
 PERM_BATCH_CREATE = "batch_create"
 PERM_BATCH_ASSIGN = "batch_assign"
 PERM_BATCH_START = "batch_start"
@@ -33,6 +34,7 @@ ALL_PERMISSIONS: list[str] = [
     PERM_SUPPLIER_MANAGE,
     PERM_STOCK_IN,
     PERM_ROLL_CUT,
+    PERM_LOT_MANAGE,
     PERM_BATCH_CREATE,
     PERM_BATCH_ASSIGN,
     PERM_BATCH_START,
@@ -55,6 +57,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         PERM_ROLE_MANAGE,
         PERM_SUPPLIER_MANAGE,
         PERM_STOCK_IN,
+        PERM_LOT_MANAGE,
         PERM_INVENTORY_VIEW,
         PERM_INVENTORY_ADJUST,
         PERM_ORDER_MANAGE,
@@ -65,6 +68,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         PERM_SUPPLIER_MANAGE,
         PERM_STOCK_IN,
         PERM_ROLL_CUT,
+        PERM_LOT_MANAGE,
         PERM_BATCH_CREATE,
         PERM_BATCH_ASSIGN,
         PERM_INVENTORY_VIEW,

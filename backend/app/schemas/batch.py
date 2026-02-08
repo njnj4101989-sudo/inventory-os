@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.schemas import BaseSchema
+from app.schemas.lot import LotBrief
 from app.schemas.sku import SKUBrief
 from app.schemas.user import UserBrief
 
@@ -15,7 +16,7 @@ from app.schemas.user import UserBrief
 
 
 class RollCutInput(BaseModel):
-    """Single roll cut entry in batch creation."""
+    """Single roll cut entry in batch creation (legacy support)."""
 
     roll_id: UUID
     pieces_cut: int
@@ -41,10 +42,12 @@ class RollUsedBrief(BaseSchema):
 
 
 class BatchCreate(BaseModel):
-    """POST /batches — create batch + cut from rolls."""
+    """POST /batches — create batch from a lot."""
 
+    lot_id: UUID
     sku_id: UUID
-    rolls: list[RollCutInput]
+    piece_count: int
+    color_breakdown: dict | None = None  # e.g. {"Green": 100, "Red": 50}
     notes: str | None = None
 
 
@@ -68,8 +71,11 @@ class BatchCheck(BaseModel):
 class BatchResponse(BaseSchema):
     id: UUID
     batch_code: str
+    lot: LotBrief | None = None
     sku: SKUBrief
     quantity: int
+    piece_count: int
+    color_breakdown: dict | None = None
     status: str
     qr_code_data: str
     created_by_user: UserBrief | None = None

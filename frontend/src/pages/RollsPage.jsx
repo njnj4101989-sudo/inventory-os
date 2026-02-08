@@ -13,18 +13,18 @@ const COLUMNS = [
   { key: 'fabric_type', label: 'Fabric' },
   { key: 'color', label: 'Color' },
   {
-    key: 'total_length',
-    label: 'Total',
-    render: (val, row) => `${val} ${row.unit}`,
+    key: 'total_weight',
+    label: 'Weight (kg)',
+    render: (val) => `${val} kg`,
   },
   {
-    key: 'remaining_length',
+    key: 'remaining_weight',
     label: 'Remaining',
     render: (val, row) => {
-      const pct = row.total_length > 0 ? (val / row.total_length) * 100 : 0
+      const pct = row.total_weight > 0 ? (val / row.total_weight) * 100 : 0
       return (
         <div className="flex items-center gap-2">
-          <span>{val} {row.unit}</span>
+          <span>{val} kg</span>
           <div className="h-1.5 w-16 rounded-full bg-gray-200">
             <div className={`h-1.5 rounded-full ${pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
           </div>
@@ -32,7 +32,7 @@ const COLUMNS = [
       )
     },
   },
-  { key: 'cost_per_unit', label: 'Cost/Unit', render: (val) => val != null ? `₹${val}` : '—' },
+  { key: 'cost_per_unit', label: '₹/kg', render: (val) => val != null ? `₹${val}` : '—' },
   {
     key: 'supplier',
     label: 'Supplier',
@@ -40,18 +40,13 @@ const COLUMNS = [
   },
   { key: 'supplier_invoice_no', label: 'Invoice No.', render: (val) => val || '—' },
   {
-    key: 'supplier_invoice_date',
-    label: 'Invoice Date',
-    render: (val) => val ? new Date(val).toLocaleDateString() : '—',
-  },
-  {
     key: 'received_at',
     label: 'Received',
     render: (val) => val ? new Date(val).toLocaleDateString() : '—',
   },
 ]
 
-const EMPTY_FORM = { fabric_type: '', color: '', total_length: '', unit: 'meters', cost_per_unit: '', supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '', notes: '' }
+const EMPTY_FORM = { fabric_type: '', color: '', total_weight: '', cost_per_unit: '', supplier_id: '', total_length: '', supplier_invoice_no: '', supplier_invoice_date: '', notes: '' }
 
 export default function RollsPage() {
   const [rolls, setRolls] = useState([])
@@ -103,9 +98,10 @@ export default function RollsPage() {
       await stockIn({
         fabric_type: form.fabric_type,
         color: form.color,
-        total_length: parseFloat(form.total_length),
-        unit: form.unit,
+        total_weight: parseFloat(form.total_weight),
+        unit: 'kg',
         cost_per_unit: form.cost_per_unit ? parseFloat(form.cost_per_unit) : null,
+        total_length: form.total_length ? parseFloat(form.total_length) : null,
         supplier_id: form.supplier_id || null,
         supplier_invoice_no: form.supplier_invoice_no || null,
         supplier_invoice_date: form.supplier_invoice_date || null,
@@ -125,7 +121,7 @@ export default function RollsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Rolls</h1>
-          <p className="mt-1 text-sm text-gray-500">Raw material stock — fabric rolls</p>
+          <p className="mt-1 text-sm text-gray-500">Raw material stock — fabric rolls (by weight)</p>
         </div>
         <button onClick={openStockIn} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
           + Stock In

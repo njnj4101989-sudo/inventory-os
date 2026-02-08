@@ -10,12 +10,12 @@ const uid = (n) => `00000000-0000-4000-a000-00000000000${n}`
 export const PERMISSIONS = {
   admin: {
     user_manage: true, role_manage: true, supplier_manage: true,
-    stock_in: true, inventory_view: true, inventory_adjust: true,
+    stock_in: true, lot_manage: true, inventory_view: true, inventory_adjust: true,
     order_manage: true, invoice_manage: true, report_view: true,
   },
   supervisor: {
     supplier_manage: true, stock_in: true, roll_cut: true,
-    batch_create: true, batch_assign: true,
+    lot_manage: true, batch_create: true, batch_assign: true,
     inventory_view: true, inventory_adjust: true, report_view: true,
   },
   tailor: { batch_start: true, batch_submit: true },
@@ -79,12 +79,12 @@ export const suppliers = [
   },
 ]
 
-// ── Rolls ──────────────────────────────────────────────
+// ── Rolls (weight-based) ──────────────────────────────
 export const rolls = [
   {
     id: uid(8), roll_code: 'ROLL-0001', fabric_type: 'Cotton',
-    color: 'Red', total_length: 50.0, remaining_length: 37.5,
-    unit: 'meters', cost_per_unit: 120.0,
+    color: 'Green', total_weight: 18.800, remaining_weight: 0,
+    unit: 'kg', cost_per_unit: 120.0, total_length: null,
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0451', supplier_invoice_date: '2026-02-06',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
@@ -92,30 +92,48 @@ export const rolls = [
   },
   {
     id: uid(9), roll_code: 'ROLL-0002', fabric_type: 'Cotton',
-    color: 'Blue', total_length: 60.0, remaining_length: 60.0,
-    unit: 'meters', cost_per_unit: 130.0,
+    color: 'Green', total_weight: 36.920, remaining_weight: 0,
+    unit: 'kg', cost_per_unit: 120.0, total_length: null,
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0451', supplier_invoice_date: '2026-02-06',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-07T09:30:00Z', notes: null,
   },
   {
-    id: uid('a'), roll_code: 'ROLL-0003', fabric_type: 'Silk',
-    color: 'Green', total_length: 40.0, remaining_length: 25.0,
-    unit: 'meters', cost_per_unit: 250.0,
-    supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
-    supplier_invoice_no: 'LF-2026-0089', supplier_invoice_date: '2026-02-07',
+    id: uid('a'), roll_code: 'ROLL-0003', fabric_type: 'Cotton',
+    color: 'Red', total_weight: 28.550, remaining_weight: 0,
+    unit: 'kg', cost_per_unit: 130.0, total_length: null,
+    supplier: { id: uid(6), name: 'Krishna Textiles' },
+    supplier_invoice_no: 'KT-2026-0452', supplier_invoice_date: '2026-02-06',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
-    received_at: '2026-02-07T10:00:00Z', notes: 'Premium quality',
+    received_at: '2026-02-07T10:00:00Z', notes: null,
   },
   {
     id: uid('b'), roll_code: 'ROLL-0004', fabric_type: 'Cotton',
-    color: 'White', total_length: 55.0, remaining_length: 55.0,
-    unit: 'meters', cost_per_unit: 110.0,
+    color: 'Red', total_weight: 29.000, remaining_weight: 0,
+    unit: 'kg', cost_per_unit: 130.0, total_length: null,
+    supplier: { id: uid(6), name: 'Krishna Textiles' },
+    supplier_invoice_no: 'KT-2026-0452', supplier_invoice_date: '2026-02-06',
+    received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
+    received_at: '2026-02-07T10:30:00Z', notes: null,
+  },
+  {
+    id: uid('b1'), roll_code: 'ROLL-0005', fabric_type: 'Cotton',
+    color: 'Black', total_weight: 28.590, remaining_weight: 28.590,
+    unit: 'kg', cost_per_unit: 125.0, total_length: null,
+    supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
+    supplier_invoice_no: 'LF-2026-0089', supplier_invoice_date: '2026-02-07',
+    received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
+    received_at: '2026-02-08T09:00:00Z', notes: 'Not yet assigned to lot',
+  },
+  {
+    id: uid('b2'), roll_code: 'ROLL-0006', fabric_type: 'Cotton',
+    color: 'White', total_weight: 23.120, remaining_weight: 23.120,
+    unit: 'kg', cost_per_unit: 115.0, total_length: null,
     supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
     supplier_invoice_no: 'LF-2026-0090', supplier_invoice_date: '2026-02-07',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
-    received_at: '2026-02-07T10:30:00Z', notes: null,
+    received_at: '2026-02-08T09:30:00Z', notes: 'Not yet assigned to lot',
   },
 ]
 
@@ -144,62 +162,91 @@ export const skus = [
   },
 ]
 
-// ── Batches ────────────────────────────────────────────
+// ── Lots ──────────────────────────────────────────────
+export const lots = [
+  {
+    id: uid('d1'), lot_code: 'LOT-0001',
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+    lot_date: '2026-02-07',
+    design_no: '702',
+    standard_palla_weight: 3.60,
+    default_size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 },
+    pieces_per_palla: 18,
+    total_pallas: 24,
+    total_pieces: 432,
+    total_weight: 113.270,
+    status: 'distributed',
+    created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
+    lot_rolls: [
+      {
+        id: uid('d2'), roll_id: uid(8), roll_code: 'ROLL-0001', color: 'Green',
+        roll_weight: 18.800, palla_weight: 2.860, num_pallas: 6,
+        weight_used: 17.160, waste_weight: 1.640, size_pattern: null, pieces_from_roll: 108,
+      },
+      {
+        id: uid('d3'), roll_id: uid(9), roll_code: 'ROLL-0002', color: 'Green',
+        roll_weight: 36.920, palla_weight: 2.610, num_pallas: 14,
+        weight_used: 36.540, waste_weight: 0.380, size_pattern: null, pieces_from_roll: 252,
+      },
+      {
+        id: uid('d4'), roll_id: uid('a'), roll_code: 'ROLL-0003', color: 'Red',
+        roll_weight: 28.550, palla_weight: 3.060, num_pallas: 9,
+        weight_used: 27.540, waste_weight: 1.010, size_pattern: null, pieces_from_roll: 162,
+      },
+      {
+        id: uid('d5'), roll_id: uid('b'), roll_code: 'ROLL-0004', color: 'Red',
+        roll_weight: 29.000, palla_weight: 3.050, num_pallas: 9,
+        weight_used: 27.450, waste_weight: 1.550, size_pattern: null, pieces_from_roll: 162,
+      },
+    ],
+    created_at: '2026-02-07T10:00:00Z',
+    notes: 'First lot - Design 702',
+  },
+]
+
+// ── Batches (lot-based) ───────────────────────────────
 export const batches = [
   {
     id: uid('f'), batch_code: 'BATCH-0001',
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', total_pieces: 432, status: 'distributed' },
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
-    quantity: 50, status: 'COMPLETED',
+    quantity: 200, piece_count: 200,
+    color_breakdown: { Green: 108, Red: 92 },
+    status: 'COMPLETED',
     qr_code_data: `https://inv.local/batch/${uid('f')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     assignment: {
       tailor: { id: uid(3), full_name: 'Amit Singh' },
       assigned_at: '2026-02-07T11:00:00Z',
     },
-    rolls_used: [
-      { roll_code: 'ROLL-0001', pieces_cut: 30, length_used: 12.5 },
-      { roll_code: 'ROLL-0003', pieces_cut: 20, length_used: 15.0 },
-    ],
+    rolls_used: [],
     created_at: '2026-02-07T10:00:00Z',
     assigned_at: '2026-02-07T11:00:00Z',
     started_at: '2026-02-07T12:00:00Z',
     submitted_at: '2026-02-07T16:00:00Z',
     checked_at: '2026-02-07T17:00:00Z',
     completed_at: '2026-02-07T17:00:00Z',
-    approved_qty: 48, rejected_qty: 2,
+    approved_qty: 196, rejected_qty: 4,
     rejection_reason: 'Minor stitching defects', notes: null,
   },
   {
     id: uid('10'), batch_code: 'BATCH-0002',
-    sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
-    quantity: 30, status: 'ASSIGNED',
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', total_pieces: 432, status: 'distributed' },
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+    quantity: 232, piece_count: 232,
+    color_breakdown: { Green: 162, Red: 70 },
+    status: 'ASSIGNED',
     qr_code_data: `https://inv.local/batch/${uid('10')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     assignment: {
       tailor: { id: uid(3), full_name: 'Amit Singh' },
       assigned_at: '2026-02-08T09:00:00Z',
     },
-    rolls_used: [
-      { roll_code: 'ROLL-0002', pieces_cut: 30, length_used: 18.0 },
-    ],
+    rolls_used: [],
     created_at: '2026-02-08T08:00:00Z',
     assigned_at: '2026-02-08T09:00:00Z',
     started_at: null, submitted_at: null, checked_at: null, completed_at: null,
     approved_qty: null, rejected_qty: null, rejection_reason: null, notes: null,
-  },
-  {
-    id: uid('11'), batch_code: 'BATCH-0003',
-    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
-    quantity: 25, status: 'CREATED',
-    qr_code_data: `https://inv.local/batch/${uid('11')}`,
-    created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
-    assignment: null,
-    rolls_used: [],
-    created_at: '2026-02-08T10:00:00Z',
-    assigned_at: null, started_at: null, submitted_at: null,
-    checked_at: null, completed_at: null,
-    approved_qty: null, rejected_qty: null, rejection_reason: null,
-    notes: 'Pending roll assignment',
   },
 ]
 
@@ -228,7 +275,7 @@ export const inventoryEvents = [
     id: uid('12'), event_id: 'STOCK_IN_batch_f_001',
     event_type: 'STOCK_IN', item_type: 'finished_goods',
     reference_type: 'batch', reference_id: uid('f'),
-    quantity: 48,
+    quantity: 196,
     performed_by: { id: uid(4), full_name: 'Suresh Checker' },
     performed_at: '2026-02-07T17:00:00Z',
     metadata: { batch_code: 'BATCH-0001' },
@@ -236,11 +283,11 @@ export const inventoryEvents = [
   {
     id: uid('13'), event_id: 'STOCK_OUT_roll_8_001',
     event_type: 'STOCK_OUT', item_type: 'raw_material',
-    reference_type: 'roll', reference_id: uid(8),
-    quantity: 30,
+    reference_type: 'lot', reference_id: uid('d1'),
+    quantity: 4,
     performed_by: { id: uid(2), full_name: 'Ravi Kumar' },
     performed_at: '2026-02-07T10:00:00Z',
-    metadata: { roll_code: 'ROLL-0001', batch_code: 'BATCH-0001' },
+    metadata: { lot_code: 'LOT-0001', roll_count: 4 },
   },
 ]
 
@@ -323,8 +370,9 @@ export const invoices = [
 
 // ── Dashboard Stats ────────────────────────────────────
 export const dashboardSummary = {
-  rolls: { total: 4, with_remaining: 4 },
-  batches: { created: 1, assigned: 1, in_progress: 0, submitted: 0, completed_today: 1 },
+  rolls: { total: 6, with_remaining: 2 },
+  lots: { total: 1, open: 0, distributed: 1 },
+  batches: { created: 0, assigned: 1, in_progress: 0, submitted: 0, completed_today: 1 },
   inventory: { total_skus: 3, low_stock_skus: 0 },
   orders: { pending: 1, processing: 1, shipped_today: 1 },
   revenue_today: 1770.0,

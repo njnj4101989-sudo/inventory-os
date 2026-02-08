@@ -8,7 +8,7 @@ export async function getRolls(params = {}) {
     let filtered = [...rolls]
     if (params.fabric_type) filtered = filtered.filter((r) => r.fabric_type === params.fabric_type)
     if (params.color) filtered = filtered.filter((r) => r.color === params.color)
-    if (params.has_remaining) filtered = filtered.filter((r) => r.remaining_length > 0)
+    if (params.has_remaining) filtered = filtered.filter((r) => r.remaining_weight > 0)
     if (params.supplier_id) filtered = filtered.filter((r) => r.supplier?.id === params.supplier_id)
     return mockPaginated(filtered, params.page, params.page_size)
   }
@@ -22,7 +22,7 @@ export async function stockIn(data) {
       id: crypto.randomUUID(),
       roll_code: nextCode,
       ...data,
-      remaining_length: data.total_length,
+      remaining_weight: data.total_weight,
       supplier: { id: data.supplier_id, name: 'Krishna Textiles' },
       received_by_user: { id: '00000000-0000-4000-a000-000000000002', full_name: 'Ravi Kumar' },
       received_at: new Date().toISOString(),

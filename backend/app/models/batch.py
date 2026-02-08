@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,8 +13,11 @@ class Batch(Base):
     __tablename__ = "batches"
 
     batch_code: Mapped[str] = mapped_column(String(50), unique=True)
+    lot_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lots.id"), index=True)
     sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"), index=True)
     quantity: Mapped[int] = mapped_column(Integer)
+    piece_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    color_breakdown: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), index=True)
     qr_code_data: Mapped[str] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
@@ -29,6 +32,7 @@ class Batch(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
+    lot: Mapped[Lot | None] = relationship(back_populates="batches")
     sku: Mapped[SKU] = relationship(back_populates="batches")
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     assignments: Mapped[list[BatchAssignment]] = relationship(back_populates="batch")

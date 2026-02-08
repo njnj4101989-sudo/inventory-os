@@ -16,10 +16,11 @@ class Roll(Base):
     roll_code: Mapped[str] = mapped_column(String(50), unique=True)
     fabric_type: Mapped[str] = mapped_column(String(100))
     color: Mapped[str] = mapped_column(String(50))
-    total_length: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    remaining_length: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    unit: Mapped[str] = mapped_column(String(20), default="meters", server_default="'meters'")
+    total_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    remaining_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    unit: Mapped[str] = mapped_column(String(20), default="kg", server_default="'kg'")
     cost_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    total_length: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     supplier_invoice_no: Mapped[str | None] = mapped_column(String(50))
     supplier_invoice_date: Mapped[datetime | None] = mapped_column(Date)
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"))
@@ -35,3 +36,4 @@ class Roll(Base):
     consumption_records: Mapped[list[BatchRollConsumption]] = relationship(
         back_populates="roll"
     )
+    lot_rolls: Mapped[list[LotRoll]] = relationship(back_populates="roll")

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getBatches, createBatch, assignBatch } from '../api/batches'
-import { getSKUs } from '../api/skus'
+import { getLots } from '../api/lots'
 import { getUsers } from '../api/users'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -13,6 +13,11 @@ import BatchForm from '../components/forms/BatchForm'
 const COLUMNS = [
   { key: 'batch_code', label: 'Code' },
   {
+    key: 'lot',
+    label: 'Lot',
+    render: (val) => val ? `${val.lot_code} (D${val.design_no})` : '—',
+  },
+  {
     key: 'sku',
     label: 'SKU',
     render: (val) => (
@@ -22,7 +27,11 @@ const COLUMNS = [
       </div>
     ),
   },
-  { key: 'quantity', label: 'Qty' },
+  {
+    key: 'piece_count',
+    label: 'Pieces',
+    render: (val) => <span className="font-semibold">{val}</span>,
+  },
   {
     key: 'status',
     label: 'Status',
@@ -62,8 +71,8 @@ export default function BatchesPage() {
 
   // Create modal
   const [createOpen, setCreateOpen] = useState(false)
-  const [skuList, setSkuList] = useState([])
-  const [createForm, setCreateForm] = useState({ sku_id: '', rolls: [{ roll_id: '', pieces_cut: '', length_used: '' }], notes: '' })
+  const [lotList, setLotList] = useState([])
+  const [createForm, setCreateForm] = useState({ lot_id: '', piece_count: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
@@ -92,7 +101,7 @@ export default function BatchesPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
-    getSKUs({ is_active: true }).then((res) => setSkuList(res.data.data)).catch(() => {})
+    getLots().then((res) => setLotList(res.data.data)).catch(() => {})
     getUsers({ role: 'tailor', is_active: true }).then((res) => setTailors(res.data.data)).catch(() => {})
   }, [])
 
@@ -106,21 +115,20 @@ export default function BatchesPage() {
     }
   }
 
-  // Create batch
+  // Create batch from lot
   const handleCreate = async () => {
     setSaving(true)
     setFormError(null)
     try {
-      const rolls = createForm.rolls
-        .filter((r) => r.pieces_cut)
-        .map((r) => ({
-          roll_id: r.roll_id || crypto.randomUUID(),
-          pieces_cut: parseInt(r.pieces_cut),
-          length_used: r.length_used ? parseFloat(r.length_used) : null,
-        }))
-      await createBatch({ sku_id: createForm.sku_id, rolls, notes: createForm.notes || null })
+      const lot = lotList.find((l) => l.id === createForm.lot_id)
+      await createBatch({
+        lot_id: createForm.lot_id,
+        sku_id: lot?.sku?.id || '',
+        piece_count: parseInt(createForm.piece_count),
+        notes: createForm.notes || null,
+      })
       setCreateOpen(false)
-      setCreateForm({ sku_id: '', rolls: [{ roll_id: '', pieces_cut: '', length_used: '' }], notes: '' })
+      setCreateForm({ lot_id: '', piece_count: '', notes: '' })
       fetchData()
     } catch (err) {
       setFormError(err.response?.data?.detail || 'Failed to create batch')
@@ -148,7 +156,7 @@ export default function BatchesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Batches</h1>
-          <p className="mt-1 text-sm text-gray-500">Production batch lifecycle management</p>
+          <p className="mt-1 text-sm text-gray-500">Production batches — assigned from lots to tailors</p>
         </div>
         <button onClick={() => { setFormError(null); setCreateOpen(true) }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
           + Create Batch
@@ -183,8 +191,7 @@ export default function BatchesPage() {
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Create Batch"
-        wide
+        title="Create Batch from Lot"
         actions={
           <>
             <button onClick={() => setCreateOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
@@ -194,7 +201,7 @@ export default function BatchesPage() {
           </>
         }
       >
-        <BatchForm form={createForm} onChange={setCreateForm} skuList={skuList}
+        <BatchForm form={createForm} onChange={setCreateForm} lotList={lotList}
           error={formError} onDismissError={() => setFormError(null)} />
       </Modal>
 

@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
+
+from pydantic import BaseModel
+
+from app.schemas import BaseSchema
+from app.schemas.sku import SKUBrief
+from app.schemas.user import UserBrief
+
+
+# --- Nested ---
+
+
+class LotRollInput(BaseModel):
+    """Single roll entry when creating a lot."""
+
+    roll_id: UUID
+    palla_weight: Decimal
+    size_pattern: dict | None = None  # Override lot default if needed
+
+
+class LotRollBrief(BaseSchema):
+    """Roll info in lot response."""
+
+    id: UUID
+    roll_id: UUID
+    roll_code: str | None = None
+    color: str | None = None
+    roll_weight: Decimal | None = None
+    palla_weight: Decimal
+    num_pallas: int
+    weight_used: Decimal
+    waste_weight: Decimal
+    size_pattern: dict | None = None
+    pieces_from_roll: int
+
+
+class LotBrief(BaseSchema):
+    """Nested lot info in batch response."""
+
+    id: UUID
+    lot_code: str
+    design_no: str
+    total_pieces: int
+    status: str
+
+
+# --- Requests ---
+
+
+class LotCreate(BaseModel):
+    """POST /lots — create lot with rolls."""
+
+    sku_id: UUID
+    lot_date: date
+    design_no: str
+    standard_palla_weight: Decimal
+    default_size_pattern: dict  # e.g. {"L": 2, "XL": 6, "XXL": 6, "3XL": 4}
+    rolls: list[LotRollInput]
+    notes: str | None = None
+
+
+class LotUpdate(BaseModel):
+    """PATCH /lots/{id} — update lot metadata."""
+
+    design_no: str | None = None
+    standard_palla_weight: Decimal | None = None
+    default_size_pattern: dict | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+# --- Response ---
+
+
+class LotResponse(BaseSchema):
+    id: UUID
+    lot_code: str
+    sku: SKUBrief
+    lot_date: date
+    design_no: str
+    standard_palla_weight: Decimal
+    default_size_pattern: dict
+    pieces_per_palla: int
+    total_pallas: int
+    total_pieces: int
+    total_weight: Decimal
+    status: str
+    created_by_user: UserBrief | None = None
+    lot_rolls: list[LotRollBrief] = []
+    created_at: datetime
+    notes: str | None = None

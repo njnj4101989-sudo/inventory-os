@@ -27,7 +27,7 @@ class RollService:
 
         Steps:
         1. Generate next_roll_code via core/code_generator
-        2. Create Roll record (remaining_length = total_length)
+        2. Create Roll record (remaining_weight = total_weight)
         3. Create STOCK_IN InventoryEvent
         4. Return {roll: RollResponse, event: EventResponse}
         """

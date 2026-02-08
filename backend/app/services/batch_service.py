@@ -29,18 +29,16 @@ class BatchService:
         raise NotImplementedError
 
     async def create_batch(self, req: BatchCreate, created_by: UUID) -> dict:
-        """Create batch + cut from rolls.
+        """Create batch from a lot (assigns pieces from lot to tailor).
 
         Steps:
         1. Generate next_batch_code via core/code_generator
-        2. Validate all rolls exist and have enough remaining_length
-        3. Create Batch record (status=CREATED, quantity=sum of pieces_cut)
-        4. Create BatchRollConsumption records for each roll
-        5. Deduct remaining_length from each Roll
-        6. Generate QR code via qr_service
-        7. Create inventory events (STOCK_OUT for raw material per roll)
-        8. Return {batch: BatchResponse, events: list}
-        Raises: NotFoundError (roll/sku), InsufficientStockError.
+        2. Validate lot exists, is in 'open' or 'cutting' status
+        3. Validate piece_count doesn't exceed lot's remaining pieces
+        4. Create Batch record (status=CREATED, lot_id, piece_count, color_breakdown)
+        5. Generate QR code via qr_service
+        6. Return {batch: BatchResponse}
+        Raises: NotFoundError (lot/sku), InsufficientStockError.
         """
         raise NotImplementedError
 
