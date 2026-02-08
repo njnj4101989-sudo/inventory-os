@@ -23,7 +23,7 @@ export async function getSKUs(params = {}) {
 
 export async function createSKU(data) {
   if (USE_MOCK) {
-    const code = `${data.product_name?.split(' ')[1] || '999'}-${data.color}-${data.size}`
+    const code = `${data.product_type}-${data.design_no || '999'}-${data.color}-${data.size}`
     const newSku = {
       id: crypto.randomUUID(),
       sku_code: code,

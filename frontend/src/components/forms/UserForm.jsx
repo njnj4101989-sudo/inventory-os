@@ -27,7 +27,7 @@ export default function UserForm({ form, onChange, roles = [], editing = false, 
         <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
         <select value={form.role_id} onChange={(e) => set('role_id', e.target.value)} className={INPUT}>
           <option value="">Select role</option>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          {roles.map((r) => <option key={r.id} value={r.id}>{r.display_name || r.name}</option>)}
         </select>
       </div>
       <div>

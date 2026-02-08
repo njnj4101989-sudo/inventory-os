@@ -1,8 +1,9 @@
 """Reservation service — reserve, confirm, release, expiry management."""
 
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.reservation import Reservation
@@ -58,4 +59,33 @@ class ReservationService:
         Called by background task (6A-11). Updates status → EXPIRED,
         decrements reserved_qty in inventory_state.
         """
-        raise NotImplementedError
+        now = datetime.now(timezone.utc)
+
+        # Find active reservations that have passed their expiry time
+        stmt = select(Reservation).where(
+            Reservation.status == "active",
+            Reservation.expires_at.isnot(None),
+            Reservation.expires_at < now,
+        )
+        result = await self.db.execute(stmt)
+        stale = result.scalars().all()
+
+        if not stale:
+            return 0
+
+        for res in stale:
+            res.status = "expired"
+            res.released_at = now
+
+            # Decrement reserved_qty on inventory_state
+            inv_stmt = select(InventoryState).where(
+                InventoryState.sku_id == res.sku_id
+            )
+            inv_result = await self.db.execute(inv_stmt)
+            inv = inv_result.scalar_one_or_none()
+            if inv:
+                inv.reserved_qty = max(0, inv.reserved_qty - res.quantity)
+                inv.available_qty = inv.total_qty - inv.reserved_qty
+                inv.last_updated = now
+
+        return len(stale)

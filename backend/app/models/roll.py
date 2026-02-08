@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,6 +20,8 @@ class Roll(Base):
     remaining_length: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     unit: Mapped[str] = mapped_column(String(20), default="meters", server_default="'meters'")
     cost_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    supplier_invoice_no: Mapped[str | None] = mapped_column(String(50))
+    supplier_invoice_date: Mapped[datetime | None] = mapped_column(Date)
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"))
     received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     received_at: Mapped[datetime] = mapped_column(

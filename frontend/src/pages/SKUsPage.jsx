@@ -37,7 +37,7 @@ const COLUMNS = [
   },
 ]
 
-const EMPTY_FORM = { product_type: 'BLS', product_name: '', color: '', size: '', description: '', base_price: '' }
+const EMPTY_FORM = { product_type: 'BLS', design_no: '', product_name: '', color: '', size: '', description: '', base_price: '' }
 
 export default function SKUsPage() {
   const [skus, setSKUs] = useState([])
@@ -80,8 +80,12 @@ export default function SKUsPage() {
 
   const openEdit = (row) => {
     setEditing(row)
+    // Extract design_no from sku_code: "BLS-101-Red-M" → "101"
+    const parts = (row.sku_code || '').split('-')
+    const designNo = parts.length >= 2 ? parts[1] : ''
     setForm({
       product_type: row.product_type,
+      design_no: designNo,
       product_name: row.product_name,
       color: row.color,
       size: row.size,
@@ -119,7 +123,7 @@ export default function SKUsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">SKUs</h1>
-          <p className="mt-1 text-sm text-gray-500">Product catalog — DesignNo-Color-Size</p>
+          <p className="mt-1 text-sm text-gray-500">Product catalog — ProductType-DesignNo-Color-Size</p>
         </div>
         <button onClick={openCreate} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
           + Add SKU
@@ -150,7 +154,7 @@ export default function SKUsPage() {
           </>
         }
       >
-        <SKUForm form={form} onChange={setForm}
+        <SKUForm form={form} onChange={setForm} editing={!!editing}
           error={formError} onDismissError={() => setFormError(null)} />
       </Modal>
     </div>

@@ -20,7 +20,6 @@ const ReportsPage      = lazy(() => import('../pages/ReportsPage'))
 const routes = [
   { path: 'dashboard',        element: DashboardPage,    requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'users',            element: UsersPage,        requiredRoles: ['admin'] },
-  { path: 'roles',            element: UsersPage,        requiredRoles: ['admin'] },
   { path: 'suppliers',        element: SuppliersPage,    requiredRoles: ['admin', 'supervisor'] },
   { path: 'rolls',            element: RollsPage,        requiredRoles: ['admin', 'supervisor'] },
   { path: 'skus',             element: SKUsPage,         requiredRoles: ['admin', 'supervisor'] },

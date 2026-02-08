@@ -22,6 +22,7 @@ export async function login(username, password) {
         username: user.username,
         full_name: user.full_name,
         role: user.role.name,
+        role_display_name: user.role.display_name || null,
         permissions,
       },
     }

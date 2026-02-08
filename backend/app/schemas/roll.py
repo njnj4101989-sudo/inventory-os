@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -23,6 +23,8 @@ class RollCreate(BaseModel):
     unit: str = "meters"
     cost_per_unit: Decimal | None = None
     supplier_id: UUID | None = None
+    supplier_invoice_no: str | None = None
+    supplier_invoice_date: date | None = None
     notes: str | None = None
 
 
@@ -51,6 +53,8 @@ class RollResponse(BaseSchema):
     unit: str
     cost_per_unit: Decimal | None = None
     supplier: SupplierBrief | None = None
+    supplier_invoice_no: str | None = None
+    supplier_invoice_date: date | None = None
     received_by_user: UserBrief | None = None
     received_at: datetime
     notes: str | None = None

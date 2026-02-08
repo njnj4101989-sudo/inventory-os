@@ -27,38 +27,38 @@ export const PERMISSIONS = {
 }
 
 export const roles = [
-  { id: uid(1), name: 'admin', permissions: PERMISSIONS.admin },
-  { id: uid(2), name: 'supervisor', permissions: PERMISSIONS.supervisor },
-  { id: uid(3), name: 'tailor', permissions: PERMISSIONS.tailor },
-  { id: uid(4), name: 'checker', permissions: PERMISSIONS.checker },
-  { id: uid(5), name: 'billing', permissions: PERMISSIONS.billing },
+  { id: uid(1), name: 'admin', display_name: null, permissions: PERMISSIONS.admin, user_count: 1 },
+  { id: uid(2), name: 'supervisor', display_name: null, permissions: PERMISSIONS.supervisor, user_count: 1 },
+  { id: uid(3), name: 'tailor', display_name: null, permissions: PERMISSIONS.tailor, user_count: 1 },
+  { id: uid(4), name: 'checker', display_name: null, permissions: PERMISSIONS.checker, user_count: 1 },
+  { id: uid(5), name: 'billing', display_name: null, permissions: PERMISSIONS.billing, user_count: 1 },
 ]
 
 // ── Users ──────────────────────────────────────────────
 export const users = [
   {
     id: uid(1), username: 'admin1', full_name: 'Nitish Admin',
-    role: { id: uid(1), name: 'admin' }, phone: '9999900001',
+    role: { id: uid(1), name: 'admin', display_name: null }, phone: '9999900001',
     is_active: true, created_at: '2026-02-07T08:00:00Z',
   },
   {
     id: uid(2), username: 'supervisor1', full_name: 'Ravi Kumar',
-    role: { id: uid(2), name: 'supervisor' }, phone: '9999900002',
+    role: { id: uid(2), name: 'supervisor', display_name: null }, phone: '9999900002',
     is_active: true, created_at: '2026-02-07T08:00:00Z',
   },
   {
     id: uid(3), username: 'tailor1', full_name: 'Amit Singh',
-    role: { id: uid(3), name: 'tailor' }, phone: '9999900003',
+    role: { id: uid(3), name: 'tailor', display_name: null }, phone: '9999900003',
     is_active: true, created_at: '2026-02-07T08:00:00Z',
   },
   {
     id: uid(4), username: 'checker1', full_name: 'Suresh Checker',
-    role: { id: uid(4), name: 'checker' }, phone: '9999900004',
+    role: { id: uid(4), name: 'checker', display_name: null }, phone: '9999900004',
     is_active: true, created_at: '2026-02-07T08:00:00Z',
   },
   {
     id: uid(5), username: 'billing1', full_name: 'Priya Billing',
-    role: { id: uid(5), name: 'billing' }, phone: '9999900005',
+    role: { id: uid(5), name: 'billing', display_name: null }, phone: '9999900005',
     is_active: true, created_at: '2026-02-07T08:00:00Z',
   },
 ]
@@ -86,6 +86,7 @@ export const rolls = [
     color: 'Red', total_length: 50.0, remaining_length: 37.5,
     unit: 'meters', cost_per_unit: 120.0,
     supplier: { id: uid(6), name: 'Krishna Textiles' },
+    supplier_invoice_no: 'KT-2026-0451', supplier_invoice_date: '2026-02-06',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-07T09:00:00Z', notes: null,
   },
@@ -94,6 +95,7 @@ export const rolls = [
     color: 'Blue', total_length: 60.0, remaining_length: 60.0,
     unit: 'meters', cost_per_unit: 130.0,
     supplier: { id: uid(6), name: 'Krishna Textiles' },
+    supplier_invoice_no: 'KT-2026-0451', supplier_invoice_date: '2026-02-06',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-07T09:30:00Z', notes: null,
   },
@@ -102,6 +104,7 @@ export const rolls = [
     color: 'Green', total_length: 40.0, remaining_length: 25.0,
     unit: 'meters', cost_per_unit: 250.0,
     supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
+    supplier_invoice_no: 'LF-2026-0089', supplier_invoice_date: '2026-02-07',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-07T10:00:00Z', notes: 'Premium quality',
   },
@@ -110,6 +113,7 @@ export const rolls = [
     color: 'White', total_length: 55.0, remaining_length: 55.0,
     unit: 'meters', cost_per_unit: 110.0,
     supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
+    supplier_invoice_no: 'LF-2026-0090', supplier_invoice_date: '2026-02-07',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-07T10:30:00Z', notes: null,
   },
@@ -118,21 +122,21 @@ export const rolls = [
 // ── SKUs ───────────────────────────────────────────────
 export const skus = [
   {
-    id: uid('c'), sku_code: '101-Red-M', product_type: 'BLS',
+    id: uid('c'), sku_code: 'BLS-101-Red-M', product_type: 'BLS',
     product_name: 'Design 101 Red Medium', color: 'Red', size: 'M',
     description: 'Cotton red blouse, regular fit', base_price: 450.0,
     is_active: true,
     stock: { total_qty: 150, available_qty: 120, reserved_qty: 30 },
   },
   {
-    id: uid('d'), sku_code: '102-Blue-L', product_type: 'BLS',
+    id: uid('d'), sku_code: 'BLS-102-Blue-L', product_type: 'BLS',
     product_name: 'Design 102 Blue Large', color: 'Blue', size: 'L',
     description: 'Cotton blue blouse, comfort fit', base_price: 500.0,
     is_active: true,
     stock: { total_qty: 80, available_qty: 65, reserved_qty: 15 },
   },
   {
-    id: uid('e'), sku_code: '103-Green-S', product_type: 'BLS',
+    id: uid('e'), sku_code: 'BLS-103-Green-S', product_type: 'BLS',
     product_name: 'Design 103 Green Small', color: 'Green', size: 'S',
     description: 'Silk green blouse, premium', base_price: 750.0,
     is_active: true,
@@ -144,7 +148,7 @@ export const skus = [
 export const batches = [
   {
     id: uid('f'), batch_code: 'BATCH-0001',
-    sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 50, status: 'COMPLETED',
     qr_code_data: `https://inv.local/batch/${uid('f')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
@@ -167,7 +171,7 @@ export const batches = [
   },
   {
     id: uid('10'), batch_code: 'BATCH-0002',
-    sku: { id: uid('d'), sku_code: '102-Blue-L', product_name: 'Design 102 Blue Large' },
+    sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
     quantity: 30, status: 'ASSIGNED',
     qr_code_data: `https://inv.local/batch/${uid('10')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
@@ -185,7 +189,7 @@ export const batches = [
   },
   {
     id: uid('11'), batch_code: 'BATCH-0003',
-    sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 25, status: 'CREATED',
     qr_code_data: `https://inv.local/batch/${uid('11')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
@@ -202,17 +206,17 @@ export const batches = [
 // ── Inventory State ────────────────────────────────────
 export const inventory = [
   {
-    sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     total_qty: 150, available_qty: 120, reserved_qty: 30,
     last_updated: '2026-02-08T10:00:00Z',
   },
   {
-    sku: { id: uid('d'), sku_code: '102-Blue-L', product_name: 'Design 102 Blue Large' },
+    sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
     total_qty: 80, available_qty: 65, reserved_qty: 15,
     last_updated: '2026-02-08T09:00:00Z',
   },
   {
-    sku: { id: uid('e'), sku_code: '103-Green-S', product_name: 'Design 103 Green Small' },
+    sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small' },
     total_qty: 40, available_qty: 40, reserved_qty: 0,
     last_updated: '2026-02-07T14:00:00Z',
   },
@@ -249,7 +253,7 @@ export const orders = [
     status: 'pending',
     items: [
       {
-        sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
         quantity: 5, unit_price: 450.0, total_price: 2250.0, fulfilled_qty: 0,
       },
     ],
@@ -262,7 +266,7 @@ export const orders = [
     status: 'shipped',
     items: [
       {
-        sku: { id: uid('d'), sku_code: '102-Blue-L', product_name: 'Design 102 Blue Large' },
+        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
         quantity: 3, unit_price: 500.0, total_price: 1500.0, fulfilled_qty: 3,
       },
     ],
@@ -275,11 +279,11 @@ export const orders = [
     status: 'processing',
     items: [
       {
-        sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
         quantity: 10, unit_price: 450.0, total_price: 4500.0, fulfilled_qty: 0,
       },
       {
-        sku: { id: uid('e'), sku_code: '103-Green-S', product_name: 'Design 103 Green Small' },
+        sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small' },
         quantity: 5, unit_price: 750.0, total_price: 3750.0, fulfilled_qty: 0,
       },
     ],
@@ -297,7 +301,7 @@ export const invoices = [
     issued_at: '2026-02-07T15:00:00Z', paid_at: '2026-02-07T16:00:00Z',
     items: [
       {
-        sku: { id: uid('d'), sku_code: '102-Blue-L', product_name: 'Design 102 Blue Large' },
+        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
         quantity: 3, unit_price: 500.0, total_price: 1500.0,
       },
     ],
@@ -310,7 +314,7 @@ export const invoices = [
     issued_at: '2026-02-08T08:30:00Z', paid_at: null,
     items: [
       {
-        sku: { id: uid('c'), sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
         quantity: 5, unit_price: 450.0, total_price: 2250.0,
       },
     ],
@@ -337,13 +341,13 @@ export const tailorPerformance = [
 
 export const inventoryMovement = [
   {
-    sku_code: '101-Red-M',
+    sku_code: 'BLS-101-Red-M',
     period: { from: '2026-02-01', to: '2026-02-08' },
     stock_in: 98, stock_out: 30, returns: 2, losses: 0,
     net_change: 70, closing_stock: 150,
   },
   {
-    sku_code: '102-Blue-L',
+    sku_code: 'BLS-102-Blue-L',
     period: { from: '2026-02-01', to: '2026-02-08' },
     stock_in: 80, stock_out: 15, returns: 0, losses: 0,
     net_change: 65, closing_stock: 80,

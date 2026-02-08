@@ -397,7 +397,7 @@ Response 200:
   "data": [
     {
       "id": "uuid",
-      "sku_code": "101-Red-M",
+      "sku_code": "BLS-101-Red-M",
       "product_type": "BLS",
       "product_name": "Design 101 Red Medium",
       "color": "Red",
@@ -430,12 +430,12 @@ Request:
 Response 201:
 {
   "success": true,
-  "data": { "id": "uuid", "sku_code": "101-Red-M", ... },
+  "data": { "id": "uuid", "sku_code": "BLS-101-Red-M", ... },
   "message": "SKU created"
 }
 
 Side effects:
-- Auto-generates sku_code as DesignNo-Color-Size
+- Auto-generates sku_code as ProductType-DesignNo-Color-Size
 - Creates inventory_state row with all zeros
 ```
 
@@ -462,7 +462,7 @@ Response 200:
     {
       "id": "uuid",
       "batch_code": "BATCH-0012",
-      "sku": { "id": "uuid", "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
+      "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
       "quantity": 50,
       "status": "ASSIGNED",
       "qr_code_data": "https://inv.local/batch/uuid",
@@ -626,14 +626,14 @@ Response: QR code image (PNG) or base64 encoded data
 #### `GET /api/v1/inventory`
 ```
 Auth: admin, supervisor, billing
-Query: ?sku_id=uuid&sku_code=101-Red-M&low_stock=true&page=1&page_size=20
+Query: ?sku_id=uuid&sku_code=BLS-101-Red-M&low_stock=true&page=1&page_size=20
 
 Response 200:
 {
   "success": true,
   "data": [
     {
-      "sku": { "id": "uuid", "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
+      "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
       "total_qty": 150,
       "available_qty": 120,
       "reserved_qty": 30,
@@ -740,7 +740,7 @@ Response 200:
       "status": "pending",
       "items": [
         {
-          "sku": { "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
+          "sku": { "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
           "quantity": 5,
           "unit_price": 450.00,
           "total_price": 2250.00,
@@ -780,7 +780,7 @@ Response 201:
   "data": {
     "order": { "id": "uuid", "order_number": "ORD-0046", "status": "pending", ... },
     "reservations": [
-      { "sku_code": "101-Red-M", "quantity": 5, "status": "active", "expires_at": "..." },
+      { "sku_code": "BLS-101-Red-M", "quantity": 5, "status": "active", "expires_at": "..." },
       { "sku_code": "201-Blue-L", "quantity": 3, "status": "active", "expires_at": "..." }
     ]
   },
@@ -886,7 +886,7 @@ Response 200:
       "issued_at": "2026-02-07T14:00:00Z",
       "items": [
         {
-          "sku": { "sku_code": "101-Red-M" },
+          "sku": { "sku_code": "BLS-101-Red-M" },
           "quantity": 5,
           "unit_price": 450.00,
           "total_price": 2250.00
@@ -974,7 +974,7 @@ Response 200:
 {
   "success": true,
   "data": {
-    "sku_code": "101-Red-M",
+    "sku_code": "BLS-101-Red-M",
     "period": { "from": "2026-02-01", "to": "2026-02-07" },
     "stock_in": 200,
     "stock_out": 150,
@@ -1001,7 +1001,7 @@ Response 200:
     {
       "id": "uuid",
       "batch_code": "BATCH-0012",
-      "sku": { "sku_code": "101-Red-M", "product_name": "Design 101 Red Medium" },
+      "sku": { "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
       "quantity": 50,
       "status": "ASSIGNED",
       "assigned_at": "2026-02-07T12:00:00Z"
@@ -1070,7 +1070,7 @@ Auth: X-API-Key
 
 Response 200:
 {
-  "sku_code": "101-Red-M",
+  "sku_code": "BLS-101-Red-M",
   "product_name": "Design 101 Red Medium",
   "available_qty": 120,
   "price": 450.00
@@ -1088,7 +1088,7 @@ Request:
 {
   "external_order_ref": "DRS-1234",
   "items": [
-    { "sku_code": "101-Red-M", "quantity": 5 }
+    { "sku_code": "BLS-101-Red-M", "quantity": 5 }
   ]
 }
 
@@ -1098,16 +1098,16 @@ Response 201:
   "status": "active",
   "expires_at": "2026-02-08T10:00:00Z",
   "items": [
-    { "sku_code": "101-Red-M", "quantity": 5, "available": true }
+    { "sku_code": "BLS-101-Red-M", "quantity": 5, "available": true }
   ]
 }
 
 Response 409:
 {
   "error": "insufficient_stock",
-  "detail": "101-Red-M: requested 5, available 3",
+  "detail": "BLS-101-Red-M: requested 5, available 3",
   "items": [
-    { "sku_code": "101-Red-M", "quantity": 5, "available_qty": 3 }
+    { "sku_code": "BLS-101-Red-M", "quantity": 5, "available_qty": 3 }
   ]
 }
 ```
@@ -1157,7 +1157,7 @@ Request:
 {
   "external_order_ref": "DRS-1234",
   "items": [
-    { "sku_code": "101-Red-M", "quantity": 2, "reason": "Customer return - wrong size" }
+    { "sku_code": "BLS-101-Red-M", "quantity": 2, "reason": "Customer return - wrong size" }
   ]
 }
 
@@ -1165,7 +1165,7 @@ Response 200:
 {
   "status": "returned",
   "items": [
-    { "sku_code": "101-Red-M", "quantity": 2, "new_available_qty": 122 }
+    { "sku_code": "BLS-101-Red-M", "quantity": 2, "new_available_qty": 122 }
   ],
   "message": "Return processed"
 }
@@ -1195,7 +1195,7 @@ Response 200:
 {
   "success": false,
   "error": "insufficient_stock",
-  "detail": "101-Red-M: requested 5, available 3",
+  "detail": "BLS-101-Red-M: requested 5, available 3",
   "timestamp": "2026-02-07T10:00:00Z"
 }
 ```

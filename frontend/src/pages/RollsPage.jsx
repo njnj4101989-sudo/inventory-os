@@ -38,6 +38,12 @@ const COLUMNS = [
     label: 'Supplier',
     render: (val) => val?.name || '—',
   },
+  { key: 'supplier_invoice_no', label: 'Invoice No.', render: (val) => val || '—' },
+  {
+    key: 'supplier_invoice_date',
+    label: 'Invoice Date',
+    render: (val) => val ? new Date(val).toLocaleDateString() : '—',
+  },
   {
     key: 'received_at',
     label: 'Received',
@@ -45,7 +51,7 @@ const COLUMNS = [
   },
 ]
 
-const EMPTY_FORM = { fabric_type: '', color: '', total_length: '', unit: 'meters', cost_per_unit: '', supplier_id: '', notes: '' }
+const EMPTY_FORM = { fabric_type: '', color: '', total_length: '', unit: 'meters', cost_per_unit: '', supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '', notes: '' }
 
 export default function RollsPage() {
   const [rolls, setRolls] = useState([])
@@ -101,6 +107,8 @@ export default function RollsPage() {
         unit: form.unit,
         cost_per_unit: form.cost_per_unit ? parseFloat(form.cost_per_unit) : null,
         supplier_id: form.supplier_id || null,
+        supplier_invoice_no: form.supplier_invoice_no || null,
+        supplier_invoice_date: form.supplier_invoice_date || null,
         notes: form.notes || null,
       })
       setModalOpen(false)

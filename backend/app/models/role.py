@@ -10,6 +10,7 @@ class Role(Base):
     __tablename__ = "roles"
 
     name: Mapped[str] = mapped_column(String(50), unique=True)
+    display_name: Mapped[str | None] = mapped_column(String(100))
     permissions: Mapped[dict] = mapped_column(JSON)
 
     # Relationships

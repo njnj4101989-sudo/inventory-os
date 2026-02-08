@@ -46,6 +46,17 @@ export default function RollForm({ form, onChange, suppliers = [], error = null,
           </select>
         </div>
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice No.</label>
+          <input type="text" value={form.supplier_invoice_no} onChange={(e) => set('supplier_invoice_no', e.target.value)}
+            placeholder="e.g. KT-2026-0451" className={INPUT} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+          <input type="date" value={form.supplier_invoice_date} onChange={(e) => set('supplier_invoice_date', e.target.value)} className={INPUT} />
+        </div>
+      </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
         <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className={INPUT} />

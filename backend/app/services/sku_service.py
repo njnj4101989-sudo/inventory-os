@@ -22,9 +22,9 @@ class SKUService:
         raise NotImplementedError
 
     async def create_sku(self, req: SKUCreate) -> SKUResponse:
-        """Create SKU with auto-generated sku_code as DesignNo-Color-Size.
+        """Create SKU with auto-generated sku_code as ProductType-DesignNo-Color-Size.
 
-        Code format: e.g. "101-Red-M" for Design 101 Red Medium.
+        Code format: e.g. "BLS-101-Red-M" for Blouse Design 101 Red Medium.
         Raises DuplicateError if sku_code already exists.
         """
         raise NotImplementedError

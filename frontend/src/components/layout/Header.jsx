@@ -9,7 +9,7 @@ const ROLE_COLORS = {
 }
 
 export default function Header() {
-  const { user, role, logout } = useAuth()
+  const { user, role, roleDisplayName, logout } = useAuth()
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
@@ -26,7 +26,7 @@ export default function Header() {
             ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'
           }`}
         >
-          {role}
+          {roleDisplayName}
         </span>
 
         {/* User name */}

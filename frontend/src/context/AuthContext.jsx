@@ -60,6 +60,7 @@ export function AuthProvider({ children }) {
     logout,
     isAuthenticated: !!token,
     role: user?.role || null,
+    roleDisplayName: user?.role_display_name || user?.role || null,
     permissions: user?.permissions || {},
   }
 

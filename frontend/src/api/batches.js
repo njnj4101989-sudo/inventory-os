@@ -20,7 +20,7 @@ export async function createBatch(data) {
     const newBatch = {
       id: crypto.randomUUID(),
       batch_code: nextCode,
-      sku: { id: data.sku_id, sku_code: '101-Red-M', product_name: 'Design 101 Red Medium' },
+      sku: { id: data.sku_id, sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
       quantity: totalPieces,
       status: 'CREATED',
       qr_code_data: `https://inv.local/batch/${crypto.randomUUID()}`,
