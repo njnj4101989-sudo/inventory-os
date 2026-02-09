@@ -7,10 +7,27 @@ export async function getInventory(params = {}) {
   if (USE_MOCK) {
     let filtered = [...inventory]
     if (params.sku_code) {
-      filtered = filtered.filter((i) => i.sku.sku_code === params.sku_code)
+      const q = params.sku_code.toLowerCase()
+      filtered = filtered.filter((i) =>
+        i.sku.sku_code.toLowerCase().includes(q) ||
+        i.sku.product_name.toLowerCase().includes(q)
+      )
     }
-    if (params.low_stock) {
-      filtered = filtered.filter((i) => i.available_qty < 20)
+    if (params.product_type) {
+      filtered = filtered.filter((i) => i.sku.sku_code.startsWith(params.product_type + '-'))
+    }
+    if (params.stock_status === 'low') {
+      filtered = filtered.filter((i) => {
+        const pct = i.total_qty > 0 ? (i.available_qty / i.total_qty) * 100 : 0
+        return pct > 0 && pct < 60
+      })
+    } else if (params.stock_status === 'critical') {
+      filtered = filtered.filter((i) => i.available_qty <= 0 || i.total_qty === 0)
+    } else if (params.stock_status === 'healthy') {
+      filtered = filtered.filter((i) => {
+        const pct = i.total_qty > 0 ? (i.available_qty / i.total_qty) * 100 : 0
+        return pct >= 60
+      })
     }
     return mockPaginated(filtered, params.page, params.page_size)
   }
@@ -28,7 +45,7 @@ export async function adjust(data) {
   if (USE_MOCK) {
     return mockResponse(
       { event: { id: crypto.randomUUID() }, inventory: inventory[0] },
-      `Stock adjusted: -${data.quantity} pieces (${data.event_type})`
+      `Stock adjusted: ${data.quantity} pieces (${data.event_type})`
     )
   }
   return client.post('/inventory/adjust', data)

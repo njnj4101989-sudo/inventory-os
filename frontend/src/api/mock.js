@@ -252,17 +252,17 @@ export const batches = [
 // ── Inventory State ────────────────────────────────────
 export const inventory = [
   {
-    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium', base_price: 450.0 },
     total_qty: 150, available_qty: 120, reserved_qty: 30,
     last_updated: '2026-02-08T10:00:00Z',
   },
   {
-    sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
+    sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large', base_price: 500.0 },
     total_qty: 80, available_qty: 65, reserved_qty: 15,
     last_updated: '2026-02-08T09:00:00Z',
   },
   {
-    sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small' },
+    sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small', base_price: 750.0 },
     total_qty: 40, available_qty: 40, reserved_qty: 0,
     last_updated: '2026-02-07T14:00:00Z',
   },
@@ -383,23 +383,124 @@ export const tailorPerformance = [
     tailor: { id: uid(3), full_name: 'Amit Singh' },
     batches_completed: 12, pieces_completed: 580,
     avg_completion_days: 1.8, rejection_rate: 3.2,
+    efficiency_score: 92, current_batch: 'BATCH-0002',
+    speciality: 'Blouse stitching',
+  },
+  {
+    tailor: { id: uid('t2'), full_name: 'Rakesh Yadav' },
+    batches_completed: 9, pieces_completed: 410,
+    avg_completion_days: 2.1, rejection_rate: 5.8,
+    efficiency_score: 78, current_batch: null,
+    speciality: 'Kurta stitching',
+  },
+  {
+    tailor: { id: uid('t3'), full_name: 'Mohammed Farhan' },
+    batches_completed: 15, pieces_completed: 720,
+    avg_completion_days: 1.5, rejection_rate: 1.9,
+    efficiency_score: 96, current_batch: null,
+    speciality: 'Blouse stitching',
   },
 ]
 
 export const inventoryMovement = [
   {
-    sku_code: 'BLS-101-Red-M',
+    sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium',
     period: { from: '2026-02-01', to: '2026-02-08' },
-    stock_in: 98, stock_out: 30, returns: 2, losses: 0,
-    net_change: 70, closing_stock: 150,
+    opening_stock: 80, stock_in: 98, stock_out: 30, returns: 2, losses: 0,
+    net_change: 70, closing_stock: 150, turnover_rate: 0.20,
   },
   {
-    sku_code: 'BLS-102-Blue-L',
+    sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large',
     period: { from: '2026-02-01', to: '2026-02-08' },
-    stock_in: 80, stock_out: 15, returns: 0, losses: 0,
-    net_change: 65, closing_stock: 80,
+    opening_stock: 15, stock_in: 80, stock_out: 15, returns: 0, losses: 0,
+    net_change: 65, closing_stock: 80, turnover_rate: 0.19,
+  },
+  {
+    sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small',
+    period: { from: '2026-02-01', to: '2026-02-08' },
+    opening_stock: 0, stock_in: 40, stock_out: 0, returns: 0, losses: 0,
+    net_change: 40, closing_stock: 40, turnover_rate: 0.00,
   },
 ]
+
+// ── Inventory Summary (KPI data) ─────────────────────
+export const inventorySummary = {
+  total_skus: 3,
+  total_pieces: 270,
+  available_pieces: 225,
+  reserved_pieces: 45,
+  low_stock_count: 0,
+  out_of_stock_count: 0,
+  total_inventory_value: 153750.0,
+  avg_stock_per_sku: 90,
+}
+
+// ── Production Report ────────────────────────────────
+export const productionReport = {
+  summary: {
+    lots_created: 1,
+    rolls_consumed: 4,
+    total_weight_used: 108.690,
+    total_waste: 4.580,
+    waste_percentage: 4.21,
+    total_pallas: 24,
+    total_pieces_produced: 432,
+    pieces_approved: 196,
+    pieces_rejected: 4,
+    approval_rate: 98.0,
+  },
+  by_lot: [
+    {
+      lot_code: 'LOT-0001', design_no: '702', lot_date: '2026-02-07',
+      rolls_used: 4, total_weight: 113.270, weight_used: 108.690,
+      waste_weight: 4.580, waste_pct: 4.04,
+      total_pallas: 24, total_pieces: 432, status: 'distributed',
+    },
+  ],
+  by_period: [
+    { date: '2026-02-03', pieces: 0, waste_kg: 0 },
+    { date: '2026-02-04', pieces: 0, waste_kg: 0 },
+    { date: '2026-02-05', pieces: 0, waste_kg: 0 },
+    { date: '2026-02-06', pieces: 0, waste_kg: 0 },
+    { date: '2026-02-07', pieces: 432, waste_kg: 4.58 },
+    { date: '2026-02-08', pieces: 0, waste_kg: 0 },
+    { date: '2026-02-09', pieces: 0, waste_kg: 0 },
+  ],
+}
+
+// ── Financial Report ─────────────────────────────────
+export const financialReport = {
+  summary: {
+    total_revenue: 12500.0,
+    total_material_cost: 13604.28,
+    gross_margin: -1104.28,
+    margin_percentage: -8.83,
+    orders_total: 12000.0,
+    invoices_paid: 1770.0,
+    invoices_pending: 2555.0,
+    avg_order_value: 4000.0,
+  },
+  revenue_by_sku: [
+    { sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium', revenue: 6750.0, units_sold: 15, avg_price: 450.0 },
+    { sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large', revenue: 1500.0, units_sold: 3, avg_price: 500.0 },
+    { sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small', revenue: 3750.0, units_sold: 5, avg_price: 750.0 },
+  ],
+  cost_breakdown: [
+    { category: 'Raw Material (Fabric)', amount: 13604.28, pct: 82.5 },
+    { category: 'Tailor Labour', amount: 2160.0, pct: 13.1 },
+    { category: 'QC / Checking', amount: 432.0, pct: 2.6 },
+    { category: 'Packaging', amount: 300.0, pct: 1.8 },
+  ],
+  revenue_by_period: [
+    { date: '2026-02-03', revenue: 0 },
+    { date: '2026-02-04', revenue: 2200 },
+    { date: '2026-02-05', revenue: 1800 },
+    { date: '2026-02-06', revenue: 3500 },
+    { date: '2026-02-07', revenue: 3230 },
+    { date: '2026-02-08', revenue: 1770 },
+    { date: '2026-02-09', revenue: 0 },
+  ],
+}
 
 // ── Mock Response Helper ───────────────────────────────
 export function mockResponse(data, message = 'OK') {

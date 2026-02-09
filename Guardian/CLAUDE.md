@@ -307,6 +307,38 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - **Git:** committed + pushed
 - **Next:** Continue testing, Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
 
+### Session 10 (2026-02-09) — Inventory & Reports page professional overhaul
+- **InventoryPage — complete upgrade** (267 lines → 447 lines, 14.67 kB built)
+  - 4 KPI summary cards: Total Pieces, Available, Reserved, Inventory Value (with sub-text, colored icons)
+  - Stock Health column: per-row health bar (green/amber/orange/red) + badge (Healthy/Moderate/Low/Critical) + percentage
+  - Inventory Value column: `available_qty × base_price` with per-unit price sub-text
+  - Multi-filter toolbar: Stock Status pills (All/Healthy/Low/Out of Stock) + Product Type dropdown (BLS/KRT/SAR/DRS/OTH) + search
+  - Buttons with icons (Reconcile, Adjust Stock)
+  - Better empty states (icon + text), improved date formatting (en-IN locale)
+  - New API: `getInventorySummary()` for KPI cards
+- **ReportsPage — complete rebuild with 4 tabs** (127 lines → 563 lines, 22.50 kB built)
+  - Tab bar with icons: Production | Inventory | Financial | Tailor Performance
+  - Period selector: Last 7 days / 30 days / 90 days (applies to all tabs)
+  - **Production tab:** 4 KPIs (pieces produced, pallas, fabric used/waste, approval rate) + lot-wise table (9 cols) + daily production bar chart
+  - **Inventory tab:** 4 KPIs (stock in/out/returns/net) + SKU-wise movement table (11 cols with opening stock, turnover rate, totals row in tfoot)
+  - **Financial tab:** 4 KPIs (revenue, material cost, invoices paid, avg order value) + revenue by SKU table with share bars + cost breakdown bars + daily revenue trend
+  - **Tailor tab:** 4 KPIs (active tailors, total pieces, avg rejection, top performer) + tailor cards with avatar initials, efficiency bar, stats grid, output comparison bar
+  - Shared components: KpiCard, HBar (horizontal bar visualization)
+  - Data fetched per-tab (lazy loading, only active tab loads)
+- **Mock data expanded:**
+  - 3 tailors (was 1) with efficiency_score, speciality, current_batch fields
+  - 3 SKU inventory movement (was 2) with opening_stock, turnover_rate, product_name
+  - `inventorySummary` — total pieces, available, reserved, value, low stock count
+  - `productionReport` — summary stats + by_lot breakdown + by_period daily trend
+  - `financialReport` — revenue summary + revenue_by_sku + cost_breakdown + revenue_by_period
+  - `base_price` added to inventory SKU objects for value calculation
+- **API modules updated:**
+  - `dashboard.js`: +3 endpoints (getProductionReport, getFinancialReport, getInventorySummary)
+  - `inventory.js`: enhanced filter mock (fuzzy search on sku_code + product_name, product_type prefix, stock_status categories)
+- **Files modified:** 4 (mock.js, dashboard.js, inventory.js, InventoryPage.jsx, ReportsPage.jsx)
+- **Build:** 128 modules, 0 errors, 6.71s
+- **Next:** Continue testing, commit + push, Phase 6C/6D
+
 ---
 
 ## SQLite → PostgreSQL Migration Checklist
