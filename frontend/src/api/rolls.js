@@ -41,3 +41,19 @@ export async function getRoll(id) {
   }
   return client.get(`/rolls/${id}`)
 }
+
+export async function updateRoll(id, data) {
+  if (USE_MOCK) {
+    const idx = rolls.findIndex((r) => r.id === id)
+    if (idx === -1) throw { response: { data: { detail: 'Roll not found' } } }
+    const roll = rolls[idx]
+    if (roll.remaining_weight < roll.total_weight) {
+      throw { response: { data: { detail: 'Cannot edit a roll that has already been consumed' } } }
+    }
+    Object.assign(roll, data)
+    if (data.total_weight != null) roll.remaining_weight = data.total_weight
+    if (data.supplier_id) roll.supplier = { id: data.supplier_id, name: roll.supplier?.name || 'Supplier' }
+    return mockResponse(roll, 'Roll updated')
+  }
+  return client.patch(`/rolls/${id}`, data)
+}

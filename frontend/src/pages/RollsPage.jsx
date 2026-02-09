@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getRolls, stockIn } from '../api/rolls'
+import { getRolls, stockIn, updateRoll } from '../api/rolls'
 import { getSuppliers } from '../api/suppliers'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -63,6 +63,59 @@ export default function RollsPage() {
   const [formError, setFormError] = useState(null)
 
   const [suppliers, setSuppliers] = useState([])
+  const [detailRoll, setDetailRoll] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
+
+  const isEditable = detailRoll && detailRoll.remaining_weight === detailRoll.total_weight
+
+  const openDetail = (roll) => {
+    setDetailRoll(roll)
+    setEditing(false)
+    setEditError(null)
+  }
+
+  const startEditing = () => {
+    setEditForm({
+      fabric_type: detailRoll.fabric_type || '',
+      color: detailRoll.color || '',
+      total_weight: detailRoll.total_weight ?? '',
+      cost_per_unit: detailRoll.cost_per_unit ?? '',
+      supplier_id: detailRoll.supplier?.id || '',
+      total_length: detailRoll.total_length ?? '',
+      supplier_invoice_no: detailRoll.supplier_invoice_no || '',
+      supplier_invoice_date: detailRoll.supplier_invoice_date || '',
+      notes: detailRoll.notes || '',
+    })
+    setEditError(null)
+    setEditing(true)
+  }
+
+  const handleUpdate = async () => {
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updateRoll(detailRoll.id, {
+        fabric_type: editForm.fabric_type,
+        color: editForm.color,
+        total_weight: parseFloat(editForm.total_weight),
+        cost_per_unit: editForm.cost_per_unit ? parseFloat(editForm.cost_per_unit) : null,
+        total_length: editForm.total_length ? parseFloat(editForm.total_length) : null,
+        supplier_id: editForm.supplier_id || null,
+        supplier_invoice_no: editForm.supplier_invoice_no || null,
+        supplier_invoice_date: editForm.supplier_invoice_date || null,
+        notes: editForm.notes || null,
+      })
+      setDetailRoll(null)
+      fetchData()
+    } catch (err) {
+      setEditError(err.response?.data?.detail || 'Failed to update roll')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -135,9 +188,110 @@ export default function RollsPage() {
       {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
 
       <div className="mt-4">
-        <DataTable columns={COLUMNS} data={rolls} loading={loading} emptyText="No rolls found." />
+        <DataTable columns={COLUMNS} data={rolls} loading={loading} onRowClick={openDetail} emptyText="No rolls found." />
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
+
+      {/* Roll Detail Modal */}
+      <Modal open={!!detailRoll} onClose={() => { setDetailRoll(null); setEditing(false) }}
+        title={detailRoll ? `${detailRoll.roll_code} — ${editing ? 'Edit' : 'Details'}` : ''} wide
+        actions={editing ? (
+          <>
+            <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleUpdate} disabled={editSaving}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              {editSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </>
+        ) : null}
+      >
+        {detailRoll && (() => {
+          const pct = detailRoll.total_weight > 0 ? (detailRoll.remaining_weight / detailRoll.total_weight) * 100 : 0
+          return (
+            <div className="space-y-5">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-blue-50 p-3 text-center">
+                  <div className="text-xl font-bold text-blue-700">{detailRoll.total_weight} kg</div>
+                  <div className="text-xs text-blue-500">Total Weight</div>
+                </div>
+                <div className="rounded-lg bg-green-50 p-3 text-center">
+                  <div className="text-xl font-bold text-green-700">{detailRoll.remaining_weight} kg</div>
+                  <div className="text-xs text-green-500">Remaining</div>
+                </div>
+                <div className="rounded-lg bg-purple-50 p-3 text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="text-xl font-bold text-purple-700">{pct.toFixed(0)}%</div>
+                    <div className="h-2 w-20 rounded-full bg-gray-200">
+                      <div className={`h-2 rounded-full ${pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-xs text-purple-500">Stock Level</div>
+                </div>
+              </div>
+
+              {editing ? (
+                /* Edit mode — form */
+                <RollForm form={editForm} onChange={setEditForm} suppliers={suppliers}
+                  error={editError} onDismissError={() => setEditError(null)} />
+              ) : (
+                /* View mode — read-only detail + edit button or warning */
+                <>
+                  {!isEditable && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                      <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">This roll cannot be edited</p>
+                        <p className="mt-0.5 text-xs text-amber-600">
+                          {detailRoll.remaining_weight === 0
+                            ? 'This roll has been fully consumed in a lot/batch. Editing consumed rolls would break inventory records.'
+                            : `${(detailRoll.total_weight - detailRoll.remaining_weight).toFixed(3)} kg has already been used. Only unused rolls (where remaining = total weight) can be edited.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                    {[
+                      ['Roll Code', detailRoll.roll_code],
+                      ['Fabric Type', detailRoll.fabric_type],
+                      ['Color', detailRoll.color],
+                      ['Unit', detailRoll.unit || 'kg'],
+                      ['Cost / kg', detailRoll.cost_per_unit != null ? `₹${detailRoll.cost_per_unit}` : '—'],
+                      ['Total Length', detailRoll.total_length ? `${detailRoll.total_length} m` : '—'],
+                      ['Supplier', detailRoll.supplier?.name || '—'],
+                      ['Invoice No.', detailRoll.supplier_invoice_no || '—'],
+                      ['Invoice Date', detailRoll.supplier_invoice_date ? new Date(detailRoll.supplier_invoice_date).toLocaleDateString() : '—'],
+                      ['Received By', detailRoll.received_by_user?.full_name || '—'],
+                      ['Received At', detailRoll.received_at ? new Date(detailRoll.received_at).toLocaleString() : '—'],
+                      ['Notes', detailRoll.notes || '—'],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex items-center px-4 py-2.5 text-sm">
+                        <span className="w-36 flex-shrink-0 font-medium text-gray-500">{label}</span>
+                        <span className="text-gray-800">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {isEditable && (
+                    <div className="flex justify-end">
+                      <button onClick={startEditing}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-primary-300 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 transition-colors">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit Roll
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })()}
+      </Modal>
 
       <Modal
         open={modalOpen}

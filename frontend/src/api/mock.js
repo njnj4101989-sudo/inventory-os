@@ -166,7 +166,6 @@ export const skus = [
 export const lots = [
   {
     id: uid('d1'), lot_code: 'LOT-0001',
-    sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     lot_date: '2026-02-07',
     design_no: '702',
     standard_palla_weight: 3.60,

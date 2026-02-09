@@ -14,7 +14,7 @@ class Lot(Base):
     __tablename__ = "lots"
 
     lot_code: Mapped[str] = mapped_column(String(50), unique=True)
-    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"), index=True)
+    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
     lot_date: Mapped[datetime] = mapped_column(Date)
     design_no: Mapped[str] = mapped_column(String(50))
     standard_palla_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
@@ -32,7 +32,7 @@ class Lot(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
-    sku: Mapped[SKU] = relationship(back_populates="lots")
+    sku: Mapped[SKU | None] = relationship(back_populates="lots")
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     lot_rolls: Mapped[list[LotRoll]] = relationship(back_populates="lot")
     batches: Mapped[list[Batch]] = relationship(back_populates="lot")

@@ -29,7 +29,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
 
       {/* Dialog */}
       <div
-        className={`relative z-10 w-full rounded-xl bg-white shadow-xl ${
+        className={`relative z-10 w-full max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl ${
           wide ? 'max-w-2xl' : 'max-w-md'
         }`}
       >
@@ -47,7 +47,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
         </div>
 
         {/* Body */}
-        <div className="px-6 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
 
         {/* Footer */}
         {actions && (

@@ -279,7 +279,33 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - **Files created:** 5 (lot.py model, lot.py schema, lot_service.py, lots.py route, lots.js API)
 - **Files modified:** ~20 (roll.py, batch.py, sku.py, __init__.py, permissions.py, code_generator.py, router.py, services/__init__.py, mock.js, rolls.js, batches.js, RollForm, RollsPage, BatchForm, BatchesPage, BatchDetailPage, LotsPage, routes.js, Sidebar.jsx)
 - **Build:** 128 modules, 0 errors, 8.88s
-- **Next:** Git commit, continue testing, Phase 6C/6D
+
+### Session 9 (2026-02-09) — UI polish, roll detail/edit, LOT SKU removal
+- **Fix: Lot create form — size pattern alignment**
+  - Size pattern inputs were cramped in a 2-col grid with palla weight
+  - Extracted into a dedicated bordered card (`bg-gray-50`) with 4-col grid, proper labels, total pill badge
+  - Palla weight moved to its own row with `max-w-xs`
+- **Fix: Modal scroll overflow (global)**
+  - All modals now cap at `max-h-[90vh]` with `flex flex-col`
+  - Body area scrolls with `overflow-y-auto`, header + footer stay pinned
+  - Applies to all modals (lots, rolls, batches, orders, etc.)
+- **Feature: Roll row click → detail modal**
+  - Click any roll row to open detail modal with 3 summary cards (weight, remaining, stock %) + 12-field read-only detail list
+- **Feature: Roll edit (unused only)**
+  - Unused rolls (remaining = total weight) show "Edit Roll" button in detail modal
+  - Click "Edit Roll" → switches to RollForm edit mode with Save/Cancel
+  - Used rolls show amber warning: "This roll cannot be edited" with contextual reason (fully consumed vs partially used)
+  - Added `updateRoll()` to `rolls.js` API module (mock + `PATCH /rolls/:id`)
+- **Fix: Remove SKU from Lot entity**
+  - A lot produces multiple sizes → multiple SKUs. Single SKU at lot level was incorrect
+  - Backend: `sku_id` made nullable in Lot model + optional in LotCreate/LotResponse schemas
+  - Frontend: removed SKU column from lots table, removed SKU selector from create form
+  - Lot create form now: Design No. + Lot Date → Palla Weight → Size Pattern → Rolls → Notes
+  - Cleaned mock data (removed sku from LOT-0001)
+- **Files modified:** 9 (lot.py model, lot.py schema, lots.js, mock.js, rolls.js, Modal.jsx, LotsPage.jsx, RollsPage.jsx, guardian.md)
+- **Build:** 128 modules, 0 errors
+- **Git:** committed + pushed
+- **Next:** Continue testing, Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
 
 ---
 

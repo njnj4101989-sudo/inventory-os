@@ -7,7 +7,7 @@ export async function getLots(params = {}) {
   if (USE_MOCK) {
     let filtered = [...lots]
     if (params.status) filtered = filtered.filter((l) => l.status === params.status)
-    if (params.sku_id) filtered = filtered.filter((l) => l.sku.id === params.sku_id)
+    if (params.design_no) filtered = filtered.filter((l) => l.design_no === params.design_no)
     return mockPaginated(filtered, params.page, params.page_size)
   }
   return client.get('/lots', { params })
@@ -59,7 +59,6 @@ export async function createLot(data) {
     const newLot = {
       id: crypto.randomUUID(),
       lot_code: nextCode,
-      sku: { id: data.sku_id, sku_code: 'BLS-101-Red-M', product_name: 'Design 101' },
       lot_date: data.lot_date,
       design_no: data.design_no,
       standard_palla_weight: data.standard_palla_weight,

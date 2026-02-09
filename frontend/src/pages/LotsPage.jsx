@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getLots, createLot } from '../api/lots'
-import { getSKUs } from '../api/skus'
 import { getRolls } from '../api/rolls'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -11,11 +10,6 @@ import ErrorAlert from '../components/common/ErrorAlert'
 const COLUMNS = [
   { key: 'lot_code', label: 'Lot Code' },
   { key: 'design_no', label: 'Design No.' },
-  {
-    key: 'sku',
-    label: 'SKU',
-    render: (val) => val?.sku_code || '—',
-  },
   { key: 'total_pallas', label: 'Pallas' },
   {
     key: 'total_pieces',
@@ -56,10 +50,9 @@ export default function LotsPage() {
 
   // Create modal
   const [createOpen, setCreateOpen] = useState(false)
-  const [skuList, setSkuList] = useState([])
   const [availableRolls, setAvailableRolls] = useState([])
   const [form, setForm] = useState({
-    sku_id: '', lot_date: new Date().toISOString().split('T')[0],
+    lot_date: new Date().toISOString().split('T')[0],
     design_no: '', standard_palla_weight: '',
     size_pattern: { ...DEFAULT_SIZE_PATTERN },
     rolls: [], notes: '',
@@ -85,7 +78,6 @@ export default function LotsPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
-    getSKUs({ is_active: true }).then((res) => setSkuList(res.data.data)).catch(() => {})
     getRolls({ has_remaining: true }).then((res) => setAvailableRolls(res.data.data)).catch(() => {})
   }, [])
 
@@ -135,7 +127,6 @@ export default function LotsPage() {
     setFormError(null)
     try {
       await createLot({
-        sku_id: form.sku_id,
         lot_date: form.lot_date,
         design_no: form.design_no,
         standard_palla_weight: parseFloat(form.standard_palla_weight),
@@ -148,7 +139,7 @@ export default function LotsPage() {
       })
       setCreateOpen(false)
       setForm({
-        sku_id: '', lot_date: new Date().toISOString().split('T')[0],
+        lot_date: new Date().toISOString().split('T')[0],
         design_no: '', standard_palla_weight: '',
         size_pattern: { ...DEFAULT_SIZE_PATTERN },
         rolls: [], notes: '',
@@ -262,14 +253,7 @@ export default function LotsPage() {
           {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
           {/* Header fields */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SKU / Product</label>
-              <select value={form.sku_id} onChange={(e) => setField('sku_id', e.target.value)} className={INPUT}>
-                <option value="">Select SKU</option>
-                {skuList.map((s) => <option key={s.id} value={s.id}>{s.sku_code} — {s.product_name}</option>)}
-              </select>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Design No.</label>
               <input type="text" value={form.design_no} onChange={(e) => setField('design_no', e.target.value)}
@@ -281,27 +265,28 @@ export default function LotsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Standard Palla Weight (kg)</label>
-              <input type="number" step="0.001" value={form.standard_palla_weight}
-                onChange={(e) => setField('standard_palla_weight', e.target.value)}
-                placeholder="e.g. 3.600" className={INPUT} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Standard Palla Weight (kg)</label>
+            <input type="number" step="0.001" value={form.standard_palla_weight}
+              onChange={(e) => setField('standard_palla_weight', e.target.value)}
+              placeholder="e.g. 3.600" className={`${INPUT} max-w-xs`} />
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-medium text-gray-700">Size Pattern (pieces per palla)</label>
+              <span className="rounded-full bg-primary-100 px-3 py-0.5 text-sm font-semibold text-primary-700">
+                Total: {piecesPerPalla} pcs / palla
+              </span>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Size Pattern (pieces per palla)</label>
-              <div className="flex gap-2">
-                {Object.entries(form.size_pattern).map(([size, count]) => (
-                  <div key={size} className="flex-1">
-                    <span className="text-xs text-gray-500">{size}</span>
-                    <input type="number" value={count} onChange={(e) => setSizeKey(size, e.target.value)}
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm text-center" />
-                  </div>
-                ))}
-                <div className="flex items-end">
-                  <span className="text-sm font-semibold text-primary-600 pb-1">= {piecesPerPalla}</span>
+            <div className="grid grid-cols-4 gap-4">
+              {Object.entries(form.size_pattern).map(([size, count]) => (
+                <div key={size}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{size}</label>
+                  <input type="number" value={count} onChange={(e) => setSizeKey(size, e.target.value)}
+                    className={`${INPUT} text-center`} />
                 </div>
-              </div>
+              ))}
             </div>
           </div>
 

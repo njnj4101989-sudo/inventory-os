@@ -54,7 +54,7 @@ class LotBrief(BaseSchema):
 class LotCreate(BaseModel):
     """POST /lots — create lot with rolls."""
 
-    sku_id: UUID
+    sku_id: UUID | None = None
     lot_date: date
     design_no: str
     standard_palla_weight: Decimal
@@ -79,7 +79,7 @@ class LotUpdate(BaseModel):
 class LotResponse(BaseSchema):
     id: UUID
     lot_code: str
-    sku: SKUBrief
+    sku: SKUBrief | None = None
     lot_date: date
     design_no: str
     standard_palla_weight: Decimal
