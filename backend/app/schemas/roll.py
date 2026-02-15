@@ -41,6 +41,20 @@ class ConsumptionBrief(BaseSchema):
     cut_at: datetime
 
 
+class ProcessingBrief(BaseSchema):
+    """Processing log nested in roll detail."""
+
+    id: UUID
+    process_type: str
+    vendor_name: str
+    sent_date: date
+    received_date: date | None = None
+    weight_before: Decimal
+    weight_after: Decimal | None = None
+    processing_cost: Decimal | None = None
+    status: str
+
+
 # --- Responses ---
 
 
@@ -54,6 +68,7 @@ class RollResponse(BaseSchema):
     unit: str
     cost_per_unit: Decimal | None = None
     total_length: Decimal | None = None
+    status: str = "in_stock"
     supplier: SupplierBrief | None = None
     supplier_invoice_no: str | None = None
     supplier_invoice_date: date | None = None
@@ -63,6 +78,43 @@ class RollResponse(BaseSchema):
 
 
 class RollDetail(RollResponse):
-    """GET /rolls/{id} — includes consumption history."""
+    """GET /rolls/{id} — includes consumption + processing history."""
 
     consumption_history: list[ConsumptionBrief] = []
+    processing_history: list[ProcessingBrief] = []
+
+
+# --- Processing Requests ---
+
+
+class SendForProcessing(BaseModel):
+    process_type: str  # embroidery, digital_print, dyeing, other
+    vendor_name: str
+    vendor_phone: str | None = None
+    sent_date: date
+    notes: str | None = None
+
+
+class ReceiveFromProcessing(BaseModel):
+    received_date: date
+    weight_after: Decimal
+    length_after: Decimal | None = None
+    processing_cost: Decimal | None = None
+    notes: str | None = None
+
+
+class ProcessingResponse(BaseSchema):
+    id: UUID
+    roll_id: UUID
+    process_type: str
+    vendor_name: str
+    vendor_phone: str | None = None
+    sent_date: date
+    received_date: date | None = None
+    weight_before: Decimal
+    weight_after: Decimal | None = None
+    length_before: Decimal | None = None
+    length_after: Decimal | None = None
+    processing_cost: Decimal | None = None
+    status: str
+    notes: str | None = None

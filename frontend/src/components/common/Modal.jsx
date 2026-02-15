@@ -11,7 +11,7 @@ import { useEffect } from 'react'
  *  actions   — optional footer JSX (buttons)
  *  wide      — use wider max-width
  */
-export default function Modal({ open, onClose, title, children, actions, wide = false }) {
+export default function Modal({ open, onClose, title, children, actions, wide = false, extraWide = false }) {
   // Close on Escape
   useEffect(() => {
     if (!open) return
@@ -30,7 +30,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
       {/* Dialog */}
       <div
         className={`relative z-10 w-full max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl ${
-          wide ? 'max-w-2xl' : 'max-w-md'
+          extraWide ? 'max-w-4xl' : wide ? 'max-w-2xl' : 'max-w-md'
         }`}
       >
         {/* Header */}

@@ -339,6 +339,54 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - **Build:** 128 modules, 0 errors, 6.71s
 - **Next:** Continue testing, commit + push, Phase 6C/6D
 
+### Session 11 (2026-02-15) — Page-by-page professional overhaul (Suppliers + Rolls)
+- **Supplier page upgrade** — 6 new fields: gst_no, pan_no, email, city, state, pin_code
+  - Backend: model + schema updated (all nullable)
+  - Frontend: 3-section form (Business/Contact/Address), Indian state dropdown, GST/PAN validation (regex)
+  - Detail modal with sectioned cards, Status badge, Deactivate/Activate toggle with confirm
+  - Table columns: Company Name, Contact Person, Phone, City+State, GST No., Status, Created
+  - Search: name, contact person, city, GST
+  - Mock data: realistic Indian textile suppliers with full addresses
+- **Rolls page — invoice-wise stock-in overhaul**
+  - Stock In modal: Invoice header (supplier*, invoice no, date) + dynamic rolls table
+  - Per-row: fabric type, color, unit (kg/meters), qty, cost/unit, notes + duplicate/remove buttons
+  - Per-row unit selector — when meters: optional weight sub-field (for LOT palla calc)
+  - Live footer totals: roll count, total kg, total m, total ₹
+  - `stockInBulk(header, rollEntries)` API function
+- **Rolls page — two-tab layout**
+  - Tab 1 "By Invoice": grouped by supplier_invoice_no — Invoice No., Supplier, Date, Rolls count, Weight, Value
+  - Click invoice → Invoice Detail modal: header cards + summary KPIs + rolls table with totals row
+  - Click roll within invoice → individual roll detail
+  - Tab 2 "All Rolls": flat view with individual roll rows (existing)
+  - `getInvoices()` API — groups rolls by invoice, computes aggregates
+- **Roll processing (value addition) — COMPLETE**
+  - Roll status field: in_stock / sent_for_processing / in_cutting
+  - UI: "Send for Processing" on roll detail, "Receive Back" with updated measurements
+  - 3rd tab "In Processing" on Rolls page with summary cards (rolls out, weight, vendors, overdue)
+  - Processing history section in roll detail with weight before/after, cost, duration
+- **Build:** 128 modules, 0 errors
+- **Files changed:** supplier.py (model+schema), mock.js, suppliers.js, SuppliersPage.jsx, rolls.js, RollsPage.jsx, RollForm.jsx, StatusBadge.jsx, models/__init__.py, roll.py (model+schema)
+
+### Session 12 (2026-02-16) — Bug fixes + Roll detail redesign
+- **Fix: Supplier form input focus loss**
+  - Root cause: `Field` component defined inside render function → new identity every re-render → input unmounts on each keystroke
+  - Fix: Moved `Field` and `InfoRow` outside `SuppliersPage()` as stable components, pass `form`/`set`/`fieldErrors` as props
+- **Fix: Roll detail — "Back to Invoice" navigation**
+  - When clicking a roll from Invoice Detail, the invoice modal closed with no way to return
+  - Added `cameFromInvoice` state: remembers which invoice the user navigated from
+  - "Back to Invoice: KT-2026-0451" link at top of roll detail (only when navigated from invoice)
+- **Roll detail modal — professional redesign**
+  - Modal: new `extraWide` prop (`max-w-4xl`) added to Modal component
+  - KPI: replaced 4 tall cards with compact single-row summary bar (Total, Remaining, Stock %, Value)
+  - Layout: 2-column sectioned cards (Material Info | Supplier & Invoice + Receiving Details + Notes)
+  - Actions: moved to modal footer (always visible) — Edit Roll, Send for Processing, Close
+- **Fix: Lot page — filter rolls by status**
+  - Roll selector now passes `{ has_remaining: true, status: 'in_stock' }` — excludes rolls sent for processing
+  - Added `status` filter support in rolls.js mock API
+- **Files changed:** SuppliersPage.jsx, RollsPage.jsx, LotsPage.jsx, Modal.jsx, rolls.js
+- **Build:** 128 modules, 0 errors
+- **Next:** Continue page overhauls (SKUs → Lots → Batches → Orders → Invoices), then Phase 6C/6D
+
 ---
 
 ## SQLite → PostgreSQL Migration Checklist
@@ -390,30 +438,30 @@ inventory-os/                      ← PROJECT ROOT
 │   ├── guardian.md                ← Protocols
 │   ├── guardian_init.bat          ← CLI launcher
 │   ├── STEP1–STEP6 .md files     ← Design blueprints
-├── backend/                       ← FastAPI backend (Phase 6A ✅ + Session 8 LOT entity)
+├── backend/                       ← FastAPI backend (Phase 6A ✅ + Sessions 7-11 enhancements)
 │   ├── app/
 │   │   ├── config.py, database.py, main.py, dependencies.py
-│   │   ├── models/    (17 ORM models — added Lot, LotRoll)
-│   │   ├── schemas/   (15 Pydantic schemas — added lot.py)
-│   │   ├── services/  (13 service classes — added LotService)
-│   │   ├── api/       (14 routers, 50 endpoints — added lots.py)
+│   │   ├── models/    (17 ORM models — Lot, LotRoll, Supplier+6 fields, Roll weight-based+status)
+│   │   ├── schemas/   (15 Pydantic schemas)
+│   │   ├── services/  (13 service classes)
+│   │   ├── api/       (14 routers, 50 endpoints)
 │   │   ├── core/      (security, permissions, exceptions, code_gen)
 │   │   └── tasks/     (reservation_expiry, backup_sync)
 │   ├── migrations/, seeds/, Dockerfile
 │   ├── requirements.txt, alembic.ini
-├── frontend/                      ← React app (Phase 6B ✅ + Session 7-8 updates)
+├── frontend/                      ← React app (Phase 6B ✅ + Sessions 7-12 professional overhaul)
 │   ├── package.json, vite.config.js, tailwind.config.js
 │   ├── postcss.config.js, index.html, .env, .env.example
 │   └── src/
 │       ├── main.jsx, App.jsx, index.css
-│       ├── api/           (14 files — client + mock + 12 modules, added lots.js)
+│       ├── api/           (14 files — client + mock + 12 modules)
 │       ├── context/       (AuthContext.jsx)
 │       ├── hooks/         (useAuth.js, useApi.js)
 │       ├── components/
 │       │   ├── layout/    (Sidebar, Header, Layout)
-│       │   ├── common/    (DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert)
+│       │   ├── common/    (DataTable, Modal[wide/extraWide], StatusBadge, SearchInput, Pagination, Spinner, Alert)
 │       │   └── forms/     (UserForm, RollForm, SKUForm, BatchForm, OrderForm)
-│       ├── pages/         (LoginPage + 12 feature pages — added LotsPage)
+│       ├── pages/         (LoginPage + 12 feature pages, professionally overhauled)
 │       └── routes/        (routes.js, ProtectedRoute.jsx)
 └── mobile/                        ← Android/Kotlin (Phase 6C, future)
 ```

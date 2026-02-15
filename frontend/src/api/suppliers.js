@@ -9,7 +9,12 @@ export async function getSuppliers(params = {}) {
     if (params.is_active !== undefined) filtered = filtered.filter((s) => s.is_active === params.is_active)
     if (params.search) {
       const s = params.search.toLowerCase()
-      filtered = filtered.filter((sup) => sup.name.toLowerCase().includes(s))
+      filtered = filtered.filter((sup) =>
+        sup.name.toLowerCase().includes(s) ||
+        (sup.contact_person || '').toLowerCase().includes(s) ||
+        (sup.city || '').toLowerCase().includes(s) ||
+        (sup.gst_no || '').toLowerCase().includes(s)
+      )
     }
     return mockPaginated(filtered, params.page, params.page_size)
   }

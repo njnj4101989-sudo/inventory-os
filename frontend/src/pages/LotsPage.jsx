@@ -78,7 +78,7 @@ export default function LotsPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   useEffect(() => {
-    getRolls({ has_remaining: true }).then((res) => setAvailableRolls(res.data.data)).catch(() => {})
+    getRolls({ has_remaining: true, status: 'in_stock' }).then((res) => setAvailableRolls(res.data.data)).catch(() => {})
   }, [])
 
   // Calculations
@@ -146,7 +146,7 @@ export default function LotsPage() {
       })
       fetchData()
       // Refresh available rolls
-      getRolls({ has_remaining: true }).then((res) => setAvailableRolls(res.data.data)).catch(() => {})
+      getRolls({ has_remaining: true, status: 'in_stock' }).then((res) => setAvailableRolls(res.data.data)).catch(() => {})
     } catch (err) {
       setFormError(err.response?.data?.detail || 'Failed to create lot')
     } finally {

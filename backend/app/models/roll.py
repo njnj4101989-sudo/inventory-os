@@ -21,6 +21,7 @@ class Roll(Base):
     unit: Mapped[str] = mapped_column(String(20), default="kg", server_default="'kg'")
     cost_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     total_length: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    status: Mapped[str] = mapped_column(String(30), default="in_stock", server_default="'in_stock'")
     supplier_invoice_no: Mapped[str | None] = mapped_column(String(50))
     supplier_invoice_date: Mapped[datetime | None] = mapped_column(Date)
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"))
@@ -37,3 +38,25 @@ class Roll(Base):
         back_populates="roll"
     )
     lot_rolls: Mapped[list[LotRoll]] = relationship(back_populates="roll")
+    processing_logs: Mapped[list[RollProcessing]] = relationship(back_populates="roll")
+
+
+class RollProcessing(Base):
+    __tablename__ = "roll_processing"
+
+    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"))
+    process_type: Mapped[str] = mapped_column(String(50))  # embroidery, digital_print, dyeing, other
+    vendor_name: Mapped[str] = mapped_column(String(200))
+    vendor_phone: Mapped[str | None] = mapped_column(String(20))
+    sent_date: Mapped[datetime] = mapped_column(Date)
+    received_date: Mapped[datetime | None] = mapped_column(Date)
+    weight_before: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    weight_after: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    length_before: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    length_after: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    processing_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'")
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    # Relationships
+    roll: Mapped[Roll] = relationship(back_populates="processing_logs")

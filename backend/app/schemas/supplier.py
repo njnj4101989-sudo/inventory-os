@@ -25,14 +25,26 @@ class SupplierCreate(BaseModel):
     name: str
     contact_person: str | None = None
     phone: str | None = None
+    email: str | None = None
+    gst_no: str | None = None
+    pan_no: str | None = None
     address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
 
 
 class SupplierUpdate(BaseModel):
     name: str | None = None
     contact_person: str | None = None
     phone: str | None = None
+    email: str | None = None
+    gst_no: str | None = None
+    pan_no: str | None = None
     address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
     is_active: bool | None = None
 
 
@@ -44,6 +56,12 @@ class SupplierResponse(BaseSchema):
     name: str
     contact_person: str | None = None
     phone: str | None = None
+    email: str | None = None
+    gst_no: str | None = None
+    pan_no: str | None = None
     address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
     is_active: bool
     created_at: datetime

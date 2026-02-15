@@ -3,7 +3,7 @@
 from app.models.role import Role
 from app.models.user import User
 from app.models.supplier import Supplier
-from app.models.roll import Roll
+from app.models.roll import Roll, RollProcessing
 from app.models.sku import SKU
 from app.models.lot import Lot, LotRoll
 from app.models.batch import Batch
@@ -22,6 +22,7 @@ __all__ = [
     "User",
     "Supplier",
     "Roll",
+    "RollProcessing",
     "SKU",
     "Lot",
     "LotRoll",

@@ -22,6 +22,15 @@ const COLORS = {
   issued:       'bg-yellow-100 text-yellow-700',
   paid:         'bg-green-100 text-green-700',
   overdue:      'bg-red-100 text-red-700',
+
+  // Roll statuses
+  in_stock:             'bg-green-100 text-green-700',
+  sent_for_processing:  'bg-orange-100 text-orange-700',
+  in_cutting:           'bg-blue-100 text-blue-700',
+
+  // Processing log statuses
+  sent:     'bg-orange-100 text-orange-700',
+  received: 'bg-green-100 text-green-700',
 }
 
 /**
