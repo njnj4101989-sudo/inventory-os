@@ -291,11 +291,44 @@ export default function RollsPage() {
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
 
+  // Track if we're editing an existing invoice (vs creating new)
+  const [editingInvoice, setEditingInvoice] = useState(null)
+
   // ── Stock In — Invoice-wise ──
   const openStockIn = () => {
+    setEditingInvoice(null)
     setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '' })
     setRollRows([{ ...EMPTY_ROLL_ROW }])
     setFormError(null)
+    setStockInOpen(true)
+  }
+
+  // Check if invoice is editable (all rolls unused + in_stock)
+  const isInvoiceEditable = (inv) => inv?.rolls?.every((r) =>
+    (r.status || 'in_stock') === 'in_stock' && r.remaining_weight === r.total_weight
+  )
+
+  const openEditInvoice = () => {
+    if (!selectedInvoice) return
+    setEditingInvoice(selectedInvoice)
+    setInvoiceHeader({
+      supplier_id: selectedInvoice.supplier?.id || '',
+      supplier_invoice_no: selectedInvoice.invoice_no || '',
+      supplier_invoice_date: selectedInvoice.invoice_date || '',
+    })
+    setRollRows(selectedInvoice.rolls.map((r) => ({
+      id: r.id,
+      fabric_type: r.fabric_type || '',
+      color: r.color || '',
+      quantity: String(r.unit === 'meters' ? (r.total_length || r.total_weight) : r.total_weight),
+      unit: r.unit || 'kg',
+      cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '',
+      weight: r.unit === 'meters' ? String(r.total_weight || '') : '',
+      length: r.unit === 'kg' ? String(r.total_length || '') : '',
+      notes: r.notes || '',
+    })))
+    setFormError(null)
+    setSelectedInvoice(null)
     setStockInOpen(true)
   }
 
@@ -324,11 +357,36 @@ export default function RollsPage() {
     setSaving(true)
     setFormError(null)
     try {
-      await stockInBulk(invoiceHeader, rollRows)
+      if (editingInvoice) {
+        // Edit mode: update existing rolls + create new ones
+        const existingRows = rollRows.filter((e) => e.id)
+        const newRows = rollRows.filter((e) => !e.id)
+        for (const entry of existingRows) {
+          const payload = {
+            fabric_type: entry.fabric_type,
+            color: entry.color,
+            total_weight: entry.unit === 'kg' ? parseFloat(entry.quantity) : (entry.weight ? parseFloat(entry.weight) : 0),
+            unit: entry.unit,
+            cost_per_unit: entry.cost_per_unit ? parseFloat(entry.cost_per_unit) : null,
+            total_length: entry.unit === 'meters' ? parseFloat(entry.quantity) : (entry.length ? parseFloat(entry.length) : null),
+            supplier_id: invoiceHeader.supplier_id || null,
+            supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
+            supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
+            notes: entry.notes || null,
+          }
+          await updateRoll(entry.id, payload)
+        }
+        if (newRows.length > 0) {
+          await stockInBulk(invoiceHeader, newRows)
+        }
+      } else {
+        await stockInBulk(invoiceHeader, rollRows)
+      }
       setStockInOpen(false)
+      setEditingInvoice(null)
       refreshAll()
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to stock in rolls')
+      setFormError(err.response?.data?.detail || 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -601,9 +659,25 @@ export default function RollsPage() {
           INVOICE DETAIL Modal
          ════════════════════════════════════════════════════════ */}
       <Modal open={!!selectedInvoice} onClose={() => setSelectedInvoice(null)}
-        title={selectedInvoice?.invoice_no ? `Invoice: ${selectedInvoice.invoice_no}` : 'Invoice Details'} wide
+        title={selectedInvoice?.invoice_no ? `Invoice: ${selectedInvoice.invoice_no}` : 'Invoice Details'} extraWide
         actions={
-          <button onClick={() => setSelectedInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
+          <div className="flex w-full items-center justify-between">
+            <div>
+              {isInvoiceEditable(selectedInvoice) && (
+                <button onClick={openEditInvoice}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit Invoice
+                </button>
+              )}
+              {selectedInvoice && !isInvoiceEditable(selectedInvoice) && (
+                <span className="text-xs text-gray-400 italic">Some rolls are used — invoice is read-only</span>
+              )}
+            </div>
+            <button onClick={() => setSelectedInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
+          </div>
         }
       >
         {selectedInvoice && (
@@ -719,20 +793,36 @@ export default function RollsPage() {
       {/* ════════════════════════════════════════════════════════
           STOCK IN — Invoice-wise bulk entry
          ════════════════════════════════════════════════════════ */}
-      <Modal open={stockInOpen} onClose={() => setStockInOpen(false)} title="Stock In — Invoice Entry" wide
+      <Modal open={stockInOpen} onClose={() => { setStockInOpen(false); setEditingInvoice(null) }}
+        title={editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Stock In — New Invoice'} extraWide
         actions={
           <div className="flex w-full items-center justify-between">
-            <div className="text-xs text-gray-500">
-              {rollRows.length} roll{rollRows.length > 1 ? 's' : ''}
-              {rollTotals.weight > 0 && <span className="ml-2">| {rollTotals.weight.toFixed(3)} kg</span>}
-              {rollTotals.length > 0 && <span className="ml-2">| {rollTotals.length.toFixed(2)} m</span>}
-              {rollTotals.value > 0 && <span className="ml-2">| ₹{rollTotals.value.toFixed(2)}</span>}
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <span className="inline-flex items-center gap-1">
+                <span className="font-semibold text-gray-700">{rollRows.length}</span> roll{rollRows.length > 1 ? 's' : ''}
+              </span>
+              {rollTotals.weight > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  {rollTotals.weight.toFixed(3)} kg
+                </span>
+              )}
+              {rollTotals.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                  {rollTotals.length.toFixed(2)} m
+                </span>
+              )}
+              {rollTotals.value > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  ₹{rollTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </span>
+              )}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setStockInOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={handleStockIn} disabled={saving}
                 className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-                {saving ? 'Saving...' : `Stock In ${rollRows.length} Roll${rollRows.length > 1 ? 's' : ''}`}
+                {saving ? 'Saving...' : editingInvoice ? 'Save Changes' : `Stock In ${rollRows.length} Roll${rollRows.length > 1 ? 's' : ''}`}
               </button>
             </div>
           </div>
@@ -741,7 +831,7 @@ export default function RollsPage() {
         {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
         {/* Invoice Header */}
-        <div className="mb-5">
+        <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Invoice Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -764,104 +854,100 @@ export default function RollsPage() {
           </div>
         </div>
 
-        {/* Rolls Table */}
+        {/* Roll Entries — card-per-roll layout */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Roll Entries</h3>
             <button onClick={addRow} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-              Add Roll
-            </button>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Add Roll
+              </button>
           </div>
 
-          <div className="hidden md:grid md:grid-cols-[1fr_1fr_0.7fr_0.6fr_0.8fr_0.8fr_auto] gap-2 mb-2 px-1">
-            <span className="text-xs font-medium text-gray-400">Fabric Type *</span>
-            <span className="text-xs font-medium text-gray-400">Color *</span>
-            <span className="text-xs font-medium text-gray-400">Unit</span>
-            <span className="text-xs font-medium text-gray-400">Qty *</span>
-            <span className="text-xs font-medium text-gray-400">Cost/Unit (₹)</span>
-            <span className="text-xs font-medium text-gray-400">Notes</span>
-            <span className="w-16"></span>
-          </div>
-
-          <div className="space-y-2">
-            {rollRows.map((row, idx) => (
-              <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-3 md:p-2 md:bg-transparent md:border-0 md:rounded-none">
-                <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_0.7fr_0.6fr_0.8fr_0.8fr_auto] gap-2 items-start">
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">Fabric Type *</label>
-                    <input type="text" value={row.fabric_type} onChange={(e) => setRow(idx, 'fabric_type', e.target.value)}
-                      placeholder="Cotton" className={INPUT_CLS} />
+          <div className="space-y-3">
+            {rollRows.map((row, idx) => {
+              const rowValue = (parseFloat(row.quantity) || 0) * (parseFloat(row.cost_per_unit) || 0)
+              return (
+                <div key={idx} className="rounded-lg border border-gray-200 bg-white">
+                  {/* Card header */}
+                  <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                    <span className="text-xs font-semibold text-gray-500">Roll #{idx + 1}</span>
+                    <div className="flex items-center gap-2">
+                      {rowValue > 0 && (
+                        <span className="text-xs text-gray-400">₹{rowValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      )}
+                      <button onClick={() => duplicateRow(idx)} title="Duplicate"
+                            className="rounded p-1 text-gray-400 hover:bg-white hover:text-gray-600">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          </button>
+                          <button onClick={() => removeRow(idx)} title="Remove" disabled={rollRows.length <= 1}
+                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">Color *</label>
-                    <input type="text" value={row.color} onChange={(e) => setRow(idx, 'color', e.target.value)}
-                      placeholder="Red" className={INPUT_CLS} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">Unit</label>
-                    <select value={row.unit} onChange={(e) => setRow(idx, 'unit', e.target.value)} className={INPUT_CLS}>
-                      <option value="kg">kg</option>
-                      <option value="meters">meters</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">{row.unit === 'kg' ? 'Weight' : 'Length'} *</label>
-                    <input type="number" step="0.001" value={row.quantity} onChange={(e) => setRow(idx, 'quantity', e.target.value)}
-                      placeholder={row.unit === 'kg' ? '28.55' : '45.00'} className={INPUT_CLS} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">Cost/Unit (₹)</label>
-                    <input type="number" step="0.01" value={row.cost_per_unit} onChange={(e) => setRow(idx, 'cost_per_unit', e.target.value)}
-                      placeholder="120" className={INPUT_CLS} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 md:hidden mb-1 block">Notes</label>
-                    <input type="text" value={row.notes} onChange={(e) => setRow(idx, 'notes', e.target.value)}
-                      placeholder="Optional" className={INPUT_CLS} />
-                  </div>
-                  <div className="flex items-center gap-1 col-span-2 md:col-span-1 justify-end md:justify-start pt-1">
-                    <button onClick={() => duplicateRow(idx)} title="Duplicate row"
-                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                    </button>
-                    <button onClick={() => removeRow(idx)} title="Remove row" disabled={rollRows.length <= 1}
-                      className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
+                  {/* Card body */}
+                  <div className="p-4 space-y-3">
+                    {/* Row 1: Fabric, Color, Unit */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className={LABEL_CLS}>Fabric Type <span className="text-red-500">*</span></label>
+                        <input type="text" value={row.fabric_type} onChange={(e) => setRow(idx, 'fabric_type', e.target.value)}
+                          placeholder="e.g. Cotton, Rayon, Georgette" className={INPUT_CLS} />
+                      </div>
+                      <div>
+                        <label className={LABEL_CLS}>Color <span className="text-red-500">*</span></label>
+                        <input type="text" value={row.color} onChange={(e) => setRow(idx, 'color', e.target.value)}
+                          placeholder="e.g. Red, Navy Blue" className={INPUT_CLS} />
+                      </div>
+                      <div>
+                        <label className={LABEL_CLS}>Unit</label>
+                        <select value={row.unit} onChange={(e) => setRow(idx, 'unit', e.target.value)} className={INPUT_CLS}>
+                          <option value="kg">Kilograms (kg)</option>
+                          <option value="meters">Meters (m)</option>
+                        </select>
+                      </div>
+                    </div>
+                    {/* Row 2: Qty, Cost, Notes + optional ref field */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className={LABEL_CLS}>{row.unit === 'kg' ? 'Weight (kg)' : 'Length (m)'} <span className="text-red-500">*</span></label>
+                        <input type="number" step="0.001" value={row.quantity} onChange={(e) => setRow(idx, 'quantity', e.target.value)}
+                          placeholder={row.unit === 'kg' ? '28.550' : '45.00'} className={INPUT_CLS} />
+                      </div>
+                      <div>
+                        <label className={LABEL_CLS}>Cost / {row.unit === 'kg' ? 'kg' : 'm'} (₹)</label>
+                        <input type="number" step="0.01" value={row.cost_per_unit} onChange={(e) => setRow(idx, 'cost_per_unit', e.target.value)}
+                          placeholder="120.00" className={INPUT_CLS} />
+                      </div>
+                      <div>
+                        <label className={LABEL_CLS}>
+                          {row.unit === 'kg' ? 'Length (m, optional)' : 'Weight (kg, optional)'}
+                        </label>
+                        {row.unit === 'kg' ? (
+                          <input type="number" step="0.01" value={row.length || ''} onChange={(e) => setRow(idx, 'length', e.target.value)}
+                            placeholder="Reference" className={INPUT_CLS} />
+                        ) : (
+                          <input type="number" step="0.001" value={row.weight || ''} onChange={(e) => setRow(idx, 'weight', e.target.value)}
+                            placeholder="For LOT palla calc" className={INPUT_CLS} />
+                        )}
+                      </div>
+                      <div>
+                        <label className={LABEL_CLS}>Notes</label>
+                        <input type="text" value={row.notes} onChange={(e) => setRow(idx, 'notes', e.target.value)}
+                          placeholder="Optional remarks" className={INPUT_CLS} />
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {row.unit === 'meters' && (
-                  <div className="mt-2">
-                    <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                      <div className="col-span-2 md:col-span-1 max-w-[200px]">
-                        <label className="text-xs text-gray-500 mb-1 block">Weight (optional, kg)</label>
-                        <input type="number" step="0.001" value={row.weight || ''} onChange={(e) => setRow(idx, 'weight', e.target.value)}
-                          placeholder="For lot/palla calc" className={`${INPUT_CLS} text-xs`} />
-                      </div>
-                      <p className="text-xs text-gray-400 col-span-2 md:col-span-2 md:pt-4">Needed for LOT palla weight calculations</p>
-                    </div>
-                  </div>
-                )}
-
-                {row.unit === 'kg' && row.quantity && (
-                  <div className="mt-2">
-                    <div className="max-w-[200px]">
-                      <label className="text-xs text-gray-500 mb-1 block">Length (optional, meters)</label>
-                      <input type="number" step="0.01" value={row.length || ''} onChange={(e) => setRow(idx, 'length', e.target.value)}
-                        placeholder="Reference" className={`${INPUT_CLS} text-xs`} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <button onClick={addRow}
-            className="mt-3 w-full rounded-lg border-2 border-dashed border-gray-300 py-2.5 text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
-            + Add Another Roll
-          </button>
+              className="mt-3 w-full rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
+              + Add Another Roll
+            </button>
         </div>
       </Modal>
 
