@@ -3,6 +3,46 @@ import { rolls, suppliers, rollProcessing, mockPaginated, mockResponse } from '.
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
+// ── Roll code generator: {Challan}-{Fabric3}-{Color5}-{Seq} ──
+const FABRIC_ABBREVS = {
+  COTTON: 'COT', SILK: 'SLK', GEORGETTE: 'GGT', SHAKIRA: 'SHK',
+  CHIFFON: 'CHF', RAYON: 'RYN', POLYESTER: 'PLY', LINEN: 'LNN',
+  CREPE: 'CRP', SATIN: 'STN', VELVET: 'VLT', ORGANZA: 'OGZ',
+}
+const COLOR_ABBREVS = {
+  GREEN: 'GREEN', RED: 'RED', BLUE: 'BLUE', BLACK: 'BLACK', WHITE: 'WHITE',
+  YELLOW: 'YELLW', PINK: 'PINK', ORANGE: 'ORNGE', PURPLE: 'PURPL', BROWN: 'BROWN',
+  GREY: 'GREY', GRAY: 'GRAY', MEHANDI: 'MHNDI', MAROON: 'MROON', BEIGE: 'BEIGE',
+  MAGENTA: 'MGNTA', PEACH: 'PEACH', CREAM: 'CREAM', NAVY: 'NAVY', TEAL: 'TEAL',
+  CORAL: 'CORAL', RUST: 'RUST', IVORY: 'IVORY', OLIVE: 'OLIVE', WINE: 'WINE',
+}
+function shortenFabric(text) {
+  if (!text) return 'UNK'
+  const clean = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+  if (FABRIC_ABBREVS[clean]) return FABRIC_ABBREVS[clean]
+  const consonants = clean.replace(/[AEIOU]/g, '')
+  return (consonants.length >= 3 ? consonants.slice(0, 3) : clean.slice(0, 3)).toUpperCase()
+}
+function shortenColor(text) {
+  if (!text) return 'UNK'
+  const clean = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+  if (COLOR_ABBREVS[clean]) return COLOR_ABBREVS[clean]
+  return clean.slice(0, 5).toUpperCase()
+}
+function generateRollCode(challanNo, fabricType, color) {
+  const challan = (challanNo || '').trim() || 'NOINV'
+  const prefix = `${challan}-${shortenFabric(fabricType)}-${shortenColor(color)}-`
+  let max = 0
+  for (const r of rolls) {
+    if (r.roll_code.startsWith(prefix)) {
+      const last = r.roll_code.split('-').pop()
+      const num = parseInt(last, 10)
+      if (num > max) max = num
+    }
+  }
+  return `${prefix}${String(max + 1).padStart(2, '0')}`
+}
+
 export async function getRolls(params = {}) {
   if (USE_MOCK) {
     let filtered = [...rolls]
@@ -17,8 +57,15 @@ export async function getRolls(params = {}) {
     }
     if (params.color) filtered = filtered.filter((r) => r.color === params.color)
     if (params.has_remaining) filtered = filtered.filter((r) => r.remaining_weight > 0)
+    if (params.fully_consumed) filtered = filtered.filter((r) => r.remaining_weight <= 0)
     if (params.status) filtered = filtered.filter((r) => (r.status || 'in_stock') === params.status)
     if (params.supplier_id) filtered = filtered.filter((r) => r.supplier?.id === params.supplier_id)
+    if (params.fabric_filter) filtered = filtered.filter((r) => r.fabric_type === params.fabric_filter)
+    if (params.process_type === 'none') {
+      filtered = filtered.filter((r) => !r.processing_logs || r.processing_logs.length === 0)
+    } else if (params.process_type) {
+      filtered = filtered.filter((r) => r.processing_logs?.some((l) => l.process_type === params.process_type))
+    }
     return mockPaginated(filtered, params.page, params.page_size)
   }
   return client.get('/rolls', { params })
@@ -26,7 +73,7 @@ export async function getRolls(params = {}) {
 
 export async function stockIn(data) {
   if (USE_MOCK) {
-    const nextCode = `ROLL-${String(rolls.length + 1).padStart(4, '0')}`
+    const nextCode = generateRollCode(data.supplier_invoice_no, data.fabric_type, data.color)
     const sup = suppliers.find((s) => s.id === data.supplier_id)
     const newRoll = {
       id: crypto.randomUUID(),

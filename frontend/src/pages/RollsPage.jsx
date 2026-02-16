@@ -196,10 +196,19 @@ export default function RollsPage() {
   const [rollPages, setRollPages] = useState(1)
   const [rollSearch, setRollSearch] = useState('')
   const [rollLoading, setRollLoading] = useState(true)
+  const [rollStatusFilter, setRollStatusFilter] = useState('all')
+  const [rollAvailFilter, setRollAvailFilter] = useState('all')
+  const [rollSupplierFilter, setRollSupplierFilter] = useState('')
+  const [rollFabricFilter, setRollFabricFilter] = useState('')
+  const [rollProcessFilter, setRollProcessFilter] = useState('')
 
   // Processing tab state
   const [procRolls, setProcRolls] = useState([])
   const [procLoading, setProcLoading] = useState(true)
+  const [procProcessFilter, setProcProcessFilter] = useState('')
+  const [procVendorFilter, setProcVendorFilter] = useState('')
+  const [procDaysFilter, setProcDaysFilter] = useState('all')
+  const [procSearch, setProcSearch] = useState('')
 
   const [error, setError] = useState(null)
   const [suppliers, setSuppliers] = useState([])
@@ -259,7 +268,15 @@ export default function RollsPage() {
     setRollLoading(true)
     setError(null)
     try {
-      const res = await getRolls({ page: rollPage, page_size: 20, fabric_type: rollSearch || undefined })
+      const params = { page: rollPage, page_size: 20 }
+      if (rollSearch) params.fabric_type = rollSearch
+      if (rollStatusFilter !== 'all') params.status = rollStatusFilter
+      if (rollAvailFilter === 'available') params.has_remaining = true
+      if (rollAvailFilter === 'consumed') params.fully_consumed = true
+      if (rollSupplierFilter) params.supplier_id = rollSupplierFilter
+      if (rollFabricFilter) params.fabric_filter = rollFabricFilter
+      if (rollProcessFilter) params.process_type = rollProcessFilter
+      const res = await getRolls(params)
       setRolls(res.data.data)
       setRollTotal(res.data.total)
       setRollPages(res.data.pages)
@@ -268,7 +285,7 @@ export default function RollsPage() {
     } finally {
       setRollLoading(false)
     }
-  }, [rollPage, rollSearch])
+  }, [rollPage, rollSearch, rollStatusFilter, rollAvailFilter, rollSupplierFilter, rollFabricFilter, rollProcessFilter])
 
   const fetchProcessing = useCallback(async () => {
     setProcLoading(true)
@@ -662,70 +679,224 @@ export default function RollsPage() {
       {/* ════════════════════════════════════════════
           TAB 2: ALL ROLLS
          ════════════════════════════════════════════ */}
-      {tab === 'rolls' && (
-        <div>
-          <div className="mt-4 max-w-sm">
-            <SearchInput value={rollSearch} onChange={(v) => { setRollSearch(v); setRollPage(1) }} placeholder="Search by code, fabric, color, invoice..." />
+      {tab === 'rolls' && (() => {
+        const STATUS_PILLS = [
+          { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
+          { key: 'in_stock', label: 'In Stock', active: 'bg-green-100 text-green-700 ring-1 ring-green-300' },
+          { key: 'sent_for_processing', label: 'Processing', active: 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' },
+          { key: 'in_cutting', label: 'In Cutting', active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' },
+        ]
+        const AVAIL_PILLS = [
+          { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
+          { key: 'available', label: 'Has Stock', active: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' },
+          { key: 'consumed', label: 'Fully Used', active: 'bg-red-100 text-red-700 ring-1 ring-red-300' },
+        ]
+        // Extract unique fabrics from loaded rolls for dropdown
+        const uniqueFabrics = [...new Set(rolls.map((r) => r.fabric_type).filter(Boolean))].sort()
+        const activeFilterCount = [rollStatusFilter !== 'all', rollAvailFilter !== 'all', !!rollSupplierFilter, !!rollFabricFilter, !!rollProcessFilter].filter(Boolean).length
+
+        return (
+          <div>
+            {/* ── Filter toolbar ── */}
+            <div className="mt-4 space-y-3">
+              {/* Row 1: Status pills + Availability pills */}
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Status:</span>
+                  {STATUS_PILLS.map((p) => (
+                    <button key={p.key} onClick={() => { setRollStatusFilter(p.key); setRollPage(1) }}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        rollStatusFilter === p.key ? p.active : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >{p.label}</button>
+                  ))}
+                </div>
+                <div className="h-5 w-px bg-gray-200" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Stock:</span>
+                  {AVAIL_PILLS.map((p) => (
+                    <button key={p.key} onClick={() => { setRollAvailFilter(p.key); setRollPage(1) }}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        rollAvailFilter === p.key ? p.active : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >{p.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Row 2: Dropdowns + Search + Clear */}
+              <div className="flex flex-wrap items-center gap-3">
+                <select value={rollSupplierFilter} onChange={(e) => { setRollSupplierFilter(e.target.value); setRollPage(1) }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                  <option value="">All Suppliers</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <select value={rollFabricFilter} onChange={(e) => { setRollFabricFilter(e.target.value); setRollPage(1) }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                  <option value="">All Fabrics</option>
+                  {uniqueFabrics.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <select value={rollProcessFilter} onChange={(e) => { setRollProcessFilter(e.target.value); setRollPage(1) }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                  <option value="">All Processes</option>
+                  <option value="none">No Processing</option>
+                  {PROCESS_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+                <div className="flex-1 max-w-sm">
+                  <SearchInput value={rollSearch} onChange={(v) => { setRollSearch(v); setRollPage(1) }} placeholder="Search code, color, invoice..." />
+                </div>
+                {activeFilterCount > 0 && (
+                  <button onClick={() => { setRollStatusFilter('all'); setRollAvailFilter('all'); setRollSupplierFilter(''); setRollFabricFilter(''); setRollProcessFilter(''); setRollSearch(''); setRollPage(1) }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ── Table ── */}
+            <div className="mt-4">
+              <DataTable columns={ROLL_COLUMNS} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
+              <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
+            </div>
           </div>
-          <div className="mt-4">
-            <DataTable columns={ROLL_COLUMNS} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
-            <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ════════════════════════════════════════════
           TAB 3: IN PROCESSING
          ════════════════════════════════════════════ */}
-      {tab === 'processing' && (
-        <div>
-          {/* Summary cards */}
-          {!procLoading && procRolls.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
-                <div className="text-2xl font-bold text-orange-700">{procRolls.length}</div>
-                <div className="text-xs text-orange-500">Rolls Out</div>
-              </div>
-              <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-                <div className="text-2xl font-bold text-blue-700">
-                  {procRolls.reduce((s, r) => s + parseFloat(r.total_weight || 0), 0).toFixed(3)} kg
-                </div>
-                <div className="text-xs text-blue-500">Total Weight</div>
-              </div>
-              <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
-                <div className="text-2xl font-bold text-purple-700">
-                  {[...new Set(procRolls.map((r) => r.processing_logs?.[r.processing_logs.length - 1]?.vendor_name).filter(Boolean))].length}
-                </div>
-                <div className="text-xs text-purple-500">Vendors</div>
-              </div>
-              <div className="rounded-lg bg-red-50 border border-red-100 p-3">
-                <div className="text-2xl font-bold text-red-700">
-                  {procRolls.filter((r) => {
-                    const log = r.processing_logs?.[r.processing_logs.length - 1]
-                    if (!log?.sent_date) return false
-                    return Math.floor((Date.now() - new Date(log.sent_date).getTime()) / (1000 * 60 * 60 * 24)) > 14
-                  }).length}
-                </div>
-                <div className="text-xs text-red-500">Overdue (&gt;14 days)</div>
-              </div>
-            </div>
-          )}
+      {tab === 'processing' && (() => {
+        // Client-side filters on procRolls (already fully loaded)
+        const getLatestLog = (r) => r.processing_logs?.[r.processing_logs.length - 1]
+        const getDaysOut = (log) => log?.sent_date ? Math.floor((Date.now() - new Date(log.sent_date).getTime()) / (1000 * 60 * 60 * 24)) : 0
 
-          <div className="mt-4">
-            <DataTable columns={PROCESSING_COLUMNS} data={procRolls} loading={procLoading} onRowClick={openRollDetail}
-              emptyText={
-                <div className="py-6 text-center">
-                  <svg className="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="mt-2 text-sm text-gray-500">No rolls currently out for processing</p>
-                  <p className="text-xs text-gray-400">Send a roll for processing from the roll detail view</p>
+        // Extract unique vendors and process types from data
+        const uniqueVendors = [...new Set(procRolls.map((r) => getLatestLog(r)?.vendor_name).filter(Boolean))].sort()
+        const uniqueProcTypes = [...new Set(procRolls.map((r) => getLatestLog(r)?.process_type).filter(Boolean))]
+
+        // Apply filters
+        let filtered = [...procRolls]
+        if (procProcessFilter) filtered = filtered.filter((r) => getLatestLog(r)?.process_type === procProcessFilter)
+        if (procVendorFilter) filtered = filtered.filter((r) => getLatestLog(r)?.vendor_name === procVendorFilter)
+        if (procDaysFilter === 'overdue') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) > 14)
+        if (procDaysFilter === 'week') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) <= 7)
+        if (procDaysFilter === '7to14') filtered = filtered.filter((r) => { const d = getDaysOut(getLatestLog(r)); return d > 7 && d <= 14 })
+        if (procSearch) {
+          const q = procSearch.toLowerCase()
+          filtered = filtered.filter((r) =>
+            r.roll_code.toLowerCase().includes(q) ||
+            r.fabric_type?.toLowerCase().includes(q) ||
+            r.color?.toLowerCase().includes(q) ||
+            (getLatestLog(r)?.vendor_name || '').toLowerCase().includes(q)
+          )
+        }
+
+        const procActiveFilters = [!!procProcessFilter, !!procVendorFilter, procDaysFilter !== 'all', !!procSearch].filter(Boolean).length
+
+        // KPIs from ALL procRolls (unfiltered)
+        const totalWeight = procRolls.reduce((s, r) => s + parseFloat(r.total_weight || 0), 0)
+        const vendorCount = uniqueVendors.length
+        const overdueCount = procRolls.filter((r) => getDaysOut(getLatestLog(r)) > 14).length
+
+        return (
+          <div>
+            {/* Summary cards */}
+            {!procLoading && procRolls.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
+                  <div className="text-2xl font-bold text-orange-700">{procRolls.length}</div>
+                  <div className="text-xs text-orange-500">Rolls Out</div>
                 </div>
-              }
-            />
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+                  <div className="text-2xl font-bold text-blue-700">{totalWeight.toFixed(3)} kg</div>
+                  <div className="text-xs text-blue-500">Total Weight</div>
+                </div>
+                <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
+                  <div className="text-2xl font-bold text-purple-700">{vendorCount}</div>
+                  <div className="text-xs text-purple-500">Vendors</div>
+                </div>
+                <div className="rounded-lg bg-red-50 border border-red-100 p-3">
+                  <div className="text-2xl font-bold text-red-700">{overdueCount}</div>
+                  <div className="text-xs text-red-500">Overdue (&gt;14 days)</div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Filter toolbar ── */}
+            {!procLoading && procRolls.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <select value={procProcessFilter} onChange={(e) => setProcProcessFilter(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                  <option value="">All Process Types</option>
+                  {uniqueProcTypes.map((pt) => {
+                    const label = PROCESS_TYPES.find((p) => p.value === pt)?.label || pt
+                    return <option key={pt} value={pt}>{label}</option>
+                  })}
+                </select>
+                <select value={procVendorFilter} onChange={(e) => setProcVendorFilter(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                  <option value="">All Vendors</option>
+                  {uniqueVendors.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Duration:</span>
+                  {[
+                    { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
+                    { key: 'week', label: '≤ 7 days', active: 'bg-green-100 text-green-700 ring-1 ring-green-300' },
+                    { key: '7to14', label: '8–14 days', active: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300' },
+                    { key: 'overdue', label: '> 14 days', active: 'bg-red-100 text-red-700 ring-1 ring-red-300' },
+                  ].map((p) => (
+                    <button key={p.key} onClick={() => setProcDaysFilter(p.key)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        procDaysFilter === p.key ? p.active : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >{p.label}</button>
+                  ))}
+                </div>
+                <div className="flex-1 max-w-xs">
+                  <SearchInput value={procSearch} onChange={setProcSearch} placeholder="Search code, color, vendor..." />
+                </div>
+                {procActiveFilters > 0 && (
+                  <button onClick={() => { setProcProcessFilter(''); setProcVendorFilter(''); setProcDaysFilter('all'); setProcSearch('') }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    Clear {procActiveFilters} filter{procActiveFilters > 1 ? 's' : ''}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Filtered count ── */}
+            {procActiveFilters > 0 && filtered.length !== procRolls.length && (
+              <div className="mt-2 text-xs text-gray-400">
+                Showing {filtered.length} of {procRolls.length} roll{procRolls.length > 1 ? 's' : ''}
+              </div>
+            )}
+
+            <div className="mt-4">
+              <DataTable columns={PROCESSING_COLUMNS} data={filtered} loading={procLoading} onRowClick={openRollDetail}
+                emptyText={
+                  procActiveFilters > 0
+                    ? <div className="py-6 text-center">
+                        <p className="text-sm text-gray-500">No rolls match the current filters</p>
+                        <button onClick={() => { setProcProcessFilter(''); setProcVendorFilter(''); setProcDaysFilter('all'); setProcSearch('') }}
+                          className="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700">Clear all filters</button>
+                      </div>
+                    : <div className="py-6 text-center">
+                        <svg className="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="mt-2 text-sm text-gray-500">No rolls currently out for processing</p>
+                        <p className="text-xs text-gray-400">Send a roll for processing from the roll detail view</p>
+                      </div>
+                }
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ════════════════════════════════════════════════════════
           INVOICE DETAIL Modal
@@ -752,114 +923,184 @@ export default function RollsPage() {
           </div>
         }
       >
-        {selectedInvoice && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Invoice Information</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="text-xs text-gray-500">Supplier</div>
-                  <div className="mt-0.5 text-sm font-semibold text-gray-800">{selectedInvoice.supplier?.name || '—'}</div>
+        {selectedInvoice && (() => {
+          // Group rolls by fabric_type → then by color within each group
+          const fabricGroups = []
+          const fabricMap = {}
+          for (const roll of selectedInvoice.rolls) {
+            const fabric = roll.fabric_type || 'Unknown'
+            if (!fabricMap[fabric]) {
+              fabricMap[fabric] = { fabric, rolls: [], colorMap: {}, unit: roll.unit || 'kg', cost_per_unit: roll.cost_per_unit, notes: roll.notes }
+              fabricGroups.push(fabricMap[fabric])
+            }
+            const grp = fabricMap[fabric]
+            grp.rolls.push(roll)
+            const color = roll.color || 'Unknown'
+            if (!grp.colorMap[color]) grp.colorMap[color] = []
+            grp.colorMap[color].push(roll)
+          }
+          // Unique colors across all groups
+          const allColors = new Set(selectedInvoice.rolls.map((r) => r.color || 'Unknown'))
+
+          return (
+            <div className="space-y-4">
+              {/* ── Compact Invoice Header ── */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <div>
+                  <span className="text-gray-400">Supplier:</span>{' '}
+                  <span className="font-semibold text-gray-800">{selectedInvoice.supplier?.name || '—'}</span>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="text-xs text-gray-500">Invoice No.</div>
-                  <div className="mt-0.5 text-sm font-semibold text-gray-800">{selectedInvoice.invoice_no || '—'}</div>
+                <div>
+                  <span className="text-gray-400">Challan No.:</span>{' '}
+                  <span className="font-semibold text-gray-800">{selectedInvoice.invoice_no || '—'}</span>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="text-xs text-gray-500">Invoice Date</div>
-                  <div className="mt-0.5 text-sm font-semibold text-gray-800">
+                <div>
+                  <span className="text-gray-400">Date:</span>{' '}
+                  <span className="font-medium text-gray-700">
                     {selectedInvoice.invoice_date ? new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                  </div>
+                  </span>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="text-xs text-gray-500">Received</div>
-                  <div className="mt-0.5 text-sm font-semibold text-gray-800">
+                <div>
+                  <span className="text-gray-400">Received:</span>{' '}
+                  <span className="font-medium text-gray-700">
                     {selectedInvoice.received_at ? new Date(selectedInvoice.received_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                  </div>
+                  </span>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-blue-50 p-3 text-center">
-                <div className="text-xl font-bold text-blue-700">{selectedInvoice.roll_count}</div>
-                <div className="text-xs text-blue-500">Roll{selectedInvoice.roll_count > 1 ? 's' : ''}</div>
+              {/* ── KPI Summary Pills (matching entry top-bar style) ── */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                  {selectedInvoice.roll_count} roll{selectedInvoice.roll_count > 1 ? 's' : ''}
+                </span>
+                <span className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700">
+                  {allColors.size} color{allColors.size > 1 ? 's' : ''}
+                </span>
+                <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                  {fabricGroups.length} design{fabricGroups.length > 1 ? 's' : ''}
+                </span>
+                <span className="rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                  {selectedInvoice.total_weight.toFixed(3)} kg
+                </span>
+                <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+                  ₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="rounded-lg bg-green-50 p-3 text-center">
-                <div className="text-xl font-bold text-green-700">{selectedInvoice.total_weight.toFixed(3)} kg</div>
-                <div className="text-xs text-green-500">Total Weight</div>
-              </div>
-              <div className="rounded-lg bg-purple-50 p-3 text-center">
-                <div className="text-xl font-bold text-purple-700">₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                <div className="text-xs text-purple-500">Total Value</div>
-              </div>
-            </div>
 
-            <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Rolls in this Invoice</h3>
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Roll Code</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Fabric</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 bg-white">
-                    {selectedInvoice.rolls.map((roll, idx) => {
-                      const unitLabel = roll.unit === 'meters' ? 'm' : 'kg'
-                      const qty = roll.unit === 'meters' ? (roll.total_length || roll.total_weight) : roll.total_weight
-                      const remaining = roll.unit === 'meters' ? (roll.remaining_length ?? roll.remaining_weight) : roll.remaining_weight
-                      const pct = qty > 0 ? (remaining / qty) * 100 : 0
-                      const value = (parseFloat(roll.total_weight) || 0) * (parseFloat(roll.cost_per_unit) || 0)
-                      return (
-                        <tr key={roll.id} onClick={() => openRollFromInvoice(roll)}
-                          className="cursor-pointer hover:bg-blue-50 transition-colors">
-                          <td className="px-4 py-2.5 text-sm text-gray-400">{idx + 1}</td>
-                          <td className="px-4 py-2.5 text-sm font-medium text-primary-600">{roll.roll_code}</td>
-                          <td className="px-4 py-2.5 text-sm text-gray-700">{roll.fabric_type}</td>
-                          <td className="px-4 py-2.5 text-sm text-gray-700">{roll.color}</td>
-                          <td className="px-4 py-2.5 text-sm text-gray-700">{qty} {unitLabel}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-700">{remaining} {unitLabel}</span>
-                              <div className="h-1.5 w-14 rounded-full bg-gray-200">
-                                <div className={`h-1.5 rounded-full ${pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                  style={{ width: `${pct}%` }} />
+              {/* ── Design Groups ── */}
+              {fabricGroups.map((grp, gIdx) => {
+                const grpWeight = grp.rolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0), 0)
+                const grpValue = grp.rolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0) * (parseFloat(r.cost_per_unit) || 0), 0)
+                const colorEntries = Object.entries(grp.colorMap)
+
+                return (
+                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    {/* Design group header bar — matches entry style */}
+                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{gIdx + 1}</span>
+                        <span className="text-sm font-semibold text-blue-800">{grp.fabric}</span>
+                        <span className="text-xs text-blue-500">
+                          {grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {grpWeight.toFixed(3)} {grp.unit}
+                          {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
+                        </span>
+                      </div>
+                      {grp.cost_per_unit > 0 && (
+                        <span className="text-xs text-blue-500">Rate: ₹{grp.cost_per_unit}/{grp.unit}</span>
+                      )}
+                    </div>
+
+                    {/* Color-wise weight grid */}
+                    <div className="p-4">
+                      {/* Grid header */}
+                      <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center">
+                        <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
+                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights ({grp.unit})</span>
+                        <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
+                        <span className="text-xs font-semibold text-gray-500 uppercase text-right">Total</span>
+                      </div>
+
+                      {/* Color rows */}
+                      <div className="border border-gray-200 rounded-b-lg divide-y divide-gray-100 bg-white">
+                        {colorEntries.map(([color, colorRolls]) => {
+                          const colorWeight = colorRolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0), 0)
+                          return (
+                            <div key={color} className="px-4 py-2.5 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center hover:bg-gray-50/50">
+                              {/* Color name */}
+                              <span className="text-sm font-medium text-gray-800">{color}</span>
+
+                              {/* Individual roll weight cells — clickable */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {colorRolls.map((roll) => {
+                                  const wt = parseFloat(roll.total_weight) || 0
+                                  const rem = parseFloat(roll.remaining_weight) || 0
+                                  const isUsed = wt > 0 && rem < wt
+                                  const isProcessing = roll.status === 'sent_for_processing'
+                                  return (
+                                    <button
+                                      key={roll.id}
+                                      onClick={() => openRollFromInvoice(roll)}
+                                      title={`${roll.roll_code} — ${wt} ${grp.unit}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
+                                      className={`relative inline-flex items-center rounded border px-2.5 py-1 text-sm tabular-nums transition-colors cursor-pointer
+                                        ${isProcessing
+                                          ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100'
+                                          : isUsed
+                                            ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                            : 'border-gray-300 bg-white text-gray-800 hover:bg-blue-50 hover:border-blue-300'}`}
+                                    >
+                                      {wt.toFixed(3)}
+                                      {isProcessing && (
+                                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-orange-500 inline-block" />
+                                      )}
+                                      {isUsed && !isProcessing && (
+                                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+                                      )}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+
+                              {/* Roll count badge */}
+                              <div className="text-center">
+                                <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                  {colorRolls.length}
+                                </span>
+                              </div>
+
+                              {/* Row total */}
+                              <div className="text-right text-sm font-medium text-gray-700">
+                                {colorWeight.toFixed(3)} {grp.unit}
                               </div>
                             </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <StatusBadge status={roll.status || 'in_stock'} label={ROLL_STATUS_LABELS[roll.status] || 'In Stock'} />
-                          </td>
-                          <td className="px-4 py-2.5 text-sm text-gray-700">
-                            {value > 0 ? `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr className="font-medium">
-                      <td colSpan={4} className="px-4 py-2.5 text-xs text-gray-500 uppercase">Total</td>
-                      <td className="px-4 py-2.5 text-sm text-gray-800">{selectedInvoice.total_weight.toFixed(3)} kg</td>
-                      <td className="px-4 py-2.5"></td>
-                      <td className="px-4 py-2.5"></td>
-                      <td className="px-4 py-2.5 text-sm text-gray-800">₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                          )
+                        })}
+                      </div>
+
+                      {/* Group footer — totals */}
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                        <div className="flex items-center gap-3">
+                          {grp.notes && <span className="italic">{grp.notes}</span>}
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span>{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''}</span>
+                          <span className="font-medium text-gray-700">{grpWeight.toFixed(3)} {grp.unit}</span>
+                          {grpValue > 0 && <span className="font-medium text-gray-700">₹{grpValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* ── Legend ── */}
+              <div className="flex items-center gap-4 text-xs text-gray-400">
+                <span>Click any weight to view roll details</span>
+                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-orange-500 inline-block" /> Processing</span>
+                <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" /> Partially used</span>
               </div>
-              <p className="mt-2 text-xs text-gray-400">Click any roll row to view full details</p>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* ════════════════════════════════════════════════════════
