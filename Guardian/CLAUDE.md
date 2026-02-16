@@ -415,6 +415,77 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
   - Switch `VITE_USE_MOCK=false` once services are live
   - Continue page overhauls (SKUs → Lots → Batches) after backend is functional
 
+### Session 14 (2026-02-16) — Invoice view redesign, smart roll codes, filters
+- **Invoice Detail Modal — challan-style grouped view** (replaces flat table)
+  - Compact header row (supplier, challan no, date, received — inline text)
+  - KPI summary pills (rolls, colors, designs, weight, value — matching entry top-bar)
+  - Design groups: grouped by fabric_type, blue header bar with summary
+  - Color-wise weight grid: Color | clickable weight cells per roll | roll count | row total
+  - Status indicators: orange dot (processing), amber dot (partially used)
+  - Legend bar at bottom
+  - All existing functionality preserved (click weight → roll detail, edit invoice, back to invoice)
+- **Roll code pattern overhaul** — `ROLL-XXXX` → `{Challan}-{Fabric3}-{Color5}-{Seq}`
+  - Example: `KT-2026-0451-COT-GREEN-01`, `LF-2026-0089-COT-BLACK-01`
+  - 5-letter color codes to avoid collisions (GREEN vs GREY)
+  - Backend: `next_roll_code()` now accepts challan_no, fabric_type, color params
+  - Frontend: `generateRollCode()` in rolls.js for mock, `stockIn()` uses it
+  - Abbreviation maps: 12 fabrics, 25 colors (both backend + frontend)
+  - All 10 mock references updated (6 rolls + 4 lot rolls)
+- **All Rolls tab — filter toolbar**
+  - Status pills: All / In Stock / Processing / In Cutting
+  - Stock pills: All / Has Stock / Fully Used
+  - Dropdowns: Supplier, Fabric, Process Type (+ "No Processing" option)
+  - Search: code, color, invoice text
+  - Clear filters button with active count
+- **In Processing tab — filter toolbar**
+  - Process Type dropdown (auto-populated from data)
+  - Vendor dropdown (auto-populated from data)
+  - Duration pills: All / ≤7 days / 8–14 days / >14 days overdue
+  - Search: code, color, vendor name
+  - Filtered count display, smart empty states
+- **Files changed:** 5 (code_generator.py, mock.js, rolls.js, RollsPage.jsx, guardian.md)
+- **Build:** 128 modules, 0 errors
+- **Git:** `68ce374` — pushed to main
+- **Next Session (15):** Implement real backend services OR continue page overhauls (SKUs → Lots → Batches)
+
+### Session 15 (2026-02-17) — All backend services implemented + STEP docs updated
+- **Track A: All 13 backend services FULLY IMPLEMENTED** (59→65+ methods, zero stubs remaining)
+  - A1: AuthService (3) — login (JWT + role permissions), refresh, logout
+  - A2: UserService (5) — CRUD + soft-delete, password hashing, duplicate username check
+  - A3: SupplierService (4) — CRUD with all 6 new fields, duplicate name check
+  - A4: RollService (4) — stock_in (challan-based codes), get_rolls (filter/paginate), get_roll (with consumption+processing), get_consumption_history
+  - A5: SKUService (4) — CRUD, auto-generate sku_code, creates initial InventoryState on creation
+  - A6: LotService (6) — create (palla calculations, deducts remaining_weight), update, add/remove rolls, recompute totals
+  - A7: BatchService (8+3) — lifecycle (create from lot, assign, start, submit, check), QR gen, + mobile methods (get_batches_for_tailor, scan_batch_qr, get_pending_checks)
+  - A8: InventoryService (6+1) — event processing (upserts InventoryState), adjust, reconcile, + get_stock_by_code (external API)
+  - A9: OrderService (6+1) — lifecycle (create, ship→auto invoice, cancel, return), + process_external_return
+  - A10: InvoiceService (5) — create from order (18% GST, QR gen), mark_paid, generate_pdf (placeholder)
+  - A11: DashboardService (3) — summary aggregates, tailor performance (batch stats per tailor), inventory movement
+  - A12: QRService (2) — qrcode library with ImportError fallback, batch-specific QR with JSON metadata
+  - A13: ReservationService (5+3) — create/confirm/release/expire_stale, + external API methods (create/confirm/release by code)
+- **Verification — ALL PASSED:**
+  - Fresh migration: 17 tables detected and created
+  - Seeds: 5 roles, 5 users, 2 suppliers, 3 SKUs
+  - Server starts with zero import errors
+  - Background reservation expiry task runs correctly
+  - Login tested: admin1/test1234 → JWT returned ✅
+  - Suppliers, SKUs, Dashboard, Roll stock-in → ALL working ✅
+  - Roll code generation: `TEST-2026-0001-COT-GREEN-01` ✅
+- **Track B: STEP docs updated to v1.1** (reflect Sessions 7-14 changes)
+  - STEP1: Updated §1.5 production flow (LOT step, weight-based), §1.9 Roll→LOT→Batch diagram
+  - STEP2: Complete rewrite — 17 tables, Lot/LotRoll/RollProcessing, weight-based Roll, Supplier+6 fields, updated ER diagram
+  - STEP3: Updated EVENT 1 metadata (length→weight), roll code format
+  - STEP4: Updated all API contracts — Lot endpoints, weight-based Roll, Supplier+6 fields, lot_manage permission, 50 endpoints
+  - STEP5: Updated folder tree (frontend/ not web/, lot files, mock layer, 90+ backend files, 55+ frontend files)
+- **Bugs fixed during implementation:**
+  - Order model has no `shipped_at` → used `updated_at`
+  - Invoice model requires non-nullable `qr_code_data` → added QR generation in create_invoice
+  - ReserveRequest has `items` list, not single sku_code → fixed create_external_reservation to iterate
+  - Mobile/External routes called non-existent service methods → added all missing methods
+- **Files changed:** 13 service files, 5 STEP docs, migration regenerated
+- **Build:** 128 modules, 0 errors
+- **Next:** Continue page overhauls (SKUs → Lots → Batches → Orders → Invoices), then Phase 6C/6D
+
 ---
 
 ## SQLite → PostgreSQL Migration Checklist

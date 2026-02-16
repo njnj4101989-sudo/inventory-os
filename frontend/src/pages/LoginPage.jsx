@@ -65,7 +65,7 @@ export default function LoginPage() {
                 required
                 autoFocus
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="e.g. admin1"
+                placeholder="e.g. admin"
               />
             </div>
 
@@ -95,7 +95,7 @@ export default function LoginPage() {
 
           {/* Dev hint */}
           <p className="mt-4 text-center text-xs text-gray-400">
-            Mock mode: admin1 / test1234
+            Login: admin / test1234 (or supervisor, tailor1, checker1, billing)
           </p>
         </form>
       </div>

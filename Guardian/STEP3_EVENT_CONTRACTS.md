@@ -1,9 +1,9 @@
 # STEP 3: EVENT CONTRACTS
 ## Inventory-OS | Production-Grade Textile Inventory System
 
-**Version:** 1.0
-**Status:** Draft
-**Date:** 2026-02-07
+**Version:** 1.1 (Updated Session 15 — reflects Sessions 7-14 changes)
+**Status:** Approved
+**Date:** 2026-02-07 (Updated: 2026-02-16)
 
 ---
 
@@ -76,23 +76,24 @@
 | **sku_id** | `NULL` (raw material has no SKU) |
 | **roll_id** | `rolls.id` |
 | **quantity** | `1` (one roll unit) |
-| **unit** | `meters` |
+| **unit** | `kg` (weight-based tracking) |
 | **performed_by** | Supervisor's `users.id` |
-| **metadata** | `{ "total_length": 50.00, "fabric_type": "Cotton", "color": "Red" }` |
+| **metadata** | `{ "total_weight": 12.50, "fabric_type": "Cotton", "color": "Green", "supplier_invoice_no": "KT-2026-0451" }` |
 
 **Side Effects:**
 ```
-1. INSERT into rolls table (roll_code, fabric_type, color, total_length, remaining_length = total_length)
-2. INSERT into inventory_events
-3. No inventory_state update (raw materials tracked via rolls.remaining_length)
+1. INSERT into rolls table (roll_code, fabric_type, color, total_weight, remaining_weight = total_weight, status = 'in_stock')
+2. Roll code generated: {Challan}-{Fabric3}-{Color5}-{Seq} (e.g., KT-2026-0451-COT-GREEN-01)
+3. INSERT into inventory_events
+4. No inventory_state update (raw materials tracked via rolls.remaining_weight in kg)
 ```
 
 **Validation:**
 ```
-- total_length > 0
+- total_weight > 0 (in kg)
 - fabric_type is not empty
 - supplier_id exists and is_active = true
-- performed_by has role = supervisor
+- performed_by has role = supervisor or admin
 ```
 
 ---

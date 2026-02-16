@@ -4,6 +4,8 @@ Routes import from here:
     from app.dependencies import get_db, get_current_user, require_permission, require_role
 """
 
+from uuid import UUID as PyUUID
+
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import ExpiredSignatureError, JWTError
@@ -44,9 +46,15 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise UnauthorizedError("Invalid token type")
 
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_str = payload.get("sub")
+    if not user_id_str:
         raise UnauthorizedError("Invalid token payload")
+
+    # Convert string UUID from JWT to proper UUID object (SQLite stores UUIDs as bytes)
+    try:
+        user_id = PyUUID(user_id_str)
+    except ValueError:
+        raise UnauthorizedError("Invalid user ID in token")
 
     # Load user + role in one query
     stmt = (

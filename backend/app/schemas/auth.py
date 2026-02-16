@@ -29,6 +29,7 @@ class UserBriefAuth(BaseSchema):
     username: str
     full_name: str
     role: str
+    role_display_name: str | None = None
     permissions: dict
 
 

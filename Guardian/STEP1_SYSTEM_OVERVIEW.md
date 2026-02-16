@@ -1,9 +1,9 @@
 # STEP 1: SYSTEM OVERVIEW
 ## Inventory-OS | Production-Grade Textile Inventory System
 
-**Version:** 1.0
+**Version:** 1.1 (Updated Session 15 — reflects Sessions 7-14 changes)
 **Status:** Approved
-**Date:** 2026-02-07
+**Date:** 2026-02-07 (Updated: 2026-02-16)
 
 ---
 
@@ -87,18 +87,21 @@
 [1] STOCK-IN (Supervisor - Web/Mobile)
     │
     │ Event: STOCK_IN (raw_material)
-    │ Creates: Roll record with qty (meters/length)
+    │ Creates: Roll record with weight (kg), challan-based roll code
+    │ Roll code: {Challan}-{Fabric3}-{Color5}-{Seq}
     ▼
-[2] CUTTING (Supervisor - Web)
+[2] LOT CREATION (Supervisor - Web)
     │
-    │ Event: STOCK_OUT (raw_material) - deduct from roll
-    │ Creates: Cut pieces linked to roll(s)
+    │ Groups rolls for cutting into a LOT
+    │ Calculates: pallas per roll (floor(weight / palla_weight))
+    │ Size pattern: {L:2, XL:6, XXL:6, 3XL:4} per palla
+    │ Deducts remaining_weight from each roll
     ▼
 [3] BATCH CREATION (Supervisor - Web)
     │
-    │ Creates: Batch record (status: CREATED)
+    │ Creates: Batch record FROM lot (status: CREATED)
     │ Generates: Batch QR Code
-    │ Links: Cut pieces → Batch → SKU
+    │ Links: Lot → Batch → SKU (piece_count, color_breakdown)
     ▼
 [4] ASSIGNMENT (Supervisor - Web/Mobile)
     │
@@ -194,29 +197,26 @@ User never manually selects batch
 
 ---
 
-## 1.9 Roll → Batch Relationship (Flexible)
+## 1.9 Roll → LOT → Batch Relationship
 
 ```
-┌─────────────┐          ┌─────────────┐
-│   Roll A    │────────▶│   Batch 1   │   (1 Roll → 1 Batch)
-└─────────────┘          └─────────────┘
-
-┌─────────────┐          ┌─────────────┐
-│   Roll B    │────┬────▶│   Batch 2   │   (1 Roll → Many Batches)
-└─────────────┘    │     └─────────────┘
-                   └────▶┌─────────────┐
-                         │   Batch 3   │
-                         └─────────────┘
-
-┌─────────────┐
-│   Roll C    │────┬────▶┌─────────────┐
-└─────────────┘    │     │   Batch 4   │   (Many Rolls → 1 Batch)
-┌─────────────┐    │     └─────────────┘
-│   Roll D    │────┘
+┌─────────────┐                              ┌─────────────┐
+│   Roll A    │────┐                    ┌───▶│   Batch 1   │
+└─────────────┘    │   ┌─────────────┐  │    └─────────────┘
+┌─────────────┐    ├──▶│   LOT-0001  │──┤
+│   Roll B    │────┤   │ (24 pallas) │  │    ┌─────────────┐
+└─────────────┘    │   └─────────────┘  └───▶│   Batch 2   │
+┌─────────────┐    │                         └─────────────┘
+│   Roll C    │────┘
 └─────────────┘
 ```
 
-Tracked via `batch_roll_consumption` junction table.
+- **LOT** groups multiple rolls for cutting (N:N via `lot_rolls` join table)
+- Each roll contributes pallas: `floor(remaining_weight / palla_weight)`
+- Size pattern per palla: e.g., `{L:2, XL:6, XXL:6, 3XL:4}` = 18 pieces/palla
+- **Batch** is created FROM a lot (1 lot → many batches)
+- Lot deducts `remaining_weight` from rolls on creation
+- LOT status: open → cutting → distributed → closed
 
 ---
 

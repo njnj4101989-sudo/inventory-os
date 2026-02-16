@@ -1,9 +1,9 @@
 # STEP 4: API CONTRACTS
 ## Inventory-OS | Production-Grade Textile Inventory System
 
-**Version:** 1.0
-**Status:** Draft
-**Date:** 2026-02-07
+**Version:** 1.1
+**Status:** Updated (Sessions 7-14)
+**Date:** 2026-02-16
 
 ---
 
@@ -21,9 +21,10 @@
 │  ├── /users         → User CRUD (Admin only)                               │
 │  ├── /roles         → Role management (Admin only)                         │
 │  ├── /suppliers     → Supplier CRUD                                        │
-│  ├── /rolls         → Raw material stock-in, listing, cutting              │
+│  ├── /rolls         → Raw material stock-in, listing, processing           │
 │  ├── /skus          → Product SKU management                               │
-│  ├── /batches       → Batch lifecycle (create → assign → complete)         │
+│  ├── /lots          → Lot management (group rolls for cutting)             │
+│  ├── /batches       → Batch lifecycle (create from lot → assign → complete)│
 │  ├── /inventory     → Stock levels, events, adjustments                    │
 │  ├── /orders        → Order management                                     │
 │  ├── /invoices      → Invoice generation                                   │
@@ -133,6 +134,7 @@ Signing: HS256 with secret from .env
 | supplier_manage | ✅ | ✅ | ❌ | ❌ | ❌ |
 | stock_in | ✅ | ✅ | ❌ | ❌ | ❌ |
 | roll_cut | ❌ | ✅ | ❌ | ❌ | ❌ |
+| lot_manage | ✅ | ✅ | ❌ | ❌ | ❌ |
 | batch_create | ❌ | ✅ | ❌ | ❌ | ❌ |
 | batch_assign | ❌ | ✅ | ❌ | ❌ | ❌ |
 | batch_start | ❌ | ❌ | ✅ | ❌ | ❌ |
@@ -265,6 +267,12 @@ Response 200:
       "contact_person": "Krishna Sharma",
       "phone": "9876543210",
       "address": "Surat, Gujarat",
+      "gst_no": "24AABCK1234F1Z5",
+      "pan_no": "AABCK1234F",
+      "email": "krishna@textiles.com",
+      "city": "Surat",
+      "state": "Gujarat",
+      "pin_code": "395002",
       "is_active": true,
       "created_at": "2026-02-07T10:00:00Z"
     }
@@ -284,8 +292,16 @@ Request:
   "name": "Krishna Textiles",
   "contact_person": "Krishna Sharma",
   "phone": "9876543210",
-  "address": "Surat, Gujarat"
+  "address": "Surat, Gujarat",
+  "gst_no": "24AABCK1234F1Z5",
+  "pan_no": "AABCK1234F",
+  "email": "krishna@textiles.com",
+  "city": "Surat",
+  "state": "Gujarat",
+  "pin_code": "395002"
 }
+
+All 6 new fields are optional (nullable). GST format: 2-digit state + 10-char PAN + 1Z + check digit.
 
 Response 201:
 { "success": true, "data": { "id": "uuid", ... }, "message": "Supplier created" }
@@ -295,7 +311,7 @@ Response 201:
 ```
 Auth: admin, supervisor
 
-Request: { "phone": "9876543211", "is_active": false }
+Request: { "phone": "9876543211", "is_active": false, "city": "Mumbai", "state": "Maharashtra" }
 Response 200: { "success": true, "data": { ... }, "message": "Supplier updated" }
 ```
 
@@ -307,6 +323,7 @@ Response 200: { "success": true, "data": { ... }, "message": "Supplier updated" 
 ```
 Auth: admin, supervisor
 Query: ?page=1&page_size=20&fabric_type=Cotton&color=Red&has_remaining=true&supplier_id=uuid
+       &status=in_stock&supplier_invoice_no=KT-2026-0451
 
 Response 200:
 {
@@ -314,14 +331,18 @@ Response 200:
   "data": [
     {
       "id": "uuid",
-      "roll_code": "ROLL-0042",
+      "roll_code": "KT-2026-0451-COT-RED00-01",
       "fabric_type": "Cotton",
       "color": "Red",
-      "total_length": 50.00,
-      "remaining_length": 37.50,
-      "unit": "meters",
-      "cost_per_unit": 120.00,
+      "total_weight": 12.500,
+      "remaining_weight": 9.200,
+      "total_length": null,
+      "unit": "kg",
+      "cost_per_unit": 320.00,
+      "status": "in_stock",
       "supplier": { "id": "uuid", "name": "Krishna Textiles" },
+      "supplier_invoice_no": "KT-2026-0451",
+      "supplier_invoice_date": "2026-02-07",
       "received_by": { "id": "uuid", "full_name": "Ravi Kumar" },
       "received_at": "2026-02-07T10:00:00Z",
       "notes": null
@@ -331,37 +352,61 @@ Response 200:
   "page": 1,
   "pages": 3
 }
+
+Roll status values: "in_stock" | "sent_for_processing" | "in_cutting"
 ```
 
-#### `POST /api/v1/rolls` (Stock-In)
+#### `POST /api/v1/rolls` (Stock-In — Bulk)
 ```
 Auth: supervisor
 
 Request:
 {
-  "fabric_type": "Cotton",
-  "color": "Red",
-  "total_length": 50.00,
-  "unit": "meters",
-  "cost_per_unit": 120.00,
   "supplier_id": "uuid",
-  "notes": "Good quality, no defects"
+  "supplier_invoice_no": "KT-2026-0451",
+  "supplier_invoice_date": "2026-02-07",
+  "rolls": [
+    {
+      "fabric_type": "Cotton",
+      "color": "Red",
+      "total_weight": 12.500,
+      "total_length": null,
+      "unit": "kg",
+      "cost_per_unit": 320.00,
+      "notes": "Good quality"
+    },
+    {
+      "fabric_type": "Cotton",
+      "color": "Green",
+      "total_weight": 14.200,
+      "unit": "kg",
+      "cost_per_unit": 320.00
+    }
+  ]
 }
 
 Response 201:
 {
   "success": true,
   "data": {
-    "roll": { "id": "uuid", "roll_code": "ROLL-0042", ... },
-    "event": { "id": "uuid", "event_id": "STOCK_IN_roll_uuid_ts", ... }
+    "rolls": [
+      { "id": "uuid", "roll_code": "KT-2026-0451-COT-RED00-01", ... },
+      { "id": "uuid", "roll_code": "KT-2026-0451-COT-GREEN-01", ... }
+    ],
+    "events": [ ... ]
   },
-  "message": "Roll stocked in"
+  "message": "2 rolls stocked in from invoice KT-2026-0451"
 }
 
+Roll code format: {Challan}-{Fabric3}-{Color5}-{Seq}
+  - Fabric3: 3-letter abbreviation (COT, SLK, GGT, SHK, PLY, LNN, CHP, ORG, NET, VLV, JRS, DEN)
+  - Color5: 5-letter code to avoid collisions (GREEN, GREY0, RED00, BLACK, WHITE, etc.)
+  - Seq: 2-digit per color within same challan+fabric
+
 Side effects:
-- Auto-generates roll_code (ROLL-XXXX sequential)
-- Creates STOCK_IN inventory_event
-- remaining_length set to total_length
+- Auto-generates roll_code per roll using challan+fabric+color
+- Creates STOCK_IN inventory_event per roll
+- remaining_weight set to total_weight for each roll
 ```
 
 #### `GET /api/v1/rolls/{id}`
@@ -373,13 +418,31 @@ Response 200:
   "success": true,
   "data": {
     "id": "uuid",
-    "roll_code": "ROLL-0042",
+    "roll_code": "KT-2026-0451-COT-RED00-01",
+    "status": "in_stock",
+    "total_weight": 12.500,
+    "remaining_weight": 9.200,
+    "supplier_invoice_no": "KT-2026-0451",
+    "supplier_invoice_date": "2026-02-07",
     ...,
     "consumption_history": [
-      { "batch_code": "BATCH-0012", "pieces_cut": 25, "length_used": 12.50, "cut_at": "..." }
+      { "lot_code": "LOT-0001", "palla_weight": 0.520, "num_pallas": 6, "weight_used": 3.300, "cut_at": "..." }
     ]
   }
 }
+```
+
+#### `PATCH /api/v1/rolls/{id}`
+```
+Auth: supervisor
+
+Only allowed when roll is unused (remaining_weight == total_weight).
+
+Request: { "fabric_type": "Silk", "color": "Maroon", "total_weight": 13.000, "cost_per_unit": 450.00 }
+Response 200: { "success": true, "data": { ... }, "message": "Roll updated" }
+
+Error 422 (used roll):
+{ "error": "business_rule_violation", "detail": "Cannot edit a roll that has been partially or fully consumed" }
 ```
 
 ---
@@ -420,12 +483,16 @@ Auth: admin, supervisor
 Request:
 {
   "product_type": "BLS",
+  "design_no": "101",
   "product_name": "Design 101 Red Medium",
   "color": "Red",
   "size": "M",
   "description": "Cotton red blouse, regular fit",
   "base_price": 450.00
 }
+
+Product types: BLS (Blouse), KRT (Kurta), SAR (Saree), DRS (Dress), OTH (Other)
+Sizes: XS, S, M, L, XL, XXL, 3XL, 4XL, FREE
 
 Response 201:
 {
@@ -435,8 +502,9 @@ Response 201:
 }
 
 Side effects:
-- Auto-generates sku_code as ProductType-DesignNo-Color-Size
+- Auto-generates sku_code as ProductType-DesignNo-Color-Size (e.g. BLS-101-Red-M, KRT-205-Blue-XL)
 - Creates inventory_state row with all zeros
+- Code-forming fields (product_type, design_no, color, size) are immutable after creation
 ```
 
 #### `PATCH /api/v1/skus/{id}`
@@ -453,7 +521,7 @@ Response 200: { "success": true, "data": { ... }, "message": "SKU updated" }
 #### `GET /api/v1/batches`
 ```
 Auth: admin, supervisor
-Query: ?status=ASSIGNED&sku_id=uuid&created_by=uuid&page=1&page_size=20
+Query: ?status=ASSIGNED&sku_id=uuid&lot_id=uuid&created_by=uuid&page=1&page_size=20
 
 Response 200:
 {
@@ -463,7 +531,10 @@ Response 200:
       "id": "uuid",
       "batch_code": "BATCH-0012",
       "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
+      "lot": { "id": "uuid", "lot_code": "LOT-0001", "design_no": "702" },
       "quantity": 50,
+      "piece_count": 50,
+      "color_breakdown": { "Red": 20, "Maroon": 30 },
       "status": "ASSIGNED",
       "qr_code_data": "https://inv.local/batch/uuid",
       "created_by": { "id": "uuid", "full_name": "Ravi Kumar" },
@@ -471,10 +542,6 @@ Response 200:
         "tailor": { "id": "uuid", "full_name": "Amit Singh" },
         "assigned_at": "2026-02-07T12:00:00Z"
       },
-      "rolls_used": [
-        { "roll_code": "ROLL-0042", "pieces_cut": 30, "length_used": 15.00 },
-        { "roll_code": "ROLL-0043", "pieces_cut": 20, "length_used": 10.00 }
-      ],
       "created_at": "2026-02-07T10:00:00Z",
       "assigned_at": "2026-02-07T12:00:00Z",
       "started_at": null,
@@ -489,40 +556,41 @@ Response 200:
 }
 ```
 
-#### `POST /api/v1/batches` (Create Batch + Cut from Rolls)
+#### `POST /api/v1/batches` (Create Batch from Lot)
 ```
 Auth: supervisor
 
 Request:
 {
   "sku_id": "uuid",
-  "rolls": [
-    { "roll_id": "uuid", "pieces_cut": 30, "length_used": 15.00 },
-    { "roll_id": "uuid", "pieces_cut": 20, "length_used": 10.00 }
-  ],
+  "lot_id": "uuid",
+  "piece_count": 50,
+  "color_breakdown": { "Red": 20, "Maroon": 30 },
   "notes": "Regular batch"
 }
+
+Note: Batches are created FROM lots, not directly from individual rolls.
+The lot groups rolls for cutting; the batch represents stitching work carved from a lot.
 
 Response 201:
 {
   "success": true,
   "data": {
-    "batch": { "id": "uuid", "batch_code": "BATCH-0012", "quantity": 50, "status": "CREATED", ... },
-    "events": [
-      { "event_id": "STOCK_OUT_batch_uuid_roll1_ts", ... },
-      { "event_id": "STOCK_OUT_batch_uuid_roll2_ts", ... }
-    ]
+    "batch": {
+      "id": "uuid", "batch_code": "BATCH-0012",
+      "quantity": 50, "piece_count": 50,
+      "lot": { "id": "uuid", "lot_code": "LOT-0001" },
+      "status": "CREATED", ...
+    }
   },
-  "message": "Batch created with 50 pieces from 2 rolls"
+  "message": "Batch created with 50 pieces from LOT-0001"
 }
 
 Side effects:
 - Auto-generates batch_code (BATCH-XXXX sequential)
 - Generates QR code data
-- quantity = SUM of all pieces_cut
-- Creates STOCK_OUT events per roll
-- Updates rolls.remaining_length per roll
-- Creates batch_roll_consumption records
+- quantity = piece_count
+- Links batch to lot via lot_id FK
 ```
 
 #### `POST /api/v1/batches/{id}/assign`
