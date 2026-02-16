@@ -387,6 +387,34 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 - **Build:** 128 modules, 0 errors
 - **Next:** Continue page overhauls (SKUs → Lots → Batches → Orders → Invoices), then Phase 6C/6D
 
+### Session 13 (2026-02-16) — Stock-In challan-style redesign
+- **Stock-In → Full-page challan entry** (replaces modal, replaces card-per-roll)
+  - Full-screen overlay with sticky top bar (totals + save button always visible)
+  - Invoice Header: Supplier, Challan No., Date (unchanged)
+  - **Design Groups**: repeatable sections — each with Fabric/Design, Rate, Unit, Notes
+    - One challan can have multiple designs (Shakira + Georgette etc.)
+    - Most challans = 1 group (no extra clicks), can add more via "+ Add Another Design"
+  - **Color-wise weight grid** per design group: spreadsheet-style
+    - Color name | weight cells (horizontal flow) | roll count badge
+    - Each weight = 1 roll, auto-totals per row
+  - **Smart keyboard flow**:
+    - Enter/Tab on color → focus first weight
+    - Enter/Tab on filled last weight → add new weight field
+    - Enter on **empty** last weight → **new color row** (auto-focus color input)
+    - Backspace on empty weight → remove it, focus previous
+    - No mouse needed for entire data entry flow
+  - Grand total summary bar: rolls, weight, colors, designs, value
+  - Keyboard hints bar at bottom
+  - Edit invoice: groups existing rolls by fabric→color automatically
+- **RollsPage:** 59.18 kB built (was 55.39 kB)
+- **Build:** 128 modules, 0 errors
+- **Files changed:** RollsPage.jsx
+- **Next Session (14):** Implement real backend services (Option B) — connect frontend to SQLite DB
+  - Priority: RollService (stock_in, get_rolls, update_roll), SupplierService, AuthService
+  - Then: LotService, BatchService, InventoryService, OrderService, InvoiceService
+  - Switch `VITE_USE_MOCK=false` once services are live
+  - Continue page overhauls (SKUs → Lots → Batches) after backend is functional
+
 ---
 
 ## SQLite → PostgreSQL Migration Checklist

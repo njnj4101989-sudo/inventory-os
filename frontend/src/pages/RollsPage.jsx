@@ -12,7 +12,7 @@ import RollForm from '../components/forms/RollForm'
 const INPUT_CLS = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL_CLS = 'block text-sm font-medium text-gray-700 mb-1'
 
-const EMPTY_ROLL_ROW = { fabric_type: '', color: '', quantity: '', unit: 'kg', cost_per_unit: '', weight: '', length: '', notes: '' }
+// Challan-style fast entry — no per-roll template needed
 
 const PROCESS_TYPES = [
   { value: 'embroidery', label: 'Embroidery' },
@@ -204,10 +204,11 @@ export default function RollsPage() {
   const [error, setError] = useState(null)
   const [suppliers, setSuppliers] = useState([])
 
-  // Stock-in modal
+  // Stock-in modal — challan style with design groups
+  const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', notes: '', colorRows: [{ color: '', weights: [''] }] }
   const [stockInOpen, setStockInOpen] = useState(false)
   const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '' })
-  const [rollRows, setRollRows] = useState([{ ...EMPTY_ROLL_ROW }])
+  const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
 
@@ -294,16 +295,15 @@ export default function RollsPage() {
   // Track if we're editing an existing invoice (vs creating new)
   const [editingInvoice, setEditingInvoice] = useState(null)
 
-  // ── Stock In — Invoice-wise ──
+  // ── Stock In — Challan-style with design groups ──
   const openStockIn = () => {
     setEditingInvoice(null)
     setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '' })
-    setRollRows([{ ...EMPTY_ROLL_ROW }])
+    setDesignGroups([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
     setFormError(null)
     setStockInOpen(true)
   }
 
-  // Check if invoice is editable (all rolls unused + in_stock)
   const isInvoiceEditable = (inv) => inv?.rolls?.every((r) =>
     (r.status || 'in_stock') === 'in_stock' && r.remaining_weight === r.total_weight
   )
@@ -316,37 +316,70 @@ export default function RollsPage() {
       supplier_invoice_no: selectedInvoice.invoice_no || '',
       supplier_invoice_date: selectedInvoice.invoice_date || '',
     })
-    setRollRows(selectedInvoice.rolls.map((r) => ({
-      id: r.id,
-      fabric_type: r.fabric_type || '',
-      color: r.color || '',
-      quantity: String(r.unit === 'meters' ? (r.total_length || r.total_weight) : r.total_weight),
-      unit: r.unit || 'kg',
-      cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '',
-      weight: r.unit === 'meters' ? String(r.total_weight || '') : '',
-      length: r.unit === 'kg' ? String(r.total_length || '') : '',
-      notes: r.notes || '',
+    // Group rolls by fabric_type → design groups, then by color within each
+    const fabricMap = {}
+    for (const r of selectedInvoice.rolls) {
+      const ft = r.fabric_type || 'Unknown'
+      if (!fabricMap[ft]) fabricMap[ft] = { fabric_type: ft, cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '', unit: r.unit || 'kg', notes: '', colors: {} }
+      const c = r.color || 'Unknown'
+      if (!fabricMap[ft].colors[c]) fabricMap[ft].colors[c] = { color: c, weights: [], rollIds: [] }
+      const qty = r.unit === 'meters' ? (r.total_length || r.total_weight) : r.total_weight
+      fabricMap[ft].colors[c].weights.push(String(qty))
+      fabricMap[ft].colors[c].rollIds.push(r.id)
+    }
+    setDesignGroups(Object.values(fabricMap).map((g) => ({
+      fabric_type: g.fabric_type, cost_per_unit: g.cost_per_unit, unit: g.unit, notes: g.notes,
+      colorRows: Object.values(g.colors),
     })))
     setFormError(null)
     setSelectedInvoice(null)
     setStockInOpen(true)
   }
 
+  // ── Design group helpers ──
   const setHeader = (k, v) => setInvoiceHeader((h) => ({ ...h, [k]: v }))
-  const setRow = (idx, k, v) => setRollRows((rows) => rows.map((r, i) => i === idx ? { ...r, [k]: v } : r))
-  const addRow = () => setRollRows((rows) => [...rows, { ...EMPTY_ROLL_ROW }])
-  const removeRow = (idx) => { if (rollRows.length > 1) setRollRows((rows) => rows.filter((_, i) => i !== idx)) }
-  const duplicateRow = (idx) => {
-    setRollRows((rows) => { const next = [...rows]; next.splice(idx + 1, 0, { ...rows[idx] }); return next })
-  }
+  const updateGroup = (gIdx, updater) => setDesignGroups((gs) => gs.map((g, i) => i === gIdx ? updater(g) : g))
+  const setGroupField = (gIdx, k, v) => updateGroup(gIdx, (g) => ({ ...g, [k]: v }))
+  const addDesignGroup = () => setDesignGroups((gs) => [...gs, { ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
+  const removeDesignGroup = (gIdx) => { if (designGroups.length > 1) setDesignGroups((gs) => gs.filter((_, i) => i !== gIdx)) }
+
+  // Color/weight helpers (scoped to design group)
+  const setColorName = (gIdx, cIdx, v) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, color: v } : r),
+  }))
+  const setWeight = (gIdx, cIdx, wIdx, v) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: r.weights.map((w, k) => k === wIdx ? v : w) } : r),
+  }))
+  const addWeight = (gIdx, cIdx) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: [...r.weights, ''] } : r),
+  }))
+  const removeWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights } : r),
+  }))
+  const addColorRow = (gIdx) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: [...g.colorRows, { color: '', weights: [''] }],
+  }))
+  const removeColorRow = (gIdx, cIdx) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
+  }))
+  // Remove empty trailing weight from a color row (used by smart Enter)
+  const trimEmptyWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx && r.weights.length > 1 ? { ...r, weights: r.weights.filter((_, k) => k !== wIdx) } : r),
+  }))
 
   const validateStockIn = () => {
     if (!invoiceHeader.supplier_id) return 'Please select a supplier'
-    for (let i = 0; i < rollRows.length; i++) {
-      const r = rollRows[i]
-      if (!r.fabric_type.trim()) return `Row ${i + 1}: Fabric type is required`
-      if (!r.color.trim()) return `Row ${i + 1}: Color is required`
-      if (!r.quantity || parseFloat(r.quantity) <= 0) return `Row ${i + 1}: ${r.unit === 'kg' ? 'Weight' : 'Length'} must be > 0`
+    for (let g = 0; g < designGroups.length; g++) {
+      const grp = designGroups[g]
+      if (!grp.fabric_type.trim()) return `Design ${g + 1}: Fabric type is required`
+      for (let i = 0; i < grp.colorRows.length; i++) {
+        const r = grp.colorRows[i]
+        // Skip completely empty color rows (no color, no weights)
+        const hasAnyWeight = r.weights.some((w) => parseFloat(w) > 0)
+        if (!r.color.trim() && !hasAnyWeight) continue
+        if (!r.color.trim()) return `Design "${grp.fabric_type}", row ${i + 1}: Color name is required`
+        if (!hasAnyWeight) return `Design "${grp.fabric_type}", "${r.color}": Enter at least one weight`
+      }
     }
     return null
   }
@@ -357,30 +390,65 @@ export default function RollsPage() {
     setSaving(true)
     setFormError(null)
     try {
-      if (editingInvoice) {
-        // Edit mode: update existing rolls + create new ones
-        const existingRows = rollRows.filter((e) => e.id)
-        const newRows = rollRows.filter((e) => !e.id)
-        for (const entry of existingRows) {
-          const payload = {
-            fabric_type: entry.fabric_type,
-            color: entry.color,
-            total_weight: entry.unit === 'kg' ? parseFloat(entry.quantity) : (entry.weight ? parseFloat(entry.weight) : 0),
-            unit: entry.unit,
-            cost_per_unit: entry.cost_per_unit ? parseFloat(entry.cost_per_unit) : null,
-            total_length: entry.unit === 'meters' ? parseFloat(entry.quantity) : (entry.length ? parseFloat(entry.length) : null),
-            supplier_id: invoiceHeader.supplier_id || null,
-            supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
-            supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
-            notes: entry.notes || null,
+      // Flatten all design groups → individual roll entries
+      const flatRolls = []
+      for (const grp of designGroups) {
+        for (const row of grp.colorRows) {
+          for (const w of row.weights) {
+            const wt = parseFloat(w)
+            if (wt > 0) {
+              flatRolls.push({
+                fabric_type: grp.fabric_type.trim(),
+                color: row.color.trim(),
+                quantity: String(wt),
+                unit: grp.unit,
+                cost_per_unit: grp.cost_per_unit || '',
+                weight: '', length: '', notes: grp.notes || '',
+              })
+            }
           }
-          await updateRoll(entry.id, payload)
         }
-        if (newRows.length > 0) {
-          await stockInBulk(invoiceHeader, newRows)
+      }
+
+      if (editingInvoice) {
+        const newRolls = []
+        for (const grp of designGroups) {
+          for (const row of grp.colorRows) {
+            let rIdx = 0
+            for (const w of row.weights) {
+              const wt = parseFloat(w)
+              if (wt <= 0) continue
+              const existingId = row.rollIds?.[rIdx]
+              if (existingId) {
+                await updateRoll(existingId, {
+                  fabric_type: grp.fabric_type.trim(),
+                  color: row.color.trim(),
+                  total_weight: grp.unit === 'kg' ? wt : 0,
+                  unit: grp.unit,
+                  cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : null,
+                  total_length: grp.unit === 'meters' ? wt : null,
+                  supplier_id: invoiceHeader.supplier_id || null,
+                  supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
+                  supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
+                  notes: grp.notes || null,
+                })
+              } else {
+                newRolls.push({
+                  fabric_type: grp.fabric_type.trim(),
+                  color: row.color.trim(),
+                  quantity: String(wt),
+                  unit: grp.unit,
+                  cost_per_unit: grp.cost_per_unit || '',
+                  weight: '', length: '', notes: grp.notes || '',
+                })
+              }
+              rIdx++
+            }
+          }
         }
+        if (newRolls.length > 0) await stockInBulk(invoiceHeader, newRolls)
       } else {
-        await stockInBulk(invoiceHeader, rollRows)
+        await stockInBulk(invoiceHeader, flatRolls)
       }
       setStockInOpen(false)
       setEditingInvoice(null)
@@ -527,14 +595,18 @@ export default function RollsPage() {
     }
   }
 
-  // ── Stock-in totals ──
-  const rollTotals = rollRows.reduce((acc, r) => {
-    const qty = parseFloat(r.quantity) || 0
-    const cost = parseFloat(r.cost_per_unit) || 0
-    if (r.unit === 'kg') { acc.weight += qty; acc.value += qty * cost }
-    else { acc.length += qty; acc.value += qty * cost }
+  // ── Stock-in totals (across all design groups) ──
+  const challanTotals = designGroups.reduce((acc, grp) => {
+    const rate = parseFloat(grp.cost_per_unit) || 0
+    grp.colorRows.forEach((row) => {
+      row.weights.forEach((w) => {
+        const wt = parseFloat(w) || 0
+        if (wt > 0) { acc.count++; acc.weight += wt; acc.value += wt * rate }
+      })
+      if (row.color.trim()) acc.colors++
+    })
     return acc
-  }, { weight: 0, length: 0, value: 0 })
+  }, { count: 0, weight: 0, value: 0, colors: 0 })
 
   return (
     <div>
@@ -791,165 +863,367 @@ export default function RollsPage() {
       </Modal>
 
       {/* ════════════════════════════════════════════════════════
-          STOCK IN — Invoice-wise bulk entry
+          STOCK IN — Full-page challan entry
          ════════════════════════════════════════════════════════ */}
-      <Modal open={stockInOpen} onClose={() => { setStockInOpen(false); setEditingInvoice(null) }}
-        title={editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Stock In — New Invoice'} extraWide
-        actions={
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-3 text-sm text-gray-500">
-              <span className="inline-flex items-center gap-1">
-                <span className="font-semibold text-gray-700">{rollRows.length}</span> roll{rollRows.length > 1 ? 's' : ''}
-              </span>
-              {rollTotals.weight > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                  {rollTotals.weight.toFixed(3)} kg
-                </span>
-              )}
-              {rollTotals.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                  {rollTotals.length.toFixed(2)} m
-                </span>
-              )}
-              {rollTotals.value > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  ₹{rollTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleStockIn} disabled={saving}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-                {saving ? 'Saving...' : editingInvoice ? 'Save Changes' : `Stock In ${rollRows.length} Roll${rollRows.length > 1 ? 's' : ''}`}
-              </button>
-            </div>
-          </div>
-        }
-      >
-        {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
-
-        {/* Invoice Header */}
-        <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Invoice Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
-              <select value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
-                <option value="">Select supplier</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={LABEL_CLS}>Invoice No.</label>
-              <input type="text" value={invoiceHeader.supplier_invoice_no} onChange={(e) => setHeader('supplier_invoice_no', e.target.value)}
-                placeholder="e.g. KT-2026-0451" className={INPUT_CLS} />
-            </div>
-            <div>
-              <label className={LABEL_CLS}>Invoice Date</label>
-              <input type="date" value={invoiceHeader.supplier_invoice_date} onChange={(e) => setHeader('supplier_invoice_date', e.target.value)}
-                className={INPUT_CLS} />
-            </div>
-          </div>
-        </div>
-
-        {/* Roll Entries — card-per-roll layout */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Roll Entries</h3>
-            <button onClick={addRow} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                Add Roll
-              </button>
-          </div>
-
-          <div className="space-y-3">
-            {rollRows.map((row, idx) => {
-              const rowValue = (parseFloat(row.quantity) || 0) * (parseFloat(row.cost_per_unit) || 0)
-              return (
-                <div key={idx} className="rounded-lg border border-gray-200 bg-white">
-                  {/* Card header */}
-                  <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
-                    <span className="text-xs font-semibold text-gray-500">Roll #{idx + 1}</span>
-                    <div className="flex items-center gap-2">
-                      {rowValue > 0 && (
-                        <span className="text-xs text-gray-400">₹{rowValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                      )}
-                      <button onClick={() => duplicateRow(idx)} title="Duplicate"
-                            className="rounded p-1 text-gray-400 hover:bg-white hover:text-gray-600">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                          </button>
-                          <button onClick={() => removeRow(idx)} title="Remove" disabled={rollRows.length <= 1}
-                            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                    </div>
+      {stockInOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+          {/* ── Top bar (sticky) ── */}
+          <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+                <h1 className="text-lg font-bold text-gray-800">
+                  {editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Stock In — Challan Entry'}
+                </h1>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Live totals */}
+                {challanTotals.count > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                      {challanTotals.count} roll{challanTotals.count > 1 ? 's' : ''}
+                    </span>
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
+                      {challanTotals.weight.toFixed(3)} kg
+                    </span>
+                    {challanTotals.colors > 0 && (
+                      <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700">
+                        {challanTotals.colors} color{challanTotals.colors > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {challanTotals.value > 0 && (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        ₹{challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    )}
                   </div>
-                  {/* Card body */}
-                  <div className="p-4 space-y-3">
-                    {/* Row 1: Fabric, Color, Unit */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className={LABEL_CLS}>Fabric Type <span className="text-red-500">*</span></label>
-                        <input type="text" value={row.fabric_type} onChange={(e) => setRow(idx, 'fabric_type', e.target.value)}
-                          placeholder="e.g. Cotton, Rayon, Georgette" className={INPUT_CLS} />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Color <span className="text-red-500">*</span></label>
-                        <input type="text" value={row.color} onChange={(e) => setRow(idx, 'color', e.target.value)}
-                          placeholder="e.g. Red, Navy Blue" className={INPUT_CLS} />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Unit</label>
-                        <select value={row.unit} onChange={(e) => setRow(idx, 'unit', e.target.value)} className={INPUT_CLS}>
-                          <option value="kg">Kilograms (kg)</option>
-                          <option value="meters">Meters (m)</option>
-                        </select>
-                      </div>
-                    </div>
-                    {/* Row 2: Qty, Cost, Notes + optional ref field */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className={LABEL_CLS}>{row.unit === 'kg' ? 'Weight (kg)' : 'Length (m)'} <span className="text-red-500">*</span></label>
-                        <input type="number" step="0.001" value={row.quantity} onChange={(e) => setRow(idx, 'quantity', e.target.value)}
-                          placeholder={row.unit === 'kg' ? '28.550' : '45.00'} className={INPUT_CLS} />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Cost / {row.unit === 'kg' ? 'kg' : 'm'} (₹)</label>
-                        <input type="number" step="0.01" value={row.cost_per_unit} onChange={(e) => setRow(idx, 'cost_per_unit', e.target.value)}
-                          placeholder="120.00" className={INPUT_CLS} />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>
-                          {row.unit === 'kg' ? 'Length (m, optional)' : 'Weight (kg, optional)'}
-                        </label>
-                        {row.unit === 'kg' ? (
-                          <input type="number" step="0.01" value={row.length || ''} onChange={(e) => setRow(idx, 'length', e.target.value)}
-                            placeholder="Reference" className={INPUT_CLS} />
-                        ) : (
-                          <input type="number" step="0.001" value={row.weight || ''} onChange={(e) => setRow(idx, 'weight', e.target.value)}
-                            placeholder="For LOT palla calc" className={INPUT_CLS} />
-                        )}
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Notes</label>
-                        <input type="text" value={row.notes} onChange={(e) => setRow(idx, 'notes', e.target.value)}
-                          placeholder="Optional remarks" className={INPUT_CLS} />
-                      </div>
-                    </div>
+                )}
+                <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleStockIn} disabled={saving || challanTotals.count === 0}
+                  className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+                  {saving ? 'Saving...' : editingInvoice ? 'Save Changes' : `Stock In ${challanTotals.count} Roll${challanTotals.count > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Scrollable body ── */}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="mx-auto max-w-6xl space-y-5">
+              {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
+
+              {/* ── Invoice Header ── */}
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-gray-700 mb-4">Invoice / Challan Details</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div>
+                    <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
+                    <select value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
+                      <option value="">Select supplier</option>
+                      {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Invoice / Challan No.</label>
+                    <input type="text" value={invoiceHeader.supplier_invoice_no} onChange={(e) => setHeader('supplier_invoice_no', e.target.value)}
+                      placeholder="e.g. 390" className={INPUT_CLS} />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Date</label>
+                    <input type="date" value={invoiceHeader.supplier_invoice_date} onChange={(e) => setHeader('supplier_invoice_date', e.target.value)}
+                      className={INPUT_CLS} />
                   </div>
                 </div>
-              )
-            })}
-          </div>
+              </div>
 
-          <button onClick={addRow}
-              className="mt-3 w-full rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
-              + Add Another Roll
-            </button>
+              {/* ── Design Groups ── */}
+              {designGroups.map((grp, gIdx) => {
+                const grpTotals = grp.colorRows.reduce((acc, row) => {
+                  row.weights.forEach((w) => { const wt = parseFloat(w) || 0; if (wt > 0) { acc.count++; acc.weight += wt } })
+                  return acc
+                }, { count: 0, weight: 0 })
+                const grpValue = grpTotals.weight * (parseFloat(grp.cost_per_unit) || 0)
+
+                return (
+                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    {/* Design header bar */}
+                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{gIdx + 1}</span>
+                        <span className="text-sm font-semibold text-blue-800">
+                          {grp.fabric_type.trim() || `Design ${gIdx + 1}`}
+                        </span>
+                        {grpTotals.count > 0 && (
+                          <span className="text-xs text-blue-500">
+                            {grpTotals.count} roll{grpTotals.count > 1 ? 's' : ''} · {grpTotals.weight.toFixed(3)} {grp.unit}
+                            {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      {designGroups.length > 1 && (
+                        <button onClick={() => removeDesignGroup(gIdx)}
+                          className="rounded p-1 text-blue-400 hover:bg-blue-100 hover:text-red-500">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="p-5 space-y-5">
+                      {/* Fabric / Rate / Unit row */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
+                          <input type="text" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)}
+                            placeholder="e.g. Shakira, Georgette" className={INPUT_CLS} />
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Rate / {grp.unit} (₹)</label>
+                          <input type="number" step="0.01" value={grp.cost_per_unit} onChange={(e) => setGroupField(gIdx, 'cost_per_unit', e.target.value)}
+                            placeholder="e.g. 221" className={INPUT_CLS} />
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Unit</label>
+                          <select value={grp.unit} onChange={(e) => setGroupField(gIdx, 'unit', e.target.value)} className={INPUT_CLS}>
+                            <option value="kg">Kilograms (kg)</option>
+                            <option value="meters">Meters (m)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Notes</label>
+                          <input type="text" value={grp.notes} onChange={(e) => setGroupField(gIdx, 'notes', e.target.value)}
+                            placeholder="Optional" className={INPUT_CLS} />
+                        </div>
+                      </div>
+
+                      {/* Color-wise weight grid */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Color-wise Rolls <span className="font-normal normal-case text-gray-400 ml-1">(Enter on empty = new color)</span>
+                          </span>
+                          <button onClick={() => addColorRow(gIdx)} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                            Add Color
+                          </button>
+                        </div>
+
+                        {/* Grid header */}
+                        <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[180px_1fr_70px] gap-3 items-center">
+                          <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase">Weights ({grp.unit}) — Enter/Tab between fields</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
+                        </div>
+
+                        {/* Grid rows */}
+                        <div className="border border-gray-200 rounded-b-lg divide-y divide-gray-100 bg-white" data-design-group={gIdx}>
+                          {grp.colorRows.map((row, cIdx) => {
+                            const validCount = row.weights.filter((w) => parseFloat(w) > 0).length
+                            const rowWeight = row.weights.reduce((s, w) => s + (parseFloat(w) || 0), 0)
+                            return (
+                              <div key={cIdx} className="px-4 py-2.5 grid grid-cols-[180px_1fr_70px] gap-3 items-start group hover:bg-gray-50/50">
+                                {/* Color name */}
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    data-color-input="true"
+                                    value={row.color}
+                                    onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
+                                    placeholder={cIdx === 0 ? 'e.g. Mehandi' : 'Color name'}
+                                    className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    onKeyDown={(e) => {
+                                      const hasData = row.weights.some((w) => w !== '')
+                                      if (e.key === 'Enter' || e.key === 'Tab') {
+                                        e.preventDefault()
+                                        // Empty color + no weights → new design group
+                                        if (row.color === '' && !hasData) {
+                                          // Remove this empty color row if not the only one
+                                          if (grp.colorRows.length > 1) removeColorRow(gIdx, cIdx)
+                                          addDesignGroup()
+                                          setTimeout(() => {
+                                            const allGroups = document.querySelectorAll('[data-design-group]')
+                                            const lastGroup = allGroups[allGroups.length - 1]?.closest('.rounded-xl')
+                                            const fabricInput = lastGroup?.querySelector('input[type="text"]')
+                                            fabricInput?.focus()
+                                            fabricInput?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                          }, 60)
+                                          return
+                                        }
+                                        // Has color → focus first weight
+                                        const gridRow = e.target.closest('.group')
+                                        const firstWeight = gridRow?.querySelector('input[data-weight]')
+                                        firstWeight?.focus()
+                                      }
+                                      // Backspace on empty color → delete row, jump back to previous row's last weight
+                                      if (e.key === 'Backspace' && row.color === '' && !hasData && cIdx > 0) {
+                                        e.preventDefault()
+                                        removeColorRow(gIdx, cIdx)
+                                        setTimeout(() => {
+                                          const groupEl = document.querySelector(`[data-design-group="${gIdx}"]`)
+                                          const prevRow = groupEl?.querySelectorAll('.group')?.[cIdx - 1]
+                                          const allW = prevRow?.querySelectorAll('input[data-weight]')
+                                          allW?.[allW.length - 1]?.focus()
+                                        }, 60)
+                                      }
+                                    }}
+                                  />
+                                  {grp.colorRows.length > 1 && (
+                                    <button onClick={() => removeColorRow(gIdx, cIdx)} title="Remove color"
+                                      className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-gray-300 hover:text-red-500 transition-opacity flex-shrink-0">
+                                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Weight inputs */}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {row.weights.map((w, wIdx) => (
+                                    <div key={wIdx} className="relative">
+                                      <input
+                                        data-weight="true"
+                                        type="number"
+                                        step="0.001"
+                                        value={w}
+                                        onChange={(e) => setWeight(gIdx, cIdx, wIdx, e.target.value)}
+                                        placeholder="0.000"
+                                        className="w-[90px] rounded border border-gray-300 px-2 py-1.5 text-sm text-center tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                            e.preventDefault()
+
+                                            // SMART ENTER: empty last weight → new color row
+                                            if (w === '' && wIdx === row.weights.length - 1) {
+                                              // Remove this empty trailing weight (if not the only one)
+                                              if (row.weights.length > 1) trimEmptyWeight(gIdx, cIdx, wIdx)
+                                              // Add new color row and focus its color input
+                                              addColorRow(gIdx)
+                                              setTimeout(() => {
+                                                const groupEl = document.querySelector(`[data-design-group="${gIdx}"]`)
+                                                const allColorInputs = groupEl?.querySelectorAll('input[data-color-input]')
+                                                allColorInputs?.[allColorInputs.length - 1]?.focus()
+                                              }, 60)
+                                              return
+                                            }
+
+                                            if (wIdx === row.weights.length - 1) {
+                                              // Last filled weight → add new weight field
+                                              addWeight(gIdx, cIdx)
+                                              setTimeout(() => {
+                                                const gridRow = e.target.closest('.group')
+                                                const allW = gridRow?.querySelectorAll('input[data-weight]')
+                                                allW?.[allW.length - 1]?.focus()
+                                              }, 60)
+                                            } else {
+                                              // Focus next weight in this row
+                                              const wrapper = e.target.closest('.flex-wrap')
+                                              const allW = wrapper?.querySelectorAll('input[data-weight]')
+                                              allW?.[wIdx + 1]?.focus()
+                                            }
+                                          }
+                                          // Backspace on empty → remove weight, focus previous
+                                          if (e.key === 'Backspace' && w === '' && row.weights.length > 1) {
+                                            e.preventDefault()
+                                            removeWeight(gIdx, cIdx, wIdx)
+                                            setTimeout(() => {
+                                              const gridRow = e.target.closest('.group')
+                                              const allW = gridRow?.querySelectorAll('input[data-weight]')
+                                              const target = allW?.[Math.max(0, wIdx - 1)]
+                                              target?.focus()
+                                            }, 60)
+                                          }
+                                        }}
+                                      />
+                                      {row.weights.length > 1 && (
+                                        <button onClick={() => removeWeight(gIdx, cIdx, wIdx)}
+                                          className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] leading-none hover:bg-red-600">
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button onClick={() => addWeight(gIdx, cIdx)} title="Add weight"
+                                    className="flex h-[34px] w-[34px] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                  </button>
+                                </div>
+
+                                {/* Roll count + row weight */}
+                                <div className="text-center">
+                                  <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                                    validCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+                                  }`}>
+                                    {validCount}
+                                  </span>
+                                  {rowWeight > 0 && (
+                                    <div className="text-[10px] text-gray-400 mt-0.5">{rowWeight.toFixed(1)}</div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Add another design group */}
+              <button onClick={addDesignGroup}
+                className="w-full rounded-xl border-2 border-dashed border-gray-300 py-4 text-sm font-medium text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                + Add Another Design / Fabric
+              </button>
+
+              {/* Grand total summary */}
+              {challanTotals.count > 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-6 text-sm">
+                    <div>
+                      <span className="text-gray-500">Total Rolls</span>
+                      <div className="text-xl font-bold text-gray-800">{challanTotals.count}</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200" />
+                    <div>
+                      <span className="text-gray-500">Total Weight</span>
+                      <div className="text-xl font-bold text-gray-800">{challanTotals.weight.toFixed(3)} kg</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200" />
+                    <div>
+                      <span className="text-gray-500">Colors</span>
+                      <div className="text-xl font-bold text-gray-800">{challanTotals.colors}</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200" />
+                    <div>
+                      <span className="text-gray-500">Designs</span>
+                      <div className="text-xl font-bold text-gray-800">{designGroups.length}</div>
+                    </div>
+                    {challanTotals.value > 0 && (
+                      <>
+                        <div className="h-10 w-px bg-gray-200" />
+                        <div>
+                          <span className="text-gray-500">Total Value</span>
+                          <div className="text-xl font-bold text-green-700">₹{challanTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Keyboard hints */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 pb-2">
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> Next weight</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty weight = New color</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty color = New design</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Backspace</kbd> on empty = Go back</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </Modal>
+      )}
 
       {/* ════════════════════════════════════════════════════════
           ROLL DETAIL / EDIT Modal

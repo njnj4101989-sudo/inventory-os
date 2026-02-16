@@ -275,9 +275,30 @@ Before writing code that uses:
 
 
 
-## 📊 Latest Project Snapshot
-_Last sync: 2026-02-16 (Session 12)_
 
-**Status:** Phase 6A (backend) ✅ | Phase 6B (frontend) ✅ | Testing & polish in progress
-**Build:** 128 modules, 0 errors | **Pages overhauled:** 5/12 (Dashboard, Inventory, Reports, Suppliers, Rolls)
-**Key Session 12 fixes:** Supplier form focus bug, Roll detail redesign (extraWide + 2-col), Back-to-Invoice nav, Lot status filter
+
+
+
+
+
+## 📊 Latest Project Snapshot
+_Last sync: 2026-02-16 16:04:15_
+```
+{
+  "summary": "Project has 12 tracked code files (~4490 lines total).",
+  "recent_files": [
+    "guardian.md (302 lines)",
+    "project-context.json (17 lines)",
+    "CLAUDE.md (467 lines)",
+    ".claude\\settings.local.json (28 lines)",
+    "STEP4_API_CONTRACTS.md (1250 lines)"
+  ],
+  "language_breakdown": {
+    ".md": 9,
+    ".py": 1,
+    ".json": 2
+  },
+  "total_lines": 4490,
+  "last_updated": "2026-02-16 16:04:15"
+}
+```
