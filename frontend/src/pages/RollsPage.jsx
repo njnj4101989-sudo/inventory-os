@@ -37,9 +37,25 @@ const ROLL_STATUS_LABELS = {
 // ── Invoice tab columns ──
 const INVOICE_COLUMNS = [
   {
+    key: 'sr_no',
+    label: 'Sr.',
+    render: (val) => val ? <span className="font-bold text-primary-700 text-sm">{val}</span> : <span className="text-gray-300">—</span>,
+  },
+  {
     key: 'invoice_no',
-    label: 'Invoice No.',
-    render: (val) => val ? <span className="font-medium text-gray-800">{val}</span> : <span className="text-gray-400 italic">No Invoice</span>,
+    label: 'Invoice / Challan',
+    render: (val, row) => {
+      const inv = val || ''
+      const ch = row.challan_no || ''
+      if (!inv && !ch) return <span className="text-gray-400 italic">No Invoice</span>
+      return (
+        <div className="leading-tight">
+          {inv && <span className="font-medium text-gray-800">{inv}</span>}
+          {inv && ch && <span className="text-gray-300 mx-1">/</span>}
+          {ch && <span className="text-gray-600">{ch}</span>}
+        </div>
+      )
+    },
   },
   {
     key: 'supplier',
@@ -62,18 +78,13 @@ const INVOICE_COLUMNS = [
   },
   {
     key: 'total_weight',
-    label: 'Total Weight',
+    label: 'Weight',
     render: (val) => val > 0 ? `${val.toFixed(3)} kg` : '—',
   },
   {
     key: 'total_value',
     label: 'Value',
     render: (val) => val > 0 ? `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—',
-  },
-  {
-    key: 'received_at',
-    label: 'Received',
-    render: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '—',
   },
 ]
 

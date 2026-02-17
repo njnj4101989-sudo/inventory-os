@@ -153,6 +153,8 @@ export async function getInvoices(params = {}) {
       const q = params.search.toLowerCase()
       invoices = invoices.filter((inv) =>
         (inv.invoice_no || '').toLowerCase().includes(q) ||
+        (inv.challan_no || '').toLowerCase().includes(q) ||
+        (inv.sr_no || '').toLowerCase().includes(q) ||
         (inv.supplier?.name || '').toLowerCase().includes(q) ||
         inv.rolls.some((r) => r.fabric_type.toLowerCase().includes(q) || r.color.toLowerCase().includes(q))
       )
@@ -168,7 +170,9 @@ export async function getInvoices(params = {}) {
     if (!grouped[key]) {
       grouped[key] = {
         invoice_no: r.supplier_invoice_no || null,
+        challan_no: r.supplier_challan_no || null,
         invoice_date: r.supplier_invoice_date || null,
+        sr_no: r.sr_no || null,
         supplier: r.supplier,
         rolls: [],
         roll_count: 0,
