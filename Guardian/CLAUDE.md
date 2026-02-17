@@ -58,7 +58,8 @@
   - Client-side filtering on `processing_logs[]` array (backend sends `status=in_stock`, frontend sub-filters)
 
 ### NEXT SESSION START HERE (Session 20)
-1. **TEST:** Restart backend → clear localStorage → login → test "Send for Processing" + "Receive Back" + new filter pills
+**Tested & confirmed:** Send for Processing + Receive Back + new filter pills all working.
+1. **"Processed & Returned" table columns:** Currently shows same columns as regular rolls — need to add process info (which process, vendor, dates, cost) in a professional way. Discuss UX approach first.
 2. Align remaining backend response shapes to `API_REFERENCE.md` (endpoint by endpoint)
 3. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
 4. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
