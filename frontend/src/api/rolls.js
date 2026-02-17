@@ -1,37 +1,30 @@
 import client from './client'
-import { rolls, suppliers, rollProcessing, mockPaginated, mockResponse } from './mock'
+import { rolls, suppliers, fabrics as mockFabrics, colors as mockColors, rollProcessing, mockPaginated, mockResponse } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
-// ── Roll code generator: {Challan}-{Fabric3}-{Color5}-{Seq} ──
-const FABRIC_ABBREVS = {
-  COTTON: 'COT', SILK: 'SLK', GEORGETTE: 'GGT', SHAKIRA: 'SHK',
-  CHIFFON: 'CHF', RAYON: 'RYN', POLYESTER: 'PLY', LINEN: 'LNN',
-  CREPE: 'CRP', SATIN: 'STN', VELVET: 'VLT', ORGANZA: 'OGZ',
-}
-const COLOR_ABBREVS = {
-  GREEN: 'GREEN', RED: 'RED', BLUE: 'BLUE', BLACK: 'BLACK', WHITE: 'WHITE',
-  YELLOW: 'YELLW', PINK: 'PINK', ORANGE: 'ORNGE', PURPLE: 'PURPL', BROWN: 'BROWN',
-  GREY: 'GREY', GRAY: 'GRAY', MEHANDI: 'MHNDI', MAROON: 'MROON', BEIGE: 'BEIGE',
-  MAGENTA: 'MGNTA', PEACH: 'PEACH', CREAM: 'CREAM', NAVY: 'NAVY', TEAL: 'TEAL',
-  CORAL: 'CORAL', RUST: 'RUST', IVORY: 'IVORY', OLIVE: 'OLIVE', WINE: 'WINE',
-}
-function shortenFabric(text) {
-  if (!text) return 'UNK'
-  const clean = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-  if (FABRIC_ABBREVS[clean]) return FABRIC_ABBREVS[clean]
+// ── Roll code generator: {Challan}-{FabricCode}-{ColorCode}-{Seq} ──
+// Uses pre-resolved codes from master data. Falls back to name-based shortening.
+function resolveFabricCode(fabricName) {
+  if (!fabricName) return 'UNK'
+  const match = mockFabrics.find((f) => f.name.toLowerCase() === fabricName.toLowerCase())
+  if (match) return match.code
+  // Fallback: first 3 consonants
+  const clean = fabricName.replace(/[^a-zA-Z]/g, '').toUpperCase()
   const consonants = clean.replace(/[AEIOU]/g, '')
-  return (consonants.length >= 3 ? consonants.slice(0, 3) : clean.slice(0, 3)).toUpperCase()
+  return (consonants.length >= 3 ? consonants.slice(0, 3) : clean.slice(0, 3))
 }
-function shortenColor(text) {
-  if (!text) return 'UNK'
-  const clean = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-  if (COLOR_ABBREVS[clean]) return COLOR_ABBREVS[clean]
-  return clean.slice(0, 5).toUpperCase()
+function resolveColorCode(colorName) {
+  if (!colorName) return 'UNK'
+  const match = mockColors.find((c) => c.name.toLowerCase() === colorName.toLowerCase())
+  if (match) return match.code
+  return colorName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)
 }
-function generateRollCode(challanNo, fabricType, color) {
+function generateRollCode(challanNo, fabricType, color, fabricCode, colorCode) {
   const challan = (challanNo || '').trim() || 'NOINV'
-  const prefix = `${challan}-${shortenFabric(fabricType)}-${shortenColor(color)}-`
+  const fc = fabricCode || resolveFabricCode(fabricType)
+  const cc = colorCode || resolveColorCode(color)
+  const prefix = `${challan}-${fc}-${cc}-`
   let max = 0
   for (const r of rolls) {
     if (r.roll_code.startsWith(prefix)) {
@@ -73,7 +66,7 @@ export async function getRolls(params = {}) {
 
 export async function stockIn(data) {
   if (USE_MOCK) {
-    const nextCode = generateRollCode(data.supplier_invoice_no, data.fabric_type, data.color)
+    const nextCode = generateRollCode(data.supplier_invoice_no, data.fabric_type, data.color, data.fabric_code, data.color_code)
     const sup = suppliers.find((s) => s.id === data.supplier_id)
     const newRoll = {
       id: crypto.randomUUID(),
@@ -111,6 +104,8 @@ export async function stockInBulk(header, rollEntries) {
       supplier_invoice_no: header.supplier_invoice_no || null,
       supplier_invoice_date: header.supplier_invoice_date || null,
       notes: entry.notes || null,
+      fabric_code: entry.fabric_code || null,
+      color_code: entry.color_code || null,
     }
     const res = await stockIn(payload)
     results.push(res)

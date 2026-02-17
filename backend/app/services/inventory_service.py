@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.models.inventory_event import InventoryEvent
 from app.models.inventory_state import InventoryState
 from app.models.sku import SKU
-from app.schemas.inventory import AdjustRequest, InventoryResponse, EventResponse, ReconcileResponse
+from app.schemas.inventory import AdjustRequest, InventoryFilterParams, InventoryResponse, EventResponse, ReconcileResponse
 from app.schemas import PaginatedParams
 from app.core.exceptions import NotFoundError, ValidationError
 
@@ -29,13 +29,46 @@ class InventoryService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_inventory(self, params: PaginatedParams) -> dict:
-        count_stmt = select(func.count()).select_from(InventoryState)
+    async def get_inventory(self, params: InventoryFilterParams) -> dict:
+        conditions = []
+
+        if params.sku_code:
+            search = f"%{params.sku_code}%"
+            conditions.append(
+                SKU.sku_code.ilike(search) | SKU.product_name.ilike(search)
+            )
+
+        if params.product_type:
+            conditions.append(SKU.product_type == params.product_type)
+
+        if params.stock_status == "healthy":
+            # available > 60% of total (and total > 0)
+            conditions.append(InventoryState.total_qty > 0)
+            conditions.append(
+                InventoryState.available_qty * 100 >= InventoryState.total_qty * 60
+            )
+        elif params.stock_status == "low":
+            conditions.append(InventoryState.total_qty > 0)
+            conditions.append(InventoryState.available_qty > 0)
+            conditions.append(
+                InventoryState.available_qty * 100 < InventoryState.total_qty * 60
+            )
+        elif params.stock_status == "critical":
+            conditions.append(
+                (InventoryState.available_qty <= 0) | (InventoryState.total_qty == 0)
+            )
+
+        # Build base query joining SKU for filtering
+        base = select(InventoryState).join(SKU, InventoryState.sku_id == SKU.id)
+        if conditions:
+            base = base.where(*conditions)
+
+        count_stmt = select(func.count()).select_from(base.subquery())
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
         stmt = (
-            select(InventoryState)
+            base
             .options(selectinload(InventoryState.sku))
             .order_by(InventoryState.last_updated.desc())
             .offset((params.page - 1) * params.page_size)

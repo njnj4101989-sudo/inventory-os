@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas import PaginatedParams
-from app.schemas.roll import RollCreate
+from app.schemas.roll import RollCreate, RollUpdate, RollFilterParams, SendForProcessing, ReceiveFromProcessing
 from app.services.roll_service import RollService
 
 router = APIRouter(prefix="/rolls", tags=["Rolls"])
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/rolls", tags=["Rolls"])
 
 @router.get("", response_model=None)
 async def list_rolls(
-    params: PaginatedParams = Depends(),
+    params: RollFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("stock_in"),
 ):
@@ -38,6 +37,19 @@ async def stock_in(
     return {"success": True, "data": result}
 
 
+@router.patch("/{roll_id}", response_model=None)
+async def update_roll(
+    roll_id: UUID,
+    req: RollUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Update an unused roll (all fields optional, only unused rolls editable)."""
+    svc = RollService(db)
+    result = await svc.update_roll(roll_id, req)
+    return {"success": True, "data": result}
+
+
 @router.get("/{roll_id}", response_model=None)
 async def get_roll(
     roll_id: UUID,
@@ -47,4 +59,31 @@ async def get_roll(
     """Get roll detail with consumption history."""
     svc = RollService(db)
     result = await svc.get_roll(roll_id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{roll_id}/processing", response_model=None, status_code=201)
+async def send_for_processing(
+    roll_id: UUID,
+    req: SendForProcessing,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Send an in-stock roll for external processing (embroidery, dyeing, etc.)."""
+    svc = RollService(db)
+    result = await svc.send_for_processing(roll_id, req)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{roll_id}/processing/{processing_id}", response_model=None)
+async def receive_from_processing(
+    roll_id: UUID,
+    processing_id: UUID,
+    req: ReceiveFromProcessing,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Mark a processing log as received with updated measurements."""
+    svc = RollService(db)
+    result = await svc.receive_from_processing(roll_id, processing_id, req)
     return {"success": True, "data": result}

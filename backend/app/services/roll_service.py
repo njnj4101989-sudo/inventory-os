@@ -8,21 +8,54 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.roll import Roll
+from app.models.roll import Roll, RollProcessing
 from app.models.inventory_event import InventoryEvent
 from app.models.batch_roll_consumption import BatchRollConsumption
-from app.schemas.roll import RollCreate, RollResponse, RollDetail
-from app.schemas import PaginatedParams
+from app.schemas.roll import (
+    RollCreate, RollUpdate, RollFilterParams, RollResponse, RollDetail,
+    SendForProcessing, ReceiveFromProcessing,
+)
 from app.core.code_generator import next_roll_code
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, BusinessRuleViolationError
 
 
 class RollService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_rolls(self, params: PaginatedParams) -> dict:
+    async def get_rolls(self, params: RollFilterParams) -> dict:
+        # Build filter conditions
+        conditions = []
+
+        if params.status:
+            conditions.append(Roll.status == params.status)
+
+        if params.fabric_type:
+            # Used as search text — match against code, fabric, color, invoice
+            search = f"%{params.fabric_type}%"
+            conditions.append(
+                Roll.roll_code.ilike(search)
+                | Roll.fabric_type.ilike(search)
+                | Roll.color.ilike(search)
+                | Roll.supplier_invoice_no.ilike(search)
+            )
+
+        if params.fabric_filter:
+            conditions.append(Roll.fabric_type == params.fabric_filter)
+
+        if params.has_remaining:
+            conditions.append(Roll.remaining_weight > 0)
+
+        if params.fully_consumed:
+            conditions.append(Roll.remaining_weight <= 0)
+
+        if params.supplier_id:
+            conditions.append(Roll.supplier_id == params.supplier_id)
+
+        # Count with filters applied
         count_stmt = select(func.count()).select_from(Roll)
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
@@ -31,11 +64,18 @@ class RollService:
 
         stmt = (
             select(Roll)
-            .options(selectinload(Roll.supplier))
+            .options(
+                selectinload(Roll.supplier),
+                selectinload(Roll.received_by_user),
+                selectinload(Roll.processing_logs),
+            )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
         )
+        if conditions:
+            stmt = stmt.where(*conditions)
+
         result = await self.db.execute(stmt)
         rolls = result.scalars().all()
 
@@ -50,7 +90,11 @@ class RollService:
         stmt = (
             select(Roll)
             .where(Roll.id == roll_id)
-            .options(selectinload(Roll.supplier))
+            .options(
+                selectinload(Roll.supplier),
+                selectinload(Roll.received_by_user),
+                selectinload(Roll.processing_logs),
+            )
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
@@ -58,33 +102,9 @@ class RollService:
             raise NotFoundError(f"Roll {roll_id} not found")
 
         consumption = await self.get_consumption_history(roll_id)
-        # Get processing history
-        from app.models.roll import RollProcessing
-        proc_stmt = select(RollProcessing).where(RollProcessing.roll_id == roll_id).order_by(RollProcessing.created_at.desc())
-        proc_result = await self.db.execute(proc_stmt)
-        processing = proc_result.scalars().all()
 
         resp = self._to_response(roll)
         resp["consumption_history"] = consumption
-        resp["processing_history"] = [
-            {
-                "id": str(p.id),
-                "process_type": p.process_type,
-                "vendor_name": p.vendor_name,
-                "vendor_phone": p.vendor_phone,
-                "sent_date": p.sent_date.isoformat() if p.sent_date else None,
-                "expected_return_date": p.expected_return_date.isoformat() if p.expected_return_date else None,
-                "actual_return_date": p.actual_return_date.isoformat() if p.actual_return_date else None,
-                "weight_before": float(p.weight_before) if p.weight_before else None,
-                "weight_after": float(p.weight_after) if p.weight_after else None,
-                "length_before": float(p.length_before) if p.length_before else None,
-                "length_after": float(p.length_after) if p.length_after else None,
-                "processing_cost": float(p.processing_cost) if p.processing_cost else None,
-                "status": p.status,
-                "notes": p.notes,
-            }
-            for p in processing
-        ]
         return resp
 
     async def stock_in(self, req: RollCreate, received_by: UUID) -> dict:
@@ -93,6 +113,8 @@ class RollService:
             challan_no=req.supplier_invoice_no or "STOCK",
             fabric_type=req.fabric_type,
             color=req.color,
+            fabric_code=req.fabric_code,
+            color_code=req.color_code,
         )
 
         roll = Roll(
@@ -115,8 +137,54 @@ class RollService:
         self.db.add(roll)
         await self.db.flush()
 
-        # Reload with supplier
-        stmt = select(Roll).where(Roll.id == roll.id).options(selectinload(Roll.supplier))
+        # Reload with relationships
+        stmt = select(Roll).where(Roll.id == roll.id).options(
+            selectinload(Roll.supplier),
+            selectinload(Roll.received_by_user),
+            selectinload(Roll.processing_logs),
+        )
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one()
+
+        return self._to_response(roll)
+
+    async def update_roll(self, roll_id: UUID, req: RollUpdate) -> dict:
+        stmt = (
+            select(Roll)
+            .where(Roll.id == roll_id)
+            .options(selectinload(Roll.supplier))
+        )
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+
+        # Guard: only unused rolls can be edited
+        if roll.remaining_weight < roll.total_weight:
+            raise BusinessRuleViolationError(
+                "Cannot edit a roll that has been partially or fully consumed"
+            )
+
+        updates = req.model_dump(exclude_unset=True)
+        weight_changed = False
+
+        for field, value in updates.items():
+            setattr(roll, field, value)
+            if field == "total_weight":
+                weight_changed = True
+
+        # Keep remaining_weight in sync when total_weight changes on unused roll
+        if weight_changed and req.total_weight is not None:
+            roll.remaining_weight = req.total_weight
+
+        await self.db.flush()
+
+        # Reload with relationships (supplier may have changed)
+        stmt = select(Roll).where(Roll.id == roll.id).options(
+            selectinload(Roll.supplier),
+            selectinload(Roll.received_by_user),
+            selectinload(Roll.processing_logs),
+        )
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
 
@@ -142,6 +210,104 @@ class RollService:
             for c in records
         ]
 
+    async def send_for_processing(self, roll_id: UUID, req: SendForProcessing) -> dict:
+        stmt = select(Roll).where(Roll.id == roll_id)
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+        if roll.status != "in_stock":
+            raise BusinessRuleViolationError("Roll must be in_stock to send for processing")
+
+        log = RollProcessing(
+            roll_id=roll_id,
+            process_type=req.process_type,
+            vendor_name=req.vendor_name,
+            vendor_phone=req.vendor_phone,
+            sent_date=req.sent_date,
+            weight_before=roll.total_weight,
+            length_before=roll.total_length,
+            status="sent",
+            notes=req.notes,
+        )
+        self.db.add(log)
+        roll.status = "sent_for_processing"
+        await self.db.flush()
+
+        # Reload with all relationships for full roll response
+        reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.supplier),
+            selectinload(Roll.received_by_user),
+            selectinload(Roll.processing_logs),
+        )
+        roll = (await self.db.execute(reload)).scalar_one()
+        return self._to_response(roll)
+
+    async def receive_from_processing(
+        self, roll_id: UUID, processing_id: UUID, req: ReceiveFromProcessing
+    ) -> dict:
+        stmt = select(Roll).where(Roll.id == roll_id)
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+
+        log_stmt = select(RollProcessing).where(
+            RollProcessing.id == processing_id,
+            RollProcessing.roll_id == roll_id,
+        )
+        log_result = await self.db.execute(log_stmt)
+        log = log_result.scalar_one_or_none()
+        if not log:
+            raise NotFoundError(f"Processing log {processing_id} not found")
+        if log.status != "sent":
+            raise BusinessRuleViolationError("Processing log is not in 'sent' status")
+
+        log.received_date = req.received_date
+        log.weight_after = req.weight_after
+        log.length_after = req.length_after
+        log.processing_cost = req.processing_cost
+        log.status = "received"
+        if req.notes:
+            log.notes = (log.notes + " | " + req.notes) if log.notes else req.notes
+
+        # Update roll measurements and return to stock
+        roll.total_weight = req.weight_after
+        roll.remaining_weight = req.weight_after
+        if req.length_after:
+            roll.total_length = req.length_after
+        if req.processing_cost and roll.cost_per_unit and req.weight_after:
+            roll.cost_per_unit = float(roll.cost_per_unit) + (float(req.processing_cost) / float(req.weight_after))
+        roll.status = "in_stock"
+        await self.db.flush()
+
+        # Reload with all relationships for full roll response
+        reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.supplier),
+            selectinload(Roll.received_by_user),
+            selectinload(Roll.processing_logs),
+        )
+        roll = (await self.db.execute(reload)).scalar_one()
+        return self._to_response(roll)
+
+    def _processing_to_response(self, p: RollProcessing) -> dict:
+        return {
+            "id": str(p.id),
+            "roll_id": str(p.roll_id),
+            "process_type": p.process_type,
+            "vendor_name": p.vendor_name,
+            "vendor_phone": p.vendor_phone,
+            "sent_date": p.sent_date.isoformat() if p.sent_date else None,
+            "received_date": p.received_date.isoformat() if p.received_date else None,
+            "weight_before": float(p.weight_before) if p.weight_before else None,
+            "weight_after": float(p.weight_after) if p.weight_after else None,
+            "length_before": float(p.length_before) if p.length_before else None,
+            "length_after": float(p.length_after) if p.length_after else None,
+            "processing_cost": float(p.processing_cost) if p.processing_cost else None,
+            "status": p.status,
+            "notes": p.notes,
+        }
+
     def _to_response(self, r: Roll) -> dict:
         return {
             "id": str(r.id),
@@ -160,8 +326,14 @@ class RollService:
             } if r.supplier else None,
             "supplier_invoice_no": r.supplier_invoice_no,
             "supplier_invoice_date": r.supplier_invoice_date.isoformat() if r.supplier_invoice_date else None,
-            "received_by": str(r.received_by) if r.received_by else None,
+            "received_by_user": {
+                "id": str(r.received_by_user.id),
+                "full_name": r.received_by_user.full_name,
+            } if r.received_by_user else None,
             "received_at": r.received_at.isoformat() if r.received_at else None,
             "notes": r.notes,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            "processing_logs": [
+                self._processing_to_response(p) for p in r.processing_logs
+            ] if r.processing_logs else [],
         }

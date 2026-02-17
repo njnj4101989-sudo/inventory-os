@@ -21,7 +21,7 @@ export async function markPaid(id) {
     }
     return mockResponse(invoice, 'Invoice marked as paid')
   }
-  return client.post(`/invoices/${id}/pay`)
+  return client.patch(`/invoices/${id}/pay`)
 }
 
 export async function downloadPDF(id) {

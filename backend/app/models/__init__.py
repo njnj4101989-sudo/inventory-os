@@ -16,6 +16,9 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
+from app.models.product_type import ProductType
+from app.models.color import Color
+from app.models.fabric import Fabric
 
 __all__ = [
     "Role",
@@ -36,4 +39,7 @@ __all__ = [
     "OrderItem",
     "Invoice",
     "InvoiceItem",
+    "ProductType",
+    "Color",
+    "Fabric",
 ]

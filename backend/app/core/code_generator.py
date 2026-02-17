@@ -65,14 +65,19 @@ async def next_roll_code(
     challan_no: str | None = None,
     fabric_type: str | None = None,
     color: str | None = None,
+    fabric_code: str | None = None,
+    color_code: str | None = None,
 ) -> str:
     """Generate roll code: {Challan}-{Fabric}-{Color}-{Seq}.
 
-    Example: 390-COT-GRN-01, NOINV-SHK-RED-03
+    If fabric_code / color_code are provided (from master DB), use them directly.
+    Otherwise fall back to the hardcoded abbreviation dicts.
+
+    Example: 390-COT-GREEN-01, NOINV-SHK-RED-03
     """
     challan = (challan_no or "").strip() or "NOINV"
-    fabric_short = _shorten_fabric(fabric_type or "")
-    color_short = _shorten_color(color or "")
+    fabric_short = fabric_code.strip().upper() if fabric_code else _shorten_fabric(fabric_type or "")
+    color_short = color_code.strip().upper() if color_code else _shorten_color(color or "")
     prefix = f"{challan}-{fabric_short}-{color_short}-"
 
     # Find max sequence for this prefix

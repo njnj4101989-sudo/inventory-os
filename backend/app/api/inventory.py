@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, require_permission, require_role
 from app.models.user import User
 from app.schemas import PaginatedParams
-from app.schemas.inventory import AdjustRequest
+from app.schemas.inventory import AdjustRequest, InventoryFilterParams
 from app.services.inventory_service import InventoryService
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
@@ -16,11 +16,11 @@ router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
 @router.get("", response_model=None)
 async def list_inventory(
-    params: PaginatedParams = Depends(),
+    params: InventoryFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("inventory_view"),
 ):
-    """List all SKU stock levels. Filters: sku_id, sku_code, low_stock."""
+    """List all SKU stock levels. Filters: sku_code, product_type, stock_status."""
     svc = InventoryService(db)
     result = await svc.get_inventory(params)
     return {"success": True, **result}

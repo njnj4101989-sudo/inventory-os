@@ -1,9 +1,19 @@
+import { useState, useEffect } from 'react'
 import ErrorAlert from '../common/ErrorAlert'
+import { getAllFabrics, getAllColors } from '../../api/masters'
 
 const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
 
 export default function RollForm({ form, onChange, suppliers = [], error = null, onDismissError }) {
+  const [fabricsList, setFabricsList] = useState([])
+  const [colorsList, setColorsList] = useState([])
+
+  useEffect(() => {
+    getAllFabrics().then((res) => setFabricsList(res.data.data)).catch(() => {})
+    getAllColors().then((res) => setColorsList(res.data.data)).catch(() => {})
+  }, [])
+
   const set = (k, v) => onChange({ ...form, [k]: v })
   const unit = form.unit || 'kg'
 
@@ -14,13 +24,17 @@ export default function RollForm({ form, onChange, suppliers = [], error = null,
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={LABEL}>Fabric Type</label>
-          <input type="text" value={form.fabric_type} onChange={(e) => set('fabric_type', e.target.value)}
-            placeholder="e.g. Cotton" className={INPUT} />
+          <select value={form.fabric_type} onChange={(e) => set('fabric_type', e.target.value)} className={INPUT}>
+            <option value="">Select fabric</option>
+            {fabricsList.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
+          </select>
         </div>
         <div>
           <label className={LABEL}>Color</label>
-          <input type="text" value={form.color} onChange={(e) => set('color', e.target.value)}
-            placeholder="e.g. Red" className={INPUT} />
+          <select value={form.color} onChange={(e) => set('color', e.target.value)} className={INPUT}>
+            <option value="">Select color</option>
+            {colorsList.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
         </div>
       </div>
 

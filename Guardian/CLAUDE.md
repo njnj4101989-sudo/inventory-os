@@ -6,485 +6,100 @@
 
 ## Document Directory (Lifetime Reference)
 
-These 6 documents are the **complete blueprint** for the entire project. Reference them at ANY phase of development.
+### All Project Documents
+| Document | Purpose | When to Read |
+|----------|---------|-------------|
+| `CLAUDE.md` | Session log, project state, architecture | Every session start |
+| `guardian.md` | Protocols, rules, coding standards | Before any coding |
+| `API_REFERENCE.md` | **THE** single source of truth for API shapes | Before any frontend↔backend work |
+| `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow, deployment | Architecture decisions |
+| `STEP2_DATA_MODEL.md` | 20 tables, columns, types, FKs, indexes | Model/migration changes |
+| `STEP3_EVENT_CONTRACTS.md` | Events, side effects, state machine | Business logic coding |
+| `STEP4_API_CONTRACTS.md` | Endpoint paths, auth, permissions (v1.1) | Route/controller work |
+| `STEP5_FOLDER_STRUCTURE.md` | File placement, layer rules | New file creation |
+| `STEP6_EXECUTION_PLAN.md` | Phase breakdown, task dependencies | Planning next work |
 
-### When Building BACKEND (Phase 6A):
+### Quick Lookup by Task
 | Need | Read This |
 |------|-----------|
-| Table columns, types, FKs, indexes | `STEP2_DATA_MODEL.md` |
-| Event payloads, side effects, validation | `STEP3_EVENT_CONTRACTS.md` |
-| Endpoint paths, request/response bodies, auth | `STEP4_API_CONTRACTS.md` |
-| File placement, layer rules | `STEP5_FOLDER_STRUCTURE.md` §5.3 |
-
-### When Building WEB FRONTEND (Phase 6B):
-| Need | Read This |
-|------|-----------|
+| **API response shapes (AUTHORITATIVE)** | `API_REFERENCE.md` — extracted from mock.js |
+| Table columns, types, FKs | `STEP2_DATA_MODEL.md` |
+| Event payloads, side effects | `STEP3_EVENT_CONTRACTS.md` |
+| Endpoint paths, auth rules | `STEP4_API_CONTRACTS.md` |
 | Role matrix (who sees what) | `STEP1_SYSTEM_OVERVIEW.md` §1.4 |
-| API request/response shapes | `STEP4_API_CONTRACTS.md` §4.3 |
-| Page list, component tree | `STEP5_FOLDER_STRUCTURE.md` §5.4 |
+| Tailor/Checker mobile flows | `STEP1_SYSTEM_OVERVIEW.md` §1.5 |
+| Batch state machine | `STEP3_EVENT_CONTRACTS.md` §3.4 |
+| Inventory formula | `STEP3_EVENT_CONTRACTS.md` §3.1 |
+| Error codes | `STEP4_API_CONTRACTS.md` §4.5 |
 
-### When Building MOBILE APP (Phase 6C):
-| Need | Read This |
-|------|-----------|
-| Tailor/Checker flows | `STEP1_SYSTEM_OVERVIEW.md` §1.5 |
-| Batch state machine transitions | `STEP3_EVENT_CONTRACTS.md` §3.4 |
-| Mobile API endpoints | `STEP4_API_CONTRACTS.md` §4.3.10 |
-| Offline-first architecture | `STEP5_FOLDER_STRUCTURE.md` §5.5 |
+---
 
-### When Building INFRA (Phase 6D):
-| Need | Read This |
-|------|-----------|
-| Deployment topology, Docker services | `STEP1_SYSTEM_OVERVIEW.md` §1.13 |
-| External API (drsblouse.com) | `STEP4_API_CONTRACTS.md` §4.4 |
-| Docker compose, nginx, scripts | `STEP5_FOLDER_STRUCTURE.md` §5.6 |
+## Current State (Session 19 — 2026-02-17)
 
-### When Debugging / Auditing:
-| Need | Read This |
-|------|-----------|
-| Inventory formula (stock computation) | `STEP3_EVENT_CONTRACTS.md` §3.1 |
-| Idempotency rules | `STEP3_EVENT_CONTRACTS.md` §3.2 |
-| Concurrency / race conditions | `STEP3_EVENT_CONTRACTS.md` §3.9 |
-| Error codes reference | `STEP4_API_CONTRACTS.md` §4.5 |
+### What's Done
+- **Phase 6A (Backend):** COMPLETE — 20 models, 16 schemas, 14 services (zero stubs), 15 routers, 71+ endpoints
+- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 130 modules, 0 build errors
+- **API_REFERENCE.md:** Created — authoritative contract for all 13 API modules, extracted from mock.js
+- **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
+- **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
+
+### What's Fixed This Session (Session 19)
+- **CRITICAL FIX:** `roll_service.py` `_to_response()` now matches API_REFERENCE.md §5 exactly:
+  - `received_by` (flat UUID) → `received_by_user: { id, full_name }` (nested object)
+  - Added `processing_logs[]` array to every roll response (was missing entirely)
+  - `get_roll()`: removed duplicate manual processing query, uses relationship via `selectinload`
+  - `get_roll()`: key renamed from `processing_history` → `processing_logs` (via `_to_response`)
+  - All roll queries now load 3 relationships: `supplier`, `received_by_user`, `processing_logs`
+  - `send_for_processing()` + `receive_from_processing()` now return full roll object (not just processing log)
+- "Receive Back" button should now work end-to-end
+- **NEW FILTER:** Rolls page → All Rolls tab now has 6 status pills:
+  - `All | In Stock | Fresh (No Process) | Processed & Returned | In Processing | In Cutting`
+  - "Fresh" = never sent for processing; "Processed & Returned" = came back from embroidery/dyeing/etc.
+  - Client-side filtering on `processing_logs[]` array (backend sends `status=in_stock`, frontend sub-filters)
+
+### NEXT SESSION START HERE (Session 20)
+1. **TEST:** Restart backend → clear localStorage → login → test "Send for Processing" + "Receive Back" + new filter pills
+2. Align remaining backend response shapes to `API_REFERENCE.md` (endpoint by endpoint)
+3. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
+4. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
+
+### Key Credentials
+- **Mock login:** admin1/supervisor1/tailor1/checker1/billing1, password: test1234
+- **Real DB login:** admin/supervisor/billing/tailor1/checker1, password: test1234
+- **Mock switch:** `VITE_USE_MOCK=true` in frontend `.env`
 
 ---
 
 ## Session History
 
-### Session 1 (2026-02-07)
-- Created all 6 design documents (Steps 1-6), all approved
-- Started Phase 6A backend scaffold
-- Completed: 6A-1 (project setup), 6A-2 (database setup)
+### Phase 6A: Backend Scaffold (Sessions 1-4) — COMPLETE
+- **Session 1:** Created 6 STEP design documents, started backend scaffold (6A-1, 6A-2)
+- **Session 2:** 15 ORM models, Alembic migration, 14 Pydantic schemas, SQLite for dev
+- **Session 3:** Core utilities (security, permissions, exceptions, code_gen), dependencies, 12 service stubs (55 methods), 13 API routers (46 endpoints)
+- **Session 4:** main.py (CORS, lifespan), background tasks (reservation expiry, backup sync), seed scripts (roles, users, suppliers, SKUs), Dockerfile
+- **Result:** 83+ files, 46 endpoints, 15 models, fully scaffolded
 
-### Session 2 (2026-02-07)
-- Restructured root folder: moved backend/ to root, removed redundant docs/ subfolder
-- Completed: 6A-3 (15 ORM models + __init__.py — all 15 tables from STEP2)
-- Completed: 6A-4 (Alembic env.py + script.py.mako + initial migration — 15 tables verified)
-- Switched to SQLite for dev (zero setup, old PC friendly)
-- Completed: 6A-5 (14 Pydantic schema files — all imports verified, zero circular deps)
-- **Session ended — state saved**
+### Phase 6B: Frontend (Sessions 5-6) — COMPLETE
+- **Session 5:** Vite+React+Tailwind setup, API client+mock layer (13 modules), auth context, layout (Sidebar/Header), routes+protection, 7 common components, admin pages (Dashboard, Users), supervisor pages (Suppliers, Rolls, SKUs, Batches)
+- **Session 6:** Billing pages (Orders, Invoices, Reports), detail pages (BatchDetail, Inventory), 5 form components extracted
+- **Result:** 55+ files, 126 modules, all 11 pages implemented, 0 errors
 
-### Session 3 (2026-02-07) — 4 tasks completed (6A-6 through 6A-9)
-- Completed: 6A-6 (Core utilities — 6 files, all imports + logic tests passed)
-  - `core/__init__.py` — module marker
-  - `core/security.py` — JWT create/verify (python-jose HS256), password hash/verify (passlib bcrypt)
-  - `core/permissions.py` — RBAC matrix (15 perms × 5 roles), helpers (check, list, map)
-  - `core/exceptions.py` — AppException base + 10 domain exceptions (STEP4 §4.5)
-  - `core/error_handlers.py` — FastAPI global handlers + register_exception_handlers()
-  - `core/code_generator.py` — async generators for ROLL/BATCH/ORD/INV/RES codes (SQLite-safe)
-- Completed: 6A-7 (dependencies.py — get_current_user, require_permission, require_role)
-  - `app/dependencies.py` — single import point for route auth deps
-  - `get_current_user`: JWT verify → DB load (User + Role eagerly) → active check
-  - `require_permission(perm)`: Depends factory, checks JWT claims permissions list
-  - `require_role(*roles)`: Depends factory, checks JWT claims role field
-  - Token type guard: rejects refresh tokens used as access tokens
-  - Re-exports `get_db` from database.py for convenience
-- Completed: 6A-8 (Service stubs — 13 files, 12 classes, 55 methods)
-  - `services/__init__.py` — exports all 12 service classes
-  - `auth_service.py` (3): login, refresh, logout
-  - `user_service.py` (5): CRUD + soft-delete
-  - `supplier_service.py` (4): CRUD
-  - `roll_service.py` (4): stock_in, get_rolls, get_roll, consumption_history
-  - `sku_service.py` (4): CRUD + auto-code
-  - `batch_service.py` (8): create, assign, start, submit, check, get_qr + list/detail
-  - `inventory_service.py` (6): create_event, adjust, reconcile, get_inventory/events
-  - `order_service.py` (6): create, ship, cancel, return + list/detail
-  - `invoice_service.py` (5): create, mark_paid, generate_pdf + list/detail
-  - `reservation_service.py` (5): create, confirm, release, expire_stale, get_active
-  - `dashboard_service.py` (3): summary, tailor_performance, inventory_movement
-  - `qr_service.py` (2): generate_qr_base64, generate_batch_qr
-- Completed: 6A-9 (API routes — 15 files, 13 sub-routers, 46 endpoints)
-  - `api/__init__.py` — package marker
-  - `api/router.py` — main aggregator (includes all 13 sub-routers)
-  - `api/auth.py` (3): login, refresh, logout — public + JWT
-  - `api/users.py` (3): list, create, update — user_manage
-  - `api/roles.py` (1): list — role_manage
-  - `api/suppliers.py` (3): list, create, update — supplier_manage
-  - `api/rolls.py` (3): list, stock_in, detail — stock_in
-  - `api/skus.py` (3): list, create, update — inventory_view / supplier_manage
-  - `api/batches.py` (7): list, create, assign, start, submit, check, qr
-  - `api/inventory.py` (4): list, events, adjust, reconcile
-  - `api/orders.py` (5): list, create, ship, cancel, return — order_manage
-  - `api/invoices.py` (3): list, pay, pdf — invoice_manage
-  - `api/dashboard.py` (3): summary, tailor-perf, movement — report_view
-  - `api/mobile.py` (3): my-batches, scan, pending-checks — tailor/checker
-  - `api/external.py` (5): stock, reserve, confirm, release, return — X-API-Key
-- Next: 6A-10 (main.py — FastAPI app entry, CORS, lifespan, error handlers)
+### Sessions 7-14: Feature Evolution + UI Overhaul
+- **Session 7:** Reservation expiry fix, unified Users & Roles page, supplier invoice tracking, SKU pattern → `ProductType-DesignNo-Color-Size`
+- **Session 8:** LOT entity (Lot→LotRoll→Roll), weight-based rolls (total_weight/remaining_weight), batch→lot FK, LotsPage
+- **Session 9:** UI polish (modal scroll, size pattern layout), roll detail/edit modals, removed SKU from Lot entity
+- **Session 10:** InventoryPage overhaul (KPIs, health bars, filters), ReportsPage rebuild (4 tabs: Production/Inventory/Financial/Tailor)
+- **Session 11:** Supplier page upgrade (+6 fields, GST/PAN), Rolls page overhaul (invoice-wise stock-in, 3-tab layout, processing workflow)
+- **Session 12:** Bug fixes (supplier form focus loss, roll→invoice navigation), roll detail redesign (extraWide modal, KPI bar)
+- **Session 13:** Challan-style stock-in (full-page overlay, design groups, color×weight grid, keyboard-driven)
+- **Session 14:** Invoice detail challan view, roll codes → `{Challan}-{Fabric3}-{Color5}-{Seq}`, filter toolbars
 
-### Session 4 (2026-02-08) — 6A-10 completed
-- Completed: 6A-10 (main.py — FastAPI app, CORS, lifespan, error handlers, router mount)
-  - `app/main.py` — lifespan (engine dispose), CORS from settings.cors_origins, docs at /api/v1/docs
-  - Health check at `/api/v1/health`
-  - Fixed: centralized `/api/v1` prefix in main.py (removed from all 13 sub-routers)
-  - Verified: 46 business endpoints + 1 health + 3 docs = 50 routes, all paths correct
-- Next: 6A-11 (Background tasks — reservation expiry, backup sync)
-- Completed: 6A-11 (Background tasks — 3 files + main.py lifespan integration)
-  - `app/tasks/__init__.py` — exports start/stop for both tasks
-  - `app/tasks/reservation_expiry.py` — asyncio loop every 15 min, calls ReservationService.expire_stale_reservations()
-  - `app/tasks/backup_sync.py` — asyncio loop every 24h (stub — real pg_dump is Phase 6D)
-  - Updated `main.py` lifespan: spawns both tasks on startup, cancels on shutdown
-- Completed: 6A-12 (Seed scripts — 4 files, all idempotent, tested end-to-end)
-  - `seeds/seed_roles.py` — 5 roles (admin, supervisor, tailor, checker, billing) + permission maps
-  - `seeds/seed_users.py` — 5 test users (1 per role, password: test1234)
-  - `seeds/seed_data.py` — 2 suppliers + 3 SKUs (textile blouse products)
-  - `seeds/seed_all.py` — runner: `python -m seeds.seed_all`
-- Completed: 6A-13 (Dockerfile + .dockerignore — text blueprint, no Docker Desktop needed)
-
-### PHASE 6A COMPLETE — All 13 tasks done
-- 83+ backend files scaffolded
-- 46 API endpoints registered + health check
-- 15 ORM models, 14 schema files, 12 service stubs, 13 routers
-- Background tasks (reservation expiry + backup sync)
-- Seed scripts (roles, users, suppliers, SKUs)
-- Dockerfile ready for future deployment
-- Git: pushed to https://github.com/njnj4101989-sudo/inventory-os
-
-### Session 4 continued — Documentation + SKU pattern update
-- Expanded STEP6 §6.4 with detailed 6B plan (11 tasks, ~45 files, dependency graph, file lists)
-- Updated SKU pattern: `[PRODUCT]-[COLOR]-[SIZE]` → `DesignNo-Color-Size` (e.g. `101-Red-M`)
-  - Updated: STEP1, STEP2, STEP4 (30+ references), seed_data.py, sku_service.py, skus.py
-  - Zero old pattern references remaining (verified)
-- Decision: Start Phase 6B (Web Frontend) with mock data layer
-
-### Session 5 (2026-02-08) — 8 tasks completed (6B-1 through 6B-8)
-- Completed: 6B-1 (Project setup — 9 files, Vite 6.4 + React 18 + Tailwind 3.4)
-  - `package.json` — React 18, Vite, Tailwind, Axios, React Router 6
-  - `vite.config.js` — dev :5173, proxy /api → :8000
-  - `tailwind.config.js` — blue-600 primary theme
-  - `postcss.config.js`, `index.html`, `.env.example`, `.env`
-  - `src/index.css`, `src/main.jsx`, `src/App.jsx`
-  - Verified: `npm run dev` → Vite ready in 902ms, 0 vulnerabilities
-- Completed: 6B-2 (API client + mock layer — 13 files)
-  - `src/api/client.js` — Axios instance, JWT interceptor, 401 auto-refresh with queue
-  - `src/api/mock.js` — Full mock store: 5 users, 2 suppliers, 4 rolls, 3 SKUs, 3 batches, 3 orders, 2 invoices, dashboard stats
-  - 11 API modules: auth, users, roles, suppliers, rolls, skus, batches, inventory, orders, invoices, dashboard
-  - Mock switch: `VITE_USE_MOCK=true` (default) — set `false` to hit real backend
-  - Fix: exported `PERMISSIONS` const from mock.js
-- Completed: 6B-3 (Auth context + hooks — 3 files + main.jsx update)
-  - `src/context/AuthContext.jsx` — Provider: user, token, role, permissions, login/logout, localStorage persistence
-  - `src/hooks/useAuth.js` — Consumer hook with context guard
-  - `src/hooks/useApi.js` — Generic { data, loading, error, refetch }, immediate/deferred modes
-  - Updated `main.jsx` — AuthProvider wrapping App
-- Completed: 6B-4 (Layout components — 3 files)
-  - `src/components/layout/Sidebar.jsx` — Role-filtered nav (Admin 11, Supervisor 7, Billing 4), collapsible, SVG icons
-  - `src/components/layout/Header.jsx` — User name, color-coded role badge, logout button, sticky
-  - `src/components/layout/Layout.jsx` — Sidebar + Header + Outlet shell with transition
-- Completed: 6B-5 (Routes + protection — 15 files)
-  - `src/routes/routes.js` — 12-route config with requiredRoles[], React.lazy code-splitting
-  - `src/routes/ProtectedRoute.jsx` — Auth guard: no auth → /login, wrong role → /dashboard
-  - `src/pages/LoginPage.jsx` — Full login form with error display, mock hint
-  - 11 placeholder page files (Dashboard through Reports)
-  - Updated `App.jsx` — Suspense + public /login + protected Layout shell + role-guarded routes
-- Completed: 6B-6 (Common components — 7 files)
-  - `DataTable.jsx` — Sortable columns, row click, skeleton loading, empty state
-  - `Modal.jsx` — Overlay dialog, Escape/backdrop close, title, body, footer actions, wide mode
-  - `StatusBadge.jsx` — 15 color mappings (batch/order/invoice/generic statuses)
-  - `SearchInput.jsx` — Debounced (300ms), search icon, clear button
-  - `Pagination.jsx` — Prev/Next, 5 visible page numbers with ellipsis
-  - `LoadingSpinner.jsx` — sm/md/lg, optional text
-  - `ErrorAlert.jsx` — Red banner, warning icon, dismissible
-- Completed: 6B-7 (Admin pages — 2 files replaced from placeholder)
-  - `DashboardPage.jsx` — 4 summary cards (rolls, batches, orders, revenue) + batch pipeline (5-stage) + inventory/revenue panels
-  - `UsersPage.jsx` — DataTable (6 cols) + search + pagination + create/edit modal (5 fields, role dropdown)
-- Completed: 6B-8 (Supervisor pages — 4 files replaced from placeholder)
-  - `SuppliersPage.jsx` — DataTable (6 cols) + search + create/edit modal (4 fields)
-  - `RollsPage.jsx` — DataTable (8 cols, remaining with progress bar) + stock-in modal (7 fields, supplier dropdown)
-  - `SKUsPage.jsx` — DataTable (7 cols, stock avail/reserved) + create/edit modal (6 fields, size dropdown)
-  - `BatchesPage.jsx` — DataTable (7 cols) + status filter tabs + create modal (SKU, dynamic rolls) + assign modal (tailor dropdown)
-
-### Session 6 (2026-02-08) — 3 tasks completed (6B-9 through 6B-11)
-- Completed: 6B-9 (Billing pages — 3 files replaced from placeholder)
-  - `OrdersPage.jsx` — DataTable (7 cols), status filter + search, create order modal (customer + dynamic SKU items), detail modal with Ship/Cancel
-  - `InvoicesPage.jsx` — DataTable (8 cols), status filter, detail modal with line items breakdown, Mark as Paid + Download PDF
-  - `ReportsPage.jsx` — Tailor Performance table (5 cols, color-coded rejection rate) + Inventory Movement table (8 cols, green/red)
-- Completed: 6B-10 (Detail pages — 2 files replaced from placeholder)
-  - `BatchDetailPage.jsx` — Back nav, status badge, 4 summary cards, 5-step visual timeline, rolls used table, details section
-  - `InventoryPage.jsx` — DataTable (6 cols), low-stock toggle, SKU search, events modal, Adjust Stock modal, Reconcile button
-- Completed: 6B-11 (Form components — 5 files created + 5 pages refactored)
-  - `components/forms/UserForm.jsx` — username, password, full_name, role select, phone
-  - `components/forms/RollForm.jsx` — fabric_type, color, total_length, unit, cost_per_unit, supplier select, notes
-  - `components/forms/SKUForm.jsx` — product_type, product_name, color, size select, base_price, description
-  - `components/forms/BatchForm.jsx` — SKU select, dynamic rolls (pieces_cut + length_used), notes
-  - `components/forms/OrderForm.jsx` — customer_name, customer_phone, source, dynamic items (sku + qty + price)
-  - Updated: UsersPage, RollsPage, SKUsPage, BatchesPage, OrdersPage — replaced inline forms with extracted components
-  - Cleaned up dead code: removed unused helper functions from all 5 pages
-
-### PHASE 6B COMPLETE — All 11 tasks done
-- Build verified: 126 modules, 0 errors, 4.52s
-- ~55 frontend files created
-- All 11 pages implemented (no more placeholders)
-- 5 reusable form components extracted
-- Next: Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
-
-### Session 7 (2026-02-08) — Bug fixes + feature enhancements (first testing round)
-- **Fix: Reservation expiry background task** — `expire_stale_reservations()` was a stub raising `NotImplementedError`
-  - Implemented: queries active reservations past `expires_at`, sets status → `expired`, decrements `reserved_qty` on `InventoryState`
-  - Task runs every 15 min via asyncio loop — no longer crashes on startup
-- **Clarification: Batch assignment flow** — confirmed web-based Supervisor assignment (T2) is correct per STEP3 §3.4
-  - QR scanning is for Tailor (T3: start work) and Checker (T5: inspect) — Phase 6C mobile
-- **Feature: Unified Users & Roles page** (was showing same data on both tabs)
-  - Removed separate `/roles` route, merged into single "Users & Roles" sidebar item
-  - Sub-tabs: Users (existing table + CRUD) | Roles (new card layout)
-  - Role cards: color-coded per role, show user count + permission count + permission pills
-  - Role CRUD: create with custom name + permissions checklist, edit alias (display_name), delete (guarded — blocks if users assigned)
-  - Backend: added `display_name` (nullable) to Role model, full CRUD endpoints (GET/POST/PATCH/DELETE)
-  - Frontend: `roleDisplayName` in AuthContext, Header shows alias, UserForm dropdown shows alias
-  - 12 files touched for this feature
-- **Feature: Supplier invoice tracking on Rolls**
-  - Added `supplier_invoice_no` (String 50) + `supplier_invoice_date` (Date) to Roll model/schema
-  - RollForm: new row with invoice no. text input + date picker
-  - RollsPage: 2 new table columns (Invoice No., Invoice Date)
-  - Both fields nullable — invoice may arrive later
-- **Feature: SKU pattern upgrade** — `DesignNo-Color-Size` → `ProductType-DesignNo-Color-Size`
-  - New format: `BLS-101-Red-M` (Blouse, Design 101, Red, Medium)
-  - Prevents conflicts when new product types share design numbers (e.g. `KRT-101-Red-M` vs `BLS-101-Red-M`)
-  - SKUForm: new Design No. field, 5 product types (BLS/KRT/SAR/DRS/OTH), live SKU code preview, code-forming fields disabled on edit
-  - Updated: all mock data, seed data, API mock code gen, design docs (STEP1, STEP2, STEP4)
-  - Zero old pattern remnants in active code (verified)
-- **Git:** `c789538` — 27 files changed, 711 insertions, 155 deletions
-- **Build:** 126 modules, 0 errors
-- **Next:** Continue testing, more bug fixes, or Phase 6C/6D
-
-### Session 8 (2026-02-08) — LOT entity + weight-based roll overhaul
-- **Root cause:** Real business tracks rolls by WEIGHT (kg), not LENGTH (meters). Client's manual register showed:
-  - Rolls tracked by weight, palla weight measured per roll
-  - Palla = one cutting layer; `num_pallas = floor(roll_weight / palla_weight)`
-  - Size pattern per palla: `{L:2, XL:6, XXL:6, 3XL:4}` = 18 pieces/palla
-  - Total pieces = total_pallas × pieces_per_palla
-  - LOT groups multiple rolls for cutting → batches are carved from lots
-- **New entity: LOT** (sits between Rolls and Batches)
-  - `Lot` model: lot_code, sku_id, lot_date, design_no, standard_palla_weight, default_size_pattern (JSON), pieces_per_palla, total_pallas, total_pieces, total_weight, status, notes
-  - `LotRoll` join model: lot_id, roll_id, palla_weight, num_pallas, weight_used, waste_weight, size_pattern (JSON nullable), pieces_from_roll
-  - LOT-XXXX code generator, lot_manage permission (admin + supervisor)
-  - Schemas: LotRollInput, LotRollBrief, LotBrief, LotCreate, LotUpdate, LotResponse
-  - Service: LotService (6 methods), API router: 4 endpoints
-- **Roll model → weight-based:**
-  - `total_length` → `total_weight`, `remaining_length` → `remaining_weight` (Numeric 10,3)
-  - `unit` defaults to "kg", `total_length` kept as optional nullable field
-  - RollForm: weight input, cost per kg, optional length field
-  - RollsPage columns: total_weight, remaining_weight with kg display
-- **Batch model updated:**
-  - Added `lot_id` FK, `piece_count`, `color_breakdown` (JSON)
-  - BatchForm: lot selector → shows lot summary → piece count input (removed roll inputs)
-  - BatchesPage: lot column, lot-based creation flow
-  - BatchDetailPage: "Lot Info" section replaces old "Rolls Used" table
-- **Frontend: New LotsPage** (largest page — 12.45 kB built)
-  - DataTable: lot_code, design_no, SKU, pallas, pieces, weight, status, date
-  - Detail modal: summary cards + per-roll breakdown table
-  - Create modal: SKU select, design no, lot date, palla weight, size pattern editor (L/XL/XXL/3XL), roll selector, per-roll palla weight, live auto-calculations
-- **Mock data overhaul:**
-  - 6 weight-based rolls (4 consumed, 2 available)
-  - 1 sample lot (LOT-0001, Design 702, 4 rolls, 24 pallas, 432 pieces)
-  - Batches reference lots with piece_count + color_breakdown
-  - New `lots.js` API module
-- **Files created:** 5 (lot.py model, lot.py schema, lot_service.py, lots.py route, lots.js API)
-- **Files modified:** ~20 (roll.py, batch.py, sku.py, __init__.py, permissions.py, code_generator.py, router.py, services/__init__.py, mock.js, rolls.js, batches.js, RollForm, RollsPage, BatchForm, BatchesPage, BatchDetailPage, LotsPage, routes.js, Sidebar.jsx)
-- **Build:** 128 modules, 0 errors, 8.88s
-
-### Session 9 (2026-02-09) — UI polish, roll detail/edit, LOT SKU removal
-- **Fix: Lot create form — size pattern alignment**
-  - Size pattern inputs were cramped in a 2-col grid with palla weight
-  - Extracted into a dedicated bordered card (`bg-gray-50`) with 4-col grid, proper labels, total pill badge
-  - Palla weight moved to its own row with `max-w-xs`
-- **Fix: Modal scroll overflow (global)**
-  - All modals now cap at `max-h-[90vh]` with `flex flex-col`
-  - Body area scrolls with `overflow-y-auto`, header + footer stay pinned
-  - Applies to all modals (lots, rolls, batches, orders, etc.)
-- **Feature: Roll row click → detail modal**
-  - Click any roll row to open detail modal with 3 summary cards (weight, remaining, stock %) + 12-field read-only detail list
-- **Feature: Roll edit (unused only)**
-  - Unused rolls (remaining = total weight) show "Edit Roll" button in detail modal
-  - Click "Edit Roll" → switches to RollForm edit mode with Save/Cancel
-  - Used rolls show amber warning: "This roll cannot be edited" with contextual reason (fully consumed vs partially used)
-  - Added `updateRoll()` to `rolls.js` API module (mock + `PATCH /rolls/:id`)
-- **Fix: Remove SKU from Lot entity**
-  - A lot produces multiple sizes → multiple SKUs. Single SKU at lot level was incorrect
-  - Backend: `sku_id` made nullable in Lot model + optional in LotCreate/LotResponse schemas
-  - Frontend: removed SKU column from lots table, removed SKU selector from create form
-  - Lot create form now: Design No. + Lot Date → Palla Weight → Size Pattern → Rolls → Notes
-  - Cleaned mock data (removed sku from LOT-0001)
-- **Files modified:** 9 (lot.py model, lot.py schema, lots.js, mock.js, rolls.js, Modal.jsx, LotsPage.jsx, RollsPage.jsx, guardian.md)
-- **Build:** 128 modules, 0 errors
-- **Git:** committed + pushed
-- **Next:** Continue testing, Phase 6C (Mobile App) or Phase 6D (Infra/Docker)
-
-### Session 10 (2026-02-09) — Inventory & Reports page professional overhaul
-- **InventoryPage — complete upgrade** (267 lines → 447 lines, 14.67 kB built)
-  - 4 KPI summary cards: Total Pieces, Available, Reserved, Inventory Value (with sub-text, colored icons)
-  - Stock Health column: per-row health bar (green/amber/orange/red) + badge (Healthy/Moderate/Low/Critical) + percentage
-  - Inventory Value column: `available_qty × base_price` with per-unit price sub-text
-  - Multi-filter toolbar: Stock Status pills (All/Healthy/Low/Out of Stock) + Product Type dropdown (BLS/KRT/SAR/DRS/OTH) + search
-  - Buttons with icons (Reconcile, Adjust Stock)
-  - Better empty states (icon + text), improved date formatting (en-IN locale)
-  - New API: `getInventorySummary()` for KPI cards
-- **ReportsPage — complete rebuild with 4 tabs** (127 lines → 563 lines, 22.50 kB built)
-  - Tab bar with icons: Production | Inventory | Financial | Tailor Performance
-  - Period selector: Last 7 days / 30 days / 90 days (applies to all tabs)
-  - **Production tab:** 4 KPIs (pieces produced, pallas, fabric used/waste, approval rate) + lot-wise table (9 cols) + daily production bar chart
-  - **Inventory tab:** 4 KPIs (stock in/out/returns/net) + SKU-wise movement table (11 cols with opening stock, turnover rate, totals row in tfoot)
-  - **Financial tab:** 4 KPIs (revenue, material cost, invoices paid, avg order value) + revenue by SKU table with share bars + cost breakdown bars + daily revenue trend
-  - **Tailor tab:** 4 KPIs (active tailors, total pieces, avg rejection, top performer) + tailor cards with avatar initials, efficiency bar, stats grid, output comparison bar
-  - Shared components: KpiCard, HBar (horizontal bar visualization)
-  - Data fetched per-tab (lazy loading, only active tab loads)
-- **Mock data expanded:**
-  - 3 tailors (was 1) with efficiency_score, speciality, current_batch fields
-  - 3 SKU inventory movement (was 2) with opening_stock, turnover_rate, product_name
-  - `inventorySummary` — total pieces, available, reserved, value, low stock count
-  - `productionReport` — summary stats + by_lot breakdown + by_period daily trend
-  - `financialReport` — revenue summary + revenue_by_sku + cost_breakdown + revenue_by_period
-  - `base_price` added to inventory SKU objects for value calculation
-- **API modules updated:**
-  - `dashboard.js`: +3 endpoints (getProductionReport, getFinancialReport, getInventorySummary)
-  - `inventory.js`: enhanced filter mock (fuzzy search on sku_code + product_name, product_type prefix, stock_status categories)
-- **Files modified:** 4 (mock.js, dashboard.js, inventory.js, InventoryPage.jsx, ReportsPage.jsx)
-- **Build:** 128 modules, 0 errors, 6.71s
-- **Next:** Continue testing, commit + push, Phase 6C/6D
-
-### Session 11 (2026-02-15) — Page-by-page professional overhaul (Suppliers + Rolls)
-- **Supplier page upgrade** — 6 new fields: gst_no, pan_no, email, city, state, pin_code
-  - Backend: model + schema updated (all nullable)
-  - Frontend: 3-section form (Business/Contact/Address), Indian state dropdown, GST/PAN validation (regex)
-  - Detail modal with sectioned cards, Status badge, Deactivate/Activate toggle with confirm
-  - Table columns: Company Name, Contact Person, Phone, City+State, GST No., Status, Created
-  - Search: name, contact person, city, GST
-  - Mock data: realistic Indian textile suppliers with full addresses
-- **Rolls page — invoice-wise stock-in overhaul**
-  - Stock In modal: Invoice header (supplier*, invoice no, date) + dynamic rolls table
-  - Per-row: fabric type, color, unit (kg/meters), qty, cost/unit, notes + duplicate/remove buttons
-  - Per-row unit selector — when meters: optional weight sub-field (for LOT palla calc)
-  - Live footer totals: roll count, total kg, total m, total ₹
-  - `stockInBulk(header, rollEntries)` API function
-- **Rolls page — two-tab layout**
-  - Tab 1 "By Invoice": grouped by supplier_invoice_no — Invoice No., Supplier, Date, Rolls count, Weight, Value
-  - Click invoice → Invoice Detail modal: header cards + summary KPIs + rolls table with totals row
-  - Click roll within invoice → individual roll detail
-  - Tab 2 "All Rolls": flat view with individual roll rows (existing)
-  - `getInvoices()` API — groups rolls by invoice, computes aggregates
-- **Roll processing (value addition) — COMPLETE**
-  - Roll status field: in_stock / sent_for_processing / in_cutting
-  - UI: "Send for Processing" on roll detail, "Receive Back" with updated measurements
-  - 3rd tab "In Processing" on Rolls page with summary cards (rolls out, weight, vendors, overdue)
-  - Processing history section in roll detail with weight before/after, cost, duration
-- **Build:** 128 modules, 0 errors
-- **Files changed:** supplier.py (model+schema), mock.js, suppliers.js, SuppliersPage.jsx, rolls.js, RollsPage.jsx, RollForm.jsx, StatusBadge.jsx, models/__init__.py, roll.py (model+schema)
-
-### Session 12 (2026-02-16) — Bug fixes + Roll detail redesign
-- **Fix: Supplier form input focus loss**
-  - Root cause: `Field` component defined inside render function → new identity every re-render → input unmounts on each keystroke
-  - Fix: Moved `Field` and `InfoRow` outside `SuppliersPage()` as stable components, pass `form`/`set`/`fieldErrors` as props
-- **Fix: Roll detail — "Back to Invoice" navigation**
-  - When clicking a roll from Invoice Detail, the invoice modal closed with no way to return
-  - Added `cameFromInvoice` state: remembers which invoice the user navigated from
-  - "Back to Invoice: KT-2026-0451" link at top of roll detail (only when navigated from invoice)
-- **Roll detail modal — professional redesign**
-  - Modal: new `extraWide` prop (`max-w-4xl`) added to Modal component
-  - KPI: replaced 4 tall cards with compact single-row summary bar (Total, Remaining, Stock %, Value)
-  - Layout: 2-column sectioned cards (Material Info | Supplier & Invoice + Receiving Details + Notes)
-  - Actions: moved to modal footer (always visible) — Edit Roll, Send for Processing, Close
-- **Fix: Lot page — filter rolls by status**
-  - Roll selector now passes `{ has_remaining: true, status: 'in_stock' }` — excludes rolls sent for processing
-  - Added `status` filter support in rolls.js mock API
-- **Files changed:** SuppliersPage.jsx, RollsPage.jsx, LotsPage.jsx, Modal.jsx, rolls.js
-- **Build:** 128 modules, 0 errors
-- **Next:** Continue page overhauls (SKUs → Lots → Batches → Orders → Invoices), then Phase 6C/6D
-
-### Session 13 (2026-02-16) — Stock-In challan-style redesign
-- **Stock-In → Full-page challan entry** (replaces modal, replaces card-per-roll)
-  - Full-screen overlay with sticky top bar (totals + save button always visible)
-  - Invoice Header: Supplier, Challan No., Date (unchanged)
-  - **Design Groups**: repeatable sections — each with Fabric/Design, Rate, Unit, Notes
-    - One challan can have multiple designs (Shakira + Georgette etc.)
-    - Most challans = 1 group (no extra clicks), can add more via "+ Add Another Design"
-  - **Color-wise weight grid** per design group: spreadsheet-style
-    - Color name | weight cells (horizontal flow) | roll count badge
-    - Each weight = 1 roll, auto-totals per row
-  - **Smart keyboard flow**:
-    - Enter/Tab on color → focus first weight
-    - Enter/Tab on filled last weight → add new weight field
-    - Enter on **empty** last weight → **new color row** (auto-focus color input)
-    - Backspace on empty weight → remove it, focus previous
-    - No mouse needed for entire data entry flow
-  - Grand total summary bar: rolls, weight, colors, designs, value
-  - Keyboard hints bar at bottom
-  - Edit invoice: groups existing rolls by fabric→color automatically
-- **RollsPage:** 59.18 kB built (was 55.39 kB)
-- **Build:** 128 modules, 0 errors
-- **Files changed:** RollsPage.jsx
-- **Next Session (14):** Implement real backend services (Option B) — connect frontend to SQLite DB
-  - Priority: RollService (stock_in, get_rolls, update_roll), SupplierService, AuthService
-  - Then: LotService, BatchService, InventoryService, OrderService, InvoiceService
-  - Switch `VITE_USE_MOCK=false` once services are live
-  - Continue page overhauls (SKUs → Lots → Batches) after backend is functional
-
-### Session 14 (2026-02-16) — Invoice view redesign, smart roll codes, filters
-- **Invoice Detail Modal — challan-style grouped view** (replaces flat table)
-  - Compact header row (supplier, challan no, date, received — inline text)
-  - KPI summary pills (rolls, colors, designs, weight, value — matching entry top-bar)
-  - Design groups: grouped by fabric_type, blue header bar with summary
-  - Color-wise weight grid: Color | clickable weight cells per roll | roll count | row total
-  - Status indicators: orange dot (processing), amber dot (partially used)
-  - Legend bar at bottom
-  - All existing functionality preserved (click weight → roll detail, edit invoice, back to invoice)
-- **Roll code pattern overhaul** — `ROLL-XXXX` → `{Challan}-{Fabric3}-{Color5}-{Seq}`
-  - Example: `KT-2026-0451-COT-GREEN-01`, `LF-2026-0089-COT-BLACK-01`
-  - 5-letter color codes to avoid collisions (GREEN vs GREY)
-  - Backend: `next_roll_code()` now accepts challan_no, fabric_type, color params
-  - Frontend: `generateRollCode()` in rolls.js for mock, `stockIn()` uses it
-  - Abbreviation maps: 12 fabrics, 25 colors (both backend + frontend)
-  - All 10 mock references updated (6 rolls + 4 lot rolls)
-- **All Rolls tab — filter toolbar**
-  - Status pills: All / In Stock / Processing / In Cutting
-  - Stock pills: All / Has Stock / Fully Used
-  - Dropdowns: Supplier, Fabric, Process Type (+ "No Processing" option)
-  - Search: code, color, invoice text
-  - Clear filters button with active count
-- **In Processing tab — filter toolbar**
-  - Process Type dropdown (auto-populated from data)
-  - Vendor dropdown (auto-populated from data)
-  - Duration pills: All / ≤7 days / 8–14 days / >14 days overdue
-  - Search: code, color, vendor name
-  - Filtered count display, smart empty states
-- **Files changed:** 5 (code_generator.py, mock.js, rolls.js, RollsPage.jsx, guardian.md)
-- **Build:** 128 modules, 0 errors
-- **Git:** `68ce374` — pushed to main
-- **Next Session (15):** Implement real backend services OR continue page overhauls (SKUs → Lots → Batches)
-
-### Session 15 (2026-02-17) — All backend services implemented + STEP docs updated
-- **Track A: All 13 backend services FULLY IMPLEMENTED** (59→65+ methods, zero stubs remaining)
-  - A1: AuthService (3) — login (JWT + role permissions), refresh, logout
-  - A2: UserService (5) — CRUD + soft-delete, password hashing, duplicate username check
-  - A3: SupplierService (4) — CRUD with all 6 new fields, duplicate name check
-  - A4: RollService (4) — stock_in (challan-based codes), get_rolls (filter/paginate), get_roll (with consumption+processing), get_consumption_history
-  - A5: SKUService (4) — CRUD, auto-generate sku_code, creates initial InventoryState on creation
-  - A6: LotService (6) — create (palla calculations, deducts remaining_weight), update, add/remove rolls, recompute totals
-  - A7: BatchService (8+3) — lifecycle (create from lot, assign, start, submit, check), QR gen, + mobile methods (get_batches_for_tailor, scan_batch_qr, get_pending_checks)
-  - A8: InventoryService (6+1) — event processing (upserts InventoryState), adjust, reconcile, + get_stock_by_code (external API)
-  - A9: OrderService (6+1) — lifecycle (create, ship→auto invoice, cancel, return), + process_external_return
-  - A10: InvoiceService (5) — create from order (18% GST, QR gen), mark_paid, generate_pdf (placeholder)
-  - A11: DashboardService (3) — summary aggregates, tailor performance (batch stats per tailor), inventory movement
-  - A12: QRService (2) — qrcode library with ImportError fallback, batch-specific QR with JSON metadata
-  - A13: ReservationService (5+3) — create/confirm/release/expire_stale, + external API methods (create/confirm/release by code)
-- **Verification — ALL PASSED:**
-  - Fresh migration: 17 tables detected and created
-  - Seeds: 5 roles, 5 users, 2 suppliers, 3 SKUs
-  - Server starts with zero import errors
-  - Background reservation expiry task runs correctly
-  - Login tested: admin1/test1234 → JWT returned ✅
-  - Suppliers, SKUs, Dashboard, Roll stock-in → ALL working ✅
-  - Roll code generation: `TEST-2026-0001-COT-GREEN-01` ✅
-- **Track B: STEP docs updated to v1.1** (reflect Sessions 7-14 changes)
-  - STEP1: Updated §1.5 production flow (LOT step, weight-based), §1.9 Roll→LOT→Batch diagram
-  - STEP2: Complete rewrite — 17 tables, Lot/LotRoll/RollProcessing, weight-based Roll, Supplier+6 fields, updated ER diagram
-  - STEP3: Updated EVENT 1 metadata (length→weight), roll code format
-  - STEP4: Updated all API contracts — Lot endpoints, weight-based Roll, Supplier+6 fields, lot_manage permission, 50 endpoints
-  - STEP5: Updated folder tree (frontend/ not web/, lot files, mock layer, 90+ backend files, 55+ frontend files)
-- **Bugs fixed during implementation:**
-  - Order model has no `shipped_at` → used `updated_at`
-  - Invoice model requires non-nullable `qr_code_data` → added QR generation in create_invoice
-  - ReserveRequest has `items` list, not single sku_code → fixed create_external_reservation to iterate
-  - Mobile/External routes called non-existent service methods → added all missing methods
-- **Files changed:** 13 service files, 5 STEP docs, migration regenerated
-- **Build:** 128 modules, 0 errors
-- **Next:** Continue page overhauls (SKUs → Lots → Batches → Orders → Invoices), then Phase 6C/6D
+### Sessions 15-18: Backend Implementation + Integration
+- **Session 15:** All 13 backend services fully implemented (65+ methods, zero stubs). STEP docs updated to v1.1
+- **Session 16:** Frontend↔Backend gap audit — fixed 7 gaps (PATCH rolls, roll filtering, processing routes, dashboard endpoints, inventory filtering)
+- **Session 17:** Master Data entities (ProductType, Color, Fabric) — 3 models, schemas, service, 12 API endpoints, MastersPage, dynamic dropdowns in forms
+- **Session 18:** Created `API_REFERENCE.md` (single source of truth). Fixed 3 missing dashboard service methods (`get_inventory_summary`, `get_production_report`, `get_financial_report`). Fixed `get_inventory_movement` returning single object instead of array. Fixed `get_summary` missing `lots` key. Added favicon. Fixed MastersPage Modal prop mismatch (`isOpen`→`open`, `footer`→`actions`). Cleaned up all docs. Added Protocol 6 (Component Props) + Activation Protocol to guardian.md.
+- **Session 19:** Fixed `roll_service.py` `_to_response()` — 5 mismatches with API_REFERENCE.md §5 (received_by→received_by_user nested, added processing_logs[], removed manual processing query, send/receive return full roll). Added "Fresh (No Process)" + "Processed & Returned" filter pills to RollsPage.
 
 ---
 
@@ -492,75 +107,60 @@ These 6 documents are the **complete blueprint** for the entire project. Referen
 
 **Current:** SQLite (dev) | **Target:** PostgreSQL / Supabase (production)
 
-When ready to switch, make these changes:
-
-### 1. Change connection URL (1 edit)
+### 1. Change connection URL
 ```env
-# In .env or config.py:
 # FROM: DATABASE_URL=sqlite+aiosqlite:///./inventory_os.db
 # TO:   DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/inventory_os
 ```
 
-### 2. Optional: Upgrade JSON → JSONB for performance (2 files)
-```
-role.py:             JSON → JSONB  (add: from sqlalchemy.dialects.postgresql import JSONB)
-inventory_event.py:  JSON → JSONB  (same import)
-```
-> JSON works fine on PostgreSQL too. JSONB is only needed if you query inside JSON fields.
+### 2. Optional: JSON → JSONB (role.py, inventory_event.py)
 
-### 3. server_default values (already cross-DB compatible, no change needed)
-- `func.now()` → works on both SQLite and PostgreSQL
-- `"1"` for booleans → works on both
-- `"0"` for integers → works on both
-
-### 4. Re-generate migration for PostgreSQL
+### 3. Re-generate migration
 ```bash
-# Delete SQLite DB and old migration
-rm inventory_os.db
-rm migrations/versions/*.py
-# Generate fresh for PostgreSQL
+rm inventory_os.db && rm migrations/versions/*.py
 alembic revision --autogenerate -m "initial_schema"
 alembic upgrade head
 ```
 
-### 5. For Supabase specifically
-- Use Supabase connection string (find in Dashboard → Settings → Database)
-- Format: `postgresql+asyncpg://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
+### 4. Supabase format
+```
+postgresql+asyncpg://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+```
 
 ---
 
 ## Project Structure
 ```
-inventory-os/                      ← PROJECT ROOT
-├── Guardian/                      ← Docs + CLI launcher (this folder)
+inventory-os/
+├── Guardian/                      ← Docs + protocols
 │   ├── CLAUDE.md                  ← This session log
-│   ├── guardian.md                ← Protocols
+│   ├── guardian.md                ← Protocols + rules
+│   ├── API_REFERENCE.md           ← Single source of truth for API shapes
+│   ├── STEP1–STEP6 .md files     ← Design blueprints (v1.1)
 │   ├── guardian_init.bat          ← CLI launcher
-│   ├── STEP1–STEP6 .md files     ← Design blueprints
-├── backend/                       ← FastAPI backend (Phase 6A ✅ + Sessions 7-11 enhancements)
+│   └── project-context.json      ← Auto-generated project snapshot
+├── backend/                       ← FastAPI (Phase 6A + Sessions 7-18)
 │   ├── app/
 │   │   ├── config.py, database.py, main.py, dependencies.py
-│   │   ├── models/    (17 ORM models — Lot, LotRoll, Supplier+6 fields, Roll weight-based+status)
-│   │   ├── schemas/   (15 Pydantic schemas)
-│   │   ├── services/  (13 service classes)
-│   │   ├── api/       (14 routers, 50 endpoints)
+│   │   ├── models/    (20 ORM models incl. ProductType, Color, Fabric)
+│   │   ├── schemas/   (16 Pydantic schemas incl. master.py)
+│   │   ├── services/  (14 service classes incl. master_service.py)
+│   │   ├── api/       (15 routers, 71+ endpoints incl. masters.py)
 │   │   ├── core/      (security, permissions, exceptions, code_gen)
 │   │   └── tasks/     (reservation_expiry, backup_sync)
 │   ├── migrations/, seeds/, Dockerfile
-│   ├── requirements.txt, alembic.ini
-├── frontend/                      ← React app (Phase 6B ✅ + Sessions 7-12 professional overhaul)
+│   └── requirements.txt, alembic.ini
+├── frontend/                      ← React (Phase 6B + Sessions 7-18)
 │   ├── package.json, vite.config.js, tailwind.config.js
-│   ├── postcss.config.js, index.html, .env, .env.example
 │   └── src/
-│       ├── main.jsx, App.jsx, index.css
-│       ├── api/           (14 files — client + mock + 12 modules)
+│       ├── api/           (15 files — client + mock + 13 modules)
 │       ├── context/       (AuthContext.jsx)
 │       ├── hooks/         (useAuth.js, useApi.js)
 │       ├── components/
 │       │   ├── layout/    (Sidebar, Header, Layout)
-│       │   ├── common/    (DataTable, Modal[wide/extraWide], StatusBadge, SearchInput, Pagination, Spinner, Alert)
+│       │   ├── common/    (DataTable, Modal, StatusBadge, SearchInput, Pagination, Spinner, Alert)
 │       │   └── forms/     (UserForm, RollForm, SKUForm, BatchForm, OrderForm)
-│       ├── pages/         (LoginPage + 12 feature pages, professionally overhauled)
+│       ├── pages/         (LoginPage + 14 feature pages incl. MastersPage)
 │       └── routes/        (routes.js, ProtectedRoute.jsx)
-└── mobile/                        ← Android/Kotlin (Phase 6C, future)
+└── mobile/                        ← Phase 6C (future)
 ```

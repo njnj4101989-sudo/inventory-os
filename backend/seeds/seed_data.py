@@ -1,6 +1,6 @@
-"""Seed sample suppliers and SKUs for development/testing.
+"""Seed sample suppliers, SKUs, and master data (Product Types, Colors, Fabrics).
 
-Idempotent — skips records that already exist (matched by name / sku_code).
+Idempotent — skips records that already exist (matched by name / sku_code / code).
 Run via: python -m seeds.seed_all
 """
 
@@ -15,6 +15,9 @@ sys.path.insert(0, ".")
 from app.database import async_session_factory
 from app.models.supplier import Supplier
 from app.models.sku import SKU
+from app.models.product_type import ProductType
+from app.models.color import Color
+from app.models.fabric import Fabric
 
 
 SUPPLIERS = [
@@ -62,10 +65,91 @@ SKUS = [
     },
 ]
 
+PRODUCT_TYPES = [
+    {"code": "BLS", "name": "Blouse", "description": "Traditional and modern blouse designs"},
+    {"code": "KRT", "name": "Kurti", "description": "Kurti and kurta designs"},
+    {"code": "SAR", "name": "Saree", "description": "Saree blouse and saree pieces"},
+    {"code": "DRS", "name": "Dress", "description": "Western and Indo-western dresses"},
+    {"code": "OTH", "name": "Other", "description": "Other garment types"},
+]
+
+COLORS = [
+    {"name": "Green",   "code": "GREEN", "hex_code": "#22c55e"},
+    {"name": "Red",     "code": "RED",   "hex_code": "#ef4444"},
+    {"name": "Blue",    "code": "BLUE",  "hex_code": "#3b82f6"},
+    {"name": "Black",   "code": "BLACK", "hex_code": "#000000"},
+    {"name": "White",   "code": "WHITE", "hex_code": "#ffffff"},
+    {"name": "Yellow",  "code": "YELLW", "hex_code": "#eab308"},
+    {"name": "Pink",    "code": "PINK",  "hex_code": "#ec4899"},
+    {"name": "Orange",  "code": "ORNGE", "hex_code": "#f97316"},
+    {"name": "Purple",  "code": "PURPL", "hex_code": "#a855f7"},
+    {"name": "Brown",   "code": "BROWN", "hex_code": "#92400e"},
+    {"name": "Grey",    "code": "GREY",  "hex_code": "#6b7280"},
+    {"name": "Gray",    "code": "GRAY",  "hex_code": "#9ca3af"},
+    {"name": "Mehandi", "code": "MHNDI", "hex_code": "#65a30d"},
+    {"name": "Maroon",  "code": "MROON", "hex_code": "#881337"},
+    {"name": "Beige",   "code": "BEIGE", "hex_code": "#d4c5a9"},
+    {"name": "Magenta", "code": "MGNTA", "hex_code": "#d946ef"},
+    {"name": "Peach",   "code": "PEACH", "hex_code": "#fdba74"},
+    {"name": "Cream",   "code": "CREAM", "hex_code": "#fef3c7"},
+    {"name": "Navy",    "code": "NAVY",  "hex_code": "#1e3a5f"},
+    {"name": "Teal",    "code": "TEAL",  "hex_code": "#14b8a6"},
+    {"name": "Coral",   "code": "CORAL", "hex_code": "#f87171"},
+    {"name": "Rust",    "code": "RUST",  "hex_code": "#b45309"},
+    {"name": "Ivory",   "code": "IVORY", "hex_code": "#fffff0"},
+    {"name": "Olive",   "code": "OLIVE", "hex_code": "#65a30d"},
+    {"name": "Wine",    "code": "WINE",  "hex_code": "#722f37"},
+]
+
+FABRICS = [
+    {"code": "COT", "name": "Cotton",    "description": "Natural cotton fabric"},
+    {"code": "SLK", "name": "Silk",      "description": "Pure and blended silk"},
+    {"code": "GGT", "name": "Georgette", "description": "Lightweight georgette"},
+    {"code": "SHK", "name": "Shakira",   "description": "Shakira lycra blend"},
+    {"code": "CHF", "name": "Chiffon",   "description": "Sheer chiffon fabric"},
+    {"code": "RYN", "name": "Rayon",     "description": "Soft rayon fabric"},
+    {"code": "PLY", "name": "Polyester", "description": "Durable polyester"},
+    {"code": "LNN", "name": "Linen",     "description": "Natural linen fabric"},
+    {"code": "CRP", "name": "Crepe",     "description": "Textured crepe fabric"},
+    {"code": "STN", "name": "Satin",     "description": "Smooth satin finish"},
+    {"code": "VLT", "name": "Velvet",    "description": "Plush velvet fabric"},
+    {"code": "OGZ", "name": "Organza",   "description": "Sheer organza fabric"},
+]
+
 
 async def seed_data() -> None:
-    """Insert sample suppliers and SKUs."""
+    """Insert sample suppliers, SKUs, and master data."""
     async with async_session_factory() as session:
+        # --- Product Types ---
+        result = await session.execute(select(ProductType))
+        existing_pt = {pt.code for pt in result.scalars().all()}
+        for pt in PRODUCT_TYPES:
+            if pt["code"] in existing_pt:
+                print(f"  ProductType '{pt['code']}' already exists — skipped")
+                continue
+            session.add(ProductType(**pt))
+            print(f"  ProductType '{pt['code']}' ({pt['name']}) created")
+
+        # --- Colors ---
+        result = await session.execute(select(Color))
+        existing_colors = {c.code for c in result.scalars().all()}
+        for c in COLORS:
+            if c["code"] in existing_colors:
+                print(f"  Color '{c['code']}' already exists — skipped")
+                continue
+            session.add(Color(**c))
+            print(f"  Color '{c['name']}' ({c['code']}) created")
+
+        # --- Fabrics ---
+        result = await session.execute(select(Fabric))
+        existing_fabrics = {f.code for f in result.scalars().all()}
+        for f in FABRICS:
+            if f["code"] in existing_fabrics:
+                print(f"  Fabric '{f['code']}' already exists — skipped")
+                continue
+            session.add(Fabric(**f))
+            print(f"  Fabric '{f['name']}' ({f['code']}) created")
+
         # --- Suppliers ---
         result = await session.execute(select(Supplier))
         existing_suppliers = {s.name for s in result.scalars().all()}

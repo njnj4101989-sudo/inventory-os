@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing } from '../api/rolls'
 import { getSuppliers } from '../api/suppliers'
+import { getAllFabrics, getAllColors } from '../api/masters'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import SearchInput from '../components/common/SearchInput'
@@ -212,6 +213,8 @@ export default function RollsPage() {
 
   const [error, setError] = useState(null)
   const [suppliers, setSuppliers] = useState([])
+  const [masterFabrics, setMasterFabrics] = useState([])
+  const [masterColors, setMasterColors] = useState([])
 
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', notes: '', colorRows: [{ color: '', weights: [''] }] }
@@ -270,14 +273,25 @@ export default function RollsPage() {
     try {
       const params = { page: rollPage, page_size: 20 }
       if (rollSearch) params.fabric_type = rollSearch
-      if (rollStatusFilter !== 'all') params.status = rollStatusFilter
+      if (rollStatusFilter === 'in_stock_fresh' || rollStatusFilter === 'in_stock_processed') {
+        params.status = 'in_stock'
+      } else if (rollStatusFilter !== 'all') {
+        params.status = rollStatusFilter
+      }
       if (rollAvailFilter === 'available') params.has_remaining = true
       if (rollAvailFilter === 'consumed') params.fully_consumed = true
       if (rollSupplierFilter) params.supplier_id = rollSupplierFilter
       if (rollFabricFilter) params.fabric_filter = rollFabricFilter
       if (rollProcessFilter) params.process_type = rollProcessFilter
       const res = await getRolls(params)
-      setRolls(res.data.data)
+      let rollData = res.data.data
+      // Client-side sub-filter for fresh vs processed-and-returned
+      if (rollStatusFilter === 'in_stock_fresh') {
+        rollData = rollData.filter((r) => !r.processing_logs || r.processing_logs.length === 0 || r.processing_logs.every((l) => l.status === 'sent'))
+      } else if (rollStatusFilter === 'in_stock_processed') {
+        rollData = rollData.filter((r) => r.processing_logs?.some((l) => l.status === 'received'))
+      }
+      setRolls(rollData)
       setRollTotal(res.data.total)
       setRollPages(res.data.pages)
     } catch (err) {
@@ -305,6 +319,8 @@ export default function RollsPage() {
   useEffect(() => { if (tab === 'processing') fetchProcessing() }, [tab, fetchProcessing])
   useEffect(() => {
     getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch(() => {})
+    getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
+    getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
   }, [])
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
@@ -410,7 +426,9 @@ export default function RollsPage() {
       // Flatten all design groups → individual roll entries
       const flatRolls = []
       for (const grp of designGroups) {
+        const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
         for (const row of grp.colorRows) {
+          const colorMatch = masterColors.find((c) => c.name === row.color)
           for (const w of row.weights) {
             const wt = parseFloat(w)
             if (wt > 0) {
@@ -421,6 +439,8 @@ export default function RollsPage() {
                 unit: grp.unit,
                 cost_per_unit: grp.cost_per_unit || '',
                 weight: '', length: '', notes: grp.notes || '',
+                fabric_code: fabricMatch?.code || null,
+                color_code: colorMatch?.code || null,
               })
             }
           }
@@ -430,7 +450,9 @@ export default function RollsPage() {
       if (editingInvoice) {
         const newRolls = []
         for (const grp of designGroups) {
+          const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
           for (const row of grp.colorRows) {
+            const colorMatch = masterColors.find((c) => c.name === row.color)
             let rIdx = 0
             for (const w of row.weights) {
               const wt = parseFloat(w)
@@ -457,6 +479,8 @@ export default function RollsPage() {
                   unit: grp.unit,
                   cost_per_unit: grp.cost_per_unit || '',
                   weight: '', length: '', notes: grp.notes || '',
+                  fabric_code: fabricMatch?.code || null,
+                  color_code: colorMatch?.code || null,
                 })
               }
               rIdx++
@@ -683,7 +707,9 @@ export default function RollsPage() {
         const STATUS_PILLS = [
           { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
           { key: 'in_stock', label: 'In Stock', active: 'bg-green-100 text-green-700 ring-1 ring-green-300' },
-          { key: 'sent_for_processing', label: 'Processing', active: 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' },
+          { key: 'in_stock_fresh', label: 'Fresh (No Process)', active: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' },
+          { key: 'in_stock_processed', label: 'Processed & Returned', active: 'bg-purple-100 text-purple-700 ring-1 ring-purple-300' },
+          { key: 'sent_for_processing', label: 'In Processing', active: 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' },
           { key: 'in_cutting', label: 'In Cutting', active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' },
         ]
         const AVAIL_PILLS = [
@@ -691,8 +717,8 @@ export default function RollsPage() {
           { key: 'available', label: 'Has Stock', active: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300' },
           { key: 'consumed', label: 'Fully Used', active: 'bg-red-100 text-red-700 ring-1 ring-red-300' },
         ]
-        // Extract unique fabrics from loaded rolls for dropdown
-        const uniqueFabrics = [...new Set(rolls.map((r) => r.fabric_type).filter(Boolean))].sort()
+        // Use master fabrics for filter dropdown
+        const uniqueFabrics = masterFabrics.map((f) => f.name)
         const activeFilterCount = [rollStatusFilter !== 'all', rollAvailFilter !== 'all', !!rollSupplierFilter, !!rollFabricFilter, !!rollProcessFilter].filter(Boolean).length
 
         return (
@@ -1218,8 +1244,10 @@ export default function RollsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
-                          <input type="text" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)}
-                            placeholder="e.g. Shakira, Georgette" className={INPUT_CLS} />
+                          <select value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
+                            <option value="">Select fabric</option>
+                            {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
+                          </select>
                         </div>
                         <div>
                           <label className={LABEL_CLS}>Rate / {grp.unit} (₹)</label>
@@ -1268,49 +1296,25 @@ export default function RollsPage() {
                               <div key={cIdx} className="px-4 py-2.5 grid grid-cols-[180px_1fr_70px] gap-3 items-start group hover:bg-gray-50/50">
                                 {/* Color name */}
                                 <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="text"
+                                  <select
                                     data-color-input="true"
                                     value={row.color}
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
-                                    placeholder={cIdx === 0 ? 'e.g. Mehandi' : 'Color name'}
                                     className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                     onKeyDown={(e) => {
-                                      const hasData = row.weights.some((w) => w !== '')
                                       if (e.key === 'Enter' || e.key === 'Tab') {
-                                        e.preventDefault()
-                                        // Empty color + no weights → new design group
-                                        if (row.color === '' && !hasData) {
-                                          // Remove this empty color row if not the only one
-                                          if (grp.colorRows.length > 1) removeColorRow(gIdx, cIdx)
-                                          addDesignGroup()
-                                          setTimeout(() => {
-                                            const allGroups = document.querySelectorAll('[data-design-group]')
-                                            const lastGroup = allGroups[allGroups.length - 1]?.closest('.rounded-xl')
-                                            const fabricInput = lastGroup?.querySelector('input[type="text"]')
-                                            fabricInput?.focus()
-                                            fabricInput?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                          }, 60)
-                                          return
+                                        if (row.color) {
+                                          e.preventDefault()
+                                          const gridRow = e.target.closest('.group')
+                                          const firstWeight = gridRow?.querySelector('input[data-weight]')
+                                          firstWeight?.focus()
                                         }
-                                        // Has color → focus first weight
-                                        const gridRow = e.target.closest('.group')
-                                        const firstWeight = gridRow?.querySelector('input[data-weight]')
-                                        firstWeight?.focus()
-                                      }
-                                      // Backspace on empty color → delete row, jump back to previous row's last weight
-                                      if (e.key === 'Backspace' && row.color === '' && !hasData && cIdx > 0) {
-                                        e.preventDefault()
-                                        removeColorRow(gIdx, cIdx)
-                                        setTimeout(() => {
-                                          const groupEl = document.querySelector(`[data-design-group="${gIdx}"]`)
-                                          const prevRow = groupEl?.querySelectorAll('.group')?.[cIdx - 1]
-                                          const allW = prevRow?.querySelectorAll('input[data-weight]')
-                                          allW?.[allW.length - 1]?.focus()
-                                        }, 60)
                                       }
                                     }}
-                                  />
+                                  >
+                                    <option value="">{cIdx === 0 ? 'Select color' : 'Color'}</option>
+                                    {masterColors.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                  </select>
                                   {grp.colorRows.length > 1 && (
                                     <button onClick={() => removeColorRow(gIdx, cIdx)} title="Remove color"
                                       className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-gray-300 hover:text-red-500 transition-opacity flex-shrink-0">
@@ -1457,8 +1461,7 @@ export default function RollsPage() {
               {/* Keyboard hints */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 pb-2">
                 <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> Next weight</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty weight = New color</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty color = New design</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty weight = New color row</span>
                 <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Backspace</kbd> on empty = Go back</span>
               </div>
             </div>

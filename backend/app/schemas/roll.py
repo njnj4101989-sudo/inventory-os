@@ -6,9 +6,24 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.supplier import SupplierBrief
 from app.schemas.user import UserBrief
+
+
+# --- Query Params ---
+
+
+class RollFilterParams(PaginatedParams):
+    """GET /rolls query parameters with filtering."""
+
+    status: str | None = None
+    fabric_type: str | None = None  # doubles as search text
+    fabric_filter: str | None = None  # exact fabric type match
+    has_remaining: bool | None = None
+    fully_consumed: bool | None = None
+    supplier_id: UUID | None = None
+    process_type: str | None = None
 
 
 # --- Requests ---
@@ -23,6 +38,23 @@ class RollCreate(BaseModel):
     unit: str = "kg"
     cost_per_unit: Decimal | None = None
     total_length: Decimal | None = None  # Optional reference length
+    supplier_id: UUID | None = None
+    supplier_invoice_no: str | None = None
+    supplier_invoice_date: date | None = None
+    notes: str | None = None
+    fabric_code: str | None = None  # Pre-resolved from master DB for roll code gen
+    color_code: str | None = None   # Pre-resolved from master DB for roll code gen
+
+
+class RollUpdate(BaseModel):
+    """PATCH /rolls/{id} — update an unused roll."""
+
+    fabric_type: str | None = None
+    color: str | None = None
+    total_weight: Decimal | None = None
+    unit: str | None = None
+    cost_per_unit: Decimal | None = None
+    total_length: Decimal | None = None
     supplier_id: UUID | None = None
     supplier_invoice_no: str | None = None
     supplier_invoice_date: date | None = None

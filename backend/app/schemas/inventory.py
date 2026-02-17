@@ -5,9 +5,20 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.sku import SKUBrief
 from app.schemas.user import UserBrief
+
+
+# --- Query Params ---
+
+
+class InventoryFilterParams(PaginatedParams):
+    """GET /inventory query parameters with filtering."""
+
+    sku_code: str | None = None  # search text (sku_code or product_name)
+    product_type: str | None = None  # exact product_type prefix (BLS, KRT, etc.)
+    stock_status: str | None = None  # healthy, low, critical
 
 
 # --- Requests ---

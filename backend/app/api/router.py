@@ -22,6 +22,7 @@ from app.api import (
     dashboard,
     mobile,
     external,
+    masters,
 )
 
 api_router = APIRouter()
@@ -40,3 +41,4 @@ api_router.include_router(invoices.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mobile.router)
 api_router.include_router(external.router)
+api_router.include_router(masters.router)

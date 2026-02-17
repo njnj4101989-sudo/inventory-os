@@ -13,6 +13,7 @@ const InventoryPage    = lazy(() => import('../pages/InventoryPage'))
 const OrdersPage       = lazy(() => import('../pages/OrdersPage'))
 const InvoicesPage     = lazy(() => import('../pages/InvoicesPage'))
 const ReportsPage      = lazy(() => import('../pages/ReportsPage'))
+const MastersPage      = lazy(() => import('../pages/MastersPage'))
 
 /**
  * Route config — each entry maps a path to a component + allowed roles.
@@ -31,6 +32,7 @@ const routes = [
   { path: 'orders',           element: OrdersPage,       requiredRoles: ['admin', 'billing'] },
   { path: 'invoices',         element: InvoicesPage,     requiredRoles: ['admin', 'billing'] },
   { path: 'reports',          element: ReportsPage,      requiredRoles: ['admin', 'supervisor', 'billing'] },
+  { path: 'masters',          element: MastersPage,      requiredRoles: ['admin', 'supervisor'] },
 ]
 
 export default routes

@@ -1,16 +1,18 @@
+import { useState, useEffect } from 'react'
 import ErrorAlert from '../common/ErrorAlert'
+import { getAllProductTypes, getAllColors } from '../../api/masters'
 
 const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 
-const PRODUCT_TYPES = [
-  { value: 'BLS', label: 'Blouse (BLS)' },
-  { value: 'KRT', label: 'Kurti (KRT)' },
-  { value: 'SAR', label: 'Saree (SAR)' },
-  { value: 'DRS', label: 'Dress (DRS)' },
-  { value: 'OTH', label: 'Other (OTH)' },
-]
-
 export default function SKUForm({ form, onChange, editing = false, error = null, onDismissError }) {
+  const [productTypes, setProductTypes] = useState([])
+  const [colorsList, setColorsList] = useState([])
+
+  useEffect(() => {
+    getAllProductTypes().then((res) => setProductTypes(res.data.data)).catch(() => {})
+    getAllColors().then((res) => setColorsList(res.data.data)).catch(() => {})
+  }, [])
+
   const set = (k, v) => onChange({ ...form, [k]: v })
 
   // Live preview of the generated SKU code
@@ -40,8 +42,9 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
           <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
           <select value={form.product_type} onChange={(e) => set('product_type', e.target.value)} className={INPUT}
             disabled={editing}>
-            {PRODUCT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+            <option value="">Select type</option>
+            {productTypes.map((t) => (
+              <option key={t.id} value={t.code}>{t.name} ({t.code})</option>
             ))}
           </select>
         </div>
@@ -54,8 +57,13 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-          <input type="text" value={form.color} onChange={(e) => set('color', e.target.value)}
-            placeholder="e.g. Red" className={INPUT} disabled={editing} />
+          <select value={form.color} onChange={(e) => set('color', e.target.value)} className={INPUT}
+            disabled={editing}>
+            <option value="">Select color</option>
+            {colorsList.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>

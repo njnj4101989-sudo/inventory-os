@@ -516,6 +516,58 @@ export const financialReport = {
   ],
 }
 
+// ── Master Data ──────────────────────────────────────────
+export const productTypes = [
+  { id: crypto.randomUUID(), code: 'BLS', name: 'Blouse', description: 'Traditional and modern blouse designs', is_active: true },
+  { id: crypto.randomUUID(), code: 'KRT', name: 'Kurti', description: 'Kurti and kurta designs', is_active: true },
+  { id: crypto.randomUUID(), code: 'SAR', name: 'Saree', description: 'Saree blouse and saree pieces', is_active: true },
+  { id: crypto.randomUUID(), code: 'DRS', name: 'Dress', description: 'Western and Indo-western dresses', is_active: true },
+  { id: crypto.randomUUID(), code: 'OTH', name: 'Other', description: 'Other garment types', is_active: true },
+]
+
+export const colors = [
+  { id: crypto.randomUUID(), name: 'Green',   code: 'GREEN', hex_code: '#22c55e', is_active: true },
+  { id: crypto.randomUUID(), name: 'Red',     code: 'RED',   hex_code: '#ef4444', is_active: true },
+  { id: crypto.randomUUID(), name: 'Blue',    code: 'BLUE',  hex_code: '#3b82f6', is_active: true },
+  { id: crypto.randomUUID(), name: 'Black',   code: 'BLACK', hex_code: '#000000', is_active: true },
+  { id: crypto.randomUUID(), name: 'White',   code: 'WHITE', hex_code: '#ffffff', is_active: true },
+  { id: crypto.randomUUID(), name: 'Yellow',  code: 'YELLW', hex_code: '#eab308', is_active: true },
+  { id: crypto.randomUUID(), name: 'Pink',    code: 'PINK',  hex_code: '#ec4899', is_active: true },
+  { id: crypto.randomUUID(), name: 'Orange',  code: 'ORNGE', hex_code: '#f97316', is_active: true },
+  { id: crypto.randomUUID(), name: 'Purple',  code: 'PURPL', hex_code: '#a855f7', is_active: true },
+  { id: crypto.randomUUID(), name: 'Brown',   code: 'BROWN', hex_code: '#92400e', is_active: true },
+  { id: crypto.randomUUID(), name: 'Grey',    code: 'GREY',  hex_code: '#6b7280', is_active: true },
+  { id: crypto.randomUUID(), name: 'Gray',    code: 'GRAY',  hex_code: '#9ca3af', is_active: true },
+  { id: crypto.randomUUID(), name: 'Mehandi', code: 'MHNDI', hex_code: '#65a30d', is_active: true },
+  { id: crypto.randomUUID(), name: 'Maroon',  code: 'MROON', hex_code: '#881337', is_active: true },
+  { id: crypto.randomUUID(), name: 'Beige',   code: 'BEIGE', hex_code: '#d4c5a9', is_active: true },
+  { id: crypto.randomUUID(), name: 'Magenta', code: 'MGNTA', hex_code: '#d946ef', is_active: true },
+  { id: crypto.randomUUID(), name: 'Peach',   code: 'PEACH', hex_code: '#fdba74', is_active: true },
+  { id: crypto.randomUUID(), name: 'Cream',   code: 'CREAM', hex_code: '#fef3c7', is_active: true },
+  { id: crypto.randomUUID(), name: 'Navy',    code: 'NAVY',  hex_code: '#1e3a5f', is_active: true },
+  { id: crypto.randomUUID(), name: 'Teal',    code: 'TEAL',  hex_code: '#14b8a6', is_active: true },
+  { id: crypto.randomUUID(), name: 'Coral',   code: 'CORAL', hex_code: '#f87171', is_active: true },
+  { id: crypto.randomUUID(), name: 'Rust',    code: 'RUST',  hex_code: '#b45309', is_active: true },
+  { id: crypto.randomUUID(), name: 'Ivory',   code: 'IVORY', hex_code: '#fffff0', is_active: true },
+  { id: crypto.randomUUID(), name: 'Olive',   code: 'OLIVE', hex_code: '#65a30d', is_active: true },
+  { id: crypto.randomUUID(), name: 'Wine',    code: 'WINE',  hex_code: '#722f37', is_active: true },
+]
+
+export const fabrics = [
+  { id: crypto.randomUUID(), name: 'Cotton',    code: 'COT', description: 'Natural cotton fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Silk',      code: 'SLK', description: 'Pure and blended silk', is_active: true },
+  { id: crypto.randomUUID(), name: 'Georgette', code: 'GGT', description: 'Lightweight georgette', is_active: true },
+  { id: crypto.randomUUID(), name: 'Shakira',   code: 'SHK', description: 'Shakira lycra blend', is_active: true },
+  { id: crypto.randomUUID(), name: 'Chiffon',   code: 'CHF', description: 'Sheer chiffon fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Rayon',     code: 'RYN', description: 'Soft rayon fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Polyester', code: 'PLY', description: 'Durable polyester', is_active: true },
+  { id: crypto.randomUUID(), name: 'Linen',     code: 'LNN', description: 'Natural linen fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Crepe',     code: 'CRP', description: 'Textured crepe fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Satin',     code: 'STN', description: 'Smooth satin finish', is_active: true },
+  { id: crypto.randomUUID(), name: 'Velvet',    code: 'VLT', description: 'Plush velvet fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Organza',   code: 'OGZ', description: 'Sheer organza fabric', is_active: true },
+]
+
 // ── Mock Response Helper ───────────────────────────────
 export function mockResponse(data, message = 'OK') {
   return delay().then(() => ({
