@@ -55,7 +55,7 @@ export default function DataTable({
             {allCols.map((col, ci) => (
               <th
                 key={col.key + ci}
-                className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 ${
+                className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 ${
                   col.sortable !== false ? 'cursor-pointer select-none hover:text-gray-700' : ''
                 } ${col.key === '__expand' ? 'w-10' : ''}`}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
@@ -118,7 +118,7 @@ export default function DataTable({
                       </td>
                     )}
                     {columns.map((col) => (
-                      <td key={col.key} className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                      <td key={col.key} className={`px-3 py-2.5 text-sm text-gray-700 ${col.render ? '' : 'whitespace-nowrap'}`}>
                         {col.render ? col.render(row[col.key], row) : row[col.key] ?? '—'}
                       </td>
                     ))}

@@ -79,31 +79,88 @@ const INVOICE_COLUMNS = [
 
 // ── All rolls tab columns ──
 const ROLL_COLUMNS = [
-  { key: 'roll_code', label: 'Code' },
-  { key: 'fabric_type', label: 'Fabric' },
-  { key: 'color', label: 'Color' },
   {
-    key: 'total_weight',
-    label: 'Qty',
+    key: 'roll_code',
+    label: 'Roll',
     render: (val, row) => {
-      if (row.unit === 'meters') return row.total_length ? `${row.total_length} m` : '—'
-      return `${val} kg`
+      // Split: "390-SHK-WHITE-03" → invoice part + material part
+      const parts = (val || '').split('-')
+      const seq = parts.length > 1 ? parts.pop() : ''
+      const rest = parts.join('-')
+      return (
+        <div className="flex items-baseline gap-1">
+          <span className="text-xs font-semibold text-gray-800">{rest}</span>
+          {seq && <span className="text-xs font-bold text-primary-600">-{seq}</span>}
+        </div>
+      )
     },
   },
   {
-    key: 'remaining_weight',
-    label: 'Remaining',
+    key: 'fabric_type',
+    label: 'Material',
+    render: (val, row) => (
+      <div className="leading-tight">
+        <span className="text-sm font-medium text-gray-800">{val}</span>
+        <span className="text-gray-300 mx-0.5">/</span>
+        <span className="text-sm text-gray-600">{row.color}</span>
+      </div>
+    ),
+  },
+  {
+    key: 'supplier',
+    label: 'Supplier',
+    render: (val, row) => (
+      <div className="max-w-[160px]">
+        <div className="text-sm text-gray-800 truncate">{val?.name || '—'}</div>
+        {row.supplier_invoice_no && (
+          <div className="text-[10px] text-gray-400 mt-0.5 truncate">{row.supplier_invoice_no}</div>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: 'received_at',
+    label: 'Date',
+    render: (val) => val
+      ? <span className="text-xs text-gray-600">{new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+      : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: 'total_weight',
+    label: 'Stock',
     render: (val, row) => {
-      const total = row.unit === 'meters' ? row.total_length : row.total_weight
-      const remaining = row.unit === 'meters' ? (row.remaining_length ?? val) : val
+      const total = row.unit === 'meters' ? (row.total_length || val) : val
+      const remaining = row.unit === 'meters' ? (row.remaining_length ?? row.remaining_weight) : row.remaining_weight
       const pct = total > 0 ? (remaining / total) * 100 : 0
-      const unitLabel = row.unit === 'meters' ? 'm' : 'kg'
+      const u = row.unit === 'meters' ? 'm' : 'kg'
+      const barColor = pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : pct > 0 ? 'bg-red-500' : 'bg-gray-300'
       return (
-        <div className="flex items-center gap-2">
-          <span className="text-sm">{remaining} {unitLabel}</span>
-          <div className="h-1.5 w-16 rounded-full bg-gray-200">
-            <div className={`h-1.5 rounded-full ${pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
+        <div className="w-[100px]">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-semibold text-gray-800">{total}</span>
+            <span className="text-[10px] text-gray-400">{u}</span>
           </div>
+          <div className="mt-0.5 h-1.5 w-full rounded-full bg-gray-100">
+            <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+          </div>
+          <div className={`text-[10px] mt-0.5 ${pct > 50 ? 'text-emerald-600' : pct > 20 ? 'text-amber-600' : pct > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+            {pct > 0 && pct < 100 ? `${remaining} left` : pct === 0 ? 'Fully used' : 'Full stock'}
+          </div>
+        </div>
+      )
+    },
+  },
+  {
+    key: 'cost_per_unit',
+    label: 'Value',
+    render: (val, row) => {
+      if (val == null) return <span className="text-gray-300">—</span>
+      const u = row.unit === 'meters' ? 'm' : 'kg'
+      const totalValue = parseFloat(val) * parseFloat(row.total_weight || 0)
+      return (
+        <div>
+          <div className="text-sm font-semibold text-gray-800">₹{totalValue > 0 ? totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}</div>
+          <div className="text-[10px] text-gray-400">@₹{val}/{u}</div>
         </div>
       )
     },
@@ -111,19 +168,28 @@ const ROLL_COLUMNS = [
   {
     key: 'status',
     label: 'Status',
-    render: (val) => <StatusBadge status={val} label={ROLL_STATUS_LABELS[val] || val} />,
+    render: (val, row) => {
+      const logs = row.processing_logs || []
+      const hasHistory = logs.some((l) => l.status === 'received')
+      const latestSent = logs.find((l) => l.status === 'sent')
+      return (
+        <div>
+          <StatusBadge status={val} label={ROLL_STATUS_LABELS[val] || val} />
+          {val === 'sent_for_processing' && latestSent && (
+            <div className="mt-0.5 text-[10px] text-orange-600 font-medium truncate max-w-[80px]">
+              {PROCESS_TYPES.find((p) => p.value === latestSent.process_type)?.label || latestSent.process_type}
+            </div>
+          )}
+          {val === 'in_stock' && hasHistory && (
+            <div className="mt-0.5 flex items-center gap-0.5">
+              <svg className="h-2.5 w-2.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span className="text-[10px] text-purple-600 font-medium">Processed</span>
+            </div>
+          )}
+        </div>
+      )
+    },
   },
-  {
-    key: 'cost_per_unit',
-    label: 'Cost/Unit',
-    render: (val, row) => val != null ? `₹${val}/${row.unit === 'meters' ? 'm' : 'kg'}` : '—',
-  },
-  {
-    key: 'supplier',
-    label: 'Supplier',
-    render: (val) => val?.name || '—',
-  },
-  { key: 'supplier_invoice_no', label: 'Invoice No.', render: (val) => val || '—' },
 ]
 
 // ── Processing tab columns ──
