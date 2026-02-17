@@ -81,9 +81,33 @@
 | `Guardian/guardian.md` | Updated DataTable props in Protocol 6 |
 
 ### NEXT SESSION START HERE (Session 21)
-1. Align remaining backend response shapes to `API_REFERENCE.md` (endpoint by endpoint)
-2. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
-3. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
+**P0/P1 backend fixes — audit done, code read, relationships confirmed. Just need to write the fixes:**
+
+#### P0 — Flat UUID → Nested Object (Appendix C violations)
+1. **lot_service.py** `_to_response()` line 267: `created_by: "uuid"` → `created_by_user: { id, full_name }`
+   - Relationship exists: `Lot.created_by_user` (confirmed in model)
+   - Add `selectinload(Lot.created_by_user)` to `_get_or_404()` and `get_lots()` queries
+2. **batch_service.py** `_to_response()` line 346: `created_by: "uuid"` → `created_by_user: { id, full_name }`
+   - Relationship exists: `Batch.created_by_user` (confirmed in model)
+   - Add `selectinload(Batch.created_by_user)` to `_get_or_404()` and `get_batches()` queries
+3. **batch_service.py** `_to_response()` line 348: `assignment.tailor_id: "uuid"` → `assignment.tailor: { id, full_name }`
+   - Need: `selectinload(Batch.assignments).selectinload(BatchAssignment.tailor)` in `_get_or_404()` and `get_batches()`
+4. **inventory_service.py** `_event_to_response()` line 299: `performed_by: "uuid"` → `performed_by: { id, full_name }`
+   - Relationship exists: `InventoryEvent.performed_by_user` (confirmed in model)
+   - Add `selectinload(InventoryEvent.performed_by_user)` to `get_events()` query
+
+#### P1 — Missing Fields
+5. **inventory_service.py** `_state_to_response()` line 277-281: `sku` object missing `base_price`
+   - Just add `"base_price": float(s.sku.base_price) if s.sku and s.sku.base_price else None` to the sku dict
+6. **batch_service.py** `_to_response()`: missing `rolls_used: []` field — add `"rolls_used": []`
+
+#### Also done this session (uncommitted)
+- All Rolls table: roll code copy-paste fix already pushed
+- All Rolls table cleanup already pushed
+
+#### After P0/P1 fixes
+1. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
+2. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
 
 ### Key Credentials
 - **Mock login:** admin1/supervisor1/tailor1/checker1/billing1, password: test1234
