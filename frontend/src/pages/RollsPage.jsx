@@ -42,6 +42,11 @@ const INVOICE_COLUMNS = [
     render: (val) => val ? <span className="font-bold text-primary-700 text-sm">{val}</span> : <span className="text-gray-300">—</span>,
   },
   {
+    key: 'invoice_date',
+    label: 'Date',
+    render: (val) => val ? new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+  },
+  {
     key: 'invoice_no',
     label: 'Invoice / Challan',
     render: (val, row) => {
@@ -61,11 +66,6 @@ const INVOICE_COLUMNS = [
     key: 'supplier',
     label: 'Supplier',
     render: (val) => val?.name || '—',
-  },
-  {
-    key: 'invoice_date',
-    label: 'Date',
-    render: (val) => val ? new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
   },
   {
     key: 'roll_count',
