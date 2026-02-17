@@ -88,10 +88,7 @@ const ROLL_COLUMNS = [
       const seq = parts.length > 1 ? parts.pop() : ''
       const rest = parts.join('-')
       return (
-        <div className="flex items-baseline gap-1">
-          <span className="text-xs font-semibold text-gray-800">{rest}</span>
-          {seq && <span className="text-xs font-bold text-primary-600">-{seq}</span>}
-        </div>
+        <span className="text-xs font-semibold text-gray-800">{rest}{seq && <span className="font-bold text-primary-600">-{seq}</span>}</span>
       )
     },
   },
