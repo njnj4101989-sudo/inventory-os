@@ -46,7 +46,8 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
-                selectinload(Batch.assignments),
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                selectinload(Batch.created_by_user),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -312,7 +313,8 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
-                selectinload(Batch.assignments),
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                selectinload(Batch.created_by_user),
             )
         )
         result = await self.db.execute(stmt)
@@ -343,12 +345,18 @@ class BatchService:
             "color_breakdown": b.color_breakdown,
             "status": b.status,
             "qr_code_data": b.qr_code_data,
-            "created_by": str(b.created_by) if b.created_by else None,
+            "created_by_user": {
+                "id": str(b.created_by_user.id),
+                "full_name": b.created_by_user.full_name,
+            } if b.created_by_user else None,
             "assignment": {
-                "tailor_id": str(assignment.tailor_id) if assignment else None,
-                "assigned_at": assignment.assigned_at.isoformat() if assignment and assignment.assigned_at else None,
-                "checker_id": str(assignment.checker_id) if assignment and assignment.checker_id else None,
+                "tailor": {
+                    "id": str(assignment.tailor.id),
+                    "full_name": assignment.tailor.full_name,
+                } if assignment.tailor else None,
+                "assigned_at": assignment.assigned_at.isoformat() if assignment.assigned_at else None,
             } if assignment else None,
+            "rolls_used": [],
             "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
             "started_at": b.started_at.isoformat() if b.started_at else None,
             "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,

@@ -38,7 +38,10 @@ class LotService:
 
         stmt = (
             select(Lot)
-            .options(selectinload(Lot.lot_rolls).selectinload(LotRoll.roll))
+            .options(
+                selectinload(Lot.lot_rolls).selectinload(LotRoll.roll),
+                selectinload(Lot.created_by_user),
+            )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
@@ -80,7 +83,7 @@ class LotService:
             if roll.status != "in_stock":
                 raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not in stock (status: {roll.status})")
 
-            palla_weight = roll_input.palla_weight or req.standard_palla_weight
+            palla_weight = float(roll_input.palla_weight or req.standard_palla_weight or 0)
             if not palla_weight or palla_weight <= 0:
                 raise InvalidStateTransitionError("Palla weight must be positive")
 
@@ -241,7 +244,10 @@ class LotService:
         stmt = (
             select(Lot)
             .where(Lot.id == lot_id)
-            .options(selectinload(Lot.lot_rolls).selectinload(LotRoll.roll))
+            .options(
+                selectinload(Lot.lot_rolls).selectinload(LotRoll.roll),
+                selectinload(Lot.created_by_user),
+            )
         )
         result = await self.db.execute(stmt)
         lot = result.scalar_one_or_none()
@@ -264,7 +270,10 @@ class LotService:
             "total_weight": float(lot.total_weight) if lot.total_weight else 0,
             "status": lot.status,
             "notes": lot.notes,
-            "created_by": str(lot.created_by) if lot.created_by else None,
+            "created_by_user": {
+                "id": str(lot.created_by_user.id),
+                "full_name": lot.created_by_user.full_name,
+            } if lot.created_by_user else None,
             "created_at": lot.created_at.isoformat() if lot.created_at else None,
             "lot_rolls": [
                 {

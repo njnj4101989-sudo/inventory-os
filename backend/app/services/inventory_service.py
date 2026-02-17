@@ -108,6 +108,7 @@ class InventoryService:
         stmt = (
             select(InventoryEvent)
             .where(InventoryEvent.sku_id == sku_id)
+            .options(selectinload(InventoryEvent.performed_by_user))
             .order_by(InventoryEvent.performed_at.desc())
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
@@ -278,6 +279,7 @@ class InventoryService:
                 "id": str(s.sku.id),
                 "sku_code": s.sku.sku_code,
                 "product_name": s.sku.product_name,
+                "base_price": float(s.sku.base_price) if s.sku.base_price else None,
             } if s.sku else None,
             "sku_id": str(s.sku_id),
             "total_qty": s.total_qty,
@@ -296,7 +298,10 @@ class InventoryService:
             "reference_id": str(e.reference_id) if e.reference_id else None,
             "sku_id": str(e.sku_id) if e.sku_id else None,
             "quantity": e.quantity,
-            "performed_by": str(e.performed_by) if e.performed_by else None,
+            "performed_by": {
+                "id": str(e.performed_by_user.id),
+                "full_name": e.performed_by_user.full_name,
+            } if e.performed_by_user else None,
             "performed_at": e.performed_at.isoformat() if e.performed_at else None,
             "metadata": e.metadata,
         }

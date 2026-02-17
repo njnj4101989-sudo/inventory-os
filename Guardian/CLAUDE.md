@@ -34,7 +34,7 @@
 
 ---
 
-## Current State (Session 20 — 2026-02-17)
+## Current State (Session 21 — 2026-02-17)
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 73+ endpoints
@@ -43,67 +43,34 @@
 - **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
 - **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
 
-### What's Built This Session (Session 20)
+### What's Built This Session (Session 21)
 
-#### 1. "Processed & Returned" Enriched Table (Option A — Inline Summary + Expandable Rows)
-- **New `PROCESSED_COLUMNS`** — 8 columns purpose-built for processed rolls:
-  - Roll Code | Fabric/Color (combined) | Weight | Processes (color-coded pills: purple=Embroidery, sky=Digital Print, amber=Dyeing) | Total Cost | Wt. Change (red/green with %) | Days | Last Returned
-- **DataTable enhanced** with expandable rows (`expandedRows`, `onToggleExpand`, `renderExpanded` props)
-  - Chevron column with rotate animation, purple tint on expanded rows
-  - Fully backward-compatible — existing DataTable usage unchanged
-- **Expandable row content** — vertical timeline showing each processing step:
-  - Numbered dots with process-type colors + connector lines
-  - Each step: process pill + vendor + phone + dates + duration + weight before→after + cost + notes
-  - Active (sent) steps: orange "In Progress" badge with pulse animation
-  - Summary footer for multi-process rolls: total processes, days, net wt change, total cost
-- Column swap: `rollStatusFilter === 'in_stock_processed'` → PROCESSED_COLUMNS with expand; all other filters → original ROLL_COLUMNS
+#### P0/P1 Backend Fixes — Appendix C Alignment (6 fixes)
+All backend response shapes now match `API_REFERENCE.md` Appendix C.
 
-#### 2. Edit Processing Log (Full Stack)
-- **Problem:** No way to edit a processing log after creation — cost/vendor/notes often come later (challan reality)
-- **Backend:** `UpdateProcessingLog` schema (all 9 fields optional) + `update_processing_log()` service method + `PATCH /rolls/{id}/processing/{pid}/edit` endpoint
-- **Frontend API:** `updateProcessingLog()` with mock + real API support
-- **Frontend UI:** Edit button on both:
-  - Expandable timeline row in "Processed & Returned" table
-  - Roll detail modal's Processing History cards
-- **Edit modal:** Pre-filled with current values (process type, vendor, dates, weight, cost, notes), only sends changed fields (efficient PATCH)
-- **Live refresh fix:** After edit, `detailRoll` state updates in-place from response — no need to close/reopen the modal
+**P0 — Flat UUID → Nested Object (4 fixes):**
+1. `lot_service.py` — `created_by: "uuid"` → `created_by_user: { id, full_name }` + `selectinload(Lot.created_by_user)` on both `get_lots()` and `_get_or_404()`
+2. `batch_service.py` — `created_by: "uuid"` → `created_by_user: { id, full_name }` + `selectinload(Batch.created_by_user)` on both `get_batches()` and `_get_or_404()`
+3. `batch_service.py` — `assignment.tailor_id: "uuid"` → `assignment.tailor: { id, full_name }` + `selectinload(Batch.assignments).selectinload(BatchAssignment.tailor)`
+4. `inventory_service.py` — `performed_by: "uuid"` → `performed_by: { id, full_name }` + `selectinload(InventoryEvent.performed_by_user)` on `get_events()`
+
+**P1 — Missing Fields (2 fixes):**
+5. `inventory_service.py` — Added `base_price` to `sku` object in `_state_to_response()`
+6. `batch_service.py` — Added `rolls_used: []` field to `_to_response()`
 
 #### Files Changed
 | File | Change |
 |------|--------|
-| `frontend/src/components/common/DataTable.jsx` | Added Fragment import, expandedRows/onToggleExpand/renderExpanded props, chevron column, expanded sub-row rendering |
-| `frontend/src/pages/RollsPage.jsx` | PROCESSED_COLUMNS, PROCESS_COLORS, getProcessSummary helper, expandedRows state, toggleExpand, renderExpandedProcessRow, editProcLog state+handlers+modal, edit buttons on timeline+detail |
-| `frontend/src/api/rolls.js` | Added `updateProcessingLog()` function |
-| `backend/app/schemas/roll.py` | Added `UpdateProcessingLog` schema |
-| `backend/app/services/roll_service.py` | Added `update_processing_log()` method |
-| `backend/app/api/rolls.py` | Added `PATCH /{roll_id}/processing/{processing_id}/edit` endpoint |
-| `Guardian/API_REFERENCE.md` | Documented new edit-processing endpoint |
-| `Guardian/guardian.md` | Updated DataTable props in Protocol 6 |
+| `backend/app/services/lot_service.py` | `created_by` → `created_by_user` nested, added selectinload |
+| `backend/app/services/batch_service.py` | `created_by` → `created_by_user` nested, `tailor_id` → `tailor` nested, added `rolls_used`, added selectinloads |
+| `backend/app/services/inventory_service.py` | `performed_by` → nested object, added `sku.base_price`, added selectinload |
 
-### NEXT SESSION START HERE (Session 21)
-**P0/P1 backend fixes — audit done, code read, relationships confirmed. Just need to write the fixes:**
-
-#### P0 — Flat UUID → Nested Object (Appendix C violations)
-1. **lot_service.py** `_to_response()` line 267: `created_by: "uuid"` → `created_by_user: { id, full_name }`
-   - Relationship exists: `Lot.created_by_user` (confirmed in model)
-   - Add `selectinload(Lot.created_by_user)` to `_get_or_404()` and `get_lots()` queries
-2. **batch_service.py** `_to_response()` line 346: `created_by: "uuid"` → `created_by_user: { id, full_name }`
-   - Relationship exists: `Batch.created_by_user` (confirmed in model)
-   - Add `selectinload(Batch.created_by_user)` to `_get_or_404()` and `get_batches()` queries
-3. **batch_service.py** `_to_response()` line 348: `assignment.tailor_id: "uuid"` → `assignment.tailor: { id, full_name }`
-   - Need: `selectinload(Batch.assignments).selectinload(BatchAssignment.tailor)` in `_get_or_404()` and `get_batches()`
-4. **inventory_service.py** `_event_to_response()` line 299: `performed_by: "uuid"` → `performed_by: { id, full_name }`
-   - Relationship exists: `InventoryEvent.performed_by_user` (confirmed in model)
-   - Add `selectinload(InventoryEvent.performed_by_user)` to `get_events()` query
-
-#### P1 — Missing Fields
-5. **inventory_service.py** `_state_to_response()` line 277-281: `sku` object missing `base_price`
-   - Just add `"base_price": float(s.sku.base_price) if s.sku and s.sku.base_price else None` to the sku dict
-6. **batch_service.py** `_to_response()`: missing `rolls_used: []` field — add `"rolls_used": []`
-
-#### Also done this session (uncommitted)
-- All Rolls table: roll code copy-paste fix already pushed
-- All Rolls table cleanup already pushed
+### NEXT — Page Overhauls
+1. **SKUs page** — align to API_REFERENCE.md §6
+2. **Lots page** — align to API_REFERENCE.md §7
+3. **Batches page** — align to API_REFERENCE.md §8
+4. **Orders page** — align to API_REFERENCE.md §10
+5. **Invoices page** — align to API_REFERENCE.md §11
 
 #### After P0/P1 fixes
 1. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices

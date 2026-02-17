@@ -171,16 +171,18 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-17 16:55:57_
+_Last sync: 2026-02-17 17:41:22_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5140 lines total).",
+  "summary": "Project has 13 tracked code files (~5205 lines total).",
   "recent_files": [
-    "guardian.md (192 lines)",
+    "CLAUDE.md (213 lines)",
+    "API_REFERENCE.md (904 lines)",
+    "guardian.md (194 lines)",
     "project-context.json (17 lines)",
-    "CLAUDE.md (167 lines)",
-    "API_REFERENCE.md (887 lines)",
     ".claude\\settings.local.json (43 lines)"
   ],
   "language_breakdown": {
@@ -188,7 +190,7 @@ _Last sync: 2026-02-17 16:55:57_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5140,
-  "last_updated": "2026-02-17 16:55:57"
+  "total_lines": 5205,
+  "last_updated": "2026-02-17 17:41:22"
 }
 ```
