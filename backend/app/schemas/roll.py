@@ -135,6 +135,20 @@ class ReceiveFromProcessing(BaseModel):
     notes: str | None = None
 
 
+class UpdateProcessingLog(BaseModel):
+    """PATCH /rolls/{id}/processing/{pid}/edit — update any field on a processing log."""
+
+    process_type: str | None = None
+    vendor_name: str | None = None
+    vendor_phone: str | None = None
+    sent_date: date | None = None
+    received_date: date | None = None
+    weight_after: Decimal | None = None
+    length_after: Decimal | None = None
+    processing_cost: Decimal | None = None
+    notes: str | None = None
+
+
 class ProcessingResponse(BaseSchema):
     id: UUID
     roll_id: UUID

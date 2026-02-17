@@ -34,35 +34,56 @@
 
 ---
 
-## Current State (Session 19 — 2026-02-17)
+## Current State (Session 20 — 2026-02-17)
 
 ### What's Done
-- **Phase 6A (Backend):** COMPLETE — 20 models, 16 schemas, 14 services (zero stubs), 15 routers, 71+ endpoints
-- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 130 modules, 0 build errors
-- **API_REFERENCE.md:** Created — authoritative contract for all 13 API modules, extracted from mock.js
+- **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 73+ endpoints
+- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 130+ modules, 0 build errors
+- **API_REFERENCE.md:** Authoritative contract for all 13 API modules + new edit-processing endpoint
 - **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
 - **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
 
-### What's Fixed This Session (Session 19)
-- **CRITICAL FIX:** `roll_service.py` `_to_response()` now matches API_REFERENCE.md §5 exactly:
-  - `received_by` (flat UUID) → `received_by_user: { id, full_name }` (nested object)
-  - Added `processing_logs[]` array to every roll response (was missing entirely)
-  - `get_roll()`: removed duplicate manual processing query, uses relationship via `selectinload`
-  - `get_roll()`: key renamed from `processing_history` → `processing_logs` (via `_to_response`)
-  - All roll queries now load 3 relationships: `supplier`, `received_by_user`, `processing_logs`
-  - `send_for_processing()` + `receive_from_processing()` now return full roll object (not just processing log)
-- "Receive Back" button should now work end-to-end
-- **NEW FILTER:** Rolls page → All Rolls tab now has 6 status pills:
-  - `All | In Stock | Fresh (No Process) | Processed & Returned | In Processing | In Cutting`
-  - "Fresh" = never sent for processing; "Processed & Returned" = came back from embroidery/dyeing/etc.
-  - Client-side filtering on `processing_logs[]` array (backend sends `status=in_stock`, frontend sub-filters)
+### What's Built This Session (Session 20)
 
-### NEXT SESSION START HERE (Session 20)
-**Tested & confirmed:** Send for Processing + Receive Back + new filter pills all working.
-1. **"Processed & Returned" table columns:** Currently shows same columns as regular rolls — need to add process info (which process, vendor, dates, cost) in a professional way. Discuss UX approach first.
-2. Align remaining backend response shapes to `API_REFERENCE.md` (endpoint by endpoint)
-3. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
-4. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
+#### 1. "Processed & Returned" Enriched Table (Option A — Inline Summary + Expandable Rows)
+- **New `PROCESSED_COLUMNS`** — 8 columns purpose-built for processed rolls:
+  - Roll Code | Fabric/Color (combined) | Weight | Processes (color-coded pills: purple=Embroidery, sky=Digital Print, amber=Dyeing) | Total Cost | Wt. Change (red/green with %) | Days | Last Returned
+- **DataTable enhanced** with expandable rows (`expandedRows`, `onToggleExpand`, `renderExpanded` props)
+  - Chevron column with rotate animation, purple tint on expanded rows
+  - Fully backward-compatible — existing DataTable usage unchanged
+- **Expandable row content** — vertical timeline showing each processing step:
+  - Numbered dots with process-type colors + connector lines
+  - Each step: process pill + vendor + phone + dates + duration + weight before→after + cost + notes
+  - Active (sent) steps: orange "In Progress" badge with pulse animation
+  - Summary footer for multi-process rolls: total processes, days, net wt change, total cost
+- Column swap: `rollStatusFilter === 'in_stock_processed'` → PROCESSED_COLUMNS with expand; all other filters → original ROLL_COLUMNS
+
+#### 2. Edit Processing Log (Full Stack)
+- **Problem:** No way to edit a processing log after creation — cost/vendor/notes often come later (challan reality)
+- **Backend:** `UpdateProcessingLog` schema (all 9 fields optional) + `update_processing_log()` service method + `PATCH /rolls/{id}/processing/{pid}/edit` endpoint
+- **Frontend API:** `updateProcessingLog()` with mock + real API support
+- **Frontend UI:** Edit button on both:
+  - Expandable timeline row in "Processed & Returned" table
+  - Roll detail modal's Processing History cards
+- **Edit modal:** Pre-filled with current values (process type, vendor, dates, weight, cost, notes), only sends changed fields (efficient PATCH)
+- **Live refresh fix:** After edit, `detailRoll` state updates in-place from response — no need to close/reopen the modal
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `frontend/src/components/common/DataTable.jsx` | Added Fragment import, expandedRows/onToggleExpand/renderExpanded props, chevron column, expanded sub-row rendering |
+| `frontend/src/pages/RollsPage.jsx` | PROCESSED_COLUMNS, PROCESS_COLORS, getProcessSummary helper, expandedRows state, toggleExpand, renderExpandedProcessRow, editProcLog state+handlers+modal, edit buttons on timeline+detail |
+| `frontend/src/api/rolls.js` | Added `updateProcessingLog()` function |
+| `backend/app/schemas/roll.py` | Added `UpdateProcessingLog` schema |
+| `backend/app/services/roll_service.py` | Added `update_processing_log()` method |
+| `backend/app/api/rolls.py` | Added `PATCH /{roll_id}/processing/{processing_id}/edit` endpoint |
+| `Guardian/API_REFERENCE.md` | Documented new edit-processing endpoint |
+| `Guardian/guardian.md` | Updated DataTable props in Protocol 6 |
+
+### NEXT SESSION START HERE (Session 21)
+1. Align remaining backend response shapes to `API_REFERENCE.md` (endpoint by endpoint)
+2. Page overhauls remaining: SKUs, Lots, Batches, Orders, Invoices
+3. Phase 6C (Mobile App) / Phase 6D (Infra/Docker)
 
 ### Key Credentials
 - **Mock login:** admin1/supervisor1/tailor1/checker1/billing1, password: test1234
@@ -101,6 +122,7 @@
 - **Session 17:** Master Data entities (ProductType, Color, Fabric) — 3 models, schemas, service, 12 API endpoints, MastersPage, dynamic dropdowns in forms
 - **Session 18:** Created `API_REFERENCE.md` (single source of truth). Fixed 3 missing dashboard service methods (`get_inventory_summary`, `get_production_report`, `get_financial_report`). Fixed `get_inventory_movement` returning single object instead of array. Fixed `get_summary` missing `lots` key. Added favicon. Fixed MastersPage Modal prop mismatch (`isOpen`→`open`, `footer`→`actions`). Cleaned up all docs. Added Protocol 6 (Component Props) + Activation Protocol to guardian.md.
 - **Session 19:** Fixed `roll_service.py` `_to_response()` — 5 mismatches with API_REFERENCE.md §5 (received_by→received_by_user nested, added processing_logs[], removed manual processing query, send/receive return full roll). Added "Fresh (No Process)" + "Processed & Returned" filter pills to RollsPage.
+- **Session 20:** "Processed & Returned" enriched table — 8 purpose-built columns with color-coded process pills, expandable timeline rows (DataTable enhanced with expand support). Edit Processing Log — full-stack feature (schema+service+endpoint+frontend modal) allowing post-hoc edits to cost/vendor/notes/dates. Live detail refresh after edit.
 
 ---
 
@@ -140,7 +162,7 @@ inventory-os/
 │   ├── STEP1–STEP6 .md files     ← Design blueprints (v1.1)
 │   ├── guardian_init.bat          ← CLI launcher
 │   └── project-context.json      ← Auto-generated project snapshot
-├── backend/                       ← FastAPI (Phase 6A + Sessions 7-18)
+├── backend/                       ← FastAPI (Phase 6A + Sessions 7-20)
 │   ├── app/
 │   │   ├── config.py, database.py, main.py, dependencies.py
 │   │   ├── models/    (20 ORM models incl. ProductType, Color, Fabric)
@@ -151,7 +173,7 @@ inventory-os/
 │   │   └── tasks/     (reservation_expiry, backup_sync)
 │   ├── migrations/, seeds/, Dockerfile
 │   └── requirements.txt, alembic.ini
-├── frontend/                      ← React (Phase 6B + Sessions 7-18)
+├── frontend/                      ← React (Phase 6B + Sessions 7-20)
 │   ├── package.json, vite.config.js, tailwind.config.js
 │   └── src/
 │       ├── api/           (15 files — client + mock + 13 modules)

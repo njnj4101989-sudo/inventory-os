@@ -13,7 +13,7 @@ from app.models.inventory_event import InventoryEvent
 from app.models.batch_roll_consumption import BatchRollConsumption
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams, RollResponse, RollDetail,
-    SendForProcessing, ReceiveFromProcessing,
+    SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
 )
 from app.core.code_generator import next_roll_code
 from app.core.exceptions import NotFoundError, BusinessRuleViolationError
@@ -282,6 +282,44 @@ class RollService:
         await self.db.flush()
 
         # Reload with all relationships for full roll response
+        reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.supplier),
+            selectinload(Roll.received_by_user),
+            selectinload(Roll.processing_logs),
+        )
+        roll = (await self.db.execute(reload)).scalar_one()
+        return self._to_response(roll)
+
+    async def update_processing_log(
+        self, roll_id: UUID, processing_id: UUID, req: UpdateProcessingLog
+    ) -> dict:
+        """Update editable fields on a processing log (cost, vendor, dates, notes, etc.)."""
+        stmt = select(Roll).where(Roll.id == roll_id)
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+
+        log_stmt = select(RollProcessing).where(
+            RollProcessing.id == processing_id,
+            RollProcessing.roll_id == roll_id,
+        )
+        log_result = await self.db.execute(log_stmt)
+        log = log_result.scalar_one_or_none()
+        if not log:
+            raise NotFoundError(f"Processing log {processing_id} not found")
+
+        updates = req.model_dump(exclude_unset=True)
+        for field, value in updates.items():
+            if field == "notes" and value is not None:
+                # Replace notes entirely (not append)
+                setattr(log, field, value)
+            else:
+                setattr(log, field, value)
+
+        await self.db.flush()
+
+        # Reload full roll with relationships
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
 import { getSuppliers } from '../api/suppliers'
 import { getAllFabrics, getAllColors } from '../api/masters'
 import DataTable from '../components/common/DataTable'
@@ -179,6 +179,130 @@ const PROCESSING_COLUMNS = [
   },
 ]
 
+// ── Helper: compute process summary from processing_logs ──
+const getProcessSummary = (logs) => {
+  if (!logs || logs.length === 0) return null
+  const received = logs.filter((l) => l.status === 'received')
+  const totalCost = received.reduce((sum, l) => sum + (l.processing_cost || 0), 0)
+  const totalDays = received.reduce((sum, l) => {
+    if (!l.sent_date || !l.received_date) return sum
+    return sum + Math.max(1, Math.floor((new Date(l.received_date) - new Date(l.sent_date)) / (1000 * 60 * 60 * 24)))
+  }, 0)
+  const firstBefore = logs[0]?.weight_before ?? null
+  const lastAfter = received.length > 0 ? received[received.length - 1]?.weight_after : null
+  const weightChange = firstBefore != null && lastAfter != null ? lastAfter - firstBefore : null
+  const weightChangePct = firstBefore && weightChange != null ? (weightChange / firstBefore) * 100 : null
+  const lastDate = received.length > 0 ? received[received.length - 1]?.received_date : null
+  return { received, totalCost, totalDays, weightChange, weightChangePct, lastDate, processCount: logs.length }
+}
+
+const PROCESS_COLORS = {
+  embroidery: { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-500' },
+  digital_print: { bg: 'bg-sky-100', text: 'text-sky-700', dot: 'bg-sky-500' },
+  dyeing: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
+  other: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' },
+}
+
+// ── Processed & Returned tab columns ──
+const PROCESSED_COLUMNS = [
+  {
+    key: 'roll_code',
+    label: 'Roll Code',
+    render: (val) => <span className="font-medium text-gray-800 font-mono text-xs">{val}</span>,
+  },
+  {
+    key: 'fabric_type',
+    label: 'Fabric / Color',
+    render: (val, row) => (
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm">{val}</span>
+        <span className="text-gray-300">/</span>
+        <span className="text-sm font-medium">{row.color}</span>
+      </div>
+    ),
+  },
+  {
+    key: 'total_weight',
+    label: 'Weight',
+    render: (val) => <span className="text-sm">{val} kg</span>,
+  },
+  {
+    key: 'processing_logs',
+    label: 'Processes',
+    sortable: false,
+    render: (logs) => {
+      if (!logs || logs.length === 0) return '—'
+      const seen = new Set()
+      return (
+        <div className="flex flex-wrap gap-1">
+          {logs.map((l, i) => {
+            if (seen.has(l.process_type)) return null
+            seen.add(l.process_type)
+            const c = PROCESS_COLORS[l.process_type] || PROCESS_COLORS.other
+            const pt = PROCESS_TYPES.find((p) => p.value === l.process_type)
+            return (
+              <span key={i} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${c.bg} ${c.text}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+                {pt?.label || l.process_type}
+              </span>
+            )
+          })}
+          {logs.length > 1 && (
+            <span className="text-xs text-gray-400 ml-0.5">x{logs.length}</span>
+          )}
+        </div>
+      )
+    },
+  },
+  {
+    key: 'processing_logs',
+    label: 'Total Cost',
+    render: (logs) => {
+      const s = getProcessSummary(logs)
+      if (!s || s.totalCost === 0) return <span className="text-gray-400">—</span>
+      return <span className="text-sm font-semibold text-gray-800">₹{s.totalCost.toLocaleString('en-IN')}</span>
+    },
+  },
+  {
+    key: 'processing_logs',
+    label: 'Wt. Change',
+    render: (logs) => {
+      const s = getProcessSummary(logs)
+      if (!s || s.weightChange == null) return <span className="text-gray-400">—</span>
+      const isLoss = s.weightChange < 0
+      const isGain = s.weightChange > 0
+      return (
+        <span className={`text-sm font-medium ${isLoss ? 'text-red-600' : isGain ? 'text-green-600' : 'text-gray-500'}`}>
+          {isGain ? '+' : ''}{s.weightChange.toFixed(2)} kg
+          <span className="text-xs ml-0.5 opacity-70">({isGain ? '+' : ''}{s.weightChangePct.toFixed(1)}%)</span>
+        </span>
+      )
+    },
+  },
+  {
+    key: 'processing_logs',
+    label: 'Days',
+    render: (logs) => {
+      const s = getProcessSummary(logs)
+      if (!s || s.totalDays === 0) return <span className="text-gray-400">—</span>
+      return (
+        <span className={`text-sm font-medium ${s.totalDays > 14 ? 'text-red-600' : s.totalDays > 7 ? 'text-amber-600' : 'text-gray-700'}`}>
+          {s.totalDays}d
+        </span>
+      )
+    },
+  },
+  {
+    key: 'processing_logs',
+    label: 'Last Returned',
+    render: (logs) => {
+      const s = getProcessSummary(logs)
+      if (!s?.lastDate) return <span className="text-gray-400">—</span>
+      return <span className="text-sm">{new Date(s.lastDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+    },
+  },
+]
+
 export default function RollsPage() {
   const [tab, setTab] = useState('invoices')
 
@@ -202,6 +326,7 @@ export default function RollsPage() {
   const [rollSupplierFilter, setRollSupplierFilter] = useState('')
   const [rollFabricFilter, setRollFabricFilter] = useState('')
   const [rollProcessFilter, setRollProcessFilter] = useState('')
+  const [expandedRows, setExpandedRows] = useState(new Set())
 
   // Processing tab state
   const [procRolls, setProcRolls] = useState([])
@@ -248,6 +373,14 @@ export default function RollsPage() {
   const [recvProcForm, setRecvProcForm] = useState({ received_date: '', weight_after: '', length_after: '', processing_cost: '', notes: '' })
   const [recvProcSaving, setRecvProcSaving] = useState(false)
   const [recvProcError, setRecvProcError] = useState(null)
+
+  // Edit Processing Log modal
+  const [editProcOpen, setEditProcOpen] = useState(false)
+  const [editProcRollId, setEditProcRollId] = useState(null)
+  const [editProcLog, setEditProcLog] = useState(null)
+  const [editProcForm, setEditProcForm] = useState({})
+  const [editProcSaving, setEditProcSaving] = useState(false)
+  const [editProcError, setEditProcError] = useState(null)
 
   const isEditable = detailRoll && detailRoll.remaining_weight === detailRoll.total_weight && detailRoll.status === 'in_stock'
 
@@ -521,6 +654,190 @@ export default function RollsPage() {
   // Track which invoice the roll was opened from (for "Back to Invoice" navigation)
   const [cameFromInvoice, setCameFromInvoice] = useState(null)
 
+  // ── Expand/collapse for processed rolls table ──
+  const toggleExpand = (rowId) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(rowId)) next.delete(rowId)
+      else next.add(rowId)
+      return next
+    })
+  }
+
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+  const renderExpandedProcessRow = (roll) => {
+    const logs = roll.processing_logs || []
+    const received = logs.filter((l) => l.status === 'received')
+    const totalCost = received.reduce((sum, l) => sum + (l.processing_cost || 0), 0)
+    const totalDays = received.reduce((sum, l) => {
+      if (!l.sent_date || !l.received_date) return sum
+      return sum + Math.max(1, Math.floor((new Date(l.received_date) - new Date(l.sent_date)) / (1000 * 60 * 60 * 24)))
+    }, 0)
+    const firstBefore = logs[0]?.weight_before ?? null
+    const lastAfter = received.length > 0 ? received[received.length - 1]?.weight_after : null
+    const netChange = firstBefore != null && lastAfter != null ? lastAfter - firstBefore : null
+
+    return (
+      <div className="px-6 py-4 border-t border-purple-100">
+        {/* Timeline */}
+        <div className="relative">
+          {logs.map((log, idx) => {
+            const pt = PROCESS_TYPES.find((p) => p.value === log.process_type)
+            const c = PROCESS_COLORS[log.process_type] || PROCESS_COLORS.other
+            const isReceived = log.status === 'received'
+            const days = log.sent_date && log.received_date
+              ? Math.max(1, Math.floor((new Date(log.received_date) - new Date(log.sent_date)) / (1000 * 60 * 60 * 24)))
+              : null
+            const wChange = isReceived && log.weight_before != null && log.weight_after != null
+              ? log.weight_after - log.weight_before : null
+
+            return (
+              <div key={log.id || idx} className="relative flex gap-4 pb-4 last:pb-0">
+                {/* Vertical connector line */}
+                {idx < logs.length - 1 && (
+                  <div className="absolute left-[11px] top-7 bottom-0 w-0.5 bg-gray-200" />
+                )}
+                {/* Dot */}
+                <div className="relative flex-shrink-0 mt-1">
+                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${isReceived ? c.dot : 'bg-orange-400'}`}>
+                    {idx + 1}
+                  </div>
+                </div>
+                {/* Content card */}
+                <div className={`flex-1 rounded-lg border p-3 ${isReceived ? 'border-gray-200 bg-white' : 'border-orange-200 bg-orange-50'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${c.bg} ${c.text}`}>
+                        {pt?.label || log.process_type}
+                      </span>
+                      <span className="text-sm text-gray-600 font-medium">{log.vendor_name}</span>
+                      {log.vendor_phone && <span className="text-xs text-gray-400">{log.vendor_phone}</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isReceived ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          Completed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 animate-pulse">
+                          In Progress
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEditProcLog(roll.id, log) }}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                        title="Edit this processing step"
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-1 text-xs">
+                    <div><span className="text-gray-400">Sent:</span> <span className="font-medium">{formatDate(log.sent_date)}</span></div>
+                    <div><span className="text-gray-400">Received:</span> <span className="font-medium">{isReceived ? formatDate(log.received_date) : '—'}</span></div>
+                    {days != null && <div><span className="text-gray-400">Duration:</span> <span className="font-medium">{days}d</span></div>}
+                    {isReceived && log.weight_before != null && (
+                      <div><span className="text-gray-400">Wt:</span> <span className="font-medium">{log.weight_before} → {log.weight_after} kg</span></div>
+                    )}
+                    {wChange != null && (
+                      <div>
+                        <span className="text-gray-400">Change:</span>{' '}
+                        <span className={`font-semibold ${wChange < 0 ? 'text-red-600' : wChange > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                          {wChange > 0 ? '+' : ''}{wChange.toFixed(2)} kg
+                        </span>
+                      </div>
+                    )}
+                    {isReceived && log.processing_cost != null && (
+                      <div><span className="text-gray-400">Cost:</span> <span className="font-semibold text-gray-800">₹{log.processing_cost.toLocaleString('en-IN')}</span></div>
+                    )}
+                  </div>
+                  {log.notes && <p className="mt-1.5 text-xs text-gray-500 italic">{log.notes}</p>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Summary footer (only if 2+ processes completed) */}
+        {received.length > 1 && (
+          <div className="mt-3 flex items-center gap-6 rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5 text-xs">
+            <span className="font-semibold text-gray-600 uppercase tracking-wider">Total</span>
+            <div><span className="text-gray-400">Processes:</span> <span className="font-bold text-gray-800">{logs.length}</span></div>
+            <div><span className="text-gray-400">Days:</span> <span className="font-bold text-gray-800">{totalDays}d</span></div>
+            {netChange != null && (
+              <div>
+                <span className="text-gray-400">Net Wt Change:</span>{' '}
+                <span className={`font-bold ${netChange < 0 ? 'text-red-600' : netChange > 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                  {netChange > 0 ? '+' : ''}{netChange.toFixed(2)} kg
+                </span>
+              </div>
+            )}
+            <div><span className="text-gray-400">Total Cost:</span> <span className="font-bold text-gray-800">₹{totalCost.toLocaleString('en-IN')}</span></div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Edit Processing Log ──
+  const openEditProcLog = (rollId, log) => {
+    setEditProcRollId(rollId)
+    setEditProcLog(log)
+    setEditProcForm({
+      process_type: log.process_type || '',
+      vendor_name: log.vendor_name || '',
+      vendor_phone: log.vendor_phone || '',
+      sent_date: log.sent_date || '',
+      received_date: log.received_date || '',
+      weight_after: log.weight_after ?? '',
+      length_after: log.length_after ?? '',
+      processing_cost: log.processing_cost ?? '',
+      notes: log.notes || '',
+    })
+    setEditProcError(null)
+    setEditProcOpen(true)
+  }
+
+  const saveEditProcLog = async () => {
+    if (!editProcRollId || !editProcLog) return
+    setEditProcSaving(true)
+    setEditProcError(null)
+    try {
+      // Only send changed fields
+      const payload = {}
+      if (editProcForm.process_type && editProcForm.process_type !== editProcLog.process_type) payload.process_type = editProcForm.process_type
+      if (editProcForm.vendor_name && editProcForm.vendor_name !== editProcLog.vendor_name) payload.vendor_name = editProcForm.vendor_name
+      if (editProcForm.vendor_phone !== (editProcLog.vendor_phone || '')) payload.vendor_phone = editProcForm.vendor_phone || null
+      if (editProcForm.sent_date && editProcForm.sent_date !== editProcLog.sent_date) payload.sent_date = editProcForm.sent_date
+      if (editProcForm.received_date && editProcForm.received_date !== (editProcLog.received_date || '')) payload.received_date = editProcForm.received_date
+      if (editProcForm.weight_after !== '' && editProcForm.weight_after != editProcLog.weight_after) payload.weight_after = parseFloat(editProcForm.weight_after)
+      if (editProcForm.length_after !== '' && editProcForm.length_after != editProcLog.length_after) payload.length_after = parseFloat(editProcForm.length_after)
+      if (editProcForm.processing_cost !== '' && editProcForm.processing_cost != editProcLog.processing_cost) payload.processing_cost = parseFloat(editProcForm.processing_cost)
+      if (editProcForm.notes !== (editProcLog.notes || '')) payload.notes = editProcForm.notes
+
+      if (Object.keys(payload).length === 0) {
+        setEditProcOpen(false)
+        return
+      }
+
+      const res = await updateProcessingLog(editProcRollId, editProcLog.id, payload)
+      setEditProcOpen(false)
+      // Update detailRoll in-place if the detail modal is showing this roll
+      const updatedRoll = res?.data?.data || res?.data
+      if (updatedRoll && detailRoll && detailRoll.id === editProcRollId) {
+        setDetailRoll(updatedRoll)
+      }
+      refreshAll()
+    } catch (err) {
+      setEditProcError(err.response?.data?.detail || 'Failed to update processing log')
+    } finally {
+      setEditProcSaving(false)
+    }
+  }
+
   // ── Roll Detail / Edit ──
   const openRollDetail = (roll) => {
     setCameFromInvoice(null)
@@ -783,7 +1100,20 @@ export default function RollsPage() {
 
             {/* ── Table ── */}
             <div className="mt-4">
-              <DataTable columns={ROLL_COLUMNS} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
+              {rollStatusFilter === 'in_stock_processed' ? (
+                <DataTable
+                  columns={PROCESSED_COLUMNS}
+                  data={rolls}
+                  loading={rollLoading}
+                  onRowClick={openRollDetail}
+                  emptyText="No processed rolls found."
+                  expandedRows={expandedRows}
+                  onToggleExpand={toggleExpand}
+                  renderExpanded={renderExpandedProcessRow}
+                />
+              ) : (
+                <DataTable columns={ROLL_COLUMNS} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
+              )}
               <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
             </div>
           </div>
@@ -1675,11 +2005,21 @@ export default function RollsPage() {
                                   <span className="font-medium text-sm text-gray-800">{pt?.label || log.process_type}</span>
                                   <StatusBadge status={log.status} />
                                 </div>
-                                {isActive && (
-                                  <span className="text-xs text-orange-600 font-medium">
-                                    {Math.floor((Date.now() - new Date(log.sent_date).getTime()) / (1000 * 60 * 60 * 24))} days out
-                                  </span>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  {isActive && (
+                                    <span className="text-xs text-orange-600 font-medium">
+                                      {Math.floor((Date.now() - new Date(log.sent_date).getTime()) / (1000 * 60 * 60 * 24))} days out
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => openEditProcLog(detailRoll.id, log)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                                    title="Edit this processing step"
+                                  >
+                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                    Edit
+                                  </button>
+                                </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                                 <div><span className="text-gray-500">Vendor:</span> <span className="text-gray-800">{log.vendor_name}</span></div>
@@ -1850,6 +2190,89 @@ export default function RollsPage() {
             <label className={LABEL_CLS}>Notes</label>
             <textarea value={recvProcForm.notes} onChange={(e) => setRecvProcForm((f) => ({ ...f, notes: e.target.value }))}
               rows={2} placeholder="Quality observations, shrinkage notes, etc." className={INPUT_CLS} />
+          </div>
+        </div>
+      </Modal>
+
+      {/* ═══════ Edit Processing Log Modal ═══════ */}
+      <Modal open={editProcOpen} onClose={() => setEditProcOpen(false)}
+        title={editProcLog ? `Edit Processing: ${PROCESS_TYPES.find((p) => p.value === editProcLog.process_type)?.label || editProcLog.process_type}` : 'Edit Processing Log'}
+        actions={
+          <>
+            <button onClick={() => setEditProcOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={saveEditProcLog} disabled={editProcSaving}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              {editProcSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </>
+        }
+      >
+        {editProcError && <div className="mb-4"><ErrorAlert message={editProcError} onDismiss={() => setEditProcError(null)} /></div>}
+
+        <div className="space-y-4">
+          {/* Row 1: Process Type + Vendor */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_CLS}>Process Type</label>
+              <select value={editProcForm.process_type} onChange={(e) => setEditProcForm((f) => ({ ...f, process_type: e.target.value }))} className={INPUT_CLS}>
+                {PROCESS_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Vendor Name</label>
+              <input type="text" value={editProcForm.vendor_name} onChange={(e) => setEditProcForm((f) => ({ ...f, vendor_name: e.target.value }))} className={INPUT_CLS} />
+            </div>
+          </div>
+
+          {/* Row 2: Vendor Phone + Sent Date */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_CLS}>Vendor Phone</label>
+              <input type="text" value={editProcForm.vendor_phone} onChange={(e) => setEditProcForm((f) => ({ ...f, vendor_phone: e.target.value }))} placeholder="Optional" className={INPUT_CLS} />
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Sent Date</label>
+              <input type="date" value={editProcForm.sent_date} onChange={(e) => setEditProcForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
+            </div>
+          </div>
+
+          {/* Row 3: Received Date + Weight After (only if log is received or being filled now) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_CLS}>Received Date</label>
+              <input type="date" value={editProcForm.received_date} onChange={(e) => setEditProcForm((f) => ({ ...f, received_date: e.target.value }))} className={INPUT_CLS} />
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Weight After (kg)</label>
+              <input type="number" step="0.001" value={editProcForm.weight_after} onChange={(e) => setEditProcForm((f) => ({ ...f, weight_after: e.target.value }))}
+                placeholder={editProcLog?.weight_before ? `Was ${editProcLog.weight_before} kg before` : ''} className={INPUT_CLS} />
+            </div>
+          </div>
+
+          {/* Row 4: Processing Cost + Length After */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_CLS}>Processing Cost (₹)</label>
+              <input type="number" step="0.01" value={editProcForm.processing_cost} onChange={(e) => setEditProcForm((f) => ({ ...f, processing_cost: e.target.value }))}
+                placeholder="Total cost for this step" className={INPUT_CLS} />
+              {editProcForm.processing_cost && editProcForm.weight_after && (
+                <p className="mt-1 text-xs text-gray-500">
+                  = ₹{(parseFloat(editProcForm.processing_cost) / parseFloat(editProcForm.weight_after)).toFixed(2)}/kg
+                </p>
+              )}
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Length After (m, optional)</label>
+              <input type="number" step="0.01" value={editProcForm.length_after} onChange={(e) => setEditProcForm((f) => ({ ...f, length_after: e.target.value }))}
+                placeholder="If applicable" className={INPUT_CLS} />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className={LABEL_CLS}>Notes</label>
+            <textarea value={editProcForm.notes} onChange={(e) => setEditProcForm((f) => ({ ...f, notes: e.target.value }))}
+              rows={2} placeholder="Update notes for this processing step" className={INPUT_CLS} />
           </div>
         </div>
       </Modal>

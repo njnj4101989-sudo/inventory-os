@@ -128,7 +128,7 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | Component | Props | NOT this |
 |-----------|-------|----------|
 | `Modal` | `open`, `onClose`, `title`, `children`, `actions`, `wide`, `extraWide` | ~~isOpen~~, ~~footer~~ |
-| `DataTable` | `columns`, `data`, `loading`, `onRowClick`, `emptyText` | |
+| `DataTable` | `columns`, `data`, `loading`, `onRowClick`, `emptyText`, `expandedRows`, `onToggleExpand`, `renderExpanded` | |
 | `SearchInput` | `value`, `onChange`, `placeholder` | |
 | `Pagination` | `page`, `pages`, `total`, `onChange` | |
 | `StatusBadge` | `status`, `label` | |
@@ -165,24 +165,30 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | Favicon | Inline SVG emoji in `index.html` (no file needed) |
 
 
+
+
+
+
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-17 15:13:23_
+_Last sync: 2026-02-17 16:55:57_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5114 lines total).",
+  "summary": "Project has 13 tracked code files (~5140 lines total).",
   "recent_files": [
-    "CLAUDE.md (168 lines)",
-    "guardian.md (165 lines)",
+    "guardian.md (192 lines)",
+    "project-context.json (17 lines)",
+    "CLAUDE.md (167 lines)",
     "API_REFERENCE.md (887 lines)",
-    ".claude\\settings.local.json (43 lines)",
-    "project-context.json (17 lines)"
+    ".claude\\settings.local.json (43 lines)"
   ],
   "language_breakdown": {
     ".md": 10,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5114,
-  "last_updated": "2026-02-17 15:13:23"
+  "total_lines": 5140,
+  "last_updated": "2026-02-17 16:55:57"
 }
 ```

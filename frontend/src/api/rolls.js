@@ -251,6 +251,21 @@ export async function sendForProcessing(rollId, data) {
   return client.post(`/rolls/${rollId}/processing`, data)
 }
 
+export async function updateProcessingLog(rollId, processingId, data) {
+  if (USE_MOCK) {
+    const roll = rolls.find((r) => r.id === rollId)
+    if (!roll) throw { response: { data: { detail: 'Roll not found' } } }
+    const log = (roll.processing_logs || []).find((p) => p.id === processingId)
+    if (!log) throw { response: { data: { detail: 'Processing log not found' } } }
+    // Apply partial updates
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined && v !== null) log[k] = typeof v === 'string' && !isNaN(v) && k !== 'notes' && k !== 'vendor_name' && k !== 'vendor_phone' && k !== 'process_type' ? parseFloat(v) : v
+    }
+    return mockResponse(roll, 'Processing log updated')
+  }
+  return client.patch(`/rolls/${rollId}/processing/${processingId}/edit`, data)
+}
+
 export async function receiveFromProcessing(rollId, processingId, data) {
   if (USE_MOCK) {
     const roll = rolls.find((r) => r.id === rollId)

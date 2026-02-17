@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas.roll import RollCreate, RollUpdate, RollFilterParams, SendForProcessing, ReceiveFromProcessing
+from app.schemas.roll import RollCreate, RollUpdate, RollFilterParams, SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog
 from app.services.roll_service import RollService
 
 router = APIRouter(prefix="/rolls", tags=["Rolls"])
@@ -86,4 +86,18 @@ async def receive_from_processing(
     """Mark a processing log as received with updated measurements."""
     svc = RollService(db)
     result = await svc.receive_from_processing(roll_id, processing_id, req)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{roll_id}/processing/{processing_id}/edit", response_model=None)
+async def update_processing_log(
+    roll_id: UUID,
+    processing_id: UUID,
+    req: UpdateProcessingLog,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Edit a processing log — update cost, vendor, dates, notes, etc."""
+    svc = RollService(db)
+    result = await svc.update_processing_log(roll_id, processing_id, req)
     return {"success": True, "data": result}

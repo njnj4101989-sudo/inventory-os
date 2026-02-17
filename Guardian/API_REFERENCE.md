@@ -285,6 +285,23 @@ Same as `GET /rolls` with status filter pre-applied.
 ```
 **Response:** Updated roll object (status → `in_stock`)
 
+### PATCH `/rolls/{id}/processing/{processingId}/edit` (Edit Processing Log)
+**Request:** All fields optional — only send changed fields:
+```json
+{
+  "process_type": "dyeing",
+  "vendor_name": "Updated Vendor",
+  "vendor_phone": "9898000000",
+  "sent_date": "2026-02-09",
+  "received_date": "2026-02-15",
+  "weight_after": 22.500,
+  "length_after": null,
+  "processing_cost": 1500.0,
+  "notes": "Updated notes"
+}
+```
+**Response:** Updated roll object (full roll with all processing_logs)
+
 ### Invoice Grouping (Frontend-Only)
 `getInvoices()` fetches all rolls and groups by `supplier_invoice_no`:
 ```json
