@@ -23,7 +23,9 @@ class Roll(Base):
     total_length: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(String(30), default="in_stock", server_default="'in_stock'")
     supplier_invoice_no: Mapped[str | None] = mapped_column(String(50))
+    supplier_challan_no: Mapped[str | None] = mapped_column(String(50))
     supplier_invoice_date: Mapped[datetime | None] = mapped_column(Date)
+    sr_no: Mapped[str | None] = mapped_column(String(20))
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"))
     received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     received_at: Mapped[datetime] = mapped_column(

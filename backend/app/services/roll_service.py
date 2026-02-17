@@ -110,7 +110,7 @@ class RollService:
     async def stock_in(self, req: RollCreate, received_by: UUID) -> dict:
         roll_code = await next_roll_code(
             self.db,
-            challan_no=req.supplier_invoice_no or "STOCK",
+            challan_no=req.sr_no or "STOCK",
             fabric_type=req.fabric_type,
             color=req.color,
             fabric_code=req.fabric_code,
@@ -128,7 +128,9 @@ class RollService:
             total_length=req.total_length,
             supplier_id=req.supplier_id,
             supplier_invoice_no=req.supplier_invoice_no,
+            supplier_challan_no=req.supplier_challan_no,
             supplier_invoice_date=req.supplier_invoice_date,
+            sr_no=req.sr_no,
             received_by=received_by,
             received_at=datetime.now(timezone.utc),
             status="in_stock",
@@ -363,7 +365,9 @@ class RollService:
                 "name": r.supplier.name,
             } if r.supplier else None,
             "supplier_invoice_no": r.supplier_invoice_no,
+            "supplier_challan_no": r.supplier_challan_no,
             "supplier_invoice_date": r.supplier_invoice_date.isoformat() if r.supplier_invoice_date else None,
+            "sr_no": r.sr_no,
             "received_by_user": {
                 "id": str(r.received_by_user.id),
                 "full_name": r.received_by_user.full_name,

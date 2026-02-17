@@ -407,7 +407,7 @@ export default function RollsPage() {
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', notes: '', colorRows: [{ color: '', weights: [''] }] }
   const [stockInOpen, setStockInOpen] = useState(false)
-  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '' })
+  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '' })
   const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -527,7 +527,11 @@ export default function RollsPage() {
   // ── Stock In — Challan-style with design groups ──
   const openStockIn = () => {
     setEditingInvoice(null)
-    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_invoice_date: '' })
+    // Auto-generate next Sr. No. (our internal filing serial)
+    const existingSrNos = invoices.map((inv) => parseInt(inv.sr_no, 10)).filter((n) => !isNaN(n))
+    const nextSr = existingSrNos.length > 0 ? Math.max(...existingSrNos) + 1 : 1
+    const today = new Date().toISOString().split('T')[0]
+    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: today, sr_no: String(nextSr) })
     setDesignGroups([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
     setFormError(null)
     setStockInOpen(true)
@@ -543,7 +547,9 @@ export default function RollsPage() {
     setInvoiceHeader({
       supplier_id: selectedInvoice.supplier?.id || '',
       supplier_invoice_no: selectedInvoice.invoice_no || '',
+      supplier_challan_no: selectedInvoice.challan_no || '',
       supplier_invoice_date: selectedInvoice.invoice_date || '',
+      sr_no: selectedInvoice.sr_no || '',
     })
     // Group rolls by fabric_type → design groups, then by color within each
     const fabricMap = {}
@@ -664,7 +670,9 @@ export default function RollsPage() {
                   total_length: grp.unit === 'meters' ? wt : null,
                   supplier_id: invoiceHeader.supplier_id || null,
                   supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
+                  supplier_challan_no: invoiceHeader.supplier_challan_no || null,
                   supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
+                  sr_no: invoiceHeader.sr_no || null,
                   notes: grp.notes || null,
                 })
               } else {
@@ -696,6 +704,27 @@ export default function RollsPage() {
       setSaving(false)
     }
   }
+
+  // ── Ctrl+S to save stock-in form ──
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && stockInOpen && !saving) {
+        e.preventDefault()
+        handleStockIn()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [stockInOpen, saving, designGroups, invoiceHeader, editingInvoice])
+
+  // ── Auto-focus supplier field when stock-in overlay opens ──
+  useEffect(() => {
+    if (stockInOpen) {
+      setTimeout(() => {
+        document.querySelector('[data-supplier-input]')?.focus()
+      }, 100)
+    }
+  }, [stockInOpen])
 
   // ── Invoice Detail ──
   const openInvoiceDetail = (inv) => setSelectedInvoice(inv)
@@ -1579,23 +1608,36 @@ export default function RollsPage() {
               {/* ── Invoice Header ── */}
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-700 mb-4">Invoice / Challan Details</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="col-span-2 md:col-span-1">
                     <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
-                    <select value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
+                    <select data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
                       <option value="">Select supplier</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Invoice / Challan No.</label>
+                    <label className={LABEL_CLS}>Invoice No.</label>
                     <input type="text" value={invoiceHeader.supplier_invoice_no} onChange={(e) => setHeader('supplier_invoice_no', e.target.value)}
-                      placeholder="e.g. 390" className={INPUT_CLS} />
+                      placeholder="Supplier inv." className={INPUT_CLS} />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Challan No.</label>
+                    <input type="text" value={invoiceHeader.supplier_challan_no} onChange={(e) => setHeader('supplier_challan_no', e.target.value)}
+                      placeholder="Supplier challan" className={INPUT_CLS} />
                   </div>
                   <div>
                     <label className={LABEL_CLS}>Date</label>
                     <input type="date" value={invoiceHeader.supplier_invoice_date} onChange={(e) => setHeader('supplier_invoice_date', e.target.value)}
                       className={INPUT_CLS} />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Sr. No.</label>
+                    <div className="relative">
+                      <input type="text" value={invoiceHeader.sr_no} onChange={(e) => setHeader('sr_no', e.target.value)}
+                        className={`${INPUT_CLS} font-bold text-primary-700 bg-primary-50`} />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Filing</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1637,7 +1679,7 @@ export default function RollsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
-                          <select value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
+                          <select data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
                             <option value="">Select fabric</option>
                             {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
                           </select>
@@ -1695,13 +1737,39 @@ export default function RollsPage() {
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
                                     className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                     onKeyDown={(e) => {
-                                      if (e.key === 'Enter' || e.key === 'Tab') {
+                                      const hasData = row.weights.some((w) => w !== '')
+                                      if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                        e.preventDefault()
+                                        // Empty color + no weights → new design group
+                                        if (row.color === '' && !hasData) {
+                                          if (grp.colorRows.length > 1) removeColorRow(gIdx, cIdx)
+                                          addDesignGroup()
+                                          setTimeout(() => {
+                                            const allGroups = document.querySelectorAll('[data-design-group]')
+                                            const lastGroup = allGroups[allGroups.length - 1]?.closest('.rounded-xl')
+                                            const fabricInput = lastGroup?.querySelector('[data-fabric-input]')
+                                            fabricInput?.focus()
+                                            fabricInput?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                          }, 60)
+                                          return
+                                        }
+                                        // Has color → focus first weight
                                         if (row.color) {
-                                          e.preventDefault()
                                           const gridRow = e.target.closest('.group')
                                           const firstWeight = gridRow?.querySelector('input[data-weight]')
                                           firstWeight?.focus()
                                         }
+                                      }
+                                      // Backspace or Shift+Tab on empty color → delete row, jump back to previous row's last weight
+                                      if ((e.key === 'Backspace' || (e.key === 'Tab' && e.shiftKey)) && row.color === '' && !hasData && cIdx > 0) {
+                                        e.preventDefault()
+                                        removeColorRow(gIdx, cIdx)
+                                        setTimeout(() => {
+                                          const groupEl = document.querySelector(`[data-design-group="${gIdx}"]`)
+                                          const prevRow = groupEl?.querySelectorAll('.group')?.[cIdx - 1]
+                                          const allW = prevRow?.querySelectorAll('input[data-weight]')
+                                          allW?.[allW.length - 1]?.focus()
+                                        }, 60)
                                       }
                                     }}
                                   >
@@ -1740,7 +1808,7 @@ export default function RollsPage() {
                                               addColorRow(gIdx)
                                               setTimeout(() => {
                                                 const groupEl = document.querySelector(`[data-design-group="${gIdx}"]`)
-                                                const allColorInputs = groupEl?.querySelectorAll('input[data-color-input]')
+                                                const allColorInputs = groupEl?.querySelectorAll('[data-color-input]')
                                                 allColorInputs?.[allColorInputs.length - 1]?.focus()
                                               }, 60)
                                               return

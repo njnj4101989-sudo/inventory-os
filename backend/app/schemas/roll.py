@@ -40,7 +40,9 @@ class RollCreate(BaseModel):
     total_length: Decimal | None = None  # Optional reference length
     supplier_id: UUID | None = None
     supplier_invoice_no: str | None = None
+    supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
+    sr_no: str | None = None
     notes: str | None = None
     fabric_code: str | None = None  # Pre-resolved from master DB for roll code gen
     color_code: str | None = None   # Pre-resolved from master DB for roll code gen
@@ -57,7 +59,9 @@ class RollUpdate(BaseModel):
     total_length: Decimal | None = None
     supplier_id: UUID | None = None
     supplier_invoice_no: str | None = None
+    supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
+    sr_no: str | None = None
     notes: str | None = None
 
 
@@ -103,7 +107,9 @@ class RollResponse(BaseSchema):
     status: str = "in_stock"
     supplier: SupplierBrief | None = None
     supplier_invoice_no: str | None = None
+    supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
+    sr_no: str | None = None
     received_by_user: UserBrief | None = None
     received_at: datetime
     notes: str | None = None

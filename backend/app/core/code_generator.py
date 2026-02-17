@@ -68,12 +68,13 @@ async def next_roll_code(
     fabric_code: str | None = None,
     color_code: str | None = None,
 ) -> str:
-    """Generate roll code: {Challan}-{Fabric}-{Color}-{Seq}.
+    """Generate roll code: {SrNo}-{Fabric}-{Color}-{Seq}.
 
-    If fabric_code / color_code are provided (from master DB), use them directly.
-    Otherwise fall back to the hardcoded abbreviation dicts.
+    challan_no param receives the filing Sr. No. (internal serial written on
+    the physical invoice copy).  If fabric_code / color_code are provided
+    (from master DB), use them directly; otherwise fall back to abbreviation dicts.
 
-    Example: 390-COT-GREEN-01, NOINV-SHK-RED-03
+    Example: 1-COT-GREEN-01, STOCK-SHK-RED-03
     """
     challan = (challan_no or "").strip() or "NOINV"
     fabric_short = fabric_code.strip().upper() if fabric_code else _shorten_fabric(fabric_type or "")

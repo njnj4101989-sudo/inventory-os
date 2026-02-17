@@ -168,7 +168,7 @@ Paginated endpoints return:
 ```json
 {
   "id": "uuid",
-  "roll_code": "KT-2026-0451-COT-GREEN-01",
+  "roll_code": "1-COT-GREEN-01",
   "fabric_type": "Cotton",
   "color": "Green",
   "total_weight": 18.800,
@@ -182,7 +182,9 @@ Paginated endpoints return:
     "name": "Krishna Textiles"
   },
   "supplier_invoice_no": "KT-2026-0451",
+  "supplier_challan_no": "CH-451",
   "supplier_invoice_date": "2026-02-06",
+  "sr_no": "1",
   "received_by_user": {
     "id": "uuid",
     "full_name": "Ravi Kumar"
@@ -220,7 +222,9 @@ Paginated endpoints return:
   "cost_per_unit": 120.0,
   "supplier_id": "uuid",
   "supplier_invoice_no": "KT-2026-0451",
+  "supplier_challan_no": "CH-451",
   "supplier_invoice_date": "2026-02-06",
+  "sr_no": "1",
   "notes": null,
   "fabric_code": "COT",
   "color_code": "GREEN"
@@ -239,7 +243,9 @@ Frontend calls `stockIn()` per roll entry. Each entry:
   "cost_per_unit": 120.0,
   "supplier_id": "uuid",
   "supplier_invoice_no": "KT-2026-0451",
+  "supplier_challan_no": "CH-451",
   "supplier_invoice_date": "2026-02-06",
+  "sr_no": "1",
   "notes": null,
   "weight": 18.800,
   "length": null,
@@ -253,7 +259,7 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 **Response:** Single roll object (same shape as list item, with `processing_logs[]`)
 
 ### PATCH `/rolls/{id}`
-**Request:** `{ fabric_type?, color?, total_weight?, cost_per_unit?, supplier_id?, supplier_invoice_no?, supplier_invoice_date?, notes? }`
+**Request:** `{ fabric_type?, color?, total_weight?, cost_per_unit?, supplier_id?, supplier_invoice_no?, supplier_challan_no?, supplier_invoice_date?, sr_no?, notes? }`
 **Response:** Updated roll object
 
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
@@ -307,6 +313,8 @@ Same as `GET /rolls` with status filter pre-applied.
 ```json
 {
   "invoice_no": "KT-2026-0451",
+  "challan_no": "CH-451",
+  "sr_no": "1",
   "supplier": "Krishna Textiles",
   "date": "2026-02-06",
   "rolls": [ ...roll objects ],
@@ -380,7 +388,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
     {
       "id": "uuid",
       "roll_id": "uuid",
-      "roll_code": "KT-2026-0451-COT-GREEN-01",
+      "roll_code": "1-COT-GREEN-01",
       "color": "Green",
       "roll_weight": 18.800,
       "palla_weight": 2.860,

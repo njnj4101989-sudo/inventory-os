@@ -66,7 +66,7 @@ export async function getRolls(params = {}) {
 
 export async function stockIn(data) {
   if (USE_MOCK) {
-    const nextCode = generateRollCode(data.supplier_invoice_no, data.fabric_type, data.color, data.fabric_code, data.color_code)
+    const nextCode = generateRollCode(data.sr_no, data.fabric_type, data.color, data.fabric_code, data.color_code)
     const sup = suppliers.find((s) => s.id === data.supplier_id)
     const newRoll = {
       id: crypto.randomUUID(),
@@ -102,7 +102,9 @@ export async function stockInBulk(header, rollEntries) {
       total_length: entry.unit === 'meters' ? parseFloat(entry.quantity) : (entry.length ? parseFloat(entry.length) : null),
       supplier_id: header.supplier_id || null,
       supplier_invoice_no: header.supplier_invoice_no || null,
+      supplier_challan_no: header.supplier_challan_no || null,
       supplier_invoice_date: header.supplier_invoice_date || null,
+      sr_no: header.sr_no || null,
       notes: entry.notes || null,
       fabric_code: entry.fabric_code || null,
       color_code: entry.color_code || null,
@@ -125,7 +127,9 @@ export async function getInvoices(params = {}) {
       if (!grouped[key]) {
         grouped[key] = {
           invoice_no: r.supplier_invoice_no || null,
+          challan_no: r.supplier_challan_no || null,
           invoice_date: r.supplier_invoice_date || null,
+          sr_no: r.sr_no || null,
           supplier: r.supplier,
           rolls: [],
           roll_count: 0,

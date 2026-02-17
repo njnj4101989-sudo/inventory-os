@@ -34,7 +34,7 @@
 
 ---
 
-## Current State (Session 21 — 2026-02-17)
+## Current State (Session 22 — 2026-02-18)
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 73+ endpoints
@@ -43,7 +43,37 @@
 - **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
 - **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
 
-### What's Built This Session (Session 21)
+### What's Built This Session (Session 22)
+
+#### Challan Form Keyboard Fixes & Enhancements
+1. **Keyboard shortcuts restored** — Enter/Tab/Backspace stopped working after color `<input>` was changed to `<select>` dropdown
+   - Restored full onKeyDown on color `<select>`: Enter/Tab empty → new design group, Backspace/Shift+Tab empty → delete row & jump back
+   - Fixed `input[data-color-input]` selector → `[data-color-input]` (works for `<select>`)
+2. **Focus fix: new design group** — Enter on empty color was focusing Notes instead of Fabric dropdown. Added `data-fabric-input` attr, fixed selector
+3. **Ctrl+S save shortcut** — Global keydown listener saves stock-in form from anywhere when overlay is open
+4. **Auto-focus supplier** — Opening +Stock In auto-focuses the Supplier dropdown (no mouse needed)
+5. **Auto-fill date** — Today's date auto-filled on new stock-in (editable)
+6. **Sr. No. field (NEW)** — Auto-incrementing internal filing serial number. Written on physical supplier invoice copy for easy filing
+7. **Challan No. field (NEW)** — Supplier's challan number (separate from invoice number)
+8. **Full-stack: `supplier_challan_no` + `sr_no`** — Model column, schema, service, migration, mock.js, API_REFERENCE.md all updated
+9. **Roll code pattern changed** — `{InvoiceNo}-Fabric-Color-Seq` → `{SrNo}-Fabric-Color-Seq` (e.g. `1-COT-GREEN-01`). Sr. No. in roll code = easy physical filing lookup
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `frontend/src/pages/RollsPage.jsx` | Keyboard fixes, Ctrl+S, auto-focus, Sr. No. + Challan No. fields |
+| `frontend/src/api/rolls.js` | `stockInBulk` sends `supplier_challan_no` + `sr_no`, invoice grouping includes them |
+| `frontend/src/api/mock.js` | Added `supplier_challan_no` + `sr_no` to all mock rolls, roll codes use sr_no prefix |
+| `backend/app/models/roll.py` | Added `supplier_challan_no`, `sr_no` columns |
+| `backend/app/core/code_generator.py` | Roll code now uses `sr_no` instead of `supplier_invoice_no` |
+| `backend/app/schemas/roll.py` | Added to RollCreate, RollUpdate, RollResponse |
+| `backend/app/services/roll_service.py` | Added to `stock_in()` and `_to_response()` |
+| `backend/migrations/versions/6f0c...` | New migration: add columns |
+| `Guardian/API_REFERENCE.md` | Updated §5 Rolls — all shapes include new fields |
+
+---
+
+### What Was Built in Session 21
 
 #### P0/P1 Backend Fixes — Appendix C Alignment (6 fixes)
 All backend response shapes now match `API_REFERENCE.md` Appendix C.
