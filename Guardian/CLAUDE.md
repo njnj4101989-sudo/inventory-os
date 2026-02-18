@@ -59,6 +59,12 @@
 - Dropdown: `Pink (07)` — name first for keyboard search
 - MastersPage: Color No. column + form field
 - Both mock + backend code generators updated
+- Backfilled color_no (1-25) on all existing colors in real DB
+
+### NEXT (Session 24)
+1. **Delete all mock data** — remove mock.js fake entries, start fresh
+2. **Real data entry** — 15 days of actual production data
+3. **Page overhauls remaining:** SKUs, Lots, Batches, Orders, Invoices
 
 ---
 
