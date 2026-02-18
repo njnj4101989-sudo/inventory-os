@@ -165,7 +165,7 @@ Paginated endpoints return:
 ## 5. Rolls (`/api/v1/rolls`)
 
 ### GET `/rolls`
-**Query:** `fabric_type`, `color`, `has_remaining` (bool), `fully_consumed` (bool), `status` (`in_stock`|`sent_for_processing`|`in_cutting`), `supplier_id`, `fabric_filter`, `process_type`, `page`, `page_size`
+**Query:** `fabric_type`, `color`, `has_remaining` (bool), `fully_consumed` (bool), `status` (`in_stock`|`sent_for_processing`|`in_cutting`), `supplier_id`, `fabric_filter`, `process_type`, `sr_no`, `page`, `page_size`
 **Response:** Paginated array of:
 ```json
 {
@@ -881,6 +881,145 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 #### PATCH `/masters/fabrics/{id}`
 **Request:** `{ name?, description?, is_active? }`
 **Response:** Updated fabric
+
+---
+
+## 14. Roll Passport (`/api/v1/rolls`)
+
+> Phase 1. Single endpoint. No auth required (public scan URL).
+
+### GET `/rolls/{roll_code}/passport`
+**Auth:** None (public — workers scan on floor)
+**Response:**
+```json
+{
+  "roll_code": "1-COT-PINK/07-01",
+  "status": "in_stock",
+  "fabric_type": "Cotton",
+  "color": "Pink",
+  "color_no": 7,
+  "total_weight": 45.5,
+  "remaining_weight": 35.0,
+  "unit": "kg",
+  "sr_no": "1",
+  "supplier_invoice_no": "INV-001",
+  "supplier_challan_no": "CH-001",
+  "supplier_invoice_date": "2026-02-15",
+  "received_at": "2026-02-15T10:00:00Z",
+  "supplier": { "id": "uuid", "name": "Ratan Fabrics", "phone": "9999900001" },
+  "received_by_user": { "id": "uuid", "full_name": "Nitish Admin" },
+  "value_additions": [
+    {
+      "id": "uuid",
+      "name": "Embroidery",
+      "short_code": "EMB",
+      "vendor_name": "Sonu Works",
+      "vendor_phone": "9999900002",
+      "sent_date": "2026-02-10",
+      "received_date": "2026-02-15",
+      "processing_cost": 2500.00,
+      "status": "received",
+      "notes": "Floral pattern"
+    }
+  ],
+  "regular_processing": [
+    {
+      "id": "uuid",
+      "process_type": "washing",
+      "vendor_name": "Local Laundry",
+      "sent_date": "2026-02-08",
+      "received_date": "2026-02-09",
+      "status": "received"
+    }
+  ],
+  "lots": [
+    {
+      "id": "uuid",
+      "lot_code": "LOT-001",
+      "lot_date": "2026-02-20",
+      "design_no": "101",
+      "weight_used": 10.5,
+      "waste_weight": 0.5,
+      "pieces_from_roll": 200,
+      "status": "distributed"
+    }
+  ],
+  "batches": [
+    {
+      "id": "uuid",
+      "batch_code": "BAT-001",
+      "sku_code": "BLS-101-Pink-M",
+      "effective_sku": "BLS-101-Pink-M+EMB",
+      "quantity": 50,
+      "status": "STARTED",
+      "tailor": { "id": "uuid", "full_name": "Ramesh Kumar" }
+    }
+  ],
+  "orders": [
+    {
+      "id": "uuid",
+      "order_number": "ORD-001",
+      "customer_name": "Fashion Hub",
+      "status": "processing"
+    }
+  ],
+  "effective_sku": "BLS-101-Pink-M+EMB"
+}
+```
+
+**Note:** `effective_sku` = `batch.sku.sku_code` + completed value addition short_codes (status='received').
+If roll is not yet in a batch, `effective_sku` is `null`.
+
+---
+
+## 15. Value Additions (`/api/v1/masters/value-additions`)
+
+> Phase 2. Master data entity. Admin/supervisor only.
+> Controls which process types appear in effective SKU suffix.
+
+### GET `/masters/value-additions`
+**Response:** `[{ id, name, short_code, description, is_active }, ...]`
+
+### POST `/masters/value-additions`
+**Request:** `{ name: string, short_code: string (3-4 chars, uppercase), description?: string }`
+**Response:** Created value addition object
+
+### PATCH `/masters/value-additions/{id}`
+**Request:** `{ name?, short_code?, description?, is_active? }`
+**Response:** Updated value addition
+
+### Seed Data (auto-seeded on first run)
+```json
+[
+  { "name": "Embroidery",    "short_code": "EMB" },
+  { "name": "Dying",         "short_code": "DYE" },
+  { "name": "Digital Print", "short_code": "DPT" },
+  { "name": "Handwork",      "short_code": "HWK" },
+  { "name": "Sequin Work",   "short_code": "SQN" },
+  { "name": "Batik",         "short_code": "BTC" }
+]
+```
+
+### Updated RollProcessing shape (Phase 2)
+
+When `value_addition_id` is present, the processing is a value addition (shows in effective SKU):
+```json
+{
+  "id": "uuid",
+  "roll_id": "uuid",
+  "value_addition_id": "uuid-or-null",
+  "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
+  "process_type": "embroidery",
+  "vendor_name": "Sonu Works",
+  "sent_date": "2026-02-10",
+  "received_date": "2026-02-15",
+  "weight_before": 45.5,
+  "weight_after": 44.0,
+  "processing_cost": 2500.00,
+  "status": "received",
+  "notes": ""
+}
+```
 
 ---
 

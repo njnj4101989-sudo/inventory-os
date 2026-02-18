@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
+import LabelSheet from '../components/common/LabelSheet'
 import { getSuppliers } from '../api/suppliers'
 import { getAllFabrics, getAllColors } from '../api/masters'
 import DataTable from '../components/common/DataTable'
@@ -422,6 +423,8 @@ export default function RollsPage() {
   const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [lastSavedRolls, setLastSavedRolls] = useState([])   // for Print Labels
+  const [showLabelSheet, setShowLabelSheet] = useState(false)
 
   // Invoice detail modal
   const [selectedInvoice, setSelectedInvoice] = useState(null)
@@ -712,9 +715,22 @@ export default function RollsPage() {
       } else {
         await stockInBulk(invoiceHeader, flatRolls)
       }
+
       setStockInOpen(false)
       setEditingInvoice(null)
-      refreshAll()
+      await refreshAll()
+
+      // Fetch fresh rolls from DB by sr_no — gives real roll_codes from backend
+      try {
+        const filterParams = { page: 1, page_size: 100 }
+        if (invoiceHeader.sr_no) filterParams.sr_no = invoiceHeader.sr_no
+        const freshResp = await getRolls(filterParams)
+        const freshRolls = freshResp?.data?.data || []   // GET /rolls → res.data = { success, data: [...] }
+        if (freshRolls.length > 0) {
+          setLastSavedRolls(freshRolls)
+        }
+      } catch (_) { /* non-fatal — labels still available from state */ }
+      setShowLabelSheet(true)
     } catch (err) {
       setFormError(err.response?.data?.detail || 'Failed to save')
     } finally {
@@ -1077,16 +1093,38 @@ export default function RollsPage() {
 
   return (
     <div>
+      {/* ── Print Labels Sheet overlay ── */}
+      {showLabelSheet && (
+        <LabelSheet
+          rolls={lastSavedRolls}
+          onClose={() => setShowLabelSheet(false)}
+        />
+      )}
+
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Rolls</h1>
           <p className="mt-1 text-sm text-gray-500">Raw material stock — fabric rolls</p>
         </div>
-        <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Stock In
-        </button>
+        <div className="flex items-center gap-2">
+          {lastSavedRolls.length > 0 && (
+            <button
+              onClick={() => setShowLabelSheet(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Labels ({lastSavedRolls.length})
+            </button>
+          )}
+          <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Stock In
+          </button>
+        </div>
       </div>
 
       {/* ── Tab bar ── */}

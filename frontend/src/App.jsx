@@ -1,9 +1,11 @@
-import { Suspense } from 'react'
+import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import ProtectedRoute from './routes/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import routes from './routes/routes'
+
+const ScanPage = lazy(() => import('./pages/ScanPage'))
 
 function App() {
   return (
@@ -15,8 +17,10 @@ function App() {
       }
     >
       <Routes>
-        {/* Public */}
+        {/* Public — no auth required */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/scan/roll/:rollCode" element={<ScanPage />} />
+        <Route path="/scan" element={<ScanPage />} />
 
         {/* Protected — Layout shell with sidebar + header */}
         <Route

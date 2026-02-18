@@ -146,6 +146,116 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 
 ---
 
+## Protocol 7: QR/Barcode System
+
+> **Read this before ANY work on: QR generation, label printing, camera scan, Roll Passport, Value Additions, effective SKU**
+
+### Core Architecture: Static QR, Dynamic Data
+
+```
+QR Code = static identifier (printed once, never changes)
+Passport Page = live data from DB (evolves as roll progresses)
+```
+
+- **Roll QR** encodes: `roll_code` only (e.g., `1-COT-PINK/07-01`)
+- **Batch QR** encodes: `batch_code` only (e.g., `BAT-001`) — field `Batch.qr_code_data` ALREADY EXISTS
+- Scanning opens `/scan/roll/{roll_code}` or `/scan/batch/{batch_code}` — app fetches live data
+- **No reprinting needed** as roll progresses through stages
+
+### Effective SKU Formula (computed, NEVER stored)
+
+```
+effective_sku = base_sku_code + "+" + value_addition_codes (only status='received', in order)
+
+Example:
+  base:               BLS-101-Pink-M
+  + Embroidery (EMB): BLS-101-Pink-M+EMB
+  + Sequin (SQN):     BLS-101-Pink-M+EMB+SQN
+```
+
+**Rule:** Only completed value additions (`status = 'received'`) count in effective_sku.
+
+### Value Addition vs Regular Processing
+
+| Type | Examples | Shows in effective_sku? |
+|------|----------|------------------------|
+| Value Addition (has short_code) | Embroidery, Dying, Digital Print, Handwork, Sequin, Batik | ✅ YES |
+| Regular Processing | Washing, ironing, folding, quality check | ❌ NO |
+
+### Value Addition Short Codes (Seed Data)
+
+| Name | Short Code | SKU Suffix |
+|------|-----------|-----------|
+| Embroidery | EMB | `+EMB` |
+| Dying | DYE | `+DYE` |
+| Digital Print | DPT | `+DPT` |
+| Handwork | HWK | `+HWK` |
+| Sequin Work | SQN | `+SQN` |
+| Batik | BTC | `+BTC` |
+
+### Roll Passport — What One Scan Shows
+
+```
+Roll: 1-COT-PINK/07-01
+├── Origin
+│   ├── Supplier: Ratan Fabrics | Invoice: INV-001 | Challan: CH-001 | Sr. No.: 1
+│   ├── Date: 15-Feb-2026 | Fabric: Cotton | Color: Pink (07) | Weight: 45.5 kg
+├── Value Additions (from processing_logs with value_addition_id)
+│   ├── [EMB] Embroidery → Sonu Works → 10-Feb to 15-Feb → ₹2,500 ✅
+│   └── [SQN] Sequin → Raju Works → 16-Feb → In Progress ⏳
+├── Lot: LOT-001 (Cut: 20-Feb | Weight Used: 10.5 kg | Waste: 0.5 kg | 200 pcs)
+├── Batch: BAT-001 | Tailor: Ramesh Kumar | Status: Stitching
+├── Order: ORD-001 | Fashion Hub | 50 pcs
+└── Effective SKU: BLS-101-Pink-M+EMB (SQN pending — not in sku until returned)
+```
+
+### Scan URL Pattern
+
+| URL | Shows |
+|-----|-------|
+| `/scan/roll/{roll_code}` | Roll Passport (full chain) |
+| `/scan/batch/{batch_code}` | Batch Passport (Phase 3) |
+
+### Label Layout (A4 — 8 per page)
+
+```
+┌────────────────────────────────────┐
+│  ██████████████  Roll: 1-COT-PINK/07-01  │
+│  ██  QR CODE ██  Fabric: Cotton | Color: Pink (07) │
+│  ██████████████  Wt: 45.5 kg | Date: 18-Feb-2026   │
+│                  Supplier: Ratan Fabrics            │
+│                  Inv: INV-001 | Sr.No: 1            │
+└────────────────────────────────────┘
+```
+
+### Phase Rollout
+
+| Phase | What | Status |
+|-------|------|--------|
+| 1 | Roll QR gen + A4 print + mobile camera scan + Roll Passport page | ⏳ Session 24 |
+| 2 | ValueAddition master + SKU suffix system + effective_sku | ⏳ Next |
+| 3 | Batch QR (use Batch.qr_code_data) + thermal ZPL + finished garment label | 🔮 Later |
+
+### Libraries
+
+| Library | Purpose | Install |
+|---------|---------|---------|
+| `qrcode.react` | QR generation in browser | `npm i qrcode.react` |
+| `react-to-print` | Browser print trigger | `npm i react-to-print` |
+| `html5-qrcode` | Camera scan (mobile PWA) | `npm i html5-qrcode` |
+
+### Key Rules (do not break these)
+
+1. **NEVER store `effective_sku`** — always compute: base_sku + completed value addition codes
+2. **Roll QR printed once** after stock-in — never reprinted (data evolves in DB, not QR)
+3. **Value additions in effective_sku ONLY when `status = 'received'`** — not while sent
+4. **`process_type` in RollProcessing stays** — `value_addition_id` is an ADDITIONAL optional FK (Phase 2)
+5. **`Batch.qr_code_data` already exists** — populate it when batch is created (Phase 3)
+6. **Mobile scan works in-browser** — `html5-qrcode` uses device camera, no app install needed
+7. **`/scan/*` routes are PUBLIC** — no auth required (workers on floor scan without logging in)
+
+---
+
 ## Key Architecture Decisions (Quick Reference)
 
 | Decision | Value |
@@ -177,16 +287,24 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 
 
 
+
+
+
+
+
+
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-18 11:55:40_
+_Last sync: 2026-02-18 13:57:39_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5214 lines total).",
+  "summary": "Project has 13 tracked code files (~5602 lines total).",
   "recent_files": [
-    "CLAUDE.md (210 lines)",
-    "guardian.md (198 lines)",
-    "API_REFERENCE.md (912 lines)",
+    "guardian.md (316 lines)",
     "project-context.json (17 lines)",
+    "CLAUDE.md (330 lines)",
+    "API_REFERENCE.md (1062 lines)",
     ".claude\\settings.local.json (43 lines)"
   ],
   "language_breakdown": {
@@ -194,7 +312,7 @@ _Last sync: 2026-02-18 11:55:40_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5214,
-  "last_updated": "2026-02-18 11:55:40"
+  "total_lines": 5602,
+  "last_updated": "2026-02-18 13:57:39"
 }
 ```

@@ -197,6 +197,28 @@ export async function getInvoices(params = {}) {
   return { data: { data: invoices, total: invoices.length, page: 1, pages: 1 } }
 }
 
+/**
+ * Public passport — full chain for a roll. No auth required.
+ * Used by /scan/roll/:rollCode page (QR scan landing).
+ */
+export async function getRollPassport(rollCode) {
+  if (USE_MOCK) {
+    const roll = rolls.find((r) => r.roll_code === rollCode)
+    if (!roll) throw { response: { data: { detail: `Roll '${rollCode}' not found` } } }
+    // Build a passport-shaped response from mock data
+    const passport = {
+      ...roll,
+      lots: [],
+      batches: [],
+      orders: [],
+      effective_sku: null,
+    }
+    return mockResponse(passport)
+  }
+  // Public endpoint — no auth header needed (backend has no auth dependency)
+  return client.get(`/rolls/${encodeURIComponent(rollCode)}/passport`)
+}
+
 export async function getRoll(id) {
   if (USE_MOCK) {
     const roll = rolls.find((r) => r.id === id)

@@ -34,37 +34,157 @@
 
 ---
 
-## Current State (Session 23 — 2026-02-18)
+## Current State (Session 24 — 2026-02-18)
 
 ### What's Done
-- **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 73+ endpoints
+- **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 75+ endpoints
 - **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 130+ modules, 0 build errors
-- **API_REFERENCE.md:** Authoritative contract for all 13 API modules + new edit-processing endpoint
-- **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
-- **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
+- **QR/Print Labels Phase 1:** COMPLETE — full end-to-end (see below)
+- **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
+- **API_REFERENCE.md:** Updated — §5 GET /rolls now includes `sr_no` filter
 
-### What's Built This Session (Session 23)
+### What's Built This Session (Session 24)
 
-#### Supplier: Broker + HSN Code (full-stack)
-- Backend: `broker`, `hsn_code` — model, schema, service, migration
-- Frontend: Company Name | Broker side by side, GST | PAN | HSN in 3-col, detail modal updated
+#### QR/Print Labels — Phase 1 COMPLETE (full-stack)
 
-#### Rolls: Panna + GSM (full-stack)
-- Backend: `panna`, `gsm` — model, schema, service, migration
-- Frontend: Design group row 4-col → 6-col (Fabric | Panna | GSM | Rate | Unit | Notes)
+**Label Sheet (A4 Print)**
+- 3 columns per row, content-height rows (no wasted space)
+- `break-inside: avoid` on each label — no label cut across page boundaries
+- Removed `position: fixed` from print CSS (was causing page overflow/clipping)
+- Label content: Roll Code (bold) + Weight + Supplier + Date (minimal, clean)
+- Removed Fabric, Color, Sr.No from label (redundant — in roll code already)
 
-#### Color No. — Numeric Color Identifier (full-stack)
-- Color model: `color_no: Integer` (unique, auto-assigned, editable)
-- Roll code: `{SrNo}-{Fabric}-{Color/ColorNo}-{Seq}` (e.g. `1-COT-PINK/07-01`)
-- Dropdown: `Pink (07)` — name first for keyboard search
-- MastersPage: Color No. column + form field
-- Both mock + backend code generators updated
-- Backfilled color_no (1-25) on all existing colors in real DB
+**Roll Code on Labels — Real Data Fix**
+- `stockInBulk` result was discarded; `roll_code: '…'` hardcoded as placeholder
+- Fix: after stock-in, fetch fresh rolls by `sr_no` from backend → real roll codes
+- Backend: added `sr_no` filter to `RollFilterParams` schema + `get_rolls()` service
+- Response path corrected: `res.data.data` (not `res.data.data.data`)
 
-### NEXT (Session 24)
-1. **Delete all mock data** — remove mock.js fake entries, start fresh
-2. **Real data entry** — 15 days of actual production data
-3. **Page overhauls remaining:** SKUs, Lots, Batches, Orders, Invoices
+**Backend (all verified working)**
+| Endpoint | Auth | Status |
+|----------|------|--------|
+| `POST /rolls` | Required | ✅ Returns full roll with `roll_code` |
+| `GET /rolls?sr_no=X` | Required | ✅ Filter by sr_no (newly added) |
+| `GET /rolls/{roll_code}/passport` | **Public** | ✅ Full chain: origin→processing→lots→batches |
+
+**Frontend (all verified working)**
+| File | Purpose | Status |
+|------|---------|--------|
+| `QRLabel.jsx` | Single label: Roll Code + Weight + Supplier + Date | ✅ |
+| `LabelSheet.jsx` | A4 sheet, 3-col, proper page breaks, professional print | ✅ |
+| `CameraScanner.jsx` | Mobile camera QR scan (html5-qrcode, rear camera) | ✅ |
+| `ScanPage.jsx` | Roll Passport: full chain view, sections for all stages | ✅ |
+| `App.jsx` | Public route `/scan/roll/:rollCode` (no auth) | ✅ |
+| `api/rolls.js` | `getRollPassport(rollCode)` → `/rolls/{code}/passport` | ✅ |
+
+#### Files Changed This Session
+| File | Change |
+|------|--------|
+| `frontend/src/components/common/LabelSheet.jsx` | 3-col layout, compact, proper print CSS, better fonts |
+| `frontend/src/components/common/QRLabel.jsx` | QR size 88, label: Weight + Supplier + Date only |
+| `frontend/src/pages/RollsPage.jsx` | Fresh roll fetch by sr_no after stock-in for real roll codes |
+| `backend/app/schemas/roll.py` | Added `sr_no` to `RollFilterParams` |
+| `backend/app/services/roll_service.py` | Added `sr_no` filter condition in `get_rolls()` |
+
+### NEXT (Session 25)
+1. **Page overhauls:** SKUs, Lots, Batches, Orders, Invoices (align to API_REFERENCE.md)
+2. **QR Phase 2:** ValueAddition model + SKU suffixes + effective_sku (see master plan below)
+3. **Real data entry:** 15-day stock entries after page overhauls confirmed working
+
+---
+
+## Barcode & QR System — Master Plan (Designed Session 24)
+
+> **Read guardian.md Protocol 7 before ANY work in this area.**
+> **Read API_REFERENCE.md §14 (Roll Passport) + §15 (Value Additions) for shapes.**
+
+### Why QR (not barcode)?
+- Smartphones can scan without extra hardware (everyone has a phone)
+- Holds more data than Code128
+- Works with cheap 2D USB scanners (₹1,500) AND phone cameras (₹0)
+- Roll code fits easily: `1-COT-PINK/07-01` → well within QR capacity
+
+### Core Insight: Static QR, Dynamic Passport
+```
+QR Code → printed ONCE after stock-in → stuck on roll forever
+Scan → opens /scan/roll/{roll_code} → live DB data (always current)
+No reprinting needed as roll moves through stages
+```
+
+### The "Full Process in One Scan" Vision
+Scanning a roll QR shows its complete product passport:
+```
+Origin (supplier/invoice/challan/date/weight)
+  → Value Additions (EMB, DYE, etc. — with vendor + cost + dates)
+  → Lot (cutting details, weight used, pieces)
+  → Batch (tailor, stitching status)
+  → Order (customer, dispatch status)
+  → Effective SKU: BLS-101-Pink-M+EMB+SQN
+```
+
+### Effective SKU System (Phase 2)
+```
+BLS-101-Pink-M          ← base (from Batch → SKU)
+BLS-101-Pink-M+EMB      ← after embroidery returned
+BLS-101-Pink-M+EMB+SQN  ← after sequin also returned
+```
+- `+` separates base from value additions (avoids confusion with `-` in base SKU)
+- NEVER stored — always computed from base_sku + received value addition logs
+- Only `status='received'` value additions count (not while still sent out)
+
+### Phase 1 — Implementation Plan (Session 24)
+
+#### Frontend Only — No DB changes
+| Task | File | Status |
+|------|------|--------|
+| Install packages | package.json | ✅ |
+| QR label component | `src/components/common/QRLabel.jsx` | ✅ |
+| A4 label sheet (8/page) | `src/components/common/LabelSheet.jsx` | ✅ |
+| "Print Labels" button in stock-in | `RollsPage.jsx` | ✅ |
+| Roll Passport page | `src/pages/ScanPage.jsx` | ✅ |
+| Camera scan component | `src/components/common/CameraScanner.jsx` | ✅ |
+| Public route `/scan/roll/:code` | `App.jsx` | ✅ |
+| Roll passport API | `src/api/rolls.js` — `getRollPassport(roll_code)` | ✅ |
+
+#### Backend — 1 new endpoint
+| Task | File | Status |
+|------|------|--------|
+| `GET /rolls/{roll_code}/passport` | `api/rolls.py` + `services/roll_service.py` | ✅ |
+
+#### No new models or migrations in Phase 1
+
+**Phase 1 COMPLETE — Session 24**
+
+### Phase 2 — Value Additions + SKU Suffixes (Next Session)
+
+| Task | Layer | File |
+|------|-------|------|
+| `ValueAddition` model | Backend | `models/master.py` (new model) |
+| `value_addition_id` FK on RollProcessing | Backend | `models/roll.py` + migration |
+| ValueAddition CRUD endpoints | Backend | `api/masters.py` |
+| Seed 6 value additions | Backend | `seeds/` |
+| Effective SKU computation | Backend | `services/roll_service.py` |
+| Processing form: Value Addition dropdown | Frontend | `RollsPage.jsx` |
+| MastersPage: Value Additions tab | Frontend | `MastersPage.jsx` |
+| Effective SKU shown in roll detail + passport | Frontend | `ScanPage.jsx` + `RollsPage.jsx` |
+
+### Phase 3 — Batch QR + Thermal + Finished Garment Label (Later)
+- Populate `Batch.qr_code_data` on batch creation (field already exists!)
+- `/scan/batch/{batch_code}` → Batch Passport
+- ZPL template for Zebra thermal printers
+- Finished garment label with full chain QR
+
+### Hardware Recommendation
+| Item | Model | Price | When |
+|------|-------|-------|------|
+| USB 2D scanner | Rida/Honeywell | ₹1,200–1,500 | Phase 1 (optional — phone works too) |
+| Label sticker paper | A4 Avery-style | ₹8/sheet | Phase 1 |
+| Thermal printer | TSC TE200 | ₹8,000 | Phase 3 |
+
+### Scan URL Rules
+- `/scan/roll/:roll_code` — **PUBLIC** (no auth — floor workers scan without login)
+- `/scan/batch/:batch_code` — **PUBLIC** (Phase 3)
+- Auth pages remain protected as before
 
 ---
 

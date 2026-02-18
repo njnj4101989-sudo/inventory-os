@@ -24,6 +24,7 @@ class RollFilterParams(PaginatedParams):
     fully_consumed: bool | None = None
     supplier_id: UUID | None = None
     process_type: str | None = None
+    sr_no: str | None = None
 
 
 # --- Requests ---

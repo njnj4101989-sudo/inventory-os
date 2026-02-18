@@ -11,6 +11,9 @@ from sqlalchemy.orm import selectinload
 from app.models.roll import Roll, RollProcessing
 from app.models.inventory_event import InventoryEvent
 from app.models.batch_roll_consumption import BatchRollConsumption
+from app.models.lot import Lot, LotRoll
+from app.models.batch import Batch
+from app.models.batch_assignment import BatchAssignment
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams, RollResponse, RollDetail,
     SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
@@ -51,6 +54,9 @@ class RollService:
 
         if params.supplier_id:
             conditions.append(Roll.supplier_id == params.supplier_id)
+
+        if params.sr_no:
+            conditions.append(Roll.sr_no == params.sr_no)
 
         # Count with filters applied
         count_stmt = select(func.count()).select_from(Roll)
@@ -106,6 +112,88 @@ class RollService:
         resp = self._to_response(roll)
         resp["consumption_history"] = consumption
         return resp
+
+    async def get_roll_passport(self, roll_code: str) -> dict:
+        """Public roll passport — full chain: origin → processing → lots → batches."""
+        stmt = (
+            select(Roll)
+            .where(Roll.roll_code == roll_code)
+            .options(
+                selectinload(Roll.supplier),
+                selectinload(Roll.received_by_user),
+                selectinload(Roll.processing_logs),
+                selectinload(Roll.lot_rolls)
+                    .selectinload(LotRoll.lot)
+                    .selectinload(Lot.batches)
+                    .selectinload(Batch.sku),
+                selectinload(Roll.lot_rolls)
+                    .selectinload(LotRoll.lot)
+                    .selectinload(Lot.batches)
+                    .selectinload(Batch.assignments)
+                    .selectinload(BatchAssignment.tailor),
+            )
+        )
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll '{roll_code}' not found")
+
+        # Build lots + batches chain
+        lots = []
+        batches = []
+        seen_batch_ids: set[str] = set()
+
+        for lot_roll in (roll.lot_rolls or []):
+            lot = lot_roll.lot
+            if not lot:
+                continue
+            lots.append({
+                "id": str(lot.id),
+                "lot_code": lot.lot_code,
+                "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
+                "design_no": lot.design_no,
+                "weight_used": float(lot_roll.weight_used) if lot_roll.weight_used else None,
+                "waste_weight": float(lot_roll.waste_weight) if lot_roll.waste_weight else None,
+                "pieces_from_roll": lot_roll.pieces_from_roll,
+                "status": lot.status,
+            })
+            for batch in (lot.batches or []):
+                bid = str(batch.id)
+                if bid in seen_batch_ids:
+                    continue
+                seen_batch_ids.add(bid)
+
+                tailor = None
+                if batch.assignments:
+                    a = batch.assignments[0]
+                    tailor = {
+                        "id": str(a.tailor.id),
+                        "full_name": a.tailor.full_name,
+                    } if a.tailor else None
+
+                sku_code = batch.sku.sku_code if batch.sku else None
+                # Phase 1: effective_sku = base sku_code
+                # Phase 2 will append value addition short_codes (+EMB, +DYE, etc.)
+                effective_sku = sku_code
+
+                batches.append({
+                    "id": bid,
+                    "batch_code": batch.batch_code,
+                    "sku_code": sku_code,
+                    "effective_sku": effective_sku,
+                    "quantity": batch.quantity,
+                    "status": batch.status,
+                    "tailor": tailor,
+                })
+
+        passport = self._to_response(roll)
+        passport.update({
+            "lots": lots,
+            "batches": batches,
+            "orders": [],   # Phase 2: traverse batch → order items
+            "effective_sku": batches[0]["effective_sku"] if batches else None,
+        })
+        return passport
 
     async def stock_in(self, req: RollCreate, received_by: UUID) -> dict:
         roll_code = await next_roll_code(

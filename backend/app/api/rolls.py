@@ -50,6 +50,17 @@ async def update_roll(
     return {"success": True, "data": result}
 
 
+@router.get("/{roll_code}/passport", response_model=None)
+async def get_roll_passport(
+    roll_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public roll passport — no auth required. Used for QR scan on factory floor."""
+    svc = RollService(db)
+    result = await svc.get_roll_passport(roll_code)
+    return {"success": True, "data": result}
+
+
 @router.get("/{roll_id}", response_model=None)
 async def get_roll(
     roll_id: UUID,
