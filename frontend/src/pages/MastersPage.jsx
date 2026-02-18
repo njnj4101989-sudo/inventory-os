@@ -30,6 +30,10 @@ const PT_COLUMNS = [
 
 const COLOR_COLUMNS = [
   {
+    key: 'color_no', label: 'No.',
+    render: (v) => v != null ? <span className="font-bold text-primary-700 tabular-nums">{String(v).padStart(2, '0')}</span> : <span className="text-gray-300">—</span>,
+  },
+  {
     key: 'hex_code', label: 'Swatch',
     render: (v) => v ? (
       <span className="inline-block h-6 w-6 rounded-full border border-gray-300" style={{ backgroundColor: v }} />
@@ -107,7 +111,7 @@ export default function MastersPage() {
     setEditing(null)
     setFormError(null)
     if (tab === 'product_types') setForm({ code: '', name: '', description: '' })
-    else if (tab === 'colors') setForm({ name: '', code: '', hex_code: '#000000' })
+    else if (tab === 'colors') setForm({ name: '', code: '', color_no: '', hex_code: '#000000' })
     else setForm({ code: '', name: '', description: '' })
     setModalOpen(true)
   }
@@ -116,7 +120,7 @@ export default function MastersPage() {
     setEditing(item)
     setFormError(null)
     if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
-    else if (tab === 'colors') setForm({ name: item.name, hex_code: item.hex_code || '#000000', is_active: item.is_active })
+    else if (tab === 'colors') setForm({ name: item.name, color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
     else setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     setModalOpen(true)
   }
@@ -139,8 +143,11 @@ export default function MastersPage() {
         if (editing) await updateProductType(editing.id, form)
         else await createProductType({ code: form.code.trim(), name: form.name.trim(), description: form.description || null })
       } else if (tab === 'colors') {
-        if (editing) await updateColor(editing.id, form)
-        else await createColor({ name: form.name.trim(), code: form.code.trim(), hex_code: form.hex_code || null })
+        const colorPayload = editing
+          ? { ...form, color_no: form.color_no !== '' ? parseInt(form.color_no, 10) : null }
+          : { name: form.name.trim(), code: form.code.trim(), color_no: form.color_no ? parseInt(form.color_no, 10) : null, hex_code: form.hex_code || null }
+        if (editing) await updateColor(editing.id, colorPayload)
+        else await createColor(colorPayload)
       } else {
         if (editing) await updateFabric(editing.id, form)
         else await createFabric({ code: form.code.trim(), name: form.name.trim(), description: form.description || null })
@@ -253,6 +260,16 @@ export default function MastersPage() {
               placeholder={tab === 'product_types' ? 'e.g. Blouse' : tab === 'colors' ? 'e.g. Coral' : 'e.g. Cotton'}
               className={INPUT} />
           </div>
+
+          {/* Color-specific: color_no */}
+          {tab === 'colors' && (
+            <div>
+              <label className={LABEL}>Color No.</label>
+              <input type="number" min="1" value={form.color_no ?? ''} onChange={(e) => set('color_no', e.target.value)}
+                placeholder="Auto-assigned if empty" className={`${INPUT} font-mono max-w-[160px]`} />
+              <p className="mt-1 text-xs text-gray-400">Numeric ID for quick reference (e.g. "4 no. Pink")</p>
+            </div>
+          )}
 
           {/* Color-specific: hex code */}
           {tab === 'colors' && (

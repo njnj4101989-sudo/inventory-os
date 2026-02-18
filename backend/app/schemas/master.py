@@ -43,16 +43,19 @@ class ColorBrief(BaseSchema):
     id: UUID
     name: str
     code: str
+    color_no: int | None = None
 
 
 class ColorCreate(BaseModel):
     name: str
     code: str
+    color_no: int | None = None
     hex_code: str | None = None
 
 
 class ColorUpdate(BaseModel):
     name: str | None = None
+    color_no: int | None = None
     hex_code: str | None = None
     is_active: bool | None = None
 
@@ -61,6 +64,7 @@ class ColorResponse(BaseSchema):
     id: UUID
     name: str
     code: str
+    color_no: int | None = None
     hex_code: str | None = None
     is_active: bool = True
 

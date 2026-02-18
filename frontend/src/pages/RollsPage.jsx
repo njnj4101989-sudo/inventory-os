@@ -416,7 +416,7 @@ export default function RollsPage() {
   const [masterColors, setMasterColors] = useState([])
 
   // Stock-in modal — challan style with design groups
-  const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', notes: '', colorRows: [{ color: '', weights: [''] }] }
+  const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', colorRows: [{ color: '', weights: [''] }] }
   const [stockInOpen, setStockInOpen] = useState(false)
   const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '' })
   const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
@@ -566,7 +566,7 @@ export default function RollsPage() {
     const fabricMap = {}
     for (const r of selectedInvoice.rolls) {
       const ft = r.fabric_type || 'Unknown'
-      if (!fabricMap[ft]) fabricMap[ft] = { fabric_type: ft, cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '', unit: r.unit || 'kg', notes: '', colors: {} }
+      if (!fabricMap[ft]) fabricMap[ft] = { fabric_type: ft, cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '', unit: r.unit || 'kg', panna: r.panna != null ? String(r.panna) : '', gsm: r.gsm != null ? String(r.gsm) : '', notes: '', colors: {} }
       const c = r.color || 'Unknown'
       if (!fabricMap[ft].colors[c]) fabricMap[ft].colors[c] = { color: c, weights: [], rollIds: [] }
       const qty = r.unit === 'meters' ? (r.total_length || r.total_weight) : r.total_weight
@@ -574,7 +574,7 @@ export default function RollsPage() {
       fabricMap[ft].colors[c].rollIds.push(r.id)
     }
     setDesignGroups(Object.values(fabricMap).map((g) => ({
-      fabric_type: g.fabric_type, cost_per_unit: g.cost_per_unit, unit: g.unit, notes: g.notes,
+      fabric_type: g.fabric_type, cost_per_unit: g.cost_per_unit, unit: g.unit, panna: g.panna, gsm: g.gsm, notes: g.notes,
       colorRows: Object.values(g.colors),
     })))
     setFormError(null)
@@ -651,9 +651,12 @@ export default function RollsPage() {
                 quantity: String(wt),
                 unit: grp.unit,
                 cost_per_unit: grp.cost_per_unit || '',
+                panna: grp.panna || '',
+                gsm: grp.gsm || '',
                 weight: '', length: '', notes: grp.notes || '',
                 fabric_code: fabricMatch?.code || null,
                 color_code: colorMatch?.code || null,
+                color_no: colorMatch?.color_no || null,
               })
             }
           }
@@ -693,9 +696,12 @@ export default function RollsPage() {
                   quantity: String(wt),
                   unit: grp.unit,
                   cost_per_unit: grp.cost_per_unit || '',
+                  panna: grp.panna || '',
+                  gsm: grp.gsm || '',
                   weight: '', length: '', notes: grp.notes || '',
                   fabric_code: fabricMatch?.code || null,
                   color_code: colorMatch?.code || null,
+                  color_no: colorMatch?.color_no || null,
                 })
               }
               rIdx++
@@ -1686,14 +1692,24 @@ export default function RollsPage() {
                     </div>
 
                     <div className="p-5 space-y-5">
-                      {/* Fabric / Rate / Unit row */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {/* Fabric / Panna / GSM / Rate / Unit / Notes row */}
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                         <div>
                           <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
                           <select data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
                             <option value="">Select fabric</option>
                             {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
                           </select>
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Panna (″)</label>
+                          <input type="number" step="0.5" value={grp.panna} onChange={(e) => setGroupField(gIdx, 'panna', e.target.value)}
+                            placeholder="e.g. 44" className={INPUT_CLS} />
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>GSM</label>
+                          <input type="number" step="1" value={grp.gsm} onChange={(e) => setGroupField(gIdx, 'gsm', e.target.value)}
+                            placeholder="e.g. 180" className={INPUT_CLS} />
                         </div>
                         <div>
                           <label className={LABEL_CLS}>Rate / {grp.unit} (₹)</label>
@@ -1703,8 +1719,8 @@ export default function RollsPage() {
                         <div>
                           <label className={LABEL_CLS}>Unit</label>
                           <select value={grp.unit} onChange={(e) => setGroupField(gIdx, 'unit', e.target.value)} className={INPUT_CLS}>
-                            <option value="kg">Kilograms (kg)</option>
-                            <option value="meters">Meters (m)</option>
+                            <option value="kg">kg</option>
+                            <option value="meters">meters</option>
                           </select>
                         </div>
                         <div>
@@ -1785,7 +1801,7 @@ export default function RollsPage() {
                                     }}
                                   >
                                     <option value="">{cIdx === 0 ? 'Select color' : 'Color'}</option>
-                                    {masterColors.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    {masterColors.map((c) => <option key={c.id} value={c.name}>{c.name}{c.color_no ? ` (${String(c.color_no).padStart(2, '0')})` : ''}</option>)}
                                   </select>
                                   {grp.colorRows.length > 1 && (
                                     <button onClick={() => removeColorRow(gIdx, cIdx)} title="Remove color"

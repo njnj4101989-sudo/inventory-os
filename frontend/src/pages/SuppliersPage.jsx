@@ -40,7 +40,8 @@ const COLUMNS = [
 
 const EMPTY_FORM = {
   name: '', contact_person: '', phone: '', email: '',
-  gst_no: '', pan_no: '', address: '', city: '', state: '', pin_code: '',
+  gst_no: '', pan_no: '', hsn_code: '', broker: '',
+  address: '', city: '', state: '', pin_code: '',
 }
 
 const INPUT_CLS = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
@@ -151,6 +152,8 @@ export default function SuppliersPage() {
       email: selected.email || '',
       gst_no: selected.gst_no || '',
       pan_no: selected.pan_no || '',
+      hsn_code: selected.hsn_code || '',
+      broker: selected.broker || '',
       address: selected.address || '',
       city: selected.city || '',
       state: selected.state || '',
@@ -266,8 +269,10 @@ export default function SuppliersPage() {
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Business Information</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Company Name" value={selected.name} />
+                <InfoRow label="Broker" value={selected.broker} />
                 <InfoRow label="GST No." value={selected.gst_no} />
                 <InfoRow label="PAN No." value={selected.pan_no} />
+                <InfoRow label="HSN Code" value={selected.hsn_code} />
                 <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
                   <span className="text-sm text-gray-500">Status</span>
                   <StatusBadge status={selected.is_active ? 'active' : 'inactive'} />
@@ -322,9 +327,13 @@ export default function SuppliersPage() {
           <div>
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Business Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field name="name" label="Company Name" required placeholder="e.g. Krishna Textiles" className="md:col-span-2" form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="name" label="Company Name" required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" hint="15-character GSTIN" maxLength={15} form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="pan_no" label="PAN No." placeholder="e.g. AABCK1234F" hint="10-character PAN" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="hsn_code" label="HSN Code" placeholder="e.g. 5208" hint="Harmonized System" maxLength={8} form={form} set={set} fieldErrors={fieldErrors} />
             </div>
           </div>
 

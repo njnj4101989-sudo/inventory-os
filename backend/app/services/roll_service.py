@@ -115,6 +115,7 @@ class RollService:
             color=req.color,
             fabric_code=req.fabric_code,
             color_code=req.color_code,
+            color_no=req.color_no,
         )
 
         roll = Roll(
@@ -131,6 +132,8 @@ class RollService:
             supplier_challan_no=req.supplier_challan_no,
             supplier_invoice_date=req.supplier_invoice_date,
             sr_no=req.sr_no,
+            panna=req.panna,
+            gsm=req.gsm,
             received_by=received_by,
             received_at=datetime.now(timezone.utc),
             status="in_stock",
@@ -368,6 +371,8 @@ class RollService:
             "supplier_challan_no": r.supplier_challan_no,
             "supplier_invoice_date": r.supplier_invoice_date.isoformat() if r.supplier_invoice_date else None,
             "sr_no": r.sr_no,
+            "panna": float(r.panna) if r.panna else None,
+            "gsm": float(r.gsm) if r.gsm else None,
             "received_by_user": {
                 "id": str(r.received_by_user.id),
                 "full_name": r.received_by_user.full_name,

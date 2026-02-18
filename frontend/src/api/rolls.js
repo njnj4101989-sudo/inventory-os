@@ -20,10 +20,11 @@ function resolveColorCode(colorName) {
   if (match) return match.code
   return colorName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)
 }
-function generateRollCode(challanNo, fabricType, color, fabricCode, colorCode) {
+function generateRollCode(challanNo, fabricType, color, fabricCode, colorCode, colorNo) {
   const challan = (challanNo || '').trim() || 'NOINV'
   const fc = fabricCode || resolveFabricCode(fabricType)
-  const cc = colorCode || resolveColorCode(color)
+  let cc = colorCode || resolveColorCode(color)
+  if (colorNo) cc = `${cc}/${String(colorNo).padStart(2, '0')}`
   const prefix = `${challan}-${fc}-${cc}-`
   let max = 0
   for (const r of rolls) {
@@ -66,7 +67,7 @@ export async function getRolls(params = {}) {
 
 export async function stockIn(data) {
   if (USE_MOCK) {
-    const nextCode = generateRollCode(data.sr_no, data.fabric_type, data.color, data.fabric_code, data.color_code)
+    const nextCode = generateRollCode(data.sr_no, data.fabric_type, data.color, data.fabric_code, data.color_code, data.color_no)
     const sup = suppliers.find((s) => s.id === data.supplier_id)
     const newRoll = {
       id: crypto.randomUUID(),
@@ -105,9 +106,12 @@ export async function stockInBulk(header, rollEntries) {
       supplier_challan_no: header.supplier_challan_no || null,
       supplier_invoice_date: header.supplier_invoice_date || null,
       sr_no: header.sr_no || null,
+      panna: entry.panna ? parseFloat(entry.panna) : null,
+      gsm: entry.gsm ? parseFloat(entry.gsm) : null,
       notes: entry.notes || null,
       fabric_code: entry.fabric_code || null,
       color_code: entry.color_code || null,
+      color_no: entry.color_no || null,
     }
     const res = await stockIn(payload)
     results.push(res)

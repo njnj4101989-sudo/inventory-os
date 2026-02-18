@@ -67,18 +67,22 @@ async def next_roll_code(
     color: str | None = None,
     fabric_code: str | None = None,
     color_code: str | None = None,
+    color_no: int | None = None,
 ) -> str:
-    """Generate roll code: {SrNo}-{Fabric}-{Color}-{Seq}.
+    """Generate roll code: {SrNo}-{Fabric}-{Color/ColorNo}-{Seq}.
 
     challan_no param receives the filing Sr. No. (internal serial written on
     the physical invoice copy).  If fabric_code / color_code are provided
     (from master DB), use them directly; otherwise fall back to abbreviation dicts.
+    color_no is the numeric color identifier (e.g. 04 for Pink).
 
-    Example: 1-COT-GREEN-01, STOCK-SHK-RED-03
+    Example: 1-COT-PINK/04-01, STOCK-SHK-RED/02-03
     """
     challan = (challan_no or "").strip() or "NOINV"
     fabric_short = fabric_code.strip().upper() if fabric_code else _shorten_fabric(fabric_type or "")
     color_short = color_code.strip().upper() if color_code else _shorten_color(color or "")
+    if color_no:
+        color_short = f"{color_short}/{color_no:02d}"
     prefix = f"{challan}-{fabric_short}-{color_short}-"
 
     # Find max sequence for this prefix

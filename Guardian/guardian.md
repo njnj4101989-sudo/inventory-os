@@ -155,7 +155,7 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | Auth tokens | localStorage: `access_token`, `refresh_token`, `user` |
 | Mock switch | `VITE_USE_MOCK=true` in `.env` |
 | SKU pattern | `ProductType-DesignNo-Color-Size` (e.g. `BLS-101-Red-M`) |
-| Roll code | `{SrNo}-{Fabric3}-{Color5}-{Seq}` (e.g. `1-COT-GREEN-01`) |
+| Roll code | `{SrNo}-{Fabric3}-{Color5/ColorNo}-{Seq}` (e.g. `1-COT-GREEN/01-01`) |
 | Weight unit | kg (primary), meters (optional) |
 | LOT model | Groups rolls for cutting; no SKU at lot level |
 | Batch source | Created from LOT (lot_id FK), not directly from rolls |
@@ -175,16 +175,18 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-17 23:03:37_
+_Last sync: 2026-02-18 11:55:40_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5174 lines total).",
+  "summary": "Project has 13 tracked code files (~5214 lines total).",
   "recent_files": [
-    "CLAUDE.md (180 lines)",
-    "guardian.md (196 lines)",
+    "CLAUDE.md (210 lines)",
+    "guardian.md (198 lines)",
+    "API_REFERENCE.md (912 lines)",
     "project-context.json (17 lines)",
-    "API_REFERENCE.md (904 lines)",
     ".claude\\settings.local.json (43 lines)"
   ],
   "language_breakdown": {
@@ -192,7 +194,7 @@ _Last sync: 2026-02-17 23:03:37_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5174,
-  "last_updated": "2026-02-17 23:03:37"
+  "total_lines": 5214,
+  "last_updated": "2026-02-18 11:55:40"
 }
 ```

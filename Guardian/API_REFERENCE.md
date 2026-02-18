@@ -145,17 +145,19 @@ Paginated endpoints return:
   "city": "Surat",
   "state": "Gujarat",
   "pin_code": "395002",
+  "broker": "Ramesh Broker",
+  "hsn_code": "5208",
   "is_active": true,
   "created_at": "2026-02-07T08:00:00Z"
 }
 ```
 
 ### POST `/suppliers`
-**Request:** `{ name, contact_person, phone, email?, city?, state?, pin_code?, gst_no?, pan_no? }`
+**Request:** `{ name, contact_person, phone, email?, city?, state?, pin_code?, gst_no?, pan_no?, broker?, hsn_code? }`
 **Response:** Single supplier object
 
 ### PATCH `/suppliers/{id}`
-**Request:** `{ name?, contact_person?, phone?, email?, city?, state?, pin_code?, gst_no?, pan_no? }`
+**Request:** `{ name?, contact_person?, phone?, email?, city?, state?, pin_code?, gst_no?, pan_no?, broker?, hsn_code? }`
 **Response:** Updated supplier object
 
 ---
@@ -168,7 +170,7 @@ Paginated endpoints return:
 ```json
 {
   "id": "uuid",
-  "roll_code": "1-COT-GREEN-01",
+  "roll_code": "1-COT-GREEN/01-01",
   "fabric_type": "Cotton",
   "color": "Green",
   "total_weight": 18.800,
@@ -176,6 +178,8 @@ Paginated endpoints return:
   "unit": "kg",
   "cost_per_unit": 120.0,
   "total_length": null,
+  "panna": 44,
+  "gsm": 180,
   "status": "in_cutting",
   "supplier": {
     "id": "uuid",
@@ -225,9 +229,12 @@ Paginated endpoints return:
   "supplier_challan_no": "CH-451",
   "supplier_invoice_date": "2026-02-06",
   "sr_no": "1",
+  "panna": 44,
+  "gsm": 180,
   "notes": null,
   "fabric_code": "COT",
-  "color_code": "GREEN"
+  "color_code": "GREEN",
+  "color_no": 1
 }
 ```
 **Response:** Single roll object (same shape as GET)
@@ -241,6 +248,8 @@ Frontend calls `stockIn()` per roll entry. Each entry:
   "quantity": 18.800,
   "unit": "kg",
   "cost_per_unit": 120.0,
+  "panna": 44,
+  "gsm": 180,
   "supplier_id": "uuid",
   "supplier_invoice_no": "KT-2026-0451",
   "supplier_challan_no": "CH-451",
@@ -250,7 +259,8 @@ Frontend calls `stockIn()` per roll entry. Each entry:
   "weight": 18.800,
   "length": null,
   "fabric_code": "COT",
-  "color_code": "GREEN"
+  "color_code": "GREEN",
+  "color_no": 1
 }
 ```
 Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) depending on `unit`.
@@ -259,7 +269,7 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 **Response:** Single roll object (same shape as list item, with `processing_logs[]`)
 
 ### PATCH `/rolls/{id}`
-**Request:** `{ fabric_type?, color?, total_weight?, cost_per_unit?, supplier_id?, supplier_invoice_no?, supplier_challan_no?, supplier_invoice_date?, sr_no?, notes? }`
+**Request:** `{ fabric_type?, color?, total_weight?, cost_per_unit?, panna?, gsm?, supplier_id?, supplier_invoice_no?, supplier_challan_no?, supplier_invoice_date?, sr_no?, notes? }`
 **Response:** Updated roll object
 
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
@@ -388,7 +398,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
     {
       "id": "uuid",
       "roll_id": "uuid",
-      "roll_code": "1-COT-GREEN-01",
+      "roll_code": "1-COT-GREEN/01-01",
       "color": "Green",
       "roll_weight": 18.800,
       "palla_weight": 2.860,
@@ -830,20 +840,21 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "id": "uuid",
   "name": "Green",
   "code": "GREEN",
+  "color_no": 1,
   "hex_code": "#22c55e",
   "is_active": true
 }
 ```
 
 #### GET `/masters/colors/all`
-**Response:** Array (active only, for dropdowns)
+**Response:** Array (active only, for dropdowns). Same shape as above.
 
 #### POST `/masters/colors`
-**Request:** `{ name, code (5-char max), hex_code? }`
+**Request:** `{ name, code (5-char max), color_no? (auto-assigned if omitted), hex_code? }`
 **Response:** Created color
 
 #### PATCH `/masters/colors/{id}`
-**Request:** `{ name?, hex_code?, is_active? }`
+**Request:** `{ name?, color_no?, hex_code?, is_active? }`
 **Response:** Updated color
 
 ### Fabrics

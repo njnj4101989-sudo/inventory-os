@@ -32,6 +32,8 @@ class SupplierCreate(BaseModel):
     city: str | None = None
     state: str | None = None
     pin_code: str | None = None
+    broker: str | None = None
+    hsn_code: str | None = None
 
 
 class SupplierUpdate(BaseModel):
@@ -45,6 +47,8 @@ class SupplierUpdate(BaseModel):
     city: str | None = None
     state: str | None = None
     pin_code: str | None = None
+    broker: str | None = None
+    hsn_code: str | None = None
     is_active: bool | None = None
 
 
@@ -63,5 +67,7 @@ class SupplierResponse(BaseSchema):
     city: str | None = None
     state: str | None = None
     pin_code: str | None = None
+    broker: str | None = None
+    hsn_code: str | None = None
     is_active: bool
     created_at: datetime

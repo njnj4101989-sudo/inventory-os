@@ -34,7 +34,7 @@
 
 ---
 
-## Current State (Session 22 — 2026-02-18)
+## Current State (Session 23 — 2026-02-18)
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 73+ endpoints
@@ -43,7 +43,26 @@
 - **Backend services:** All 14 fully implemented, gap audit done (Session 16), masters added (Session 17)
 - **STEP docs:** Updated to v1.1 (Session 15) — reflect weight-based rolls, LOTs, master entities
 
-### What's Built This Session (Session 22)
+### What's Built This Session (Session 23)
+
+#### Supplier: Broker + HSN Code (full-stack)
+- Backend: `broker`, `hsn_code` — model, schema, service, migration
+- Frontend: Company Name | Broker side by side, GST | PAN | HSN in 3-col, detail modal updated
+
+#### Rolls: Panna + GSM (full-stack)
+- Backend: `panna`, `gsm` — model, schema, service, migration
+- Frontend: Design group row 4-col → 6-col (Fabric | Panna | GSM | Rate | Unit | Notes)
+
+#### Color No. — Numeric Color Identifier (full-stack)
+- Color model: `color_no: Integer` (unique, auto-assigned, editable)
+- Roll code: `{SrNo}-{Fabric}-{Color/ColorNo}-{Seq}` (e.g. `1-COT-PINK/07-01`)
+- Dropdown: `Pink (07)` — name first for keyboard search
+- MastersPage: Color No. column + form field
+- Both mock + backend code generators updated
+
+---
+
+### What Was Built in Session 22
 
 #### Challan Form Keyboard Fixes & Enhancements
 1. **Keyboard shortcuts restored** — Enter/Tab/Backspace stopped working after color `<input>` was changed to `<select>` dropdown

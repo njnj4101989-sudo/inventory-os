@@ -19,6 +19,8 @@ class Supplier(Base):
     city: Mapped[str | None] = mapped_column(String(100))
     state: Mapped[str | None] = mapped_column(String(100))
     pin_code: Mapped[str | None] = mapped_column(String(6))
+    broker: Mapped[str | None] = mapped_column(String(200))
+    hsn_code: Mapped[str | None] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     # Relationships

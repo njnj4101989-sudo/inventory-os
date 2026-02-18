@@ -43,9 +43,12 @@ class RollCreate(BaseModel):
     supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
+    panna: Decimal | None = None
+    gsm: Decimal | None = None
     notes: str | None = None
     fabric_code: str | None = None  # Pre-resolved from master DB for roll code gen
     color_code: str | None = None   # Pre-resolved from master DB for roll code gen
+    color_no: int | None = None     # Numeric color identifier for roll code gen
 
 
 class RollUpdate(BaseModel):
@@ -62,6 +65,8 @@ class RollUpdate(BaseModel):
     supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
+    panna: Decimal | None = None
+    gsm: Decimal | None = None
     notes: str | None = None
 
 
@@ -110,6 +115,8 @@ class RollResponse(BaseSchema):
     supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
+    panna: Decimal | None = None
+    gsm: Decimal | None = None
     received_by_user: UserBrief | None = None
     received_at: datetime
     notes: str | None = None

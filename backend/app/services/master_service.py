@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import DuplicateError, NotFoundError
@@ -86,14 +86,23 @@ class MasterService:
         return await MasterService._list(db, Color, active_only=True)
 
     @staticmethod
+    async def _next_color_no(db: AsyncSession) -> int:
+        result = await db.execute(select(func.max(Color.color_no)))
+        current = result.scalar() or 0
+        return current + 1
+
+    @staticmethod
     async def create_color(db: AsyncSession, data) -> Color:
         code = data.code.strip().upper()
         if len(code) > 5:
             code = code[:5]
         await MasterService._check_code(db, Color, code, "Color")
+        # Auto-assign color_no if not provided
+        color_no = data.color_no if data.color_no else await MasterService._next_color_no(db)
         obj = Color(
             name=data.name.strip(),
             code=code,
+            color_no=color_no,
             hex_code=data.hex_code,
         )
         db.add(obj)
@@ -105,6 +114,8 @@ class MasterService:
         obj = await MasterService._get(db, Color, color_id, "Color")
         if data.name is not None:
             obj.name = data.name.strip()
+        if data.color_no is not None:
+            obj.color_no = data.color_no
         if data.hex_code is not None:
             obj.hex_code = data.hex_code
         if data.is_active is not None:

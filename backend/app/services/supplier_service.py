@@ -88,6 +88,8 @@ class SupplierService:
             "city": s.city,
             "state": s.state,
             "pin_code": s.pin_code,
+            "broker": s.broker,
+            "hsn_code": s.hsn_code,
             "is_active": s.is_active,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         }
