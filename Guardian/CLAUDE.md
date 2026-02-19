@@ -81,6 +81,12 @@
 | `pages/ScanPage.jsx` | Passport: shows "Orig. Weight" + "Current Wt." (only when different) |
 | `API_REFERENCE.md` | Added `current_weight` to RollResponse + Passport examples |
 
+#### Fix: Editable Guard After VA Weight Change — COMPLETE
+**Bug:** After VA increases weight, `remaining_weight (28.2) > total_weight (27.5)` → guard falsely marked roll as consumed. Fixed 5 locations (backend service, mock API, 3 frontend) to compare against `current_weight`.
+
+#### Invoice View: Purple Accent on VA-Processed Rolls — COMPLETE
+Roll weight chips in invoice challan grid now show purple border + VA short code suffix (`+EMB`, `+EMB+DYE`) for rolls with received value additions. Visual-only — no data changes.
+
 ### What's Built This Session (Session 26)
 
 #### Replace `process_type` with `value_addition_id` (fully) — COMPLETE
