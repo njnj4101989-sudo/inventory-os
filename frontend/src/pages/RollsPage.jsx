@@ -496,7 +496,7 @@ export default function RollsPage() {
   const [editProcSaving, setEditProcSaving] = useState(false)
   const [editProcError, setEditProcError] = useState(null)
 
-  const isEditable = detailRoll && detailRoll.remaining_weight === detailRoll.total_weight && detailRoll.status === 'in_stock'
+  const isEditable = detailRoll && detailRoll.remaining_weight >= (detailRoll.current_weight || detailRoll.total_weight) && detailRoll.status === 'in_stock'
 
   // ── Data fetching ──
   const fetchInvoices = useCallback(async () => {
@@ -594,7 +594,7 @@ export default function RollsPage() {
   }
 
   const isInvoiceEditable = (inv) => inv?.rolls?.every((r) =>
-    (r.status || 'in_stock') === 'in_stock' && r.remaining_weight === r.total_weight
+    (r.status || 'in_stock') === 'in_stock' && r.remaining_weight >= (r.current_weight || r.total_weight)
   )
 
   const openEditInvoice = () => {
@@ -2133,7 +2133,7 @@ export default function RollsPage() {
                         <p className="mt-0.5 text-xs text-amber-600">
                           {detailRoll.remaining_weight === 0
                             ? 'This roll has been fully consumed in a lot/batch.'
-                            : `${(detailRoll.total_weight - detailRoll.remaining_weight).toFixed(3)} kg has already been used. Only unused rolls can be edited.`}
+                            : `${((detailRoll.current_weight || detailRoll.total_weight) - detailRoll.remaining_weight).toFixed(3)} kg has already been used in lots/cutting. Only unused rolls can be edited.`}
                         </p>
                       </div>
                     </div>

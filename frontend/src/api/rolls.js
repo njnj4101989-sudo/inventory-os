@@ -233,7 +233,7 @@ export async function updateRoll(id, data) {
     const idx = rolls.findIndex((r) => r.id === id)
     if (idx === -1) throw { response: { data: { detail: 'Roll not found' } } }
     const roll = rolls[idx]
-    if (roll.remaining_weight < roll.total_weight) {
+    if (roll.remaining_weight < roll.current_weight) {
       throw { response: { data: { detail: 'Cannot edit a roll that has already been consumed' } } }
     }
     Object.assign(roll, data)

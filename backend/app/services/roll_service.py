@@ -284,7 +284,7 @@ class RollService:
             raise NotFoundError(f"Roll {roll_id} not found")
 
         # Guard: only unused rolls can be edited
-        if roll.remaining_weight < roll.total_weight:
+        if roll.remaining_weight < roll.current_weight:
             raise BusinessRuleViolationError(
                 "Cannot edit a roll that has been partially or fully consumed"
             )
