@@ -1583,21 +1583,30 @@ export default function RollsPage() {
                                 {colorRolls.map((roll) => {
                                   const wt = parseFloat(roll.total_weight) || 0
                                   const rem = parseFloat(roll.remaining_weight) || 0
-                                  const isUsed = wt > 0 && rem < wt
+                                  const currWt = parseFloat(roll.current_weight) || wt
+                                  const isUsed = currWt > 0 && rem < currWt
                                   const isProcessing = roll.status === 'sent_for_processing'
+                                  const receivedVAs = (roll.processing_logs || []).filter(l => l.status === 'received')
+                                  const hasVA = receivedVAs.length > 0
+                                  const vaSuffixes = hasVA ? receivedVAs.map(l => l.value_addition?.short_code).filter(Boolean).join('+') : ''
                                   return (
                                     <button
                                       key={roll.id}
                                       onClick={() => openRollFromInvoice(roll)}
-                                      title={`${roll.roll_code} — ${wt} ${grp.unit}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
+                                      title={`${roll.roll_code}${vaSuffixes ? '+' + vaSuffixes : ''} — ${wt} ${grp.unit}${hasVA ? ` (now ${currWt})` : ''}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
                                       className={`relative inline-flex items-center rounded border px-2.5 py-1 text-sm tabular-nums transition-colors cursor-pointer
                                         ${isProcessing
                                           ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100'
                                           : isUsed
                                             ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                            : 'border-gray-300 bg-white text-gray-800 hover:bg-blue-50 hover:border-blue-300'}`}
+                                            : hasVA
+                                              ? 'border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                                              : 'border-gray-300 bg-white text-gray-800 hover:bg-blue-50 hover:border-blue-300'}`}
                                     >
                                       {wt.toFixed(3)}
+                                      {hasVA && !isProcessing && !isUsed && (
+                                        <span className="ml-1 text-[10px] font-bold text-purple-600">+{vaSuffixes}</span>
+                                      )}
                                       {isProcessing && (
                                         <span className="ml-1 h-1.5 w-1.5 rounded-full bg-orange-500 inline-block" />
                                       )}
