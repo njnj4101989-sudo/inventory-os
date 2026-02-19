@@ -23,7 +23,7 @@ class RollFilterParams(PaginatedParams):
     has_remaining: bool | None = None
     fully_consumed: bool | None = None
     supplier_id: UUID | None = None
-    process_type: str | None = None
+    value_addition_id: UUID | None = None
     sr_no: str | None = None
 
 
@@ -87,7 +87,7 @@ class ProcessingBrief(BaseSchema):
     """Processing log nested in roll detail."""
 
     id: UUID
-    process_type: str
+    value_addition_id: UUID
     vendor_name: str
     sent_date: date
     received_date: date | None = None
@@ -107,6 +107,7 @@ class RollResponse(BaseSchema):
     color: str
     total_weight: Decimal
     remaining_weight: Decimal
+    current_weight: Decimal
     unit: str
     cost_per_unit: Decimal | None = None
     total_length: Decimal | None = None
@@ -134,11 +135,10 @@ class RollDetail(RollResponse):
 
 
 class SendForProcessing(BaseModel):
-    process_type: str  # embroidery, digital_print, dyeing, other
+    value_addition_id: UUID
     vendor_name: str
     vendor_phone: str | None = None
     sent_date: date
-    value_addition_id: UUID | None = None  # Link to ValueAddition master (for effective roll code)
     notes: str | None = None
 
 
@@ -153,7 +153,6 @@ class ReceiveFromProcessing(BaseModel):
 class UpdateProcessingLog(BaseModel):
     """PATCH /rolls/{id}/processing/{pid}/edit — update any field on a processing log."""
 
-    process_type: str | None = None
     value_addition_id: UUID | None = None
     vendor_name: str | None = None
     vendor_phone: str | None = None
@@ -168,7 +167,7 @@ class UpdateProcessingLog(BaseModel):
 class ProcessingResponse(BaseSchema):
     id: UUID
     roll_id: UUID
-    process_type: str
+    value_addition_id: UUID
     vendor_name: str
     vendor_phone: str | None = None
     sent_date: date

@@ -34,15 +34,75 @@
 
 ---
 
-## Current State (Session 25 — 2026-02-19)
+## Current State (Session 27 — 2026-02-19)
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 21 models, 18 schemas, 14 services, 15 routers, 80+ endpoints
 - **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 135+ modules, 0 build errors
 - **QR/Print Labels Phase 1:** COMPLETE — full end-to-end
-- **QR Phase 2 (Value Additions + Enhanced Roll Code):** COMPLETE — see below
+- **QR Phase 2 (Value Additions + Enhanced Roll Code):** COMPLETE
+- **Session 26: `process_type` → `value_addition_id` migration:** COMPLETE
+- **Session 27: `current_weight` — separate original vs post-VA weight:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
-- **API_REFERENCE.md:** Updated — §5 rolls include `enhanced_roll_code`, §15 value additions
+- **API_REFERENCE.md:** Updated — `current_weight` added to RollResponse + Passport
+
+### What's Built This Session (Session 27)
+
+#### Fix: Roll Weight Corruption After Value Addition — COMPLETE
+
+**Bug:** When receiving a roll back from VA (e.g., embroidery adds weight), `receive_from_processing()` was overwriting `roll.total_weight` with the new `weight_after`. This corrupted the invoice/challan view — which should always show the **original supplier weight**.
+
+**Fix:** Added `current_weight` column to separate original vs post-VA weight.
+
+| Field | Meaning | Mutated by |
+|-------|---------|-----------|
+| `total_weight` | Original supplier weight — IMMUTABLE after stock-in | Never (after stock-in) |
+| `current_weight` | Latest weight after value additions | `receive_from_processing`, `update_processing_log` |
+| `remaining_weight` | Available for cutting/lots | `receive_from_processing`, lot creation |
+
+**Additional bugs fixed:**
+1. **`send_for_processing` was capturing wrong `weight_before` for multi-VA rolls** — was using `total_weight` (original), now uses `current_weight` (post-previous-VA)
+2. **`update_processing_log` didn't sync roll weight** — if user edits `weight_after` on a received log, `current_weight` now recalculates from latest received log
+
+**Backend changes:**
+| File | Change |
+|------|--------|
+| `models/roll.py` | Added `current_weight` column (Numeric(10,3), NOT NULL) |
+| `schemas/roll.py` | Added `current_weight: Decimal` to `RollResponse` |
+| `services/roll_service.py` | Fixed 5 methods: `stock_in` (init current_weight), `update_roll` (sync), `send_for_processing` (use current_weight for weight_before), `receive_from_processing` (update current_weight NOT total_weight), `update_processing_log` (sync when weight_after edited), `_to_response` (include current_weight) |
+| `migrations/versions/a7b2c3d4e5f6_...` | Add column + backfill from total_weight + override from latest received processing log |
+
+**Frontend changes:**
+| File | Change |
+|------|--------|
+| `api/mock.js` | Added `current_weight` to all 6 mock rolls |
+| `api/rolls.js` | Fixed mock `stockIn` (set current_weight), `updateRoll` (sync), `sendForProcessing` (use current_weight), `receiveFromProcessing` (update current_weight not total_weight) |
+| `pages/RollsPage.jsx` | Added "Wt. Change" column to All Rolls tab (green +/red - delta). Detail modal: shows "Original" weight + "Wt. Change" in KPI bar, "Current Weight" row in Material Info (only when different). Processing tab: renamed "Weight" → "Orig. Wt" |
+| `pages/ScanPage.jsx` | Passport: shows "Orig. Weight" + "Current Wt." (only when different) |
+| `API_REFERENCE.md` | Added `current_weight` to RollResponse + Passport examples |
+
+### What's Built This Session (Session 26)
+
+#### Replace `process_type` with `value_addition_id` (fully) — COMPLETE
+
+**Why:** `RollProcessing` had two overlapping fields — `process_type` (free-text: embroidery, dyeing, etc.) and `value_addition_id` (FK to ValueAddition master). They described the same thing. `value_addition_id` was already integrated into enhanced_roll_code, passport, badges. The `process_type` string was redundant. Removed it entirely, made `value_addition_id` **required**.
+
+**Backend changes:**
+| File | Change |
+|------|--------|
+| `models/roll.py` | Removed `process_type` column, made `value_addition_id` non-nullable |
+| `schemas/roll.py` | Removed `process_type` from all schemas (Filter, Send, Update, Brief, Response). Added `value_addition_id` filter param. Made `value_addition_id` required in `SendForProcessing` |
+| `services/roll_service.py` | Removed `process_type` from send/response. Removed passport VA/regular split (all logs have VA now). Added `value_addition_id` filter via subquery join. Simplified enhanced_roll_code computation |
+| `migrations/versions/f3a8b1c2d4e5_...` | Drop `process_type`, make `value_addition_id` NOT NULL (backfills existing NULLs with first VA) |
+
+**Frontend changes:**
+| File | Change |
+|------|--------|
+| `pages/RollsPage.jsx` | Removed `PROCESS_TYPES` + `PROCESS_COLORS` constants. Added `VA_COLORS` + `getVAColor()`. All badges/labels/filters now use `value_addition` object. Send Processing form: only VA dropdown (required). Edit Processing: VA dropdown replaces Process Type. Filters use VA master data. |
+| `pages/ScanPage.jsx` | Removed `regular_processing` section. Fallback shows VA name/short_code instead of `process_type` |
+| `api/mock.js` | Processing log entry: replaced `process_type` with `value_addition_id` + `value_addition` nested object |
+| `api/rolls.js` | Mock filter: `value_addition_id` replaces `process_type`. Mock sendForProcessing: creates log with VA fields |
+| `API_REFERENCE.md` | All processing schemas updated: `process_type` → `value_addition_id` (required UUID). Removed `regular_processing` from passport |
 
 ### What's Built This Session (Session 25)
 

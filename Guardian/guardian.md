@@ -249,7 +249,7 @@ Roll: 1-COT-PINK/07-01
 1. **NEVER store `effective_sku`** — always compute: base_sku + completed value addition codes
 2. **Roll QR printed once** after stock-in — never reprinted (data evolves in DB, not QR)
 3. **Value additions in effective_sku ONLY when `status = 'received'`** — not while sent
-4. **`process_type` in RollProcessing stays** — `value_addition_id` is an ADDITIONAL optional FK (Phase 2)
+4. **`process_type` is REMOVED** — `value_addition_id` is the ONLY required FK on RollProcessing (Session 26)
 5. **`Batch.qr_code_data` already exists** — populate it when batch is created (Phase 3)
 6. **Mobile scan works in-browser** — `html5-qrcode` uses device camera, no app install needed
 7. **`/scan/*` routes are PUBLIC** — no auth required (workers on floor scan without logging in)
@@ -299,24 +299,26 @@ Roll: 1-COT-PINK/07-01
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-19 16:14:16_
+_Last sync: 2026-02-19 22:47:06_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5672 lines total).",
+  "summary": "Project has 13 tracked code files (~5688 lines total).",
   "recent_files": [
-    "CLAUDE.md (394 lines)",
-    ".claude\\settings.local.json (45 lines)",
-    "guardian.md (320 lines)",
+    "CLAUDE.md (418 lines)",
+    "API_REFERENCE.md (1052 lines)",
+    "guardian.md (322 lines)",
     "project-context.json (17 lines)",
-    "API_REFERENCE.md (1062 lines)"
+    ".claude\\settings.local.json (45 lines)"
   ],
   "language_breakdown": {
     ".md": 10,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5672,
-  "last_updated": "2026-02-19 16:14:16"
+  "total_lines": 5688,
+  "last_updated": "2026-02-19 22:47:06"
 }
 ```

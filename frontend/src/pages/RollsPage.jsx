@@ -16,13 +16,6 @@ const LABEL_CLS = 'block text-sm font-medium text-gray-700 mb-1'
 
 // Challan-style fast entry — no per-roll template needed
 
-const PROCESS_TYPES = [
-  { value: 'embroidery', label: 'Embroidery' },
-  { value: 'digital_print', label: 'Digital Print' },
-  { value: 'dyeing', label: 'Dyeing' },
-  { value: 'other', label: 'Other' },
-]
-
 const TABS = [
   { key: 'invoices', label: 'By Invoice', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { key: 'rolls', label: 'All Rolls', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
@@ -168,6 +161,22 @@ const ROLL_COLUMNS = [
     },
   },
   {
+    key: 'current_weight',
+    label: 'Wt. Change',
+    render: (val, row) => {
+      const orig = parseFloat(row.total_weight) || 0
+      const curr = parseFloat(val) || orig
+      const delta = curr - orig
+      if (Math.abs(delta) < 0.001) return <span className="text-gray-300">—</span>
+      const isGain = delta > 0
+      return (
+        <span className={`text-sm font-medium ${isGain ? 'text-green-600' : 'text-red-600'}`}>
+          {isGain ? '+' : ''}{delta.toFixed(2)} kg
+        </span>
+      )
+    },
+  },
+  {
     key: 'cost_per_unit',
     label: 'Value',
     render: (val, row) => {
@@ -194,7 +203,7 @@ const ROLL_COLUMNS = [
           <StatusBadge status={val} label={ROLL_STATUS_LABELS[val] || val} />
           {val === 'sent_for_processing' && latestSent && (
             <div className="mt-0.5 text-[10px] text-orange-600 font-medium truncate max-w-[80px]">
-              {PROCESS_TYPES.find((p) => p.value === latestSent.process_type)?.label || latestSent.process_type}
+              {latestSent.value_addition?.name || latestSent.value_addition?.short_code || '—'}
             </div>
           )}
           {val === 'in_stock' && hasHistory && (
@@ -216,27 +225,23 @@ const PROCESSING_COLUMNS = [
   { key: 'color', label: 'Color' },
   {
     key: 'total_weight',
-    label: 'Weight',
-    render: (val) => `${val} kg`,
+    label: 'Orig. Wt',
+    render: (val) => <span className="text-sm">{val} kg</span>,
   },
   {
     key: 'processing_logs',
-    label: 'Process / VA',
+    label: 'Value Addition',
     render: (val) => {
       const latest = val?.[val.length - 1]
       if (!latest) return '—'
-      const pt = PROCESS_TYPES.find((p) => p.value === latest.process_type)
       const va = latest.value_addition
+      const c = va ? getVAColor(va.short_code) : DEFAULT_VA_COLOR
       return (
         <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
-            {pt?.label || latest.process_type}
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${c.bg} ${c.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+            {va?.name || '—'}
           </span>
-          {va && (
-            <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
-              +{va.short_code}
-            </span>
-          )}
         </div>
       )
     },
@@ -287,12 +292,16 @@ const getProcessSummary = (logs) => {
   return { received, totalCost, totalDays, weightChange, weightChangePct, lastDate, processCount: logs.length }
 }
 
-const PROCESS_COLORS = {
-  embroidery: { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-500' },
-  digital_print: { bg: 'bg-sky-100', text: 'text-sky-700', dot: 'bg-sky-500' },
-  dyeing: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
-  other: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' },
+const VA_COLORS = {
+  EMB: { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-500' },
+  DYE: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
+  DPT: { bg: 'bg-sky-100', text: 'text-sky-700', dot: 'bg-sky-500' },
+  HWK: { bg: 'bg-rose-100', text: 'text-rose-700', dot: 'bg-rose-500' },
+  SQN: { bg: 'bg-teal-100', text: 'text-teal-700', dot: 'bg-teal-500' },
+  BTC: { bg: 'bg-indigo-100', text: 'text-indigo-700', dot: 'bg-indigo-500' },
 }
+const DEFAULT_VA_COLOR = { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' }
+const getVAColor = (shortCode) => VA_COLORS[shortCode] || DEFAULT_VA_COLOR
 
 // ── Processed & Returned tab columns ──
 const PROCESSED_COLUMNS = [
@@ -330,7 +339,7 @@ const PROCESSED_COLUMNS = [
   },
   {
     key: 'processing_logs',
-    label: 'Processes',
+    label: 'Value Additions',
     sortable: false,
     render: (logs) => {
       if (!logs || logs.length === 0) return '—'
@@ -338,14 +347,14 @@ const PROCESSED_COLUMNS = [
       return (
         <div className="flex flex-wrap gap-1">
           {logs.map((l, i) => {
-            if (seen.has(l.process_type)) return null
-            seen.add(l.process_type)
-            const c = PROCESS_COLORS[l.process_type] || PROCESS_COLORS.other
-            const pt = PROCESS_TYPES.find((p) => p.value === l.process_type)
+            const sc = l.value_addition?.short_code
+            if (!sc || seen.has(sc)) return null
+            seen.add(sc)
+            const c = getVAColor(sc)
             return (
               <span key={i} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${c.bg} ${c.text}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
-                {pt?.label || l.process_type}
+                {l.value_addition?.name || sc}
               </span>
             )
           })}
@@ -467,7 +476,7 @@ export default function RollsPage() {
   // Send for Processing modal
   const [sendProcOpen, setSendProcOpen] = useState(false)
   const [sendProcRoll, setSendProcRoll] = useState(null)
-  const [sendProcForm, setSendProcForm] = useState({ process_type: 'embroidery', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
+  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
   const [sendProcSaving, setSendProcSaving] = useState(false)
   const [sendProcError, setSendProcError] = useState(null)
 
@@ -520,7 +529,7 @@ export default function RollsPage() {
       if (rollAvailFilter === 'consumed') params.fully_consumed = true
       if (rollSupplierFilter) params.supplier_id = rollSupplierFilter
       if (rollFabricFilter) params.fabric_filter = rollFabricFilter
-      if (rollProcessFilter) params.process_type = rollProcessFilter
+      if (rollProcessFilter && rollProcessFilter !== 'none') params.value_addition_id = rollProcessFilter
       const res = await getRolls(params)
       let rollData = res.data.data
       // Client-side sub-filter for fresh vs processed-and-returned
@@ -528,6 +537,10 @@ export default function RollsPage() {
         rollData = rollData.filter((r) => !r.processing_logs || r.processing_logs.length === 0 || r.processing_logs.every((l) => l.status === 'sent'))
       } else if (rollStatusFilter === 'in_stock_processed') {
         rollData = rollData.filter((r) => r.processing_logs?.some((l) => l.status === 'received'))
+      }
+      // Client-side: "none" = no processing logs at all
+      if (rollProcessFilter === 'none') {
+        rollData = rollData.filter((r) => !r.processing_logs || r.processing_logs.length === 0)
       }
       setRolls(rollData)
       setRollTotal(res.data.total)
@@ -837,8 +850,8 @@ export default function RollsPage() {
         {/* Timeline */}
         <div className="relative">
           {logs.map((log, idx) => {
-            const pt = PROCESS_TYPES.find((p) => p.value === log.process_type)
-            const c = PROCESS_COLORS[log.process_type] || PROCESS_COLORS.other
+            const va = log.value_addition
+            const c = va ? getVAColor(va.short_code) : DEFAULT_VA_COLOR
             const isReceived = log.status === 'received'
             const days = log.sent_date && log.received_date
               ? Math.max(1, Math.floor((new Date(log.received_date) - new Date(log.sent_date)) / (1000 * 60 * 60 * 24)))
@@ -863,7 +876,7 @@ export default function RollsPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${c.bg} ${c.text}`}>
-                        {pt?.label || log.process_type}
+                        {va?.name || '—'}
                       </span>
                       <span className="text-sm text-gray-600 font-medium">{log.vendor_name}</span>
                       {log.vendor_phone && <span className="text-xs text-gray-400">{log.vendor_phone}</span>}
@@ -941,7 +954,7 @@ export default function RollsPage() {
     setEditProcRollId(rollId)
     setEditProcLog(log)
     setEditProcForm({
-      process_type: log.process_type || '',
+      value_addition_id: log.value_addition_id || log.value_addition?.id || '',
       vendor_name: log.vendor_name || '',
       vendor_phone: log.vendor_phone || '',
       sent_date: log.sent_date || '',
@@ -962,7 +975,8 @@ export default function RollsPage() {
     try {
       // Only send changed fields
       const payload = {}
-      if (editProcForm.process_type && editProcForm.process_type !== editProcLog.process_type) payload.process_type = editProcForm.process_type
+      const origVaId = editProcLog.value_addition_id || editProcLog.value_addition?.id || ''
+      if (editProcForm.value_addition_id && editProcForm.value_addition_id !== origVaId) payload.value_addition_id = editProcForm.value_addition_id
       if (editProcForm.vendor_name && editProcForm.vendor_name !== editProcLog.vendor_name) payload.vendor_name = editProcForm.vendor_name
       if (editProcForm.vendor_phone !== (editProcLog.vendor_phone || '')) payload.vendor_phone = editProcForm.vendor_phone || null
       if (editProcForm.sent_date && editProcForm.sent_date !== editProcLog.sent_date) payload.sent_date = editProcForm.sent_date
@@ -1045,21 +1059,21 @@ export default function RollsPage() {
   // ── Send for Processing ──
   const openSendProcessing = (roll) => {
     setSendProcRoll(roll)
-    setSendProcForm({ process_type: 'embroidery', value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+    setSendProcForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
     setSendProcError(null)
     setDetailRoll(null) // close detail modal
     setSendProcOpen(true)
   }
 
   const handleSendProcessing = async () => {
+    if (!sendProcForm.value_addition_id) { setSendProcError('Value Addition is required'); return }
     if (!sendProcForm.vendor_name.trim()) { setSendProcError('Vendor name is required'); return }
     if (!sendProcForm.sent_date) { setSendProcError('Sent date is required'); return }
     setSendProcSaving(true)
     setSendProcError(null)
     try {
       await sendForProcessing(sendProcRoll.id, {
-        process_type: sendProcForm.process_type,
-        value_addition_id: sendProcForm.value_addition_id || null,
+        value_addition_id: sendProcForm.value_addition_id,
         vendor_name: sendProcForm.vendor_name.trim(),
         vendor_phone: sendProcForm.vendor_phone.trim() || null,
         sent_date: sendProcForm.sent_date,
@@ -1258,9 +1272,9 @@ export default function RollsPage() {
                 </select>
                 <select value={rollProcessFilter} onChange={(e) => { setRollProcessFilter(e.target.value); setRollPage(1) }}
                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Processes</option>
+                  <option value="">All Value Additions</option>
                   <option value="none">No Processing</option>
-                  {PROCESS_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
                 </select>
                 <div className="flex-1 max-w-sm">
                   <SearchInput value={rollSearch} onChange={(v) => { setRollSearch(v); setRollPage(1) }} placeholder="Search code, color, invoice..." />
@@ -1307,11 +1321,16 @@ export default function RollsPage() {
 
         // Extract unique vendors and process types from data
         const uniqueVendors = [...new Set(procRolls.map((r) => getLatestLog(r)?.vendor_name).filter(Boolean))].sort()
-        const uniqueProcTypes = [...new Set(procRolls.map((r) => getLatestLog(r)?.process_type).filter(Boolean))]
+        const uniqueVAs = []
+        const seenVA = new Set()
+        for (const r of procRolls) {
+          const va = getLatestLog(r)?.value_addition
+          if (va && !seenVA.has(va.id)) { seenVA.add(va.id); uniqueVAs.push(va) }
+        }
 
         // Apply filters
         let filtered = [...procRolls]
-        if (procProcessFilter) filtered = filtered.filter((r) => getLatestLog(r)?.process_type === procProcessFilter)
+        if (procProcessFilter) filtered = filtered.filter((r) => getLatestLog(r)?.value_addition?.id === procProcessFilter)
         if (procVendorFilter) filtered = filtered.filter((r) => getLatestLog(r)?.vendor_name === procVendorFilter)
         if (procDaysFilter === 'overdue') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) > 14)
         if (procDaysFilter === 'week') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) <= 7)
@@ -1362,11 +1381,8 @@ export default function RollsPage() {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <select value={procProcessFilter} onChange={(e) => setProcProcessFilter(e.target.value)}
                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Process Types</option>
-                  {uniqueProcTypes.map((pt) => {
-                    const label = PROCESS_TYPES.find((p) => p.value === pt)?.label || pt
-                    return <option key={pt} value={pt}>{label}</option>
-                  })}
+                  <option value="">All Value Additions</option>
+                  {uniqueVAs.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
                 </select>
                 <select value={procVendorFilter} onChange={(e) => setProcVendorFilter(e.target.value)}
                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
@@ -2082,8 +2098,11 @@ export default function RollsPage() {
           const unitLabel = detailRoll.unit === 'meters' ? 'm' : 'kg'
           const totalQty = detailRoll.unit === 'meters' ? (detailRoll.total_length || detailRoll.total_weight) : detailRoll.total_weight
           const remainQty = detailRoll.unit === 'meters' ? (detailRoll.remaining_length ?? detailRoll.remaining_weight) : detailRoll.remaining_weight
+          const currentWt = parseFloat(detailRoll.current_weight) || parseFloat(detailRoll.total_weight) || 0
+          const origWt = parseFloat(detailRoll.total_weight) || 0
+          const wtDelta = currentWt - origWt
           const pct = totalQty > 0 ? (remainQty / totalQty) * 100 : 0
-          const totalValue = (parseFloat(detailRoll.total_weight) || 0) * (parseFloat(detailRoll.cost_per_unit) || 0)
+          const totalValue = origWt * (parseFloat(detailRoll.cost_per_unit) || 0)
           const procLogs = detailRoll.processing_logs || []
           return (
             <div className="space-y-5">
@@ -2123,9 +2142,20 @@ export default function RollsPage() {
                   {/* KPI Summary — compact single row */}
                   <div className="flex items-center gap-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500">Total</span>
-                      <span className="text-sm font-bold text-blue-700">{totalQty} {unitLabel}</span>
+                      <span className="text-xs text-gray-500">Original</span>
+                      <span className="text-sm font-bold text-blue-700">{origWt} {unitLabel}</span>
                     </div>
+                    {Math.abs(wtDelta) >= 0.001 && (
+                      <>
+                        <div className="h-4 w-px bg-gray-300" />
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-500">Wt. Change</span>
+                          <span className={`text-sm font-bold ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)} {unitLabel}
+                          </span>
+                        </div>
+                      </>
+                    )}
                     <div className="h-4 w-px bg-gray-300" />
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-500">Remaining</span>
@@ -2158,7 +2188,10 @@ export default function RollsPage() {
                           ['Fabric Type', detailRoll.fabric_type],
                           ['Color', detailRoll.color],
                           ['Unit', detailRoll.unit === 'meters' ? 'Meters' : 'Kilograms'],
-                          [detailRoll.unit === 'meters' ? 'Total Length' : 'Total Weight', `${totalQty} ${unitLabel}`],
+                          [detailRoll.unit === 'meters' ? 'Total Length' : 'Original Weight', `${totalQty} ${unitLabel}`],
+                          ...(Math.abs(wtDelta) >= 0.001 ? [['Current Weight',
+                            <span key="cw">{currentWt.toFixed(3)} {unitLabel} <span className={`text-xs ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>({wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)})</span></span>
+                          ]] : []),
                           [detailRoll.unit === 'meters' ? 'Weight (ref)' : 'Length (ref)',
                             detailRoll.unit === 'meters'
                               ? (detailRoll.total_weight ? `${detailRoll.total_weight} kg` : '—')
@@ -2222,15 +2255,18 @@ export default function RollsPage() {
                       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Processing History</h3>
                       <div className="space-y-3">
                         {procLogs.map((log, idx) => {
-                          const pt = PROCESS_TYPES.find((p) => p.value === log.process_type)
+                          const va = log.value_addition
+                          const vc = va ? getVAColor(va.short_code) : DEFAULT_VA_COLOR
                           const isActive = log.status === 'sent'
                           return (
                             <div key={log.id || idx} className={`rounded-lg border p-4 ${isActive ? 'border-orange-200 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm text-gray-800">{pt?.label || log.process_type}</span>
-                                  {log.value_addition && (
-                                    <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">+{log.value_addition.short_code}</span>
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${vc.bg} ${vc.text}`}>
+                                    {va?.name || '—'}
+                                  </span>
+                                  {va && (
+                                    <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">+{va.short_code}</span>
                                   )}
                                   <StatusBadge status={log.status} />
                                 </div>
@@ -2314,21 +2350,13 @@ export default function RollsPage() {
         )}
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLS}>Process Type <span className="text-red-500">*</span></label>
-              <select value={sendProcForm.process_type} onChange={(e) => setSendProcForm((f) => ({ ...f, process_type: e.target.value }))} className={INPUT_CLS}>
-                {PROCESS_TYPES.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={LABEL_CLS}>Value Addition</label>
-              <select value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
-                <option value="">None (regular processing)</option>
-                {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-              </select>
-              <p className="mt-1 text-xs text-gray-400">If selected, adds to enhanced roll code after completion</p>
-            </div>
+          <div>
+            <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
+            <select value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+              <option value="">Select value addition</option>
+              {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">Adds to enhanced roll code after completion (e.g. +EMB, +DYE)</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -2377,7 +2405,7 @@ export default function RollsPage() {
             <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                 <div><span className="text-orange-500">Roll:</span> <span className="font-medium text-orange-800">{recvProcRoll.roll_code}</span></div>
-                <div><span className="text-orange-500">Process:</span> <span className="font-medium text-orange-800">{PROCESS_TYPES.find((p) => p.value === recvProcLog.process_type)?.label || recvProcLog.process_type}</span></div>
+                <div><span className="text-orange-500">Process:</span> <span className="font-medium text-orange-800">{recvProcLog.value_addition?.name || '—'}</span></div>
                 <div><span className="text-orange-500">Vendor:</span> <span className="font-medium text-orange-800">{recvProcLog.vendor_name}</span></div>
                 <div><span className="text-orange-500">Sent:</span> <span className="font-medium text-orange-800">{new Date(recvProcLog.sent_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
                 <div><span className="text-orange-500">Weight Before:</span> <span className="font-medium text-orange-800">{recvProcLog.weight_before} kg</span></div>
@@ -2435,7 +2463,7 @@ export default function RollsPage() {
 
       {/* ═══════ Edit Processing Log Modal ═══════ */}
       <Modal open={editProcOpen} onClose={() => setEditProcOpen(false)}
-        title={editProcLog ? `Edit Processing: ${PROCESS_TYPES.find((p) => p.value === editProcLog.process_type)?.label || editProcLog.process_type}` : 'Edit Processing Log'}
+        title={editProcLog ? `Edit Processing: ${editProcLog.value_addition?.name || '—'}` : 'Edit Processing Log'}
         actions={
           <>
             <button onClick={() => setEditProcOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
@@ -2449,12 +2477,13 @@ export default function RollsPage() {
         {editProcError && <div className="mb-4"><ErrorAlert message={editProcError} onDismiss={() => setEditProcError(null)} /></div>}
 
         <div className="space-y-4">
-          {/* Row 1: Process Type + Vendor */}
+          {/* Row 1: Value Addition + Vendor */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Process Type</label>
-              <select value={editProcForm.process_type} onChange={(e) => setEditProcForm((f) => ({ ...f, process_type: e.target.value }))} className={INPUT_CLS}>
-                {PROCESS_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              <label className={LABEL_CLS}>Value Addition</label>
+              <select value={editProcForm.value_addition_id} onChange={(e) => setEditProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+                <option value="">Select value addition</option>
+                {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
               </select>
             </div>
             <div>

@@ -165,7 +165,7 @@ Paginated endpoints return:
 ## 5. Rolls (`/api/v1/rolls`)
 
 ### GET `/rolls`
-**Query:** `fabric_type`, `color`, `has_remaining` (bool), `fully_consumed` (bool), `status` (`in_stock`|`sent_for_processing`|`in_cutting`), `supplier_id`, `fabric_filter`, `process_type`, `sr_no`, `page`, `page_size`
+**Query:** `fabric_type`, `color`, `has_remaining` (bool), `fully_consumed` (bool), `status` (`in_stock`|`sent_for_processing`|`in_cutting`), `supplier_id`, `fabric_filter`, `value_addition_id`, `sr_no`, `page`, `page_size`
 **Response:** Paginated array of:
 ```json
 {
@@ -175,6 +175,7 @@ Paginated endpoints return:
   "color": "Green",
   "total_weight": 18.800,
   "remaining_weight": 0,
+  "current_weight": 18.800,
   "unit": "kg",
   "cost_per_unit": 120.0,
   "total_length": null,
@@ -198,7 +199,8 @@ Paginated endpoints return:
   "processing_logs": [
     {
       "id": "uuid",
-      "process_type": "embroidery",
+      "value_addition_id": "uuid",
+      "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
       "vendor_name": "Shree Embroidery Works",
       "vendor_phone": "9898123456",
       "sent_date": "2026-02-09",
@@ -279,7 +281,7 @@ Same as `GET /rolls` with status filter pre-applied.
 **Request:**
 ```json
 {
-  "process_type": "embroidery",
+  "value_addition_id": "uuid (required)",
   "vendor_name": "Shree Embroidery Works",
   "vendor_phone": "9898123456",
   "sent_date": "2026-02-09",
@@ -305,7 +307,7 @@ Same as `GET /rolls` with status filter pre-applied.
 **Request:** All fields optional — only send changed fields:
 ```json
 {
-  "process_type": "dyeing",
+  "value_addition_id": "uuid (optional)",
   "vendor_name": "Updated Vendor",
   "vendor_phone": "9898000000",
   "sent_date": "2026-02-09",
@@ -900,6 +902,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "color_no": 7,
   "total_weight": 45.5,
   "remaining_weight": 35.0,
+  "current_weight": 47.8,
   "unit": "kg",
   "sr_no": "1",
   "supplier_invoice_no": "INV-001",
@@ -920,16 +923,6 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
       "processing_cost": 2500.00,
       "status": "received",
       "notes": "Floral pattern"
-    }
-  ],
-  "regular_processing": [
-    {
-      "id": "uuid",
-      "process_type": "washing",
-      "vendor_name": "Local Laundry",
-      "sent_date": "2026-02-08",
-      "received_date": "2026-02-09",
-      "status": "received"
     }
   ],
   "lots": [
@@ -1002,14 +995,13 @@ If roll is not yet in a batch, `effective_sku` is `null`.
 
 ### Updated RollProcessing shape (Phase 2)
 
-When `value_addition_id` is present, the processing is a value addition (shows in effective SKU):
+Every processing log has a required `value_addition_id` (no more `process_type`):
 ```json
 {
   "id": "uuid",
   "roll_id": "uuid",
-  "value_addition_id": "uuid-or-null",
+  "value_addition_id": "uuid",
   "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
-  "process_type": "embroidery",
   "vendor_name": "Sonu Works",
   "sent_date": "2026-02-10",
   "received_date": "2026-02-15",

@@ -93,7 +93,7 @@ export const rollProcessing = []
 export const rolls = [
   {
     id: uid(8), roll_code: '1-COT-GREEN-01', fabric_type: 'Cotton',
-    color: 'Green', total_weight: 18.800, remaining_weight: 0,
+    color: 'Green', total_weight: 18.800, remaining_weight: 0, current_weight: 18.800,
     unit: 'kg', cost_per_unit: 120.0, total_length: null, panna: 44, gsm: 180, status: 'in_cutting',
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0451', supplier_challan_no: 'CH-451', supplier_invoice_date: '2026-02-06', sr_no: '1',
@@ -102,7 +102,7 @@ export const rolls = [
   },
   {
     id: uid(9), roll_code: '1-COT-GREEN-02', fabric_type: 'Cotton',
-    color: 'Green', total_weight: 36.920, remaining_weight: 0,
+    color: 'Green', total_weight: 36.920, remaining_weight: 0, current_weight: 36.920,
     unit: 'kg', cost_per_unit: 120.0, total_length: null, panna: 44, gsm: 180, status: 'in_cutting',
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0451', supplier_challan_no: 'CH-451', supplier_invoice_date: '2026-02-06', sr_no: '1',
@@ -111,7 +111,7 @@ export const rolls = [
   },
   {
     id: uid('a'), roll_code: '2-COT-RED-01', fabric_type: 'Cotton',
-    color: 'Red', total_weight: 28.550, remaining_weight: 0,
+    color: 'Red', total_weight: 28.550, remaining_weight: 0, current_weight: 28.550,
     unit: 'kg', cost_per_unit: 130.0, total_length: null, panna: 44, gsm: 180, status: 'in_cutting',
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0452', supplier_challan_no: 'CH-452', supplier_invoice_date: '2026-02-06', sr_no: '2',
@@ -120,7 +120,7 @@ export const rolls = [
   },
   {
     id: uid('b'), roll_code: '2-COT-RED-02', fabric_type: 'Cotton',
-    color: 'Red', total_weight: 29.000, remaining_weight: 0,
+    color: 'Red', total_weight: 29.000, remaining_weight: 0, current_weight: 29.000,
     unit: 'kg', cost_per_unit: 130.0, total_length: null, panna: 44, gsm: 180, status: 'in_cutting',
     supplier: { id: uid(6), name: 'Krishna Textiles' },
     supplier_invoice_no: 'KT-2026-0452', supplier_challan_no: 'CH-452', supplier_invoice_date: '2026-02-06', sr_no: '2',
@@ -129,7 +129,7 @@ export const rolls = [
   },
   {
     id: uid('b1'), roll_code: '3-COT-BLACK-01', fabric_type: 'Cotton',
-    color: 'Black', total_weight: 28.590, remaining_weight: 28.590,
+    color: 'Black', total_weight: 28.590, remaining_weight: 28.590, current_weight: 28.590,
     unit: 'kg', cost_per_unit: 125.0, total_length: null, panna: 46, gsm: 200, status: 'in_stock',
     supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
     supplier_invoice_no: 'LF-2026-0089', supplier_challan_no: null, supplier_invoice_date: '2026-02-07', sr_no: '3',
@@ -138,14 +138,16 @@ export const rolls = [
   },
   {
     id: uid('b2'), roll_code: '4-COT-WHITE-01', fabric_type: 'Cotton',
-    color: 'White', total_weight: 23.120, remaining_weight: 23.120,
+    color: 'White', total_weight: 23.120, remaining_weight: 23.120, current_weight: 23.120,
     unit: 'kg', cost_per_unit: 115.0, total_length: null, panna: 46, gsm: 200, status: 'sent_for_processing',
     supplier: { id: uid(7), name: 'Lakshmi Fabrics' },
     supplier_invoice_no: 'LF-2026-0090', supplier_challan_no: null, supplier_invoice_date: '2026-02-07', sr_no: '4',
     received_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     received_at: '2026-02-08T09:30:00Z', notes: 'Sent for embroidery',
     processing_logs: [{
-      id: crypto.randomUUID(), process_type: 'embroidery', vendor_name: 'Shree Embroidery Works',
+      id: crypto.randomUUID(), value_addition_id: 'va-emb-001',
+      value_addition: { id: 'va-emb-001', name: 'Embroidery', short_code: 'EMB' },
+      vendor_name: 'Shree Embroidery Works',
       vendor_phone: '9898123456', sent_date: '2026-02-09', received_date: null,
       weight_before: 23.120, weight_after: null, length_before: null, length_after: null,
       processing_cost: null, status: 'sent', notes: 'Chikan embroidery work',

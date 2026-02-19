@@ -175,7 +175,10 @@ export default function ScanPage() {
               <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
                 <Metric label="Fabric" value={passport.fabric_type} />
                 <Metric label="Color" value={`${passport.color}${passport.color_no ? ` (${String(passport.color_no).padStart(2,'0')})` : ''}`} />
-                <Metric label="Weight" value={`${parseFloat(passport.total_weight || 0).toFixed(1)} ${passport.unit || 'kg'}`} />
+                <Metric label="Orig. Weight" value={`${parseFloat(passport.total_weight || 0).toFixed(1)} ${passport.unit || 'kg'}`} />
+                {passport.current_weight && Math.abs(parseFloat(passport.current_weight) - parseFloat(passport.total_weight)) >= 0.01 && (
+                  <Metric label="Current Wt." value={`${parseFloat(passport.current_weight).toFixed(1)} ${passport.unit || 'kg'}`} />
+                )}
                 <Metric label="Remaining" value={`${parseFloat(passport.remaining_weight || 0).toFixed(1)} ${passport.unit || 'kg'}`} />
                 {passport.panna && <Metric label="Panna" value={passport.panna} />}
                 {passport.gsm && <Metric label="GSM" value={passport.gsm} />}
@@ -221,41 +224,15 @@ export default function ScanPage() {
               </Section>
             )}
 
-            {/* Regular Processing */}
-            {passport.regular_processing?.length > 0 && (
-              <Section title="Processing History" icon="🔧">
-                {passport.regular_processing.map((log, i) => (
-                  <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-900 capitalize">
-                        {log.process_type?.replace(/_/g, ' ')}
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {log.status === 'received' ? 'Returned' : 'Sent'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>{log.vendor_name}</span>
-                      {log.sent_date && <span>Sent: {log.sent_date}</span>}
-                      {log.received_date && <span>Returned: {log.received_date}</span>}
-                      {log.processing_cost && <span>Cost: ₹{parseFloat(log.processing_cost).toLocaleString('en-IN')}</span>}
-                    </div>
-                  </div>
-                ))}
-              </Section>
-            )}
-
-            {/* Fallback: processing_logs if no split (mock mode) */}
-            {!passport.value_additions && !passport.regular_processing && passport.processing_logs?.length > 0 && (
-              <Section title="Processing History" icon="🔧">
+            {/* Fallback: processing_logs if passport has no value_additions split (mock mode) */}
+            {!passport.value_additions && passport.processing_logs?.length > 0 && (
+              <Section title="Value Additions" icon="✨">
                 {passport.processing_logs.map((log, i) => (
                   <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 capitalize">{log.process_type?.replace(/_/g, ' ')}</span>
-                        {log.value_addition && <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">+{log.value_addition.short_code}</span>}
+                        {log.value_addition && <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.value_addition.short_code}</span>}
+                        <span className="text-sm font-medium text-gray-900">{log.value_addition?.name || '—'}</span>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'

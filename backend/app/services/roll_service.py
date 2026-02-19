@@ -58,6 +58,15 @@ class RollService:
         if params.sr_no:
             conditions.append(Roll.sr_no == params.sr_no)
 
+        if params.value_addition_id:
+            conditions.append(
+                Roll.id.in_(
+                    select(RollProcessing.roll_id).where(
+                        RollProcessing.value_addition_id == params.value_addition_id
+                    )
+                )
+            )
+
         # Count with filters applied
         count_stmt = select(func.count()).select_from(Roll)
         if conditions:
@@ -186,23 +195,20 @@ class RollService:
                     "tailor": tailor,
                 })
 
-        # Compute value additions for passport display
+        # Compute value additions for passport display (all logs have a VA now)
         value_additions = []
-        regular_processing = []
         for p in (roll.processing_logs or []):
             entry = self._processing_to_response(p)
-            if p.value_addition_id and p.value_addition:
+            if p.value_addition:
                 entry["name"] = p.value_addition.name
                 entry["short_code"] = p.value_addition.short_code
-                value_additions.append(entry)
-            else:
-                regular_processing.append(entry)
+            value_additions.append(entry)
 
         # Compute effective_sku: base sku + received value addition short_codes
         va_suffixes = [
             p.value_addition.short_code
             for p in (roll.processing_logs or [])
-            if p.status == "received" and p.value_addition_id and p.value_addition
+            if p.status == "received" and p.value_addition
         ]
         base_sku = batches[0]["sku_code"] if batches else None
         effective_sku = None
@@ -212,7 +218,6 @@ class RollService:
         passport = self._to_response(roll)
         passport.update({
             "value_additions": value_additions,
-            "regular_processing": regular_processing,
             "lots": lots,
             "batches": batches,
             "orders": [],   # Future: traverse batch → order items
@@ -237,6 +242,7 @@ class RollService:
             color=req.color,
             total_weight=req.total_weight,
             remaining_weight=req.total_weight,
+            current_weight=req.total_weight,
             unit=req.unit or "kg",
             cost_per_unit=req.cost_per_unit,
             total_length=req.total_length,
@@ -291,9 +297,10 @@ class RollService:
             if field == "total_weight":
                 weight_changed = True
 
-        # Keep remaining_weight in sync when total_weight changes on unused roll
+        # Keep remaining_weight and current_weight in sync when total_weight changes on unused roll
         if weight_changed and req.total_weight is not None:
             roll.remaining_weight = req.total_weight
+            roll.current_weight = req.total_weight
 
         await self.db.flush()
 
@@ -339,13 +346,12 @@ class RollService:
 
         log = RollProcessing(
             roll_id=roll_id,
-            process_type=req.process_type,
+            value_addition_id=req.value_addition_id,
             vendor_name=req.vendor_name,
             vendor_phone=req.vendor_phone,
             sent_date=req.sent_date,
-            weight_before=roll.total_weight,
+            weight_before=roll.current_weight,
             length_before=roll.total_length,
-            value_addition_id=req.value_addition_id,
             status="sent",
             notes=req.notes,
         )
@@ -390,8 +396,8 @@ class RollService:
         if req.notes:
             log.notes = (log.notes + " | " + req.notes) if log.notes else req.notes
 
-        # Update roll measurements and return to stock
-        roll.total_weight = req.weight_after
+        # Update current_weight (post-VA) — total_weight stays immutable (original supplier weight)
+        roll.current_weight = req.weight_after
         roll.remaining_weight = req.weight_after
         if req.length_after:
             roll.total_length = req.length_after
@@ -436,6 +442,24 @@ class RollService:
             else:
                 setattr(log, field, value)
 
+        # If weight_after was edited on a received log, sync roll.current_weight
+        if "weight_after" in updates and log.status == "received":
+            # Find the chronologically latest received log for this roll
+            latest_stmt = (
+                select(RollProcessing)
+                .where(
+                    RollProcessing.roll_id == roll_id,
+                    RollProcessing.status == "received",
+                )
+                .order_by(RollProcessing.received_date.desc(), RollProcessing.created_at.desc())
+                .limit(1)
+            )
+            latest = (await self.db.execute(latest_stmt)).scalar_one_or_none()
+            # The just-edited log might be the latest — use its new value
+            if latest and latest.id == log.id:
+                roll.current_weight = updates["weight_after"]
+                roll.remaining_weight = updates["weight_after"]
+
         await self.db.flush()
 
         # Reload full roll with relationships
@@ -452,8 +476,7 @@ class RollService:
         return {
             "id": str(p.id),
             "roll_id": str(p.roll_id),
-            "process_type": p.process_type,
-            "value_addition_id": str(p.value_addition_id) if p.value_addition_id else None,
+            "value_addition_id": str(p.value_addition_id),
             "value_addition": {
                 "id": str(va.id),
                 "name": va.name,
@@ -477,7 +500,7 @@ class RollService:
         """Compute enhanced roll code: base + received value addition short codes."""
         suffixes = []
         for p in (processing_logs or []):
-            if p.status == "received" and p.value_addition_id and p.value_addition:
+            if p.status == "received" and p.value_addition:
                 suffixes.append(p.value_addition.short_code)
         if suffixes:
             return roll_code + "+" + "+".join(suffixes)
@@ -493,6 +516,7 @@ class RollService:
             "color": r.color,
             "total_weight": float(r.total_weight) if r.total_weight else 0,
             "remaining_weight": float(r.remaining_weight) if r.remaining_weight else 0,
+            "current_weight": float(r.current_weight) if r.current_weight else 0,
             "unit": r.unit,
             "cost_per_unit": float(r.cost_per_unit) if r.cost_per_unit else 0,
             "total_length": float(r.total_length) if r.total_length else None,

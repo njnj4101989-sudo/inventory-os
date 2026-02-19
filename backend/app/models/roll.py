@@ -18,6 +18,7 @@ class Roll(Base):
     color: Mapped[str] = mapped_column(String(50))
     total_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     remaining_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    current_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     unit: Mapped[str] = mapped_column(String(20), default="kg", server_default="'kg'")
     cost_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     total_length: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
@@ -49,7 +50,9 @@ class RollProcessing(Base):
     __tablename__ = "roll_processing"
 
     roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"))
-    process_type: Mapped[str] = mapped_column(String(50))  # embroidery, digital_print, dyeing, other
+    value_addition_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("value_additions.id")
+    )
     vendor_name: Mapped[str] = mapped_column(String(200))
     vendor_phone: Mapped[str | None] = mapped_column(String(20))
     sent_date: Mapped[datetime] = mapped_column(Date)
@@ -60,9 +63,6 @@ class RollProcessing(Base):
     length_after: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     processing_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'")
-    value_addition_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("value_additions.id"), nullable=True
-    )
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships

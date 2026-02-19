@@ -55,10 +55,10 @@ export async function getRolls(params = {}) {
     if (params.status) filtered = filtered.filter((r) => (r.status || 'in_stock') === params.status)
     if (params.supplier_id) filtered = filtered.filter((r) => r.supplier?.id === params.supplier_id)
     if (params.fabric_filter) filtered = filtered.filter((r) => r.fabric_type === params.fabric_filter)
-    if (params.process_type === 'none') {
+    if (params.value_addition_id === 'none') {
       filtered = filtered.filter((r) => !r.processing_logs || r.processing_logs.length === 0)
-    } else if (params.process_type) {
-      filtered = filtered.filter((r) => r.processing_logs?.some((l) => l.process_type === params.process_type))
+    } else if (params.value_addition_id) {
+      filtered = filtered.filter((r) => r.processing_logs?.some((l) => l.value_addition_id === params.value_addition_id))
     }
     return mockPaginated(filtered, params.page, params.page_size)
   }
@@ -74,6 +74,7 @@ export async function stockIn(data) {
       roll_code: nextCode,
       ...data,
       remaining_weight: data.total_weight || 0,
+      current_weight: data.total_weight || 0,
       status: 'in_stock',
       processing_logs: [],
       supplier: sup ? { id: sup.id, name: sup.name } : null,
@@ -236,7 +237,10 @@ export async function updateRoll(id, data) {
       throw { response: { data: { detail: 'Cannot edit a roll that has already been consumed' } } }
     }
     Object.assign(roll, data)
-    if (data.total_weight != null) roll.remaining_weight = data.total_weight
+    if (data.total_weight != null) {
+      roll.remaining_weight = data.total_weight
+      roll.current_weight = data.total_weight
+    }
     if (data.supplier_id) {
       const sup = suppliers.find((s) => s.id === data.supplier_id)
       roll.supplier = sup ? { id: sup.id, name: sup.name } : roll.supplier
@@ -264,12 +268,13 @@ export async function sendForProcessing(rollId, data) {
     const log = {
       id: crypto.randomUUID(),
       roll_id: rollId,
-      process_type: data.process_type,
+      value_addition_id: data.value_addition_id,
+      value_addition: { id: data.value_addition_id, name: 'Value Addition', short_code: 'VA' },
       vendor_name: data.vendor_name,
       vendor_phone: data.vendor_phone || null,
       sent_date: data.sent_date,
       received_date: null,
-      weight_before: roll.total_weight,
+      weight_before: roll.current_weight,
       weight_after: null,
       length_before: roll.total_length,
       length_after: null,
@@ -293,7 +298,7 @@ export async function updateProcessingLog(rollId, processingId, data) {
     if (!log) throw { response: { data: { detail: 'Processing log not found' } } }
     // Apply partial updates
     for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined && v !== null) log[k] = typeof v === 'string' && !isNaN(v) && k !== 'notes' && k !== 'vendor_name' && k !== 'vendor_phone' && k !== 'process_type' ? parseFloat(v) : v
+      if (v !== undefined && v !== null) log[k] = typeof v === 'string' && !isNaN(v) && k !== 'notes' && k !== 'vendor_name' && k !== 'vendor_phone' && k !== 'value_addition_id' ? parseFloat(v) : v
     }
     return mockResponse(roll, 'Processing log updated')
   }
@@ -312,8 +317,8 @@ export async function receiveFromProcessing(rollId, processingId, data) {
     log.processing_cost = data.processing_cost ? parseFloat(data.processing_cost) : null
     log.status = 'received'
     if (data.notes) log.notes = (log.notes ? log.notes + ' | ' : '') + data.notes
-    // Update roll measurements
-    roll.total_weight = log.weight_after
+    // Update current weight (total_weight stays immutable — original supplier weight)
+    roll.current_weight = log.weight_after
     roll.remaining_weight = log.weight_after
     if (log.length_after) roll.total_length = log.length_after
     // Add processing cost to roll cost
