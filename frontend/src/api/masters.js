@@ -1,5 +1,5 @@
 import client from './client'
-import { productTypes, colors, fabrics, mockResponse } from './mock'
+import { productTypes, colors, fabrics, valueAdditions, mockResponse } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -108,4 +108,41 @@ export async function updateFabric(id, data) {
     return mockResponse(obj, 'Fabric updated')
   }
   return client.patch(`/masters/fabrics/${id}`, data)
+}
+
+// ── Value Additions ────────────────────────────────────
+
+export async function getValueAdditions() {
+  if (USE_MOCK) return mockResponse(valueAdditions)
+  return client.get('/masters/value-additions')
+}
+
+export async function getAllValueAdditions() {
+  if (USE_MOCK) return mockResponse(valueAdditions.filter((va) => va.is_active))
+  return client.get('/masters/value-additions/all')
+}
+
+export async function createValueAddition(data) {
+  if (USE_MOCK) {
+    const code = data.short_code.toUpperCase().slice(0, 4)
+    const exists = valueAdditions.find((va) => va.short_code === code)
+    if (exists) throw { response: { data: { detail: `Value addition '${code}' already exists` } } }
+    const obj = { id: crypto.randomUUID(), name: data.name, short_code: code, description: data.description || null, is_active: true }
+    valueAdditions.push(obj)
+    return mockResponse(obj, 'Value addition created')
+  }
+  return client.post('/masters/value-additions', data)
+}
+
+export async function updateValueAddition(id, data) {
+  if (USE_MOCK) {
+    const obj = valueAdditions.find((va) => va.id === id)
+    if (!obj) throw { response: { data: { detail: 'Value addition not found' } } }
+    if (data.name != null) obj.name = data.name
+    if (data.short_code != null) obj.short_code = data.short_code.toUpperCase().slice(0, 4)
+    if (data.description != null) obj.description = data.description
+    if (data.is_active != null) obj.is_active = data.is_active
+    return mockResponse(obj, 'Value addition updated')
+  }
+  return client.patch(`/masters/value-additions/${id}`, data)
 }

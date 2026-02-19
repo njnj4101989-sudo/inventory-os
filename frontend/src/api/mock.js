@@ -570,6 +570,16 @@ export const fabrics = [
   { id: crypto.randomUUID(), name: 'Organza',   code: 'OGZ', description: 'Sheer organza fabric', is_active: true },
 ]
 
+// ── Value Additions ──────────────────────────────────────
+export const valueAdditions = [
+  { id: crypto.randomUUID(), name: 'Embroidery',    short_code: 'EMB', description: 'Machine or hand embroidery work', is_active: true },
+  { id: crypto.randomUUID(), name: 'Dying',         short_code: 'DYE', description: 'Fabric dying / color treatment', is_active: true },
+  { id: crypto.randomUUID(), name: 'Digital Print', short_code: 'DPT', description: 'Digital printing on fabric', is_active: true },
+  { id: crypto.randomUUID(), name: 'Handwork',      short_code: 'HWK', description: 'Manual handwork / embellishment', is_active: true },
+  { id: crypto.randomUUID(), name: 'Sequin Work',   short_code: 'SQN', description: 'Sequin application work', is_active: true },
+  { id: crypto.randomUUID(), name: 'Batik',         short_code: 'BTC', description: 'Batik dyeing technique', is_active: true },
+]
+
 // ── Mock Response Helper ───────────────────────────────
 export function mockResponse(data, message = 'OK') {
   return delay().then(() => ({

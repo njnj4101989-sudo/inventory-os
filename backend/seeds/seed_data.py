@@ -18,6 +18,7 @@ from app.models.sku import SKU
 from app.models.product_type import ProductType
 from app.models.color import Color
 from app.models.fabric import Fabric
+from app.models.value_addition import ValueAddition
 
 
 SUPPLIERS = [
@@ -101,6 +102,15 @@ COLORS = [
     {"name": "Wine",    "code": "WINE",  "hex_code": "#722f37"},
 ]
 
+VALUE_ADDITIONS = [
+    {"name": "Embroidery",    "short_code": "EMB",  "description": "Machine or hand embroidery work"},
+    {"name": "Dying",         "short_code": "DYE",  "description": "Fabric dying / color treatment"},
+    {"name": "Digital Print", "short_code": "DPT",  "description": "Digital printing on fabric"},
+    {"name": "Handwork",      "short_code": "HWK",  "description": "Manual handwork / embellishment"},
+    {"name": "Sequin Work",   "short_code": "SQN",  "description": "Sequin application work"},
+    {"name": "Batik",         "short_code": "BTC",  "description": "Batik dyeing technique"},
+]
+
 FABRICS = [
     {"code": "COT", "name": "Cotton",    "description": "Natural cotton fabric"},
     {"code": "SLK", "name": "Silk",      "description": "Pure and blended silk"},
@@ -149,6 +159,16 @@ async def seed_data() -> None:
                 continue
             session.add(Fabric(**f))
             print(f"  Fabric '{f['name']}' ({f['code']}) created")
+
+        # --- Value Additions ---
+        result = await session.execute(select(ValueAddition))
+        existing_va = {va.short_code for va in result.scalars().all()}
+        for va in VALUE_ADDITIONS:
+            if va["short_code"] in existing_va:
+                print(f"  ValueAddition '{va['short_code']}' already exists — skipped")
+                continue
+            session.add(ValueAddition(**va))
+            print(f"  ValueAddition '{va['name']}' ({va['short_code']}) created")
 
         # --- Suppliers ---
         result = await session.execute(select(Supplier))

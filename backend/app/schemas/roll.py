@@ -138,6 +138,7 @@ class SendForProcessing(BaseModel):
     vendor_name: str
     vendor_phone: str | None = None
     sent_date: date
+    value_addition_id: UUID | None = None  # Link to ValueAddition master (for effective roll code)
     notes: str | None = None
 
 
@@ -153,6 +154,7 @@ class UpdateProcessingLog(BaseModel):
     """PATCH /rolls/{id}/processing/{pid}/edit — update any field on a processing log."""
 
     process_type: str | None = None
+    value_addition_id: UUID | None = None
     vendor_name: str | None = None
     vendor_phone: str | None = None
     sent_date: date | None = None

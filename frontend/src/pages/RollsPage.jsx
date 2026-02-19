@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
 import LabelSheet from '../components/common/LabelSheet'
 import { getSuppliers } from '../api/suppliers'
-import { getAllFabrics, getAllColors } from '../api/masters'
+import { getAllFabrics, getAllColors, getAllValueAdditions } from '../api/masters'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import SearchInput from '../components/common/SearchInput'
@@ -95,12 +95,20 @@ const ROLL_COLUMNS = [
     key: 'roll_code',
     label: 'Roll',
     render: (val, row) => {
-      // Split: "390-SHK-WHITE-03" → invoice part + material part
-      const parts = (val || '').split('-')
+      const enhanced = row.enhanced_roll_code || val || ''
+      // Split base roll code and process suffixes: "1-COT-GREEN/01-01+EMB+DYE"
+      const plusIdx = enhanced.indexOf('+')
+      const base = plusIdx >= 0 ? enhanced.slice(0, plusIdx) : enhanced
+      const suffixes = plusIdx >= 0 ? enhanced.slice(plusIdx) : ''
+      // Split base: "390-SHK-WHITE-03" → invoice part + seq
+      const parts = base.split('-')
       const seq = parts.length > 1 ? parts.pop() : ''
       const rest = parts.join('-')
       return (
-        <span className="text-xs font-semibold text-gray-800">{rest}{seq && <span className="font-bold text-primary-600">-{seq}</span>}</span>
+        <span className="text-xs font-semibold text-gray-800">
+          {rest}{seq && <span className="font-bold text-primary-600">-{seq}</span>}
+          {suffixes && <span className="text-[10px] font-bold text-orange-600">{suffixes}</span>}
+        </span>
       )
     },
   },
@@ -213,15 +221,23 @@ const PROCESSING_COLUMNS = [
   },
   {
     key: 'processing_logs',
-    label: 'Process Type',
+    label: 'Process / VA',
     render: (val) => {
       const latest = val?.[val.length - 1]
       if (!latest) return '—'
       const pt = PROCESS_TYPES.find((p) => p.value === latest.process_type)
+      const va = latest.value_addition
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
-          {pt?.label || latest.process_type}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+            {pt?.label || latest.process_type}
+          </span>
+          {va && (
+            <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+              +{va.short_code}
+            </span>
+          )}
+        </div>
       )
     },
   },
@@ -283,7 +299,18 @@ const PROCESSED_COLUMNS = [
   {
     key: 'roll_code',
     label: 'Roll Code',
-    render: (val) => <span className="font-medium text-gray-800 font-mono text-xs">{val}</span>,
+    render: (val, row) => {
+      const enhanced = row.enhanced_roll_code || val || ''
+      const plusIdx = enhanced.indexOf('+')
+      const base = plusIdx >= 0 ? enhanced.slice(0, plusIdx) : enhanced
+      const suffixes = plusIdx >= 0 ? enhanced.slice(plusIdx) : ''
+      return (
+        <span className="font-medium text-gray-800 font-mono text-xs">
+          {base}
+          {suffixes && <span className="font-bold text-orange-600">{suffixes}</span>}
+        </span>
+      )
+    },
   },
   {
     key: 'fabric_type',
@@ -415,6 +442,7 @@ export default function RollsPage() {
   const [suppliers, setSuppliers] = useState([])
   const [masterFabrics, setMasterFabrics] = useState([])
   const [masterColors, setMasterColors] = useState([])
+  const [masterValueAdditions, setMasterValueAdditions] = useState([])
 
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', colorRows: [{ color: '', weights: [''] }] }
@@ -531,6 +559,7 @@ export default function RollsPage() {
     getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch(() => {})
     getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
     getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
+    getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch(() => {})
   }, [])
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
@@ -1016,7 +1045,7 @@ export default function RollsPage() {
   // ── Send for Processing ──
   const openSendProcessing = (roll) => {
     setSendProcRoll(roll)
-    setSendProcForm({ process_type: 'embroidery', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+    setSendProcForm({ process_type: 'embroidery', value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
     setSendProcError(null)
     setDetailRoll(null) // close detail modal
     setSendProcOpen(true)
@@ -1030,6 +1059,7 @@ export default function RollsPage() {
     try {
       await sendForProcessing(sendProcRoll.id, {
         process_type: sendProcForm.process_type,
+        value_addition_id: sendProcForm.value_addition_id || null,
         vendor_name: sendProcForm.vendor_name.trim(),
         vendor_phone: sendProcForm.vendor_phone.trim() || null,
         sent_date: sendProcForm.sent_date,
@@ -1999,7 +2029,7 @@ export default function RollsPage() {
           ROLL DETAIL / EDIT Modal
          ════════════════════════════════════════════════════════ */}
       <Modal open={!!detailRoll} onClose={() => { setDetailRoll(null); setEditing(false); setCameFromInvoice(null) }}
-        title={detailRoll ? `${detailRoll.roll_code} — ${editing ? 'Edit' : 'Details'}` : ''} extraWide
+        title={detailRoll ? `${detailRoll.enhanced_roll_code || detailRoll.roll_code} — ${editing ? 'Edit' : 'Details'}` : ''} extraWide
         actions={
           editing ? (
             <>
@@ -2123,7 +2153,7 @@ export default function RollsPage() {
                       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Material Information</h3>
                       <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
                         {[
-                          ['Roll Code', <span key="rc" className="font-mono text-primary-600 font-semibold">{detailRoll.roll_code}</span>],
+                          ['Roll Code', <span key="rc" className="font-mono text-primary-600 font-semibold">{detailRoll.roll_code}{detailRoll.enhanced_roll_code && detailRoll.enhanced_roll_code !== detailRoll.roll_code && <span className="text-orange-600">{detailRoll.enhanced_roll_code.slice(detailRoll.roll_code.length)}</span>}</span>],
                           ['Status', <StatusBadge key="st" status={detailRoll.status || 'in_stock'} label={ROLL_STATUS_LABELS[detailRoll.status] || 'In Stock'} />],
                           ['Fabric Type', detailRoll.fabric_type],
                           ['Color', detailRoll.color],
@@ -2199,6 +2229,9 @@ export default function RollsPage() {
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-sm text-gray-800">{pt?.label || log.process_type}</span>
+                                  {log.value_addition && (
+                                    <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">+{log.value_addition.short_code}</span>
+                                  )}
                                   <StatusBadge status={log.status} />
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -2281,11 +2314,21 @@ export default function RollsPage() {
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className={LABEL_CLS}>Process Type <span className="text-red-500">*</span></label>
-            <select value={sendProcForm.process_type} onChange={(e) => setSendProcForm((f) => ({ ...f, process_type: e.target.value }))} className={INPUT_CLS}>
-              {PROCESS_TYPES.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={LABEL_CLS}>Process Type <span className="text-red-500">*</span></label>
+              <select value={sendProcForm.process_type} onChange={(e) => setSendProcForm((f) => ({ ...f, process_type: e.target.value }))} className={INPUT_CLS}>
+                {PROCESS_TYPES.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Value Addition</label>
+              <select value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+                <option value="">None (regular processing)</option>
+                {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">If selected, adds to enhanced roll code after completion</p>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

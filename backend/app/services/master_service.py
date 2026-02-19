@@ -11,6 +11,7 @@ from app.core.exceptions import DuplicateError, NotFoundError
 from app.models.product_type import ProductType
 from app.models.color import Color
 from app.models.fabric import Fabric
+from app.models.value_addition import ValueAddition
 
 
 class MasterService:
@@ -35,10 +36,11 @@ class MasterService:
         return obj
 
     @staticmethod
-    async def _check_code(db: AsyncSession, model, code: str, label: str):
-        result = await db.execute(select(model).where(model.code == code))
+    async def _check_code(db: AsyncSession, model, code: str, label: str, *, field_name: str = "code"):
+        col = getattr(model, field_name)
+        result = await db.execute(select(model).where(col == code))
         if result.scalar_one_or_none():
-            raise DuplicateError(f"{label} with code '{code}' already exists")
+            raise DuplicateError(f"{label} with {field_name} '{code}' already exists")
 
     # ── Product Types ────────────────────────────────────
 
@@ -153,6 +155,60 @@ class MasterService:
         obj = await MasterService._get(db, Fabric, fabric_id, "Fabric")
         if data.name is not None:
             obj.name = data.name.strip()
+        if data.description is not None:
+            obj.description = data.description
+        if data.is_active is not None:
+            obj.is_active = data.is_active
+        await db.flush()
+        return obj
+
+    # ── Value Additions ───────────────────────────────────
+
+    @staticmethod
+    async def get_value_additions(db: AsyncSession):
+        stmt = select(ValueAddition).order_by(ValueAddition.short_code)
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_active_value_additions(db: AsyncSession):
+        stmt = (
+            select(ValueAddition)
+            .where(ValueAddition.is_active == True)  # noqa: E712
+            .order_by(ValueAddition.short_code)
+        )
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def create_value_addition(db: AsyncSession, data) -> ValueAddition:
+        code = data.short_code.strip().upper()
+        if len(code) > 4:
+            code = code[:4]
+        await MasterService._check_code(
+            db, ValueAddition, code, "Value addition", field_name="short_code"
+        )
+        obj = ValueAddition(
+            name=data.name.strip(),
+            short_code=code,
+            description=data.description,
+        )
+        db.add(obj)
+        await db.flush()
+        return obj
+
+    @staticmethod
+    async def update_value_addition(db: AsyncSession, va_id: UUID, data) -> ValueAddition:
+        obj = await MasterService._get(db, ValueAddition, va_id, "Value addition")
+        if data.name is not None:
+            obj.name = data.name.strip()
+        if data.short_code is not None:
+            new_code = data.short_code.strip().upper()[:4]
+            if new_code != obj.short_code:
+                await MasterService._check_code(
+                    db, ValueAddition, new_code, "Value addition", field_name="short_code"
+                )
+                obj.short_code = new_code
         if data.description is not None:
             obj.description = data.description
         if data.is_active is not None:

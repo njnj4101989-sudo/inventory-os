@@ -146,7 +146,7 @@ export default function ScanPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <h1 className="text-xl font-bold text-gray-900 font-mono break-all">
-                    {passport.roll_code}
+                    {passport.enhanced_roll_code || passport.roll_code}
                   </h1>
                   {passport.effective_sku && (
                     <div className="mt-1 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1 rounded-full">
@@ -194,10 +194,37 @@ export default function ScanPage() {
               <InfoRow label="Received by" value={passport.received_by_user?.full_name} />
             </Section>
 
-            {/* Processing / Value Additions */}
-            {passport.processing_logs?.length > 0 && (
+            {/* Value Additions */}
+            {passport.value_additions?.length > 0 && (
+              <Section title="Value Additions" icon="✨">
+                {passport.value_additions.map((log, i) => (
+                  <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.short_code}</span>
+                        <span className="text-sm font-medium text-gray-900">{log.name}</span>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {log.status === 'received' ? 'Returned' : 'Sent'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                      <span>{log.vendor_name}</span>
+                      {log.sent_date && <span>Sent: {log.sent_date}</span>}
+                      {log.received_date && <span>Returned: {log.received_date}</span>}
+                      {log.processing_cost && <span>Cost: ₹{parseFloat(log.processing_cost).toLocaleString('en-IN')}</span>}
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+
+            {/* Regular Processing */}
+            {passport.regular_processing?.length > 0 && (
               <Section title="Processing History" icon="🔧">
-                {passport.processing_logs.map((log, i) => (
+                {passport.regular_processing.map((log, i) => (
                   <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium text-gray-900 capitalize">
@@ -206,7 +233,34 @@ export default function ScanPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {log.status === 'received' ? '✓ Returned' : '⏳ Sent'}
+                        {log.status === 'received' ? 'Returned' : 'Sent'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                      <span>{log.vendor_name}</span>
+                      {log.sent_date && <span>Sent: {log.sent_date}</span>}
+                      {log.received_date && <span>Returned: {log.received_date}</span>}
+                      {log.processing_cost && <span>Cost: ₹{parseFloat(log.processing_cost).toLocaleString('en-IN')}</span>}
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+
+            {/* Fallback: processing_logs if no split (mock mode) */}
+            {!passport.value_additions && !passport.regular_processing && passport.processing_logs?.length > 0 && (
+              <Section title="Processing History" icon="🔧">
+                {passport.processing_logs.map((log, i) => (
+                  <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 capitalize">{log.process_type?.replace(/_/g, ' ')}</span>
+                        {log.value_addition && <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">+{log.value_addition.short_code}</span>}
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {log.status === 'received' ? 'Returned' : 'Sent'}
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">

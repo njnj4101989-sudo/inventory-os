@@ -31,7 +31,7 @@ export default function QRLabel({ roll, appBaseUrl }) {
 
       {/* Roll details */}
       <div className="qr-label__info">
-        <div className="qr-label__code">{rollCode}</div>
+        <div className="qr-label__code">{roll?.enhanced_roll_code || rollCode}</div>
 
         <div className="qr-label__row">
           <span className="qr-label__key">Weight</span>

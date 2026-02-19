@@ -19,6 +19,7 @@ from app.models.invoice_item import InvoiceItem
 from app.models.product_type import ProductType
 from app.models.color import Color
 from app.models.fabric import Fabric
+from app.models.value_addition import ValueAddition
 
 __all__ = [
     "Role",
@@ -42,4 +43,5 @@ __all__ = [
     "ProductType",
     "Color",
     "Fabric",
+    "ValueAddition",
 ]

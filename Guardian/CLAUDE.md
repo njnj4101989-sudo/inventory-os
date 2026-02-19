@@ -34,16 +34,55 @@
 
 ---
 
-## Current State (Session 24 — 2026-02-18)
+## Current State (Session 25 — 2026-02-19)
 
 ### What's Done
-- **Phase 6A (Backend):** COMPLETE — 20 models, 17 schemas, 14 services, 15 routers, 75+ endpoints
-- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 130+ modules, 0 build errors
-- **QR/Print Labels Phase 1:** COMPLETE — full end-to-end (see below)
+- **Phase 6A (Backend):** COMPLETE — 21 models, 18 schemas, 14 services, 15 routers, 80+ endpoints
+- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 135+ modules, 0 build errors
+- **QR/Print Labels Phase 1:** COMPLETE — full end-to-end
+- **QR Phase 2 (Value Additions + Enhanced Roll Code):** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
-- **API_REFERENCE.md:** Updated — §5 GET /rolls now includes `sr_no` filter
+- **API_REFERENCE.md:** Updated — §5 rolls include `enhanced_roll_code`, §15 value additions
 
-### What's Built This Session (Session 24)
+### What's Built This Session (Session 25)
+
+#### QR Phase 2 — Value Additions + Enhanced Roll Code COMPLETE
+
+**Core concept:** When a roll goes through value-adding processes (embroidery, dying, etc.), the enhanced roll code reflects it:
+```
+Base:     1-COT-GREEN/01-01
++EMB:     1-COT-GREEN/01-01+EMB
++EMB+DYE: 1-COT-GREEN/01-01+EMB+DYE
+```
+- `roll_code` stays immutable (QR encodes this)
+- `enhanced_roll_code` is computed from `roll_code` + received value addition short codes
+- Never stored — assembled on-the-fly from processing_logs
+
+**Backend changes:**
+| File | Change |
+|------|--------|
+| `models/value_addition.py` | NEW model: name, short_code (3-4 chars), description, is_active |
+| `models/roll.py` | Added `value_addition_id` FK + relationship on RollProcessing |
+| `models/__init__.py` | Registered ValueAddition |
+| `schemas/master.py` | ValueAddition CRUD schemas (Brief, Create, Update, Response) |
+| `schemas/roll.py` | Added `value_addition_id` to SendForProcessing + UpdateProcessingLog |
+| `services/master_service.py` | Full CRUD for value additions |
+| `services/roll_service.py` | `enhanced_roll_code` computed in `_to_response()`, `value_addition` nested in processing logs, passport splits VA vs regular processing |
+| `api/masters.py` | 4 new endpoints: GET/GET-all/POST/PATCH value-additions |
+| `seeds/seed_data.py` | 6 seed value additions (EMB, DYE, DPT, HWK, SQN, BTC) |
+| `migrations/versions/eef26a6af67d_...` | value_additions table + FK on roll_processing |
+
+**Frontend changes:**
+| File | Change |
+|------|--------|
+| `api/mock.js` | Added `valueAdditions` mock data array |
+| `api/masters.js` | Added getValueAdditions, getAllValueAdditions, createValueAddition, updateValueAddition |
+| `pages/MastersPage.jsx` | 4th tab "Value Additions" with CRUD table |
+| `pages/RollsPage.jsx` | Value Addition dropdown in Send for Processing modal, enhanced_roll_code shown in All Rolls + Processed columns + detail modal, VA badges in processing logs |
+| `pages/ScanPage.jsx` | Separate "Value Additions" and "Regular Processing" sections, enhanced_roll_code in header |
+| `components/common/QRLabel.jsx` | Label text shows enhanced_roll_code (QR still encodes base roll_code) |
+
+### Previous Session (Session 24)
 
 #### QR/Print Labels — Phase 1 COMPLETE (full-stack)
 

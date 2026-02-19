@@ -11,6 +11,7 @@ from app.schemas.master import (
     ProductTypeCreate, ProductTypeUpdate, ProductTypeResponse,
     ColorCreate, ColorUpdate, ColorResponse,
     FabricCreate, FabricUpdate, FabricResponse,
+    ValueAdditionCreate, ValueAdditionUpdate, ValueAdditionResponse,
 )
 from app.services.master_service import MasterService
 
@@ -141,3 +142,45 @@ async def update_fabric(
 ):
     obj = await MasterService.update_fabric(db, fabric_id, req)
     return {"success": True, "data": FabricResponse.model_validate(obj)}
+
+
+# ── Value Additions ─────────────────────────────────────
+
+
+@router.get("/value-additions", response_model=None)
+async def list_value_additions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_value_additions(db)
+    return {"success": True, "data": [ValueAdditionResponse.model_validate(i) for i in items]}
+
+
+@router.get("/value-additions/all", response_model=None)
+async def all_active_value_additions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_active_value_additions(db)
+    return {"success": True, "data": [ValueAdditionResponse.model_validate(i) for i in items]}
+
+
+@router.post("/value-additions", response_model=None, status_code=201)
+async def create_value_addition(
+    req: ValueAdditionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.create_value_addition(db, req)
+    return {"success": True, "data": ValueAdditionResponse.model_validate(obj)}
+
+
+@router.patch("/value-additions/{va_id}", response_model=None)
+async def update_value_addition(
+    va_id: UUID,
+    req: ValueAdditionUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.update_value_addition(db, va_id, req)
+    return {"success": True, "data": ValueAdditionResponse.model_validate(obj)}

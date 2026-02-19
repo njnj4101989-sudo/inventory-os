@@ -96,3 +96,33 @@ class FabricResponse(BaseSchema):
     code: str
     description: str | None = None
     is_active: bool = True
+
+
+# ── Value Addition ──────────────────────────────────────
+
+
+class ValueAdditionBrief(BaseSchema):
+    id: UUID
+    name: str
+    short_code: str
+
+
+class ValueAdditionCreate(BaseModel):
+    name: str
+    short_code: str
+    description: str | None = None
+
+
+class ValueAdditionUpdate(BaseModel):
+    name: str | None = None
+    short_code: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class ValueAdditionResponse(BaseSchema):
+    id: UUID
+    name: str
+    short_code: str
+    description: str | None = None
+    is_active: bool = True

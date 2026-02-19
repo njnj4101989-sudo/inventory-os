@@ -73,7 +73,7 @@ class RollService:
             .options(
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
-                selectinload(Roll.processing_logs),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -99,7 +99,7 @@ class RollService:
             .options(
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
-                selectinload(Roll.processing_logs),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
             )
         )
         result = await self.db.execute(stmt)
@@ -121,7 +121,7 @@ class RollService:
             .options(
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
-                selectinload(Roll.processing_logs),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.lot_rolls)
                     .selectinload(LotRoll.lot)
                     .selectinload(Lot.batches)
@@ -186,12 +186,37 @@ class RollService:
                     "tailor": tailor,
                 })
 
+        # Compute value additions for passport display
+        value_additions = []
+        regular_processing = []
+        for p in (roll.processing_logs or []):
+            entry = self._processing_to_response(p)
+            if p.value_addition_id and p.value_addition:
+                entry["name"] = p.value_addition.name
+                entry["short_code"] = p.value_addition.short_code
+                value_additions.append(entry)
+            else:
+                regular_processing.append(entry)
+
+        # Compute effective_sku: base sku + received value addition short_codes
+        va_suffixes = [
+            p.value_addition.short_code
+            for p in (roll.processing_logs or [])
+            if p.status == "received" and p.value_addition_id and p.value_addition
+        ]
+        base_sku = batches[0]["sku_code"] if batches else None
+        effective_sku = None
+        if base_sku:
+            effective_sku = base_sku + ("+" + "+".join(va_suffixes) if va_suffixes else "")
+
         passport = self._to_response(roll)
         passport.update({
+            "value_additions": value_additions,
+            "regular_processing": regular_processing,
             "lots": lots,
             "batches": batches,
-            "orders": [],   # Phase 2: traverse batch → order items
-            "effective_sku": batches[0]["effective_sku"] if batches else None,
+            "orders": [],   # Future: traverse batch → order items
+            "effective_sku": effective_sku,
         })
         return passport
 
@@ -234,7 +259,7 @@ class RollService:
         stmt = select(Roll).where(Roll.id == roll.id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
-            selectinload(Roll.processing_logs),
+            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
@@ -276,7 +301,7 @@ class RollService:
         stmt = select(Roll).where(Roll.id == roll.id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
-            selectinload(Roll.processing_logs),
+            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
@@ -320,6 +345,7 @@ class RollService:
             sent_date=req.sent_date,
             weight_before=roll.total_weight,
             length_before=roll.total_length,
+            value_addition_id=req.value_addition_id,
             status="sent",
             notes=req.notes,
         )
@@ -331,7 +357,7 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
-            selectinload(Roll.processing_logs),
+            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         roll = (await self.db.execute(reload)).scalar_one()
         return self._to_response(roll)
@@ -378,7 +404,7 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
-            selectinload(Roll.processing_logs),
+            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         roll = (await self.db.execute(reload)).scalar_one()
         return self._to_response(roll)
@@ -416,16 +442,23 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
-            selectinload(Roll.processing_logs),
+            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         roll = (await self.db.execute(reload)).scalar_one()
         return self._to_response(roll)
 
     def _processing_to_response(self, p: RollProcessing) -> dict:
+        va = p.value_addition
         return {
             "id": str(p.id),
             "roll_id": str(p.roll_id),
             "process_type": p.process_type,
+            "value_addition_id": str(p.value_addition_id) if p.value_addition_id else None,
+            "value_addition": {
+                "id": str(va.id),
+                "name": va.name,
+                "short_code": va.short_code,
+            } if va else None,
             "vendor_name": p.vendor_name,
             "vendor_phone": p.vendor_phone,
             "sent_date": p.sent_date.isoformat() if p.sent_date else None,
@@ -439,10 +472,23 @@ class RollService:
             "notes": p.notes,
         }
 
+    @staticmethod
+    def _compute_enhanced_roll_code(roll_code: str, processing_logs) -> str:
+        """Compute enhanced roll code: base + received value addition short codes."""
+        suffixes = []
+        for p in (processing_logs or []):
+            if p.status == "received" and p.value_addition_id and p.value_addition:
+                suffixes.append(p.value_addition.short_code)
+        if suffixes:
+            return roll_code + "+" + "+".join(suffixes)
+        return roll_code
+
     def _to_response(self, r: Roll) -> dict:
+        enhanced = self._compute_enhanced_roll_code(r.roll_code, r.processing_logs)
         return {
             "id": str(r.id),
             "roll_code": r.roll_code,
+            "enhanced_roll_code": enhanced,
             "fabric_type": r.fabric_type,
             "color": r.color,
             "total_weight": float(r.total_weight) if r.total_weight else 0,
