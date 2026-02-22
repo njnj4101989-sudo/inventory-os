@@ -141,16 +141,15 @@ const ROLL_COLUMNS = [
     key: 'total_weight',
     label: 'Stock',
     render: (val, row) => {
-      const total = row.unit === 'meters' ? (row.total_length || val) : val
-      const remaining = row.unit === 'meters' ? (row.remaining_length ?? row.remaining_weight) : row.remaining_weight
+      const total = val
+      const remaining = row.remaining_weight
       const pct = total > 0 ? (remaining / total) * 100 : 0
-      const u = row.unit === 'meters' ? 'm' : 'kg'
       const barColor = pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : pct > 0 ? 'bg-red-500' : 'bg-gray-300'
       return (
         <div className="w-[100px]">
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-semibold text-gray-800">{total}</span>
-            <span className="text-[10px] text-gray-400">{u}</span>
+            <span className="text-[10px] text-gray-400">kg</span>
           </div>
           <div className="mt-0.5 h-1.5 w-full rounded-full bg-gray-100">
             <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${Math.max(pct, 2)}%` }} />
@@ -470,6 +469,7 @@ export default function RollsPage() {
   const [showBulkLabels, setShowBulkLabels] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
   const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
+  const [bulkSendWeights, setBulkSendWeights] = useState({})
   const [bulkSendSaving, setBulkSendSaving] = useState(false)
   const [bulkSendError, setBulkSendError] = useState(null)
   const [showJobChallan, setShowJobChallan] = useState(false)
@@ -488,7 +488,7 @@ export default function RollsPage() {
   // Send for Processing modal
   const [sendProcOpen, setSendProcOpen] = useState(false)
   const [sendProcRoll, setSendProcRoll] = useState(null)
-  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
+  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '', weight_to_send: '' })
   const [sendProcSaving, setSendProcSaving] = useState(false)
   const [sendProcError, setSendProcError] = useState(null)
 
@@ -600,16 +600,29 @@ export default function RollsPage() {
     if (!bulkSendForm.sent_date) { setBulkSendError('Sent date is required'); return }
     const selectedRollObjects = getSelectedRollObjects()
     if (selectedRollObjects.length === 0) { setBulkSendError('No rolls selected'); return }
+    // Validate weights
+    for (const r of selectedRollObjects) {
+      const wt = parseFloat(bulkSendWeights[r.id])
+      const maxWt = r.remaining_weight || r.current_weight || r.total_weight
+      if (!wt || wt <= 0) { setBulkSendError(`Weight must be > 0 for ${r.roll_code}`); return }
+      if (wt > maxWt) { setBulkSendError(`Weight (${wt}) exceeds remaining (${maxWt}) for ${r.roll_code}`); return }
+    }
     setBulkSendSaving(true)
     setBulkSendError(null)
     try {
+      const rollEntries = selectedRollObjects.map((r) => ({
+        roll_id: r.id,
+        weight_to_send: parseFloat(bulkSendWeights[r.id]),
+      }))
       const res = await createJobChallan({
         value_addition_id: bulkSendForm.value_addition_id,
         vendor_name: bulkSendForm.vendor_name.trim(),
         vendor_phone: bulkSendForm.vendor_phone.trim() || null,
         sent_date: bulkSendForm.sent_date,
         notes: bulkSendForm.notes.trim() || null,
-        roll_ids: selectedRollObjects.map((r) => r.id),
+        rolls: rollEntries,
+        _rolls: selectedRollObjects, // for mock
+        _vaObj: masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id) || null,
       })
       const challan = res.data?.data || res.data
       const vaObj = masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id)
@@ -671,7 +684,7 @@ export default function RollsPage() {
       if (!fabricMap[ft]) fabricMap[ft] = { fabric_type: ft, cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '', unit: r.unit || 'kg', panna: r.panna != null ? String(r.panna) : '', gsm: r.gsm != null ? String(r.gsm) : '', notes: '', colors: {} }
       const c = r.color || 'Unknown'
       if (!fabricMap[ft].colors[c]) fabricMap[ft].colors[c] = { color: c, weights: [], rollIds: [] }
-      const qty = r.unit === 'meters' ? (r.total_length || r.total_weight) : r.total_weight
+      const qty = r.total_weight
       fabricMap[ft].colors[c].weights.push(String(qty))
       fabricMap[ft].colors[c].rollIds.push(r.id)
     }
@@ -780,10 +793,9 @@ export default function RollsPage() {
                 await updateRoll(existingId, {
                   fabric_type: grp.fabric_type.trim(),
                   color: row.color.trim(),
-                  total_weight: grp.unit === 'kg' ? wt : 0,
+                  total_weight: wt,
                   unit: grp.unit,
                   cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : null,
-                  total_length: grp.unit === 'meters' ? wt : null,
                   supplier_id: invoiceHeader.supplier_id || null,
                   supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
                   supplier_challan_no: invoiceHeader.supplier_challan_no || null,
@@ -1116,7 +1128,7 @@ export default function RollsPage() {
   // ── Send for Processing ──
   const openSendProcessing = (roll) => {
     setSendProcRoll(roll)
-    setSendProcForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+    setSendProcForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
     setSendProcError(null)
     setDetailRoll(null) // close detail modal
     setSendProcOpen(true)
@@ -1126,6 +1138,10 @@ export default function RollsPage() {
     if (!sendProcForm.value_addition_id) { setSendProcError('Value Addition is required'); return }
     if (!sendProcForm.vendor_name.trim()) { setSendProcError('Vendor name is required'); return }
     if (!sendProcForm.sent_date) { setSendProcError('Sent date is required'); return }
+    const wts = parseFloat(sendProcForm.weight_to_send)
+    if (!wts || wts <= 0) { setSendProcError('Weight to send must be > 0'); return }
+    const maxWt = sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight
+    if (wts > maxWt) { setSendProcError(`Weight to send (${wts}) exceeds remaining (${maxWt})`); return }
     setSendProcSaving(true)
     setSendProcError(null)
     try {
@@ -1135,6 +1151,7 @@ export default function RollsPage() {
         vendor_phone: sendProcForm.vendor_phone.trim() || null,
         sent_date: sendProcForm.sent_date,
         notes: sendProcForm.notes.trim() || null,
+        weight_to_send: wts,
       })
       setSendProcOpen(false)
       refreshAll()
@@ -1368,20 +1385,20 @@ export default function RollsPage() {
             {/* ── Table ── */}
             {(() => {
               const isSelectableView = rollStatusFilter !== 'in_stock_processed'
-              const inStockRolls = rolls.filter((r) => r.status === 'in_stock')
-              const allSelected = inStockRolls.length > 0 && inStockRolls.every((r) => selectedRolls.has(r.id))
+              const sendableRolls = rolls.filter((r) => r.status === 'in_stock' && (r.remaining_weight || 0) > 0)
+              const allSelected = sendableRolls.length > 0 && sendableRolls.every((r) => selectedRolls.has(r.id))
               const CHECKBOX_COL = {
                 key: '__select',
                 label: (
                   <input type="checkbox" checked={allSelected}
                     onChange={() => {
                       if (allSelected) setSelectedRolls(new Set())
-                      else setSelectedRolls(new Set(inStockRolls.map((r) => r.id)))
+                      else setSelectedRolls(new Set(sendableRolls.map((r) => r.id)))
                     }}
                     className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
                 ),
                 sortable: false,
-                render: (_, row) => row.status !== 'in_stock' ? <span className="w-4" /> : (
+                render: (_, row) => (row.status !== 'in_stock' || (row.remaining_weight || 0) <= 0) ? <span className="w-4" /> : (
                   <input type="checkbox" checked={selectedRolls.has(row.id)}
                     onChange={(e) => { e.stopPropagation(); setSelectedRolls((prev) => { const next = new Set(prev); next.has(row.id) ? next.delete(row.id) : next.add(row.id); return next }) }}
                     onClick={(e) => e.stopPropagation()}
@@ -1426,6 +1443,7 @@ export default function RollsPage() {
                         </button>
                         <button onClick={() => {
                             setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                            const wts = {}; getSelectedRollObjects().forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                             setBulkSendError(null)
                             setBulkSendOpen(true)
                           }}
@@ -1770,7 +1788,7 @@ export default function RollsPage() {
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{gIdx + 1}</span>
                         <span className="text-sm font-semibold text-blue-800">{grp.fabric}</span>
                         <span className="text-xs text-blue-500">
-                          {grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {grpWeight.toFixed(3)} {grp.unit}
+                          {grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {grpWeight.toFixed(3)} kg
                           {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
                         </span>
                       </div>
@@ -1784,7 +1802,7 @@ export default function RollsPage() {
                       {/* Grid header */}
                       <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center">
                         <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
-                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights ({grp.unit})</span>
+                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights (kg)</span>
                         <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
                         <span className="text-xs font-semibold text-gray-500 uppercase text-right">Total</span>
                       </div>
@@ -1813,7 +1831,7 @@ export default function RollsPage() {
                                     <button
                                       key={roll.id}
                                       onClick={() => openRollFromInvoice(roll)}
-                                      title={`${roll.roll_code}${vaSuffixes ? '+' + vaSuffixes : ''} — ${wt} ${grp.unit}${hasVA ? ` (now ${currWt})` : ''}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
+                                      title={`${roll.roll_code}${vaSuffixes ? '+' + vaSuffixes : ''} — ${wt} kg${hasVA ? ` (now ${currWt})` : ''}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
                                       className={`relative inline-flex items-center rounded border px-2.5 py-1 text-sm tabular-nums transition-colors cursor-pointer
                                         ${isProcessing
                                           ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100'
@@ -1847,7 +1865,7 @@ export default function RollsPage() {
 
                               {/* Row total */}
                               <div className="text-right text-sm font-medium text-gray-700">
-                                {colorWeight.toFixed(3)} {grp.unit}
+                                {colorWeight.toFixed(3)} kg
                               </div>
                             </div>
                           )
@@ -1861,7 +1879,7 @@ export default function RollsPage() {
                         </div>
                         <div className="flex items-center gap-4">
                           <span>{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''}</span>
-                          <span className="font-medium text-gray-700">{grpWeight.toFixed(3)} {grp.unit}</span>
+                          <span className="font-medium text-gray-700">{grpWeight.toFixed(3)} kg</span>
                           {grpValue > 0 && <span className="font-medium text-gray-700">₹{grpValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>}
                         </div>
                       </div>
@@ -1991,7 +2009,7 @@ export default function RollsPage() {
                         </span>
                         {grpTotals.count > 0 && (
                           <span className="text-xs text-blue-500">
-                            {grpTotals.count} roll{grpTotals.count > 1 ? 's' : ''} · {grpTotals.weight.toFixed(3)} {grp.unit}
+                            {grpTotals.count} roll{grpTotals.count > 1 ? 's' : ''} · {grpTotals.weight.toFixed(3)} kg
                             {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
                           </span>
                         )}
@@ -2058,7 +2076,7 @@ export default function RollsPage() {
                         {/* Grid header */}
                         <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[180px_1fr_70px] gap-3 items-center">
                           <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase">Weights ({grp.unit}) — Enter/Tab between fields</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase">Weights (kg) — Enter/Tab between fields</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
                         </div>
 
@@ -2387,9 +2405,9 @@ export default function RollsPage() {
         }
       >
         {detailRoll && (() => {
-          const unitLabel = detailRoll.unit === 'meters' ? 'm' : 'kg'
-          const totalQty = detailRoll.unit === 'meters' ? (detailRoll.total_length || detailRoll.total_weight) : detailRoll.total_weight
-          const remainQty = detailRoll.unit === 'meters' ? (detailRoll.remaining_length ?? detailRoll.remaining_weight) : detailRoll.remaining_weight
+          const rateUnit = detailRoll.unit === 'meters' ? 'm' : 'kg'
+          const totalQty = detailRoll.total_weight
+          const remainQty = detailRoll.remaining_weight
           const currentWt = parseFloat(detailRoll.current_weight) || parseFloat(detailRoll.total_weight) || 0
           const origWt = parseFloat(detailRoll.total_weight) || 0
           const wtDelta = currentWt - origWt
@@ -2435,7 +2453,7 @@ export default function RollsPage() {
                   <div className="flex items-center gap-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-500">Original</span>
-                      <span className="text-sm font-bold text-blue-700">{origWt} {unitLabel}</span>
+                      <span className="text-sm font-bold text-blue-700">{origWt} kg</span>
                     </div>
                     {Math.abs(wtDelta) >= 0.001 && (
                       <>
@@ -2443,7 +2461,7 @@ export default function RollsPage() {
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-gray-500">Wt. Change</span>
                           <span className={`text-sm font-bold ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)} {unitLabel}
+                            {wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)} kg
                           </span>
                         </div>
                       </>
@@ -2451,7 +2469,7 @@ export default function RollsPage() {
                     <div className="h-4 w-px bg-gray-300" />
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-500">Remaining</span>
-                      <span className="text-sm font-bold text-green-700">{remainQty} {unitLabel}</span>
+                      <span className="text-sm font-bold text-green-700">{remainQty} kg</span>
                     </div>
                     <div className="h-4 w-px bg-gray-300" />
                     <div className="flex items-center gap-1.5">
@@ -2479,17 +2497,15 @@ export default function RollsPage() {
                           ['Status', <StatusBadge key="st" status={detailRoll.status || 'in_stock'} label={ROLL_STATUS_LABELS[detailRoll.status] || 'In Stock'} />],
                           ['Fabric Type', detailRoll.fabric_type],
                           ['Color', detailRoll.color],
-                          ['Unit', detailRoll.unit === 'meters' ? 'Meters' : 'Kilograms'],
-                          [detailRoll.unit === 'meters' ? 'Total Length' : 'Original Weight', `${totalQty} ${unitLabel}`],
+                          ['Rate Unit', detailRoll.unit === 'meters' ? 'Meters' : 'Kilograms'],
+                          ['Original Weight', `${totalQty} kg`],
                           ...(Math.abs(wtDelta) >= 0.001 ? [['Current Weight',
-                            <span key="cw">{currentWt.toFixed(3)} {unitLabel} <span className={`text-xs ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>({wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)})</span></span>
+                            <span key="cw">{currentWt.toFixed(3)} kg <span className={`text-xs ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>({wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)})</span></span>
                           ]] : []),
-                          [detailRoll.unit === 'meters' ? 'Weight (ref)' : 'Length (ref)',
-                            detailRoll.unit === 'meters'
-                              ? (detailRoll.total_weight ? `${detailRoll.total_weight} kg` : '—')
-                              : (detailRoll.total_length ? `${detailRoll.total_length} m` : '—')
-                          ],
-                          ['Cost / ' + unitLabel, detailRoll.cost_per_unit != null ? `₹${detailRoll.cost_per_unit}` : '—'],
+                          ...(detailRoll.total_length
+                            ? [['Length (ref)', `${detailRoll.total_length} m`]]
+                            : []),
+                          ['Cost / ' + rateUnit, detailRoll.cost_per_unit != null ? `₹${detailRoll.cost_per_unit}` : '—'],
                         ].map(([label, value]) => (
                           <div key={label} className="flex items-center justify-between py-2 text-sm">
                             <span className="text-gray-500">{label}</span>
@@ -2636,12 +2652,30 @@ export default function RollsPage() {
               <div><span className="text-blue-500">Roll:</span> <span className="font-medium text-blue-800">{sendProcRoll.roll_code}</span></div>
               <div><span className="text-blue-500">Fabric:</span> <span className="font-medium text-blue-800">{sendProcRoll.fabric_type}</span></div>
               <div><span className="text-blue-500">Color:</span> <span className="font-medium text-blue-800">{sendProcRoll.color}</span></div>
-              <div><span className="text-blue-500">Weight:</span> <span className="font-medium text-blue-800">{sendProcRoll.total_weight} kg</span></div>
+              <div><span className="text-blue-500">Original:</span> <span className="font-medium text-blue-800">{sendProcRoll.total_weight} kg</span></div>
+              {sendProcRoll.current_weight !== sendProcRoll.total_weight && (
+                <div><span className="text-blue-500">Current:</span> <span className="font-medium text-blue-800">{sendProcRoll.current_weight} kg</span></div>
+              )}
+              <div><span className="text-blue-500">Remaining:</span> <span className="font-bold text-blue-900">{sendProcRoll.remaining_weight} kg</span></div>
             </div>
           </div>
         )}
 
         <div className="space-y-4">
+          <div>
+            <label className={LABEL_CLS}>Weight to Send (kg) <span className="text-red-500">*</span></label>
+            <div className="flex items-center gap-3">
+              <input type="number" step="0.001" min="0.001"
+                max={sendProcRoll ? (sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight) : undefined}
+                value={sendProcForm.weight_to_send} onChange={(e) => setSendProcForm((f) => ({ ...f, weight_to_send: e.target.value }))}
+                className={INPUT_CLS + ' max-w-[180px]'} />
+              {sendProcRoll && (
+                <button type="button" onClick={() => setSendProcForm((f) => ({ ...f, weight_to_send: String(sendProcRoll.remaining_weight || sendProcRoll.current_weight) }))}
+                  className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap">Send All</button>
+              )}
+            </div>
+            {sendProcRoll && <p className="mt-1 text-xs text-gray-400">Max: {sendProcRoll.remaining_weight} kg (remaining). Send less to keep the roll in stock.</p>}
+          </div>
           <div>
             <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
             <select value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
@@ -2842,14 +2876,14 @@ export default function RollsPage() {
          ════════════════════════════════════════════════════════ */}
       {bulkSendOpen && (() => {
         const bulkRolls = getSelectedRollObjects()
-        const totalWt = bulkRolls.reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0)
+        const totalSendWt = bulkRolls.reduce((s, r) => s + (parseFloat(bulkSendWeights[r.id]) || 0), 0)
         return (
           <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
             {/* ── Top bar ── */}
             <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Send {bulkRolls.length} Roll{bulkRolls.length > 1 ? 's' : ''} for Processing</h2>
-                <p className="text-sm text-gray-500">Total weight: {totalWt.toFixed(3)} kg</p>
+                <p className="text-sm text-gray-500">Total send weight: {totalSendWt.toFixed(3)} kg</p>
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={() => setBulkSendOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
@@ -2870,8 +2904,10 @@ export default function RollsPage() {
 
                 {/* ── Selected Rolls Table ── */}
                 <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-100 px-5 py-3">
+                  <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-700">Selected Rolls</h3>
+                    <button type="button" onClick={() => { const wts = {}; bulkRolls.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts) }}
+                      className="text-xs text-blue-600 hover:text-blue-800">Reset All to Full</button>
                   </div>
                   <table className="w-full text-sm">
                     <thead>
@@ -2880,31 +2916,41 @@ export default function RollsPage() {
                         <th className="px-4 py-2.5 text-left">Roll Code</th>
                         <th className="px-4 py-2.5 text-left">Fabric</th>
                         <th className="px-4 py-2.5 text-left">Color</th>
-                        <th className="px-4 py-2.5 text-right">Weight</th>
+                        <th className="px-4 py-2.5 text-right">Remaining</th>
+                        <th className="px-4 py-2.5 text-right">Send Weight</th>
                         <th className="px-4 py-2.5 text-center w-10"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {bulkRolls.map((r, i) => (
+                      {bulkRolls.map((r, i) => {
+                        const maxWt = r.remaining_weight || r.current_weight || r.total_weight
+                        return (
                         <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                           <td className="px-4 py-2 text-center text-gray-400 font-medium">{i + 1}</td>
                           <td className="px-4 py-2 font-semibold text-gray-800">{r.enhanced_roll_code || r.roll_code}</td>
                           <td className="px-4 py-2 text-gray-600">{r.fabric_type}</td>
                           <td className="px-4 py-2 text-gray-600">{r.color}</td>
-                          <td className="px-4 py-2 text-right font-medium">{parseFloat(r.current_weight || r.total_weight).toFixed(3)} kg</td>
+                          <td className="px-4 py-2 text-right text-gray-500">{parseFloat(maxWt).toFixed(3)} kg</td>
+                          <td className="px-4 py-2 text-right">
+                            <input type="number" step="0.001" min="0.001" max={maxWt}
+                              value={bulkSendWeights[r.id] || ''}
+                              onChange={(e) => setBulkSendWeights((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                              className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
+                          </td>
                           <td className="px-4 py-2 text-center">
-                            <button onClick={() => setSelectedRolls((prev) => { const next = new Set(prev); next.delete(r.id); if (next.size === 0) setBulkSendOpen(false); return next })}
+                            <button onClick={() => { setSelectedRolls((prev) => { const next = new Set(prev); next.delete(r.id); if (next.size === 0) setBulkSendOpen(false); return next }); setBulkSendWeights((prev) => { const next = { ...prev }; delete next[r.id]; return next }) }}
                               className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="bg-gray-50 font-semibold text-sm">
-                        <td colSpan={4} className="px-4 py-2 text-right text-gray-600">Total: {bulkRolls.length} roll{bulkRolls.length > 1 ? 's' : ''}</td>
-                        <td className="px-4 py-2 text-right">{totalWt.toFixed(3)} kg</td>
+                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">Total: {bulkRolls.length} roll{bulkRolls.length > 1 ? 's' : ''}</td>
+                        <td className="px-4 py-2 text-right">{totalSendWt.toFixed(3)} kg</td>
                         <td></td>
                       </tr>
                     </tfoot>

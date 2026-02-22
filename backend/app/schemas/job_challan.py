@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -17,13 +18,17 @@ class JobChallanFilterParams(PaginatedParams):
 
 # --- Requests ---
 
+class JobChallanRollEntry(BaseModel):
+    roll_id: UUID
+    weight_to_send: Decimal | None = None  # None = full remaining weight
+
 class JobChallanCreate(BaseModel):
     value_addition_id: UUID
     vendor_name: str
     vendor_phone: str | None = None
     sent_date: date
     notes: str | None = None
-    roll_ids: list[UUID]
+    rolls: list[JobChallanRollEntry]
 
 
 # --- Responses ---
@@ -35,6 +40,7 @@ class JobChallanRollBrief(BaseSchema):
     fabric_type: str
     color: str
     current_weight: float
+    weight_sent: float | None = None  # partial weight sent for this challan
 
 
 class JobChallanResponse(BaseSchema):

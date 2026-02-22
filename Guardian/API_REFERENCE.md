@@ -285,10 +285,18 @@ Same as `GET /rolls` with status filter pre-applied.
   "vendor_name": "Shree Embroidery Works",
   "vendor_phone": "9898123456",
   "sent_date": "2026-02-09",
-  "notes": "Chikan embroidery work"
+  "notes": "Chikan embroidery work",
+  "weight_to_send": 20.000
 }
 ```
-**Response:** Updated roll object (status → `sent_for_processing`)
+- `weight_to_send` (optional): partial weight to send. Defaults to full `remaining_weight`.
+- Must be `> 0` and `<= roll.remaining_weight`.
+- `weight_before` on processing log = `weight_to_send` (the partial amount sent).
+- `roll.remaining_weight -= weight_to_send` after send.
+- If `remaining_weight > 0` after send → roll stays `in_stock` (partial send).
+- If `remaining_weight == 0` → roll becomes `sent_for_processing`.
+
+**Response:** Updated roll object
 
 ### PATCH `/rolls/{id}/processing/{processingId}` (Receive from Processing)
 **Request:**
@@ -301,7 +309,11 @@ Same as `GET /rolls` with status filter pre-applied.
   "notes": "Completed"
 }
 ```
-**Response:** Updated roll object (status → `in_stock`)
+- `roll.remaining_weight += weight_after` (adds back the returned portion).
+- `roll.current_weight += (weight_after - weight_before)` (VA delta — e.g. embroidery adds weight).
+- Status → `in_stock` only if no other "sent" processing logs remain.
+
+**Response:** Updated roll object
 
 ### PATCH `/rolls/{id}/processing/{processingId}/edit` (Edit Processing Log)
 **Request:** All fields optional — only send changed fields:
@@ -993,9 +1005,10 @@ If roll is not yet in a batch, `effective_sku` is `null`.
 ]
 ```
 
-### Updated RollProcessing shape (Phase 2)
+### Updated RollProcessing shape (Phase 2 + Partial Weight)
 
-Every processing log has a required `value_addition_id` (no more `process_type`):
+Every processing log has a required `value_addition_id` (no more `process_type`).
+`weight_before` = the partial amount sent (not full roll weight). Can be less than `current_weight` for partial sends.
 ```json
 {
   "id": "uuid",
@@ -1005,13 +1018,81 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
   "vendor_name": "Sonu Works",
   "sent_date": "2026-02-10",
   "received_date": "2026-02-15",
-  "weight_before": 45.5,
-  "weight_after": 44.0,
+  "weight_before": 20.0,
+  "weight_after": 20.5,
   "processing_cost": 2500.00,
   "status": "received",
-  "notes": ""
+  "notes": "",
+  "job_challan_id": "uuid | null"
 }
 ```
+
+---
+
+---
+
+## §16. Job Challans
+
+### POST `/job-challans` (Create Job Challan + Bulk Send)
+**Auth:** Required (stock_in permission)
+
+Creates a job challan and sends all specified rolls for processing atomically.
+
+**Request:**
+```json
+{
+  "value_addition_id": "uuid (required)",
+  "vendor_name": "Shree Embroidery Works",
+  "vendor_phone": "9898123456",
+  "sent_date": "2026-02-09",
+  "notes": "Chikan embroidery on all rolls",
+  "rolls": [
+    { "roll_id": "uuid", "weight_to_send": 20.000 },
+    { "roll_id": "uuid", "weight_to_send": null }
+  ]
+}
+```
+- `rolls[].weight_to_send` (optional): partial weight per roll. `null` = full `remaining_weight`.
+- Same validation as individual send: `0 < weight_to_send <= remaining_weight`.
+- Each roll gets a `RollProcessing` log linked to the challan (`job_challan_id`).
+- Rolls with `remaining_weight > 0` after send stay `in_stock`.
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "challan_no": "JC-001",
+  "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
+  "vendor_name": "Shree Embroidery Works",
+  "vendor_phone": "9898123456",
+  "sent_date": "2026-02-09",
+  "notes": "Chikan embroidery on all rolls",
+  "created_by_user": { "id": "uuid", "full_name": "Admin User" },
+  "created_at": "2026-02-09T10:30:00Z",
+  "rolls": [
+    {
+      "id": "uuid",
+      "roll_code": "1-COT-GREEN/01-01",
+      "enhanced_roll_code": "1-COT-GREEN/01-01",
+      "fabric_type": "Cotton",
+      "color": "Green",
+      "current_weight": 50.0,
+      "weight_sent": 20.0
+    }
+  ],
+  "total_weight": 20.0,
+  "roll_count": 1
+}
+```
+
+### GET `/job-challans` (List Job Challans)
+**Auth:** Required
+**Query:** `vendor_name`, `value_addition_id`, `page`, `page_size`
+**Response:** Paginated list of challan objects (same shape as create response).
+
+### GET `/job-challans/{id}` (Get Job Challan)
+**Auth:** Required
+**Response:** Single challan object with full roll details.
 
 ---
 

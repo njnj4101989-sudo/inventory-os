@@ -98,10 +98,10 @@ export async function stockInBulk(header, rollEntries) {
     const payload = {
       fabric_type: entry.fabric_type,
       color: entry.color,
-      total_weight: entry.unit === 'kg' ? parseFloat(entry.quantity) : (entry.weight ? parseFloat(entry.weight) : 0),
+      total_weight: parseFloat(entry.quantity),
       unit: entry.unit,
       cost_per_unit: entry.cost_per_unit ? parseFloat(entry.cost_per_unit) : null,
-      total_length: entry.unit === 'meters' ? parseFloat(entry.quantity) : (entry.length ? parseFloat(entry.length) : null),
+      total_length: entry.length ? parseFloat(entry.length) : null,
       supplier_id: header.supplier_id || null,
       supplier_invoice_no: header.supplier_invoice_no || null,
       supplier_challan_no: header.supplier_challan_no || null,
@@ -265,6 +265,9 @@ export async function sendForProcessing(rollId, data) {
     const roll = rolls.find((r) => r.id === rollId)
     if (!roll) throw { response: { data: { detail: 'Roll not found' } } }
     if (roll.status !== 'in_stock') throw { response: { data: { detail: 'Roll must be in_stock to send for processing' } } }
+    if ((roll.remaining_weight || 0) <= 0) throw { response: { data: { detail: 'Roll has no remaining weight to send' } } }
+    const weightToSend = data.weight_to_send != null ? parseFloat(data.weight_to_send) : roll.remaining_weight
+    if (weightToSend > roll.remaining_weight) throw { response: { data: { detail: `Weight to send (${weightToSend}) exceeds remaining (${roll.remaining_weight})` } } }
     const log = {
       id: crypto.randomUUID(),
       roll_id: rollId,
@@ -274,7 +277,7 @@ export async function sendForProcessing(rollId, data) {
       vendor_phone: data.vendor_phone || null,
       sent_date: data.sent_date,
       received_date: null,
-      weight_before: roll.current_weight,
+      weight_before: weightToSend,
       weight_after: null,
       length_before: roll.total_length,
       length_after: null,
@@ -282,7 +285,8 @@ export async function sendForProcessing(rollId, data) {
       status: 'sent',
       notes: data.notes || null,
     }
-    roll.status = 'sent_for_processing'
+    roll.remaining_weight = (roll.remaining_weight || 0) - weightToSend
+    if (roll.remaining_weight <= 0) roll.status = 'sent_for_processing'
     roll.processing_logs = [...(roll.processing_logs || []), log]
     rollProcessing.push(log)
     return mockResponse(log, 'Roll sent for processing')
@@ -317,15 +321,19 @@ export async function receiveFromProcessing(rollId, processingId, data) {
     log.processing_cost = data.processing_cost ? parseFloat(data.processing_cost) : null
     log.status = 'received'
     if (data.notes) log.notes = (log.notes ? log.notes + ' | ' : '') + data.notes
-    // Update current weight (total_weight stays immutable — original supplier weight)
-    roll.current_weight = log.weight_after
-    roll.remaining_weight = log.weight_after
+    // Add back returned weight to remaining
+    roll.remaining_weight = (roll.remaining_weight || 0) + log.weight_after
+    // Adjust current_weight by VA delta
+    const vaDelta = log.weight_after - log.weight_before
+    roll.current_weight = (roll.current_weight || 0) + vaDelta
     if (log.length_after) roll.total_length = log.length_after
     // Add processing cost to roll cost
     if (log.processing_cost && roll.cost_per_unit) {
       roll.cost_per_unit = parseFloat(roll.cost_per_unit) + (log.processing_cost / log.weight_after)
     }
-    roll.status = 'in_stock'
+    // Check if any other sent logs remain
+    const otherSent = (roll.processing_logs || []).some((p) => p.status === 'sent' && p.id !== processingId)
+    if (!otherSent) roll.status = 'in_stock'
     return mockResponse(log, 'Roll received from processing')
   }
   return client.patch(`/rolls/${rollId}/processing/${processingId}`, data)

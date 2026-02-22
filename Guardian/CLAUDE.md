@@ -34,7 +34,40 @@
 
 ---
 
-## Current State (Session 29 — 2026-02-22)
+## Current State (Session 30 — 2026-02-23)
+
+### NEXT (Session 31): Lot Page Redesign — Challan-Style Cutting Sheet
+
+**Context:** Analyzed client's physical lot register (5 photos of handwritten Gujarati/Hindi register). The **data model is solid** — all register fields map to existing columns. The gap is purely **UX** — current lot creation is a cramped modal, needs to become a full-page "cutting sheet" overlay (like we did for stock-in challan).
+
+**Client's register structure (decoded from photos):**
+- **Header:** Design name (आकृति), Date, Standard palla weight (कुल शीव, e.g. 6.70 kg), Panna, Lot number
+- **Rows:** One row per color/roll — Color name, Roll weight, Waste weight, Palla count (पल्लो)
+- **Footer:** Total weight, Total waste, Total pallas × pieces_per_palla = total pieces
+- **Physical swatches:** Fabric pieces pinned next to each color for visual reference
+- **Typical lot:** 17-20 colors, 150-160 pallas, 18 pieces per palla = ~2800 pieces
+
+**Key design decisions confirmed with user:**
+1. **Palla weight is FIXED per lot** — prefilled, NOT in tab order (rare to change, wastes time during bulk entry). If user wants to change, they click on it, but Tab/Enter skips it.
+2. **Lot number format:** Keep `LOT-0001` as-is (user approved)
+3. **Size pattern:** L/XL/XXL/3XL standard, but may have "Free" size — need to confirm in next session
+4. **Feriwala (waste disposition):** Deferred — not in scope for now
+
+**Implementation plan (Session 31):**
+1. Replace lot creation modal with **full-page overlay** (challan-style, like stock-in)
+2. Header section: Design, Date, Palla Weight (prefilled, tabindex=-1), Size Pattern
+3. Roll picker: Browse `in_stock` rolls with `remaining_weight > 0`, searchable, add to table
+4. Roll table: Color, Roll Code, Remaining Weight, Pallas (auto-calc), Waste (auto-calc), Remove button
+5. Summary footer: Live totals (colors, pallas, pieces, weight, waste)
+6. Keyboard-driven: Tab through roll additions, not the rarely-changed header fields
+7. Use `remaining_weight` (not `total_weight`) — compatible with partial-send feature
+
+**Existing system check (all verified):**
+- Backend model: `Lot` + `LotRoll` — all fields match register ✓
+- Backend service: `create_lot()` with palla calculations — logic correct ✓
+- Backend API: 4 endpoints (GET list, POST create, GET detail, PATCH update) ✓
+- Frontend: `LotsPage.jsx` — functional but needs full redesign ✓
+- Mock data: LOT-0001 with 4 rolls, size pattern {L:2, XL:6, XXL:6, 3XL:4} ✓
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
@@ -44,8 +77,47 @@
 - **Session 26: `process_type` → `value_addition_id` migration:** COMPLETE
 - **Session 27: `current_weight` — separate original vs post-VA weight:** COMPLETE
 - **Session 28: QR Reprint + Bulk Send + Job Challan:** COMPLETE
-- **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE — see below
+- **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE
+- **Session 30: Partial Weight Send for VA Processing:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
+
+### What's Built This Session (Session 30)
+
+#### Partial Weight Send for Value Addition Processing — COMPLETE
+
+**Why:** Previously, sending a roll for VA (embroidery, dyeing, etc.) always sent the **entire roll** — `weight_before = roll.current_weight`, and `roll.status` became `sent_for_processing` (locked). Real-world need: a 50 kg roll — send 20 kg for embroidery, keep 30 kg in stock for cutting or another VA.
+
+**Key design decisions:**
+- Roll stays `in_stock` if partial weight sent (`remaining_weight > 0`)
+- Roll becomes `sent_for_processing` **only** if entire remaining weight is sent
+- `weight_before` on processing log = the partial amount sent (not full roll weight)
+- On receive: `remaining_weight += weight_after`, `current_weight += (weight_after - weight_before)` (VA delta)
+- Status on receive: `in_stock` if no other "sent" logs remain
+
+**Backend changes:**
+| File | Change |
+|------|--------|
+| `schemas/roll.py` | Added `weight_to_send: Decimal | None = None` to `SendForProcessing` |
+| `schemas/job_challan.py` | `roll_ids: list[UUID]` → `rolls: list[JobChallanRollEntry]` with per-roll `weight_to_send` |
+| `schemas/job_challan.py` | Added `weight_sent: float | None` to `JobChallanRollBrief` response |
+| `services/roll_service.py` | `send_for_processing`: validates `weight_to_send`, deducts `remaining_weight`, conditional status |
+| `services/roll_service.py` | `receive_from_processing`: additive `remaining_weight`, VA-delta `current_weight`, checks open "sent" logs |
+| `services/roll_service.py` | `update_processing_log`: recalculates weights from all logs (not just latest) |
+| `services/job_challan_service.py` | `create_challan`: uses `rolls` array with per-roll `weight_to_send`, partial weight logic |
+| `services/job_challan_service.py` | Response includes `weight_sent` per roll brief |
+
+**Frontend changes:**
+| File | Change |
+|------|--------|
+| `api/rolls.js` | `sendForProcessing` passes `weight_to_send`, mock implements partial logic |
+| `api/rolls.js` | `receiveFromProcessing` mock: additive remaining, VA delta, checks other sent logs |
+| `api/jobChallans.js` | `createJobChallan` payload: `rolls: [{ roll_id, weight_to_send }]` replaces `roll_ids` |
+| `pages/RollsPage.jsx` | Single send modal: weight input (prefilled remaining), "Send All" button, remaining weight info |
+| `pages/RollsPage.jsx` | Bulk send overlay: per-roll editable "Send Weight" column, "Remaining" column, "Reset All to Full" |
+| `pages/RollsPage.jsx` | Selection guard: only rolls with `remaining_weight > 0` are selectable |
+| `components/common/JobChallan.jsx` | Table shows "Sent Wt." using `weight_sent`, totals use partial weight |
+
+**No migration needed** — no new columns. `weight_before` on `RollProcessing` already stores the sent amount.
 
 ### What's Built This Session (Session 29)
 

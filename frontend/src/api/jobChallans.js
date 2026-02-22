@@ -10,6 +10,17 @@ let mockSeq = 0
 export async function createJobChallan(data) {
   if (USE_MOCK) {
     mockSeq++
+    const rollObjs = data._rolls || []
+    const rollEntries = data.rolls || []
+    // Build weight_sent map from entries
+    const weightMap = {}
+    for (const entry of rollEntries) {
+      weightMap[entry.roll_id] = entry.weight_to_send
+    }
+    const rollBriefs = rollObjs.map((r) => ({
+      ...r,
+      weight_sent: weightMap[r.id] != null ? parseFloat(weightMap[r.id]) : parseFloat(r.current_weight || r.total_weight),
+    }))
     const challan = {
       id: crypto.randomUUID(),
       challan_no: `JC-${String(mockSeq).padStart(3, '0')}`,
@@ -20,14 +31,16 @@ export async function createJobChallan(data) {
       notes: data.notes || null,
       created_by_user: { id: '00000000-0000-4000-a000-000000000001', full_name: 'Nitish Admin' },
       created_at: new Date().toISOString(),
-      rolls: data._rolls || [],
-      total_weight: (data._rolls || []).reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0),
-      roll_count: (data._rolls || []).length,
+      rolls: rollBriefs,
+      total_weight: rollBriefs.reduce((s, r) => s + (r.weight_sent || 0), 0),
+      roll_count: rollBriefs.length,
     }
     mockChallans.push(challan)
     return mockResponse(challan, 'Job challan created')
   }
-  return client.post('/job-challans', data)
+  // Strip internal _rolls/_vaObj from payload — only send API fields
+  const { _rolls, _vaObj, ...apiPayload } = data
+  return client.post('/job-challans', apiPayload)
 }
 
 export async function getJobChallans(params = {}) {

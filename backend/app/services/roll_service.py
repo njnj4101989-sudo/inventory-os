@@ -343,6 +343,17 @@ class RollService:
             raise NotFoundError(f"Roll {roll_id} not found")
         if roll.status != "in_stock":
             raise BusinessRuleViolationError("Roll must be in_stock to send for processing")
+        if roll.remaining_weight <= 0:
+            raise BusinessRuleViolationError("Roll has no remaining weight to send")
+
+        # Determine weight to send — default to full remaining
+        weight_to_send = req.weight_to_send if req.weight_to_send is not None else roll.remaining_weight
+        if weight_to_send <= 0:
+            raise BusinessRuleViolationError("Weight to send must be greater than 0")
+        if weight_to_send > roll.remaining_weight:
+            raise BusinessRuleViolationError(
+                f"Weight to send ({weight_to_send}) exceeds remaining weight ({roll.remaining_weight})"
+            )
 
         log = RollProcessing(
             roll_id=roll_id,
@@ -350,14 +361,21 @@ class RollService:
             vendor_name=req.vendor_name,
             vendor_phone=req.vendor_phone,
             sent_date=req.sent_date,
-            weight_before=roll.current_weight,
+            weight_before=weight_to_send,  # partial amount sent
             length_before=roll.total_length,
             status="sent",
             notes=req.notes,
             job_challan_id=req.job_challan_id,
         )
         self.db.add(log)
-        roll.status = "sent_for_processing"
+
+        # Deduct remaining weight
+        roll.remaining_weight = roll.remaining_weight - weight_to_send
+        # Status: sent_for_processing only if nothing remains
+        if roll.remaining_weight <= 0:
+            roll.status = "sent_for_processing"
+        # else stays in_stock (partial send)
+
         await self.db.flush()
 
         # Reload with all relationships for full roll response
@@ -397,14 +415,27 @@ class RollService:
         if req.notes:
             log.notes = (log.notes + " | " + req.notes) if log.notes else req.notes
 
-        # Update current_weight (post-VA) — total_weight stays immutable (original supplier weight)
-        roll.current_weight = req.weight_after
-        roll.remaining_weight = req.weight_after
+        # Add back the returned weight to remaining
+        roll.remaining_weight = (roll.remaining_weight or 0) + req.weight_after
+        # Adjust current_weight by VA delta (weight change from processing)
+        va_delta = req.weight_after - log.weight_before
+        roll.current_weight = (roll.current_weight or 0) + va_delta
         if req.length_after:
             roll.total_length = req.length_after
         if req.processing_cost and roll.cost_per_unit and req.weight_after:
             roll.cost_per_unit = float(roll.cost_per_unit) + (float(req.processing_cost) / float(req.weight_after))
-        roll.status = "in_stock"
+
+        # Status: check if roll has any remaining "sent" processing logs
+        sent_logs_stmt = select(func.count()).select_from(RollProcessing).where(
+            RollProcessing.roll_id == roll_id,
+            RollProcessing.status == "sent",
+            RollProcessing.id != processing_id,  # exclude the one we just received
+        )
+        remaining_sent = (await self.db.execute(sent_logs_stmt)).scalar() or 0
+        if remaining_sent == 0:
+            roll.status = "in_stock"
+        # else keep current status (still has material out)
+
         await self.db.flush()
 
         # Reload with all relationships for full roll response
@@ -443,23 +474,22 @@ class RollService:
             else:
                 setattr(log, field, value)
 
-        # If weight_after was edited on a received log, sync roll.current_weight
+        # If weight_after was edited on a received log, recalculate roll weights
         if "weight_after" in updates and log.status == "received":
-            # Find the chronologically latest received log for this roll
-            latest_stmt = (
-                select(RollProcessing)
-                .where(
-                    RollProcessing.roll_id == roll_id,
-                    RollProcessing.status == "received",
-                )
-                .order_by(RollProcessing.received_date.desc(), RollProcessing.created_at.desc())
-                .limit(1)
+            # Recalculate current_weight and remaining_weight from all processing logs
+            # current_weight = total_weight + sum(weight_after - weight_before) for all received logs
+            # remaining_weight = total_weight + sum(weight_after - weight_before) for received - sum(weight_before) for sent
+            all_logs_stmt = select(RollProcessing).where(RollProcessing.roll_id == roll_id)
+            all_logs = (await self.db.execute(all_logs_stmt)).scalars().all()
+            va_delta_sum = sum(
+                (float(p.weight_after) - float(p.weight_before))
+                for p in all_logs if p.status == "received" and p.weight_after is not None
             )
-            latest = (await self.db.execute(latest_stmt)).scalar_one_or_none()
-            # The just-edited log might be the latest — use its new value
-            if latest and latest.id == log.id:
-                roll.current_weight = updates["weight_after"]
-                roll.remaining_weight = updates["weight_after"]
+            sent_weight_sum = sum(
+                float(p.weight_before) for p in all_logs if p.status == "sent"
+            )
+            roll.current_weight = float(roll.total_weight) + va_delta_sum
+            roll.remaining_weight = roll.current_weight - sent_weight_sum
 
         await self.db.flush()
 

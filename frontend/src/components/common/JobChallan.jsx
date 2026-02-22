@@ -49,7 +49,7 @@ export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, ven
     `,
   })
 
-  const totalWeight = rolls.reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0)
+  const totalWeight = rolls.reduce((s, r) => s + (parseFloat(r.weight_sent || r.current_weight || r.total_weight) || 0), 0)
   const dateStr = sentDate
     ? new Date(sentDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
     : '—'
@@ -116,7 +116,7 @@ export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, ven
               <th style={{ background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px', textAlign: 'left' }}>Roll Code</th>
               <th style={{ background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px', textAlign: 'left' }}>Fabric</th>
               <th style={{ background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px', textAlign: 'left' }}>Color</th>
-              <th style={{ background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px', textAlign: 'right' }}>Weight</th>
+              <th style={{ background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px', textAlign: 'right' }}>Sent Wt.</th>
             </tr>
           </thead>
           <tbody>
@@ -126,7 +126,7 @@ export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, ven
                 <td style={{ fontSize: '10pt', padding: '5px 8px', borderBottom: '1px solid #ddd', fontWeight: 700 }}>{r.enhanced_roll_code || r.roll_code}</td>
                 <td style={{ fontSize: '10pt', padding: '5px 8px', borderBottom: '1px solid #ddd' }}>{r.fabric_type}</td>
                 <td style={{ fontSize: '10pt', padding: '5px 8px', borderBottom: '1px solid #ddd' }}>{r.color}</td>
-                <td style={{ fontSize: '10pt', padding: '5px 8px', borderBottom: '1px solid #ddd', textAlign: 'right', fontWeight: 700 }}>{parseFloat(r.current_weight || r.total_weight).toFixed(3)} {r.unit || 'kg'}</td>
+                <td style={{ fontSize: '10pt', padding: '5px 8px', borderBottom: '1px solid #ddd', textAlign: 'right', fontWeight: 700 }}>{parseFloat(r.weight_sent || r.current_weight || r.total_weight).toFixed(3)} {r.unit || 'kg'}</td>
               </tr>
             ))}
           </tbody>

@@ -141,6 +141,7 @@ class SendForProcessing(BaseModel):
     sent_date: date
     notes: str | None = None
     job_challan_id: UUID | None = None
+    weight_to_send: Decimal | None = None  # None = full remaining_weight
 
 
 class ReceiveFromProcessing(BaseModel):
