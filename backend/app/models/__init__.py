@@ -20,6 +20,7 @@ from app.models.product_type import ProductType
 from app.models.color import Color
 from app.models.fabric import Fabric
 from app.models.value_addition import ValueAddition
+from app.models.job_challan import JobChallan
 
 __all__ = [
     "Role",
@@ -44,4 +45,5 @@ __all__ = [
     "Color",
     "Fabric",
     "ValueAddition",
+    "JobChallan",
 ]

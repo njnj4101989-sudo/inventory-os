@@ -64,7 +64,11 @@ class RollProcessing(Base):
     processing_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'")
     notes: Mapped[str | None] = mapped_column(Text)
+    job_challan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("job_challans.id"), nullable=True
+    )
 
     # Relationships
     roll: Mapped[Roll] = relationship(back_populates="processing_logs")
     value_addition = relationship("ValueAddition")
+    job_challan = relationship("JobChallan", back_populates="processing_logs")

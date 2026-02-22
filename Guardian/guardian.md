@@ -4,6 +4,15 @@ Guardian ensures **naming consistency**, **data-flow correctness**, and **cross-
 
 ---
 
+## Agent Loading
+When user says "Load agent: {name}":
+1. Read `{project_root}/.claude/agents/{name}.md` — if exists, use it (project override)
+2. Otherwise read `~/.claude/agents/{name}.md` (global)
+3. Always read `~/.claude/agents/base.md` alongside
+4. Confirm activation and wait for task
+
+Available agents: frontend, backend, database, ml-vision, devops, docs
+
 ## Activation Protocol (Read This When User Says "activate guardian")
 
 **Step 1:** Read `CLAUDE.md` → current state, what's blocking, what's next
@@ -301,15 +310,17 @@ Roll: 1-COT-PINK/07-01
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-02-19 22:47:06_
+_Last sync: 2026-02-22 10:21:51_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5688 lines total).",
+  "summary": "Project has 13 tracked code files (~5743 lines total).",
   "recent_files": [
-    "CLAUDE.md (418 lines)",
-    "API_REFERENCE.md (1052 lines)",
-    "guardian.md (322 lines)",
+    "guardian.md (333 lines)",
+    "CLAUDE.md (460 lines)",
+    "API_REFERENCE.md (1054 lines)",
     "project-context.json (17 lines)",
     ".claude\\settings.local.json (45 lines)"
   ],
@@ -318,7 +329,7 @@ _Last sync: 2026-02-19 22:47:06_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5688,
-  "last_updated": "2026-02-19 22:47:06"
+  "total_lines": 5743,
+  "last_updated": "2026-02-22 10:21:51"
 }
 ```

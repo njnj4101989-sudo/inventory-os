@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
+import { createJobChallan, getJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
+import JobChallan from '../components/common/JobChallan'
 import { getSuppliers } from '../api/suppliers'
 import { getAllFabrics, getAllColors, getAllValueAdditions } from '../api/masters'
 import DataTable from '../components/common/DataTable'
@@ -463,6 +465,16 @@ export default function RollsPage() {
   const [lastSavedRolls, setLastSavedRolls] = useState([])   // for Print Labels
   const [showLabelSheet, setShowLabelSheet] = useState(false)
 
+  // Roll selection + bulk actions
+  const [selectedRolls, setSelectedRolls] = useState(new Set())
+  const [showBulkLabels, setShowBulkLabels] = useState(false)
+  const [bulkSendOpen, setBulkSendOpen] = useState(false)
+  const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
+  const [bulkSendSaving, setBulkSendSaving] = useState(false)
+  const [bulkSendError, setBulkSendError] = useState(null)
+  const [showJobChallan, setShowJobChallan] = useState(false)
+  const [jobChallanData, setJobChallanData] = useState(null)
+
   // Invoice detail modal
   const [selectedInvoice, setSelectedInvoice] = useState(null)
 
@@ -576,6 +588,51 @@ export default function RollsPage() {
   }, [])
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
+
+  // Clear selection on any filter/tab/page change
+  useEffect(() => { setSelectedRolls(new Set()) }, [tab, rollStatusFilter, rollAvailFilter, rollSupplierFilter, rollFabricFilter, rollProcessFilter, rollPage, rollSearch])
+
+  const getSelectedRollObjects = () => rolls.filter((r) => selectedRolls.has(r.id))
+
+  const handleBulkSendProcessing = async () => {
+    if (!bulkSendForm.value_addition_id) { setBulkSendError('Value Addition is required'); return }
+    if (!bulkSendForm.vendor_name.trim()) { setBulkSendError('Vendor name is required'); return }
+    if (!bulkSendForm.sent_date) { setBulkSendError('Sent date is required'); return }
+    const selectedRollObjects = getSelectedRollObjects()
+    if (selectedRollObjects.length === 0) { setBulkSendError('No rolls selected'); return }
+    setBulkSendSaving(true)
+    setBulkSendError(null)
+    try {
+      const res = await createJobChallan({
+        value_addition_id: bulkSendForm.value_addition_id,
+        vendor_name: bulkSendForm.vendor_name.trim(),
+        vendor_phone: bulkSendForm.vendor_phone.trim() || null,
+        sent_date: bulkSendForm.sent_date,
+        notes: bulkSendForm.notes.trim() || null,
+        roll_ids: selectedRollObjects.map((r) => r.id),
+      })
+      const challan = res.data?.data || res.data
+      const vaObj = masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id)
+      setJobChallanData({
+        challanNo: challan.challan_no,
+        rolls: challan.rolls || selectedRollObjects,
+        vaName: challan.value_addition?.name || vaObj?.name || '—',
+        vaShortCode: challan.value_addition?.short_code || vaObj?.short_code || '—',
+        vendorName: challan.vendor_name || bulkSendForm.vendor_name.trim(),
+        vendorPhone: challan.vendor_phone || bulkSendForm.vendor_phone.trim() || '',
+        sentDate: challan.sent_date || bulkSendForm.sent_date,
+        notes: challan.notes || bulkSendForm.notes.trim() || '',
+      })
+      setBulkSendOpen(false)
+      setSelectedRolls(new Set())
+      setShowJobChallan(true)
+      refreshAll()
+    } catch (err) {
+      setBulkSendError(err.response?.data?.detail || 'Failed to create job challan')
+    } finally {
+      setBulkSendSaving(false)
+    }
+  }
 
   // Track if we're editing an existing invoice (vs creating new)
   const [editingInvoice, setEditingInvoice] = useState(null)
@@ -1144,6 +1201,25 @@ export default function RollsPage() {
           onClose={() => setShowLabelSheet(false)}
         />
       )}
+      {showBulkLabels && (
+        <LabelSheet
+          rolls={getSelectedRollObjects()}
+          onClose={() => setShowBulkLabels(false)}
+        />
+      )}
+      {showJobChallan && jobChallanData && (
+        <JobChallan
+          challanNo={jobChallanData.challanNo}
+          rolls={jobChallanData.rolls}
+          vaName={jobChallanData.vaName}
+          vaShortCode={jobChallanData.vaShortCode}
+          vendorName={jobChallanData.vendorName}
+          vendorPhone={jobChallanData.vendorPhone}
+          sentDate={jobChallanData.sentDate}
+          notes={jobChallanData.notes}
+          onClose={() => { setShowJobChallan(false); setJobChallanData(null) }}
+        />
+      )}
 
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between">
@@ -1290,23 +1366,81 @@ export default function RollsPage() {
             </div>
 
             {/* ── Table ── */}
-            <div className="mt-4">
-              {rollStatusFilter === 'in_stock_processed' ? (
-                <DataTable
-                  columns={PROCESSED_COLUMNS}
-                  data={rolls}
-                  loading={rollLoading}
-                  onRowClick={openRollDetail}
-                  emptyText="No processed rolls found."
-                  expandedRows={expandedRows}
-                  onToggleExpand={toggleExpand}
-                  renderExpanded={renderExpandedProcessRow}
-                />
-              ) : (
-                <DataTable columns={ROLL_COLUMNS} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
-              )}
-              <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
-            </div>
+            {(() => {
+              const isSelectableView = rollStatusFilter !== 'in_stock_processed'
+              const inStockRolls = rolls.filter((r) => r.status === 'in_stock')
+              const allSelected = inStockRolls.length > 0 && inStockRolls.every((r) => selectedRolls.has(r.id))
+              const CHECKBOX_COL = {
+                key: '__select',
+                label: (
+                  <input type="checkbox" checked={allSelected}
+                    onChange={() => {
+                      if (allSelected) setSelectedRolls(new Set())
+                      else setSelectedRolls(new Set(inStockRolls.map((r) => r.id)))
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                ),
+                sortable: false,
+                render: (_, row) => row.status !== 'in_stock' ? <span className="w-4" /> : (
+                  <input type="checkbox" checked={selectedRolls.has(row.id)}
+                    onChange={(e) => { e.stopPropagation(); setSelectedRolls((prev) => { const next = new Set(prev); next.has(row.id) ? next.delete(row.id) : next.add(row.id); return next }) }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                ),
+              }
+              const displayColumns = isSelectableView ? [CHECKBOX_COL, ...ROLL_COLUMNS] : ROLL_COLUMNS
+
+              return (
+                <div className="mt-4">
+                  {rollStatusFilter === 'in_stock_processed' ? (
+                    <DataTable
+                      columns={PROCESSED_COLUMNS}
+                      data={rolls}
+                      loading={rollLoading}
+                      onRowClick={openRollDetail}
+                      emptyText="No processed rolls found."
+                      expandedRows={expandedRows}
+                      onToggleExpand={toggleExpand}
+                      renderExpanded={renderExpandedProcessRow}
+                    />
+                  ) : (
+                    <DataTable columns={displayColumns} data={rolls} loading={rollLoading} onRowClick={openRollDetail} emptyText="No rolls found." />
+                  )}
+                  <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
+
+                  {/* ── Floating bulk action bar ── */}
+                  {selectedRolls.size > 0 && (
+                    <div className="sticky bottom-4 z-20 mt-3 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/95 backdrop-blur px-5 py-3 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">{selectedRolls.size}</span>
+                        <span className="text-sm font-semibold text-primary-800">roll{selectedRolls.size > 1 ? 's' : ''} selected</span>
+                        <button onClick={() => setSelectedRolls(new Set())} className="text-xs text-primary-500 hover:text-primary-700 underline">Clear</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setShowBulkLabels(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 transition-colors">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Print Labels ({selectedRolls.size})
+                        </button>
+                        <button onClick={() => {
+                            setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                            setBulkSendError(null)
+                            setBulkSendOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 transition-colors">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                          Send for Processing ({selectedRolls.size})
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )
       })()}
@@ -1424,6 +1558,83 @@ export default function RollsPage() {
               </div>
             )}
 
+            {/* ── Vendor × VA grouped challan cards ── */}
+            {!procLoading && filtered.length > 0 && (() => {
+              const groups = {}
+              for (const r of filtered) {
+                const log = getLatestLog(r)
+                if (!log) continue
+                const key = `${log.vendor_name || '?'}|||${log.value_addition?.id || '?'}`
+                if (!groups[key]) groups[key] = { vendorName: log.vendor_name || '—', vendorPhone: log.vendor_phone || '', va: log.value_addition, sentDate: log.sent_date, rolls: [] }
+                groups[key].rolls.push(r)
+              }
+              const groupList = Object.values(groups)
+              if (groupList.length === 0) return null
+              return (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {groupList.map((g, gi) => {
+                    const vaColor = g.va ? getVAColor(g.va.short_code) : DEFAULT_VA_COLOR
+                    const totalWt = g.rolls.reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0)
+                    return (
+                      <div key={gi} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-semibold text-gray-800 text-sm">{g.vendorName}</div>
+                            <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vaColor.bg} ${vaColor.text}`}>
+                              {g.va?.name || '—'} ({g.va?.short_code || '?'})
+                            </span>
+                          </div>
+                          <button onClick={async () => {
+                              // Try to fetch from DB if any log has a job_challan_id
+                              const firstLog = getLatestLog(g.rolls[0])
+                              const challanId = firstLog?.job_challan_id
+                              if (challanId) {
+                                try {
+                                  const res = await getJobChallan(challanId)
+                                  const c = res.data?.data || res.data
+                                  setJobChallanData({
+                                    challanNo: c.challan_no,
+                                    rolls: c.rolls || g.rolls,
+                                    vaName: c.value_addition?.name || g.va?.name || '—',
+                                    vaShortCode: c.value_addition?.short_code || g.va?.short_code || '—',
+                                    vendorName: c.vendor_name || g.vendorName,
+                                    vendorPhone: c.vendor_phone || g.vendorPhone,
+                                    sentDate: c.sent_date || g.sentDate || '',
+                                    notes: c.notes || '',
+                                  })
+                                  setShowJobChallan(true)
+                                  return
+                                } catch { /* fallback to client-side data */ }
+                              }
+                              setJobChallanData({
+                                rolls: g.rolls,
+                                vaName: g.va?.name || '—',
+                                vaShortCode: g.va?.short_code || '—',
+                                vendorName: g.vendorName,
+                                vendorPhone: g.vendorPhone,
+                                sentDate: g.sentDate || '',
+                                notes: '',
+                              })
+                              setShowJobChallan(true)
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 transition-colors">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            Print Challan
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                          <span>{g.rolls.length} roll{g.rolls.length > 1 ? 's' : ''}</span>
+                          <span>{totalWt.toFixed(3)} kg</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+
             <div className="mt-4">
               <DataTable columns={PROCESSING_COLUMNS} data={filtered} loading={procLoading} onRowClick={openRollDetail}
                 emptyText={
@@ -1454,7 +1665,7 @@ export default function RollsPage() {
         title={selectedInvoice?.invoice_no ? `Invoice: ${selectedInvoice.invoice_no}` : 'Invoice Details'} extraWide
         actions={
           <div className="flex w-full items-center justify-between">
-            <div>
+            <div className="flex gap-2">
               {isInvoiceEditable(selectedInvoice) && (
                 <button onClick={openEditInvoice}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
@@ -1464,8 +1675,17 @@ export default function RollsPage() {
                   Edit Invoice
                 </button>
               )}
+              {selectedInvoice?.rolls?.length > 0 && (
+                <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setShowLabelSheet(true) }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print All Labels ({selectedInvoice.rolls.length})
+                </button>
+              )}
               {selectedInvoice && !isInvoiceEditable(selectedInvoice) && (
-                <span className="text-xs text-gray-400 italic">Some rolls are used — invoice is read-only</span>
+                <span className="text-xs text-gray-400 italic self-center">Some rolls are used — invoice is read-only</span>
               )}
             </div>
             <button onClick={() => setSelectedInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
@@ -2067,6 +2287,13 @@ export default function RollsPage() {
           ) : (
             <div className="flex w-full items-center justify-between">
               <div className="flex gap-2">
+                <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowLabelSheet(true) }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Label
+                </button>
                 {detailRoll?.status === 'in_stock' && (
                   <button onClick={() => openSendProcessing(detailRoll)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 transition-colors">
@@ -2076,15 +2303,71 @@ export default function RollsPage() {
                     Send for Processing
                   </button>
                 )}
-                {detailRoll?.status === 'sent_for_processing' && (
-                  <button onClick={() => openReceiveProcessing(detailRoll)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Receive Back
-                  </button>
-                )}
+                {detailRoll?.status === 'sent_for_processing' && (() => {
+                  const latestLog = detailRoll.processing_logs?.[detailRoll.processing_logs.length - 1]
+                  return (
+                    <>
+                      <button onClick={() => openReceiveProcessing(detailRoll)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Receive Back
+                      </button>
+                      {latestLog && (
+                        <button onClick={async () => {
+                            // Try to fetch from DB if log has a job_challan_id
+                            const challanId = latestLog.job_challan_id
+                            if (challanId) {
+                              try {
+                                const res = await getJobChallan(challanId)
+                                const c = res.data?.data || res.data
+                                setJobChallanData({
+                                  challanNo: c.challan_no,
+                                  rolls: c.rolls || [detailRoll],
+                                  vaName: c.value_addition?.name || latestLog.value_addition?.name || '—',
+                                  vaShortCode: c.value_addition?.short_code || latestLog.value_addition?.short_code || '—',
+                                  vendorName: c.vendor_name || latestLog.vendor_name || '—',
+                                  vendorPhone: c.vendor_phone || latestLog.vendor_phone || '',
+                                  sentDate: c.sent_date || latestLog.sent_date || '',
+                                  notes: c.notes || '',
+                                })
+                                setDetailRoll(null)
+                                setCameFromInvoice(null)
+                                setShowJobChallan(true)
+                                return
+                              } catch { /* fallback */ }
+                            }
+                            // Fallback: use client-side data
+                            const vendorKey = latestLog.vendor_name
+                            const vaId = latestLog.value_addition?.id
+                            const groupRolls = procRolls.filter((r) => {
+                              const log = r.processing_logs?.[r.processing_logs.length - 1]
+                              return log?.vendor_name === vendorKey && log?.value_addition?.id === vaId
+                            })
+                            setJobChallanData({
+                              rolls: groupRolls.length > 0 ? groupRolls : [detailRoll],
+                              vaName: latestLog.value_addition?.name || '—',
+                              vaShortCode: latestLog.value_addition?.short_code || '—',
+                              vendorName: latestLog.vendor_name || '—',
+                              vendorPhone: latestLog.vendor_phone || '',
+                              sentDate: latestLog.sent_date || '',
+                              notes: latestLog.notes || '',
+                            })
+                            setDetailRoll(null)
+                            setCameFromInvoice(null)
+                            setShowJobChallan(true)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 transition-colors">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Print Challan
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div className="flex gap-2">
                 <button onClick={() => { setDetailRoll(null); setCameFromInvoice(null) }}
@@ -2553,6 +2836,118 @@ export default function RollsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* ════════════════════════════════════════════════════════
+          BULK SEND FOR PROCESSING — Full-page overlay
+         ════════════════════════════════════════════════════════ */}
+      {bulkSendOpen && (() => {
+        const bulkRolls = getSelectedRollObjects()
+        const totalWt = bulkRolls.reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0)
+        return (
+          <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
+            {/* ── Top bar ── */}
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Send {bulkRolls.length} Roll{bulkRolls.length > 1 ? 's' : ''} for Processing</h2>
+                <p className="text-sm text-gray-500">Total weight: {totalWt.toFixed(3)} kg</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setBulkSendOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleBulkSendProcessing} disabled={bulkSendSaving}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-5 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  {bulkSendSaving ? 'Sending...' : 'Send & Print Challan'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Body ── */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mx-auto max-w-4xl space-y-6">
+                {bulkSendError && <ErrorAlert message={bulkSendError} onDismiss={() => setBulkSendError(null)} />}
+
+                {/* ── Selected Rolls Table ── */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className="border-b border-gray-100 px-5 py-3">
+                    <h3 className="text-sm font-semibold text-gray-700">Selected Rolls</h3>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        <th className="px-4 py-2.5 text-center w-10">#</th>
+                        <th className="px-4 py-2.5 text-left">Roll Code</th>
+                        <th className="px-4 py-2.5 text-left">Fabric</th>
+                        <th className="px-4 py-2.5 text-left">Color</th>
+                        <th className="px-4 py-2.5 text-right">Weight</th>
+                        <th className="px-4 py-2.5 text-center w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkRolls.map((r, i) => (
+                        <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-4 py-2 text-center text-gray-400 font-medium">{i + 1}</td>
+                          <td className="px-4 py-2 font-semibold text-gray-800">{r.enhanced_roll_code || r.roll_code}</td>
+                          <td className="px-4 py-2 text-gray-600">{r.fabric_type}</td>
+                          <td className="px-4 py-2 text-gray-600">{r.color}</td>
+                          <td className="px-4 py-2 text-right font-medium">{parseFloat(r.current_weight || r.total_weight).toFixed(3)} kg</td>
+                          <td className="px-4 py-2 text-center">
+                            <button onClick={() => setSelectedRolls((prev) => { const next = new Set(prev); next.delete(r.id); if (next.size === 0) setBulkSendOpen(false); return next })}
+                              className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50 font-semibold text-sm">
+                        <td colSpan={4} className="px-4 py-2 text-right text-gray-600">Total: {bulkRolls.length} roll{bulkRolls.length > 1 ? 's' : ''}</td>
+                        <td className="px-4 py-2 text-right">{totalWt.toFixed(3)} kg</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* ── Processing Details Form ── */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-700">Processing Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
+                      <select value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+                        <option value="">Select value addition</option>
+                        {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Sent Date <span className="text-red-500">*</span></label>
+                      <input type="date" value={bulkSendForm.sent_date} onChange={(e) => setBulkSendForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Vendor Name <span className="text-red-500">*</span></label>
+                      <input type="text" value={bulkSendForm.vendor_name} onChange={(e) => setBulkSendForm((f) => ({ ...f, vendor_name: e.target.value }))}
+                        placeholder="e.g. Shree Embroidery Works" className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Vendor Phone</label>
+                      <input type="text" value={bulkSendForm.vendor_phone} onChange={(e) => setBulkSendForm((f) => ({ ...f, vendor_phone: e.target.value }))}
+                        placeholder="e.g. 9898123456" className={INPUT_CLS} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Notes</label>
+                    <textarea value={bulkSendForm.notes} onChange={(e) => setBulkSendForm((f) => ({ ...f, notes: e.target.value }))}
+                      rows={2} placeholder="Instructions for the vendor..." className={INPUT_CLS} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

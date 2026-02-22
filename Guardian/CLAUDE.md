@@ -34,19 +34,79 @@
 
 ---
 
-## Current State (Session 27 — 2026-02-19)
+## Current State (Session 29 — 2026-02-22)
 
 ### What's Done
-- **Phase 6A (Backend):** COMPLETE — 21 models, 18 schemas, 14 services, 15 routers, 80+ endpoints
-- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 135+ modules, 0 build errors
+- **Phase 6A (Backend):** COMPLETE — 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
+- **Phase 6B (Frontend):** COMPLETE — 14 feature pages, 137+ modules, 0 build errors
 - **QR/Print Labels Phase 1:** COMPLETE — full end-to-end
 - **QR Phase 2 (Value Additions + Enhanced Roll Code):** COMPLETE
 - **Session 26: `process_type` → `value_addition_id` migration:** COMPLETE
-- **Session 27: `current_weight` — separate original vs post-VA weight:** COMPLETE — see below
+- **Session 27: `current_weight` — separate original vs post-VA weight:** COMPLETE
+- **Session 28: QR Reprint + Bulk Send + Job Challan:** COMPLETE
+- **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
-- **API_REFERENCE.md:** Updated — `current_weight` added to RollResponse + Passport
 
-### What's Built This Session (Session 27)
+### What's Built This Session (Session 29)
+
+#### Job Challan DB Model + Full-Stack Integration — COMPLETE
+
+**Why:** Job challans were print-only (generated client-side, lost on close). Need DB tracking for: audit trail, vendor disputes, reprint exact challan, challan history/reporting.
+
+**Design:** `JobChallan` model with auto-sequential `challan_no` (JC-001, JC-002...). `RollProcessing` gets nullable `job_challan_id` FK. One challan groups many processing logs.
+
+**New Endpoint:** `POST /job-challans` — creates challan + sends all specified rolls in one transaction (replaces the loop of individual `POST /rolls/{id}/processing` calls).
+
+**Backend changes:**
+| File | Action |
+|------|--------|
+| `models/job_challan.py` | **NEW** — JobChallan model (challan_no, value_addition_id, vendor_name, vendor_phone, sent_date, notes, created_by_id) |
+| `models/roll.py` | **MODIFIED** — Added `job_challan_id` FK + relationship on RollProcessing |
+| `models/__init__.py` | **MODIFIED** — Registered JobChallan |
+| `schemas/job_challan.py` | **NEW** — Filter, Create, Response schemas |
+| `schemas/roll.py` | **MODIFIED** — Added `job_challan_id` to SendForProcessing + ProcessingResponse |
+| `services/job_challan_service.py` | **NEW** — create (auto challan_no + bulk roll send), list, get_by_id |
+| `services/roll_service.py` | **MODIFIED** — `send_for_processing` accepts `job_challan_id`, `_processing_to_response` includes it |
+| `api/job_challans.py` | **NEW** — GET list, GET by id, POST |
+| `api/router.py` | **MODIFIED** — Registered job_challans router |
+| Migration `ff960137e0bc` | **NEW** — job_challans table + FK on roll_processing (batch mode for SQLite) |
+
+**Frontend changes:**
+| File | Action |
+|------|--------|
+| `api/jobChallans.js` | **NEW** — createJobChallan, getJobChallans, getJobChallan |
+| `components/common/JobChallan.jsx` | **MODIFIED** — Accepts optional `challanNo` prop from DB (falls back to client-side timestamp) |
+| `pages/RollsPage.jsx` | **MODIFIED** — Bulk send now calls `POST /job-challans` (single API call, no loop). In Processing tab "Print Challan" fetches from DB when `job_challan_id` exists. Roll detail modal "Print Challan" also fetches from DB. All pass `challanNo` to JobChallan component. |
+
+**Flow change:**
+- Before: Select rolls → Fill form → Loop `POST /rolls/{id}/send` → Print client-side challan (lost on close)
+- After: Select rolls → Fill form → `POST /job-challans` (creates challan + sends all rolls atomically) → Print challan from DB → Reprint anytime from In Processing tab
+
+### What's Built This Session (Session 28)
+
+#### QR Label Reprint (3 access points) — COMPLETE
+- **All Rolls tab:** Checkbox selection on in_stock rolls → floating action bar → "Print Labels (N)"
+- **Roll Detail modal:** "Print Label" button (closes modal, opens label sheet)
+- **Invoice Detail modal:** "Print All Labels (N)" button (closes modal, opens label sheet)
+
+#### Bulk Send for Processing + Job Challan — COMPLETE
+- Select multiple in_stock rolls via checkboxes → "Send for Processing (N)" in floating bar
+- Full-page overlay: roll table (with remove X) + VA/vendor/date/notes form
+- Loops existing `POST /rolls/{id}/send-for-processing` per roll (no new backend)
+- On success → auto-opens **Job Challan** A4 print document
+
+#### Job Challan Component (NEW: `JobChallan.jsx`)
+- A4 print layout: header, challan no (`JC-YYYYMMDD-HHMM`), vendor, VA work type, roll table, totals, notes, signature lines
+- Same pattern as LabelSheet (react-to-print, full-screen overlay)
+- Client-side only — no DB storage for challan numbers
+
+#### Files Changed
+| File | Action |
+|------|--------|
+| `frontend/src/components/common/JobChallan.jsx` | **NEW** — Job challan print component |
+| `frontend/src/pages/RollsPage.jsx` | **MODIFIED** — Selection, bulk actions, reprint buttons, bulk send overlay |
+
+### What's Built in Session (Session 27)
 
 #### Fix: Roll Weight Corruption After Value Addition — COMPLETE
 

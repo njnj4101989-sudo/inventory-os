@@ -140,6 +140,7 @@ class SendForProcessing(BaseModel):
     vendor_phone: str | None = None
     sent_date: date
     notes: str | None = None
+    job_challan_id: UUID | None = None
 
 
 class ReceiveFromProcessing(BaseModel):
@@ -179,3 +180,4 @@ class ProcessingResponse(BaseSchema):
     processing_cost: Decimal | None = None
     status: str
     notes: str | None = None
+    job_challan_id: UUID | None = None

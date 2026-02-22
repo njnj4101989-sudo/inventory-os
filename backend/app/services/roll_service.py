@@ -354,6 +354,7 @@ class RollService:
             length_before=roll.total_length,
             status="sent",
             notes=req.notes,
+            job_challan_id=req.job_challan_id,
         )
         self.db.add(log)
         roll.status = "sent_for_processing"
@@ -493,6 +494,7 @@ class RollService:
             "processing_cost": float(p.processing_cost) if p.processing_cost else None,
             "status": p.status,
             "notes": p.notes,
+            "job_challan_id": str(p.job_challan_id) if p.job_challan_id else None,
         }
 
     @staticmethod

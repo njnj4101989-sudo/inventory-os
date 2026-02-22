@@ -1,0 +1,49 @@
+"""Job Challan routes — create (with bulk roll send), list, get by id."""
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_db, require_permission
+from app.models.user import User
+from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams
+from app.services.job_challan_service import JobChallanService
+
+router = APIRouter(prefix="/job-challans", tags=["Job Challans"])
+
+
+@router.get("", response_model=None)
+async def list_challans(
+    params: JobChallanFilterParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """List job challans with pagination."""
+    svc = JobChallanService(db)
+    result = await svc.get_challans(params)
+    return {"success": True, **result}
+
+
+@router.post("", response_model=None, status_code=201)
+async def create_challan(
+    req: JobChallanCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Create a job challan and send all specified rolls for processing."""
+    svc = JobChallanService(db)
+    result = await svc.create_challan(req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.get("/{challan_id}", response_model=None)
+async def get_challan(
+    challan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Get a single job challan with full roll details."""
+    svc = JobChallanService(db)
+    result = await svc.get_challan(challan_id)
+    return {"success": True, "data": result}
