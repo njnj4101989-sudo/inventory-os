@@ -34,15 +34,14 @@
 
 ---
 
-## Current State (Session 31 — 2026-02-23)
+## Current State (Session 33 — 2026-02-23)
 
-### NEXT (Session 32)
-1. **Lot detail view enhancements** — edit lot, change status, print cutting sheet
-2. **Batches page overhaul** — align to API_REFERENCE.md §8
-3. **SKUs page overhaul** — align to API_REFERENCE.md §6
-4. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
-5. **"Free" size support** — confirm with user if needed in size pattern
-6. **Feriwala (waste disposition)** — deferred feature, add when client requests
+### NEXT (Session 34)
+1. **Batches page overhaul** — align to API_REFERENCE.md §8, lot→batch flow UX
+2. **SKUs page overhaul** — align to API_REFERENCE.md §6
+3. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
+4. **"Free" size support** — confirm with user if needed in size pattern
+5. **Feriwala (waste disposition)** — deferred feature, add when client requests
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
@@ -54,10 +53,93 @@
 - **Session 28: QR Reprint + Bulk Send + Job Challan:** COMPLETE
 - **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE
 - **Session 30: Partial Weight Send for VA Processing:** COMPLETE
-- **Session 31: Lot Page Redesign — Challan-Style Cutting Sheet:** COMPLETE — see below
+- **Session 31: Lot Page Redesign — Challan-Style Cutting Sheet:** COMPLETE
+- **Session 32: Palla Meter + Lot Overlay UX Tightening:** COMPLETE — see below
+- **Session 33: Lot Detail Overhaul + Roll Picker Filters:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
-### What's Built This Session (Session 31)
+### What's Built This Session (Session 33)
+
+#### Lot Detail Overhaul + Roll Picker Filters — COMPLETE
+
+**Why:** Lot detail was a basic read-only Modal — no edit, no status change, no print, no batch creation. Roll picker in lot creation had only text search — no filtering by processing status, fabric, color, or supplier.
+
+**Changes:**
+
+**1. Lot Detail — Full-Page Overlay (replaces Modal)**
+| Feature | Implementation |
+|---------|---------------|
+| Full-page overlay | Same pattern as create cutting sheet — `fixed inset-0 z-50`, emerald gradient header |
+| Edit mode | Inline editable fields (design, palla wt/mtr, size pattern, notes) — only for 'open' lots |
+| Status transitions | Forward-only pills: open → cutting → distributed, via `PATCH /lots/{id}` |
+| Print cutting sheet | New `CuttingSheet.jsx` component — A4 print (follows JobChallan.jsx pattern) |
+| Create Batch | Modal with SKU dropdown (required), piece count (prefilled), notes → `POST /batches` |
+| Read-only rolls table | Same structure as create overlay, with totals row |
+| Summary KPIs | 6-card grid: colors, rolls, pallas, pieces, weight, waste |
+| Fresh data on open | Fetches lot via `GET /lots/{id}` when detail opens (not stale list data) |
+
+**2. Roll Picker Filters (in lot creation overlay)**
+| Filter | Type | Source |
+|--------|------|--------|
+| Fresh / Processed | Toggle pills | `hasVA()` helper + `processing_logs` check |
+| Fabric | Dropdown | Unique `fabric_type` values from available rolls |
+| Color | Dropdown | Unique `color` values from available rolls |
+| Supplier | Dropdown | Unique `supplier.name` values from available rolls |
+| Count indicator | Read-only | Shows `{N} available` after all filters applied |
+
+All filters compose with existing text search. Reset on overlay open.
+
+**3. CuttingSheet.jsx — NEW print component**
+| Aspect | Detail |
+|--------|--------|
+| Pattern | Exact JobChallan.jsx pattern — `useReactToPrint`, fixed overlay, A4 container |
+| Content | Lot header (code, design, date, palla wt/mtr), size pattern bar, rolls table, totals, notes, signatures |
+| Print CSS | Inline styles for print compatibility, `@page { size: A4; margin: 15mm }` |
+
+**4. Lot Status Coloring (list + detail)**
+| Status | Color |
+|--------|-------|
+| Open | Emerald |
+| Cutting | Blue |
+| Distributed | Purple |
+Custom colored pills replace StatusBadge in list view (lot statuses weren't in StatusBadge's COLORS map).
+
+**Files changed:**
+| File | Action | Lines |
+|------|--------|-------|
+| `frontend/src/components/common/CuttingSheet.jsx` | **NEW** | ~140 |
+| `frontend/src/pages/LotsPage.jsx` | **REWRITE** | ~540 → ~650 |
+
+**No backend changes** — all endpoints already existed.
+
+### What's Built in Session (Session 32)
+
+#### Palla Meter Field + Lot Overlay UX Tightening — COMPLETE
+
+**Why:** Each palla has two dimensions — weight (kg) and length (meters). Only weight existed. Also, the lot creation overlay's details card and roll picker were using too much vertical space, leaving the rolls section cramped.
+
+**Changes:**
+
+**1. Palla Meter — full-stack (new field)**
+| File | Change |
+|------|--------|
+| `models/lot.py` | Added `standard_palla_meter: Numeric(10,3), nullable` |
+| `schemas/lot.py` | Added to `LotCreate`, `LotUpdate`, `LotResponse` |
+| `services/lot_service.py` | Included in `create_lot()` + `_to_response()` |
+| Migration `c084d85a14ff` | `ALTER TABLE lots ADD standard_palla_meter` |
+| `pages/LotsPage.jsx` | 5th field in details bar + shown in detail modal |
+| `api/lots.js` | Mock `createLot` includes `standard_palla_meter` |
+
+**2. Lot overlay UX tightening**
+| Area | Before | After |
+|------|--------|-------|
+| Details card | 5-col grid, `p-5`, labels `text-sm` | Single flex row toolbar, `px-4 py-3`, labels `text-[10px]` |
+| Size pattern | Separate border-t sub-row | Inline in same row, separated by vertical divider |
+| Roll picker | Chip soup (`flex-wrap gap-1.5`) | 3-col grid cards with roll code + color dot + weight |
+| Outer spacing | `space-y-5 p-6` | `space-y-3 px-6 py-4` |
+| Vertical savings | — | ~80px reclaimed for rolls section |
+
+### What's Built in Session (Session 31)
 
 #### Lot Page Redesign — Challan-Style Cutting Sheet — COMPLETE
 
