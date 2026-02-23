@@ -73,7 +73,7 @@ export default function LotsPage() {
   const [rollSearch, setRollSearch] = useState('')
   const [form, setForm] = useState({
     lot_date: new Date().toISOString().split('T')[0],
-    design_no: '', standard_palla_weight: '',
+    design_no: '', standard_palla_weight: '', standard_palla_meter: '',
     size_pattern: { ...DEFAULT_SIZE_PATTERN },
     rolls: [], notes: '',
   })
@@ -166,7 +166,7 @@ export default function LotsPage() {
 
   const openCreate = () => {
     setFormError(null); setRollSearch('')
-    setForm({ lot_date: new Date().toISOString().split('T')[0], design_no: '', standard_palla_weight: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
+    setForm({ lot_date: new Date().toISOString().split('T')[0], design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
     setShowCreate(true)
   }
 
@@ -179,6 +179,7 @@ export default function LotsPage() {
       await createLot({
         lot_date: form.lot_date, design_no: form.design_no,
         standard_palla_weight: parseFloat(form.standard_palla_weight),
+        standard_palla_meter: form.standard_palla_meter ? parseFloat(form.standard_palla_meter) : null,
         default_size_pattern: form.size_pattern,
         rolls: form.rolls.map(r => ({ roll_id: r.roll_id, palla_weight: parseFloat(r.palla_weight) })),
         notes: form.notes || null,
@@ -229,49 +230,54 @@ export default function LotsPage() {
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-5xl space-y-5 p-6">
+          <div className="mx-auto max-w-5xl space-y-3 px-6 py-4">
             {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
-            {/* ── Lot Details + Size Pattern (compact single card) ── */}
-            <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <div className="grid grid-cols-4 gap-5">
-                <div>
-                  <label className={LABEL}>Lot No.</label>
-                  <div className="flex items-center h-[38px] rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 text-sm font-semibold text-primary-700">
+            {/* ── Lot Details (tight toolbar) ── */}
+            <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
+              <div className="flex items-end gap-3">
+                <div className="shrink-0">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</label>
+                  <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
                     LOT-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
-                <div>
-                  <label className={LABEL}>Design No. *</label>
+                <div className="w-24">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Design *</label>
                   <input ref={designRef} type="text" value={form.design_no} onChange={e => setField('design_no', e.target.value)}
-                    placeholder="e.g. 702" className={INPUT} />
+                    placeholder="702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
-                <div>
-                  <label className={LABEL}>Date</label>
-                  <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)} className={INPUT} />
+                <div className="w-[130px]">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</label>
+                  <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
+                    className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
-                <div>
-                  <label className={LABEL}>Palla Weight (kg) *</label>
+                <div className="w-24">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt *</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
                       setForm(f => ({ ...f, standard_palla_weight: v, rolls: f.rolls.map(r => ({ ...r, palla_weight: v })) }))
                     }}
-                    placeholder="e.g. 6.700" className={INPUT} />
+                    placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
-              </div>
-              {/* Size pattern — inline sub-row */}
-              <div className="mt-4 flex items-center gap-3 border-t pt-4">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 whitespace-nowrap">Sizes</span>
+                <div className="w-24">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</label>
+                  <input type="number" step="0.01" value={form.standard_palla_meter}
+                    onChange={e => setField('standard_palla_meter', e.target.value)}
+                    tabIndex={-1}
+                    placeholder="5.50" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                </div>
+                <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
                 {Object.entries(form.size_pattern).map(([size, count]) => (
-                  <div key={size} className="flex items-center gap-1">
-                    <label className="text-xs font-semibold text-gray-500">{size}</label>
+                  <div key={size} className="flex items-center gap-0.5">
+                    <label className="text-[10px] font-bold text-gray-400">{size}</label>
                     <input type="number" value={count} onChange={e => setSizeKey(size, e.target.value)}
-                      className="w-14 rounded border border-gray-300 px-2 py-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                      className="w-11 h-[34px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
                   </div>
                 ))}
-                <span className="ml-auto rounded-full bg-emerald-50 border border-emerald-200 px-3 py-0.5 text-sm font-bold text-emerald-700">
-                  = {piecesPerPalla} pcs/palla
+                <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                  = {piecesPerPalla} pcs
                 </span>
               </div>
             </div>
@@ -291,21 +297,25 @@ export default function LotsPage() {
                 </div>
               </div>
 
-              {/* Available rolls — clickable chips */}
+              {/* Available rolls — grid cards */}
               {addableRolls.length > 0 && (
-                <div className="border-b bg-gray-50/80 px-5 py-3">
-                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                <div className="border-b bg-gray-50/50 px-4 py-3">
+                  <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
                     {addableRolls.slice(0, 60).map(r => (
                       <button key={r.id} onClick={() => addRoll(r.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-purple-300 bg-purple-50/40' : 'border-gray-200 bg-white'}`}>
-                        <RollCodeDisplay roll={r} />
-                        <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">{r.color}</span>
-                        <span className="font-medium text-emerald-600">{r.remaining_weight}kg</span>
+                        className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-sm ${hasVA(r) ? 'border-purple-300 bg-purple-50/30' : 'border-gray-200 bg-white'}`}>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold text-gray-700"><RollCodeDisplay roll={r} /></div>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: r.color?.toLowerCase() || '#9ca3af' }} />
+                            <span className="text-[11px] text-gray-500 truncate">{r.color || '—'}</span>
+                            <span className="ml-auto text-[11px] font-semibold text-emerald-600 tabular-nums whitespace-nowrap">{r.remaining_weight} kg</span>
+                          </div>
+                        </div>
                       </button>
                     ))}
-                    {addableRolls.length > 60 && <span className="self-center text-xs text-gray-400 pl-2">+{addableRolls.length - 60} more</span>}
                   </div>
+                  {addableRolls.length > 60 && <p className="mt-2 text-center text-[11px] text-gray-400">+{addableRolls.length - 60} more rolls (use search to filter)</p>}
                 </div>
               )}
 
@@ -475,6 +485,7 @@ export default function LotsPage() {
             <div className="flex flex-wrap gap-4 text-sm text-gray-600">
               <span><span className="font-medium">Size:</span> {Object.entries(detailLot.default_size_pattern || {}).map(([k, v]) => `${k}:${v}`).join(' + ')} = {detailLot.pieces_per_palla}/palla</span>
               <span><span className="font-medium">Palla Wt:</span> {detailLot.standard_palla_weight} kg</span>
+              {detailLot.standard_palla_meter && <span><span className="font-medium">Palla Meter:</span> {detailLot.standard_palla_meter} m</span>}
               <span><span className="font-medium">Date:</span> {detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</span>
             </div>
 

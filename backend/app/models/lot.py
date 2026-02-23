@@ -18,6 +18,7 @@ class Lot(Base):
     lot_date: Mapped[datetime] = mapped_column(Date)
     design_no: Mapped[str] = mapped_column(String(50))
     standard_palla_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    standard_palla_meter: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     default_size_pattern: Mapped[dict] = mapped_column(JSON)
     pieces_per_palla: Mapped[int] = mapped_column(Integer)
     total_pallas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -65,6 +65,7 @@ export async function createLot(data) {
       lot_date: data.lot_date,
       design_no: data.design_no,
       standard_palla_weight: data.standard_palla_weight,
+      standard_palla_meter: data.standard_palla_meter || null,
       default_size_pattern: data.default_size_pattern,
       pieces_per_palla: piecesPerPalla,
       total_pallas: totalPallas,

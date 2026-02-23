@@ -58,6 +58,7 @@ class LotCreate(BaseModel):
     lot_date: date
     design_no: str
     standard_palla_weight: Decimal
+    standard_palla_meter: Decimal | None = None
     default_size_pattern: dict  # e.g. {"L": 2, "XL": 6, "XXL": 6, "3XL": 4}
     rolls: list[LotRollInput]
     notes: str | None = None
@@ -68,6 +69,7 @@ class LotUpdate(BaseModel):
 
     design_no: str | None = None
     standard_palla_weight: Decimal | None = None
+    standard_palla_meter: Decimal | None = None
     default_size_pattern: dict | None = None
     status: str | None = None
     notes: str | None = None
@@ -83,6 +85,7 @@ class LotResponse(BaseSchema):
     lot_date: date
     design_no: str
     standard_palla_weight: Decimal
+    standard_palla_meter: Decimal | None = None
     default_size_pattern: dict
     pieces_per_palla: int
     total_pallas: int
