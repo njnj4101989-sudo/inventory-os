@@ -26,23 +26,26 @@ export async function createLot(data) {
     const nextCode = `LOT-${String(lots.length + 1).padStart(4, '0')}`
     const piecesPerPalla = Object.values(data.default_size_pattern).reduce((s, v) => s + v, 0)
 
-    const lotRolls = (data.rolls || []).map((r, i) => {
+    const lotRolls = (data.rolls || []).map((r) => {
       const roll = rolls.find((rl) => rl.id === r.roll_id)
-      const rollWeight = roll ? roll.total_weight : 0
-      const numPallas = Math.floor(rollWeight / r.palla_weight)
+      const remaining = roll ? parseFloat(roll.remaining_weight) : 0
+      const numPallas = Math.floor(remaining / r.palla_weight)
       const weightUsed = +(numPallas * r.palla_weight).toFixed(3)
-      const wasteWeight = +(rollWeight - weightUsed).toFixed(3)
+      const wasteWeight = +(remaining - weightUsed).toFixed(3)
       const piecesFromRoll = numPallas * piecesPerPalla
 
-      // Deduct remaining weight on roll
-      if (roll) roll.remaining_weight = 0
+      // Deduct remaining weight on roll (match backend behavior)
+      if (roll) {
+        roll.remaining_weight = wasteWeight
+        if (wasteWeight <= 0) roll.status = 'in_cutting'
+      }
 
       return {
         id: crypto.randomUUID(),
         roll_id: r.roll_id,
         roll_code: roll ? roll.roll_code : 'ROLL-XXXX',
         color: roll ? roll.color : '',
-        roll_weight: rollWeight,
+        roll_weight: roll ? roll.total_weight : 0,
         palla_weight: r.palla_weight,
         num_pallas: numPallas,
         weight_used: weightUsed,
@@ -54,7 +57,7 @@ export async function createLot(data) {
 
     const totalPallas = lotRolls.reduce((s, r) => s + r.num_pallas, 0)
     const totalPieces = totalPallas * piecesPerPalla
-    const totalWeight = lotRolls.reduce((s, r) => s + r.roll_weight, 0)
+    const totalWeight = lotRolls.reduce((s, r) => s + r.weight_used, 0)
 
     const newLot = {
       id: crypto.randomUUID(),

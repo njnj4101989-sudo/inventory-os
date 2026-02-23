@@ -34,40 +34,15 @@
 
 ---
 
-## Current State (Session 30 — 2026-02-23)
+## Current State (Session 31 — 2026-02-23)
 
-### NEXT (Session 31): Lot Page Redesign — Challan-Style Cutting Sheet
-
-**Context:** Analyzed client's physical lot register (5 photos of handwritten Gujarati/Hindi register). The **data model is solid** — all register fields map to existing columns. The gap is purely **UX** — current lot creation is a cramped modal, needs to become a full-page "cutting sheet" overlay (like we did for stock-in challan).
-
-**Client's register structure (decoded from photos):**
-- **Header:** Design name (आकृति), Date, Standard palla weight (कुल शीव, e.g. 6.70 kg), Panna, Lot number
-- **Rows:** One row per color/roll — Color name, Roll weight, Waste weight, Palla count (पल्लो)
-- **Footer:** Total weight, Total waste, Total pallas × pieces_per_palla = total pieces
-- **Physical swatches:** Fabric pieces pinned next to each color for visual reference
-- **Typical lot:** 17-20 colors, 150-160 pallas, 18 pieces per palla = ~2800 pieces
-
-**Key design decisions confirmed with user:**
-1. **Palla weight is FIXED per lot** — prefilled, NOT in tab order (rare to change, wastes time during bulk entry). If user wants to change, they click on it, but Tab/Enter skips it.
-2. **Lot number format:** Keep `LOT-0001` as-is (user approved)
-3. **Size pattern:** L/XL/XXL/3XL standard, but may have "Free" size — need to confirm in next session
-4. **Feriwala (waste disposition):** Deferred — not in scope for now
-
-**Implementation plan (Session 31):**
-1. Replace lot creation modal with **full-page overlay** (challan-style, like stock-in)
-2. Header section: Design, Date, Palla Weight (prefilled, tabindex=-1), Size Pattern
-3. Roll picker: Browse `in_stock` rolls with `remaining_weight > 0`, searchable, add to table
-4. Roll table: Color, Roll Code, Remaining Weight, Pallas (auto-calc), Waste (auto-calc), Remove button
-5. Summary footer: Live totals (colors, pallas, pieces, weight, waste)
-6. Keyboard-driven: Tab through roll additions, not the rarely-changed header fields
-7. Use `remaining_weight` (not `total_weight`) — compatible with partial-send feature
-
-**Existing system check (all verified):**
-- Backend model: `Lot` + `LotRoll` — all fields match register ✓
-- Backend service: `create_lot()` with palla calculations — logic correct ✓
-- Backend API: 4 endpoints (GET list, POST create, GET detail, PATCH update) ✓
-- Frontend: `LotsPage.jsx` — functional but needs full redesign ✓
-- Mock data: LOT-0001 with 4 rolls, size pattern {L:2, XL:6, XXL:6, 3XL:4} ✓
+### NEXT (Session 32)
+1. **Lot detail view enhancements** — edit lot, change status, print cutting sheet
+2. **Batches page overhaul** — align to API_REFERENCE.md §8
+3. **SKUs page overhaul** — align to API_REFERENCE.md §6
+4. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
+5. **"Free" size support** — confirm with user if needed in size pattern
+6. **Feriwala (waste disposition)** — deferred feature, add when client requests
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
@@ -78,10 +53,44 @@
 - **Session 27: `current_weight` — separate original vs post-VA weight:** COMPLETE
 - **Session 28: QR Reprint + Bulk Send + Job Challan:** COMPLETE
 - **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE
-- **Session 30: Partial Weight Send for VA Processing:** COMPLETE — see below
+- **Session 30: Partial Weight Send for VA Processing:** COMPLETE
+- **Session 31: Lot Page Redesign — Challan-Style Cutting Sheet:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
-### What's Built This Session (Session 30)
+### What's Built This Session (Session 31)
+
+#### Lot Page Redesign — Challan-Style Cutting Sheet — COMPLETE
+
+**Why:** Current lot creation was a cramped modal. Client's physical register (5 photos of Gujarati handwritten lot register decoded) shows a full-page "cutting sheet" workflow. Redesigned to match — full-page overlay like stock-in challan (Session 13 pattern).
+
+**Key design decisions (confirmed with user):**
+1. Lot No. shown as read-only preview (auto-generated `LOT-XXXX`)
+2. Palla weight prefilled from standard, `tabIndex={-1}` (rarely changed per-roll)
+3. Size Pattern merged into Lot Details card as compact inline row (saves space)
+4. Roll picker chips area expanded (`max-h-48`) for easy selection
+5. Enhanced roll codes shown (`1-COT-GREEN/01-01+EMB`) with colored VA badges
+6. VA-processed rolls get purple-tinted border in picker for instant visual identification
+
+**Frontend changes:**
+| File | Change |
+|------|--------|
+| `pages/LotsPage.jsx` | **FULL REWRITE** — Challan-style full-page overlay (fixed inset-0 z-50), emerald gradient header, 4-col lot details (Lot No. + Design + Date + Palla Wt), compact inline size pattern, searchable roll picker with VA-colored chips, auto-calc roll table (remaining_weight), 6-KPI summary footer, Ctrl+S save, status filter pills on list, enhanced detail modal with totals row |
+| `api/lots.js` | **BUG FIX** — Mock `createLot` was using `total_weight` (wrong) → now uses `remaining_weight` (correct). `remaining_weight` set to `waste_weight` after lot creation (not 0). Roll status changes to `in_cutting` when waste=0. `totalWeight` sums `weight_used` (not `roll_weight`) |
+
+**No backend changes** — data model was already solid.
+
+**VA color coding (new in LotsPage):**
+| VA | Chip Color |
+|---|---|
+| EMB | Purple |
+| DYE | Amber |
+| DPT | Sky |
+| HWK | Rose |
+| SQN | Pink |
+| BTC | Teal |
+| VA rolls | Purple-tinted border + bg in picker |
+
+### What's Built in Session (Session 30)
 
 #### Partial Weight Send for Value Addition Processing — COMPLETE
 
