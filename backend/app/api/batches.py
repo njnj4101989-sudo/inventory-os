@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, get_current_user, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
 from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck
@@ -14,11 +14,36 @@ from app.services.batch_service import BatchService
 router = APIRouter(prefix="/batches", tags=["Batches"])
 
 
+# ── Public routes (MUST be before /{batch_id} to avoid UUID parsing) ──
+
+@router.get("/passport/{batch_code}", response_model=None)
+async def get_batch_passport(
+    batch_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public batch passport — no auth required. Workers scan QR to view batch info."""
+    svc = BatchService(db)
+    result = await svc.get_batch_passport(batch_code)
+    return {"success": True, "data": result}
+
+
+@router.post("/claim/{batch_code}", response_model=None)
+async def claim_batch(
+    batch_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_start"),
+):
+    """Tailor claims unclaimed batch (CREATED → ASSIGNED)."""
+    svc = BatchService(db)
+    result = await svc.claim_batch(batch_code, current_user.id)
+    return {"success": True, "data": result}
+
+
 @router.get("", response_model=None)
 async def list_batches(
     params: PaginatedParams = Depends(),
     db: AsyncSession = Depends(get_db),
-    current_user: User = require_permission("batch_create"),
+    current_user: User = require_permission("inventory_view"),
 ):
     """List batches with pagination. Filters: status, sku_id, created_by."""
     svc = BatchService(db)

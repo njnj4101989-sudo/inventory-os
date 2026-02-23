@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas import PaginatedParams
-from app.schemas.lot import LotCreate, LotUpdate
+from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate
 from app.services.lot_service import LotService
 
 router = APIRouter(prefix="/lots", tags=["Lots"])
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/lots", tags=["Lots"])
 
 @router.get("", response_model=None)
 async def list_lots(
-    params: PaginatedParams = Depends(),
+    params: LotFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("lot_manage"),
 ):
@@ -47,6 +46,18 @@ async def get_lot(
     """Get lot detail with rolls and calculations."""
     svc = LotService(db)
     result = await svc.get_lot(lot_id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{lot_id}/distribute", response_model=None, status_code=201)
+async def distribute_lot(
+    lot_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("lot_manage"),
+):
+    """Distribute cutting lot — auto-creates batches from size pattern."""
+    svc = LotService(db)
+    result = await svc.distribute_lot(lot_id, current_user.id)
     return {"success": True, "data": result}
 
 

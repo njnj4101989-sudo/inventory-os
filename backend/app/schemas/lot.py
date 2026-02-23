@@ -6,9 +6,19 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.sku import SKUBrief
 from app.schemas.user import UserBrief
+
+
+# --- Filter ---
+
+
+class LotFilterParams(PaginatedParams):
+    """GET /lots query parameters with filtering."""
+
+    status: str | None = None
+    design_no: str | None = None
 
 
 # --- Nested ---

@@ -83,6 +83,7 @@ class BatchService:
             batch_code=batch_code,
             lot_id=req.lot_id,
             sku_id=req.sku_id,
+            size=req.size,
             quantity=req.piece_count or 0,
             piece_count=req.piece_count,
             color_breakdown=req.color_breakdown,
@@ -306,6 +307,67 @@ class BatchService:
             for b in batches
         ]
 
+    async def get_batch_passport(self, batch_code: str) -> dict:
+        """Public batch passport — lookup by batch_code (not UUID)."""
+        stmt = (
+            select(Batch)
+            .where(Batch.batch_code == batch_code)
+            .options(
+                selectinload(Batch.lot),
+                selectinload(Batch.sku),
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                selectinload(Batch.created_by_user),
+            )
+        )
+        result = await self.db.execute(stmt)
+        batch = result.scalar_one_or_none()
+        if not batch:
+            raise NotFoundError(f"Batch '{batch_code}' not found")
+
+        resp = self._to_response(batch)
+        # Add lot-derived fields for passport display
+        if batch.lot:
+            resp["design_no"] = batch.lot.design_no
+            resp["lot_date"] = batch.lot.lot_date.isoformat() if batch.lot.lot_date else None
+            resp["default_size_pattern"] = batch.lot.default_size_pattern
+        return resp
+
+    async def claim_batch(self, batch_code: str, tailor_id: UUID) -> dict:
+        """Tailor claims an unclaimed batch by scanning its QR."""
+        stmt = (
+            select(Batch)
+            .where(Batch.batch_code == batch_code)
+            .options(
+                selectinload(Batch.lot),
+                selectinload(Batch.sku),
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                selectinload(Batch.created_by_user),
+            )
+        )
+        result = await self.db.execute(stmt)
+        batch = result.scalar_one_or_none()
+        if not batch:
+            raise NotFoundError(f"Batch '{batch_code}' not found")
+        if batch.status != "created":
+            raise InvalidStateTransitionError(
+                f"Cannot claim batch in '{batch.status}' status (must be 'created')"
+            )
+
+        assignment = BatchAssignment(
+            batch_id=batch.id,
+            tailor_id=tailor_id,
+            assigned_by=tailor_id,
+            assigned_at=datetime.now(timezone.utc),
+        )
+        self.db.add(assignment)
+
+        batch.status = "assigned"
+        batch.assigned_at = datetime.now(timezone.utc)
+        await self.db.flush()
+
+        # Reload to get fresh relationships
+        return await self.get_batch_passport(batch_code)
+
     async def _get_or_404(self, batch_id: UUID) -> Batch:
         stmt = (
             select(Batch)
@@ -328,6 +390,7 @@ class BatchService:
         return {
             "id": str(b.id),
             "batch_code": b.batch_code,
+            "size": b.size,
             "lot": {
                 "id": str(b.lot.id),
                 "lot_code": b.lot.lot_code,

@@ -2,52 +2,84 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
+import { getBatchPassport, claimBatch } from '../api/batches'
 import CameraScanner from '../components/common/CameraScanner'
 
 /**
- * Public Roll Passport page — /scan/roll/:rollCode
- * No auth required. Workers scan QR on roll → see full chain.
- * Also shows a "Scan Another" button to open camera scanner.
+ * Public Passport page — /scan/roll/:rollCode OR /scan/batch/:batchCode
+ * No auth required for viewing. Workers scan QR on roll/batch → see full chain.
+ * Tailors can claim batches if logged in.
  */
 export default function ScanPage() {
-  const { rollCode } = useParams()
+  const { rollCode, batchCode } = useParams()
   const navigate = useNavigate()
 
   const [passport, setPassport] = useState(null)
+  const [batchPassport, setBatchPassport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showScanner, setShowScanner] = useState(false)
+  const [claiming, setClaiming] = useState(false)
+  const [claimSuccess, setClaimSuccess] = useState(false)
+
+  const isLoggedIn = !!localStorage.getItem('access_token')
 
   useEffect(() => {
-    if (!rollCode) {
+    if (rollCode) {
+      fetchRollPassport(rollCode)
+    } else if (batchCode) {
+      fetchBatchPassport(batchCode)
+    } else {
       setShowScanner(true)
       setLoading(false)
-      return
     }
-    fetchPassport(rollCode)
-  }, [rollCode])
+  }, [rollCode, batchCode])
 
-  async function fetchPassport(code) {
-    setLoading(true)
-    setError(null)
+  async function fetchRollPassport(code) {
+    setLoading(true); setError(null); setBatchPassport(null)
     try {
       const res = await getRollPassport(code)
-      // Handle both mock shape (res.data.data) and real backend (res.data.data)
       const data = res?.data?.data || res?.data || res
       setPassport(data)
     } catch (err) {
       setError(err?.response?.data?.detail || `Roll "${code}" not found`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
+  }
+
+  async function fetchBatchPassport(code) {
+    setLoading(true); setError(null); setPassport(null); setClaimSuccess(false)
+    try {
+      const res = await getBatchPassport(code)
+      const data = res?.data?.data || res?.data || res
+      setBatchPassport(data)
+    } catch (err) {
+      setError(err?.response?.data?.detail || `Batch "${code}" not found`)
+    } finally { setLoading(false) }
+  }
+
+  async function handleClaim() {
+    if (!batchCode || !batchPassport) return
+    setClaiming(true)
+    try {
+      await claimBatch(batchCode)
+      setClaimSuccess(true)
+      // Refresh passport
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to claim batch')
+    } finally { setClaiming(false) }
   }
 
   function handleScan(decodedText) {
     setShowScanner(false)
-    // Extract roll_code from scan URL or use raw text
-    // Expected: http://host/scan/roll/{rollCode} or just the rollCode itself
-    const match = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
-    const code = match ? decodeURIComponent(match[1]) : decodedText.trim()
+    // Detect batch or roll URL
+    const batchMatch = decodedText.match(/\/scan\/batch\/([^/?\s]+)/)
+    if (batchMatch) {
+      navigate(`/scan/batch/${encodeURIComponent(batchMatch[1])}`)
+      return
+    }
+    const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
+    const code = rollMatch ? decodeURIComponent(rollMatch[1]) : decodedText.trim()
     navigate(`/scan/roll/${encodeURIComponent(code)}`)
   }
 
@@ -58,6 +90,11 @@ export default function ScanPage() {
   }
 
   const batchStatusColor = {
+    created: 'bg-gray-100 text-gray-600',
+    assigned: 'bg-blue-100 text-blue-700',
+    in_progress: 'bg-yellow-100 text-yellow-700',
+    submitted: 'bg-purple-100 text-purple-700',
+    completed: 'bg-green-100 text-green-700',
     CREATED: 'bg-gray-100 text-gray-600',
     ASSIGNED: 'bg-blue-100 text-blue-700',
     STARTED: 'bg-yellow-100 text-yellow-700',
@@ -67,22 +104,24 @@ export default function ScanPage() {
     REJECTED: 'bg-red-100 text-red-700',
   }
 
+  const pageTitle = batchCode ? 'Batch Passport' : 'Roll Passport'
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${batchCode ? 'bg-emerald-600' : 'bg-blue-600'}`}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
-          <span className="font-semibold text-gray-900 text-sm">Roll Passport</span>
+          <span className="font-semibold text-gray-900 text-sm">{pageTitle}</span>
         </div>
         <button
           onClick={() => setShowScanner(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-lg hover:opacity-90 ${batchCode ? 'bg-emerald-600' : 'bg-blue-600'}`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -104,20 +143,17 @@ export default function ScanPage() {
         {/* Error */}
         {!loading && error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-8">
-            <div className="text-3xl mb-3">❌</div>
-            <h3 className="font-semibold text-red-800 mb-1">Roll Not Found</h3>
+            <h3 className="font-semibold text-red-800 mb-1">Not Found</h3>
             <p className="text-red-600 text-sm">{error}</p>
-            <button
-              onClick={() => setShowScanner(true)}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
-            >
+            <button onClick={() => { setError(null); setShowScanner(true) }}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
               Scan Again
             </button>
           </div>
         )}
 
-        {/* No rollCode — prompt to scan */}
-        {!loading && !error && !passport && (
+        {/* No code — prompt to scan */}
+        {!loading && !error && !passport && !batchPassport && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
             <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -126,19 +162,117 @@ export default function ScanPage() {
               </svg>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Scan a Roll QR Code</h3>
-              <p className="text-gray-500 text-sm mt-1">Point your camera at the QR label on any roll</p>
+              <h3 className="font-semibold text-gray-900">Scan a QR Code</h3>
+              <p className="text-gray-500 text-sm mt-1">Point your camera at the QR label on any roll or batch</p>
             </div>
-            <button
-              onClick={() => setShowScanner(true)}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700"
-            >
+            <button onClick={() => setShowScanner(true)}
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
               Open Camera
             </button>
           </div>
         )}
 
-        {/* Passport */}
+        {/* ═══════ BATCH PASSPORT ═══════ */}
+        {!loading && !error && batchPassport && (
+          <div className="space-y-4">
+            {/* Batch identity card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg font-bold text-gray-900 font-mono">{batchPassport.batch_code}</h1>
+                  {/* Size — large prominent badge */}
+                  {batchPassport.size && (
+                    <div className="mt-2 inline-flex items-center gap-2 bg-emerald-50 border-2 border-emerald-200 rounded-xl px-4 py-2">
+                      <span className="text-xs font-bold text-emerald-600 uppercase">Size</span>
+                      <span className="text-2xl font-black text-emerald-700">{batchPassport.size}</span>
+                    </div>
+                  )}
+                  <div className="mt-2">
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${batchStatusColor[batchPassport.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {batchPassport.status?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0">
+                  <QRCodeSVG value={window.location.href} size={64} level="M" includeMargin={false} />
+                </div>
+              </div>
+
+              {/* Key metrics */}
+              <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+                <Metric label="Pieces" value={batchPassport.piece_count} />
+                <Metric label="Lot" value={batchPassport.lot?.lot_code} />
+                <Metric label="Design" value={batchPassport.design_no || batchPassport.lot?.design_no} />
+              </div>
+            </div>
+
+            {/* Color breakdown */}
+            {batchPassport.color_breakdown && Object.keys(batchPassport.color_breakdown).length > 0 && (
+              <Section title="Colors" icon="🎨">
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(batchPassport.color_breakdown).map(([color, count]) => (
+                    <div key={color} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5">
+                      <span className="inline-block h-3 w-3 rounded-full border border-gray-200" style={{ backgroundColor: color.toLowerCase() }} />
+                      <span className="text-sm font-medium text-gray-700">{color}</span>
+                      <span className="text-xs text-gray-400">{count} pallas</span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Assignment info */}
+            {batchPassport.assignment && (
+              <Section title="Assignment" icon="🧵">
+                <InfoRow label="Tailor" value={batchPassport.assignment.tailor?.full_name} />
+                <InfoRow label="Assigned" value={batchPassport.assigned_at
+                  ? new Date(batchPassport.assigned_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : null} />
+              </Section>
+            )}
+
+            {/* Lot info */}
+            {batchPassport.lot && (
+              <Section title="Lot Details" icon="📦">
+                <InfoRow label="Lot Code" value={batchPassport.lot.lot_code} />
+                <InfoRow label="Design" value={batchPassport.lot.design_no || batchPassport.design_no} />
+                <InfoRow label="Date" value={batchPassport.lot_date
+                  ? new Date(batchPassport.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : null} />
+                <InfoRow label="Total Pieces" value={batchPassport.lot.total_pieces} />
+                <InfoRow label="Status" value={batchPassport.lot.status} />
+              </Section>
+            )}
+
+            {/* Claim button */}
+            {batchPassport.status === 'created' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                {claimSuccess ? (
+                  <div className="text-emerald-700 font-semibold">Batch claimed successfully!</div>
+                ) : isLoggedIn ? (
+                  <button onClick={handleClaim} disabled={claiming}
+                    className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                    {claiming ? 'Claiming...' : 'Claim This Batch'}
+                  </button>
+                ) : (
+                  <div>
+                    <p className="text-gray-500 text-sm mb-3">Login to claim this batch</p>
+                    <a href="/login" className="inline-block px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
+                      Login to Claim
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <p className="text-center text-xs text-gray-400 pb-4">
+              Inventory-OS • Scan QR to see latest status
+            </p>
+          </div>
+        )}
+
+        {/* ═══════ ROLL PASSPORT ═══════ */}
         {!loading && !error && passport && (
           <div className="space-y-4">
             {/* Roll identity card */}
@@ -160,14 +294,8 @@ export default function ScanPage() {
                     {passport.status?.replace(/_/g, ' ')}
                   </span>
                 </div>
-                {/* Mini QR for sharing */}
                 <div className="flex-shrink-0">
-                  <QRCodeSVG
-                    value={window.location.href}
-                    size={64}
-                    level="M"
-                    includeMargin={false}
-                  />
+                  <QRCodeSVG value={window.location.href} size={64} level="M" includeMargin={false} />
                 </div>
               </div>
 

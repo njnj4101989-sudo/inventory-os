@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { getLots, getLot, createLot, updateLot } from '../api/lots'
-import { createBatch } from '../api/batches'
-import { getSKUs } from '../api/skus'
+import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -9,6 +8,7 @@ import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import CuttingSheet from '../components/common/CuttingSheet'
+import BatchLabelSheet from '../components/common/BatchLabelSheet'
 
 const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
@@ -98,11 +98,8 @@ export default function LotsPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState(null)
   const [showCuttingSheet, setShowCuttingSheet] = useState(false)
-  const [showBatchModal, setShowBatchModal] = useState(false)
-  const [batchForm, setBatchForm] = useState({ piece_count: '', sku_id: '', notes: '' })
-  const [batchSaving, setBatchSaving] = useState(false)
-  const [batchError, setBatchError] = useState(null)
-  const [skus, setSkus] = useState([])
+  const [distributing, setDistributing] = useState(false)
+  const [showBatchLabels, setShowBatchLabels] = useState(null) // { batches, lotCode, designNo, lotDate }
 
   // ── Create overlay state ──
   const [showCreate, setShowCreate] = useState(false)
@@ -297,7 +294,7 @@ export default function LotsPage() {
   // ══════════════════════════════════════
 
   const openDetail = async (lot) => {
-    setEditing(false); setEditError(null); setShowCuttingSheet(false); setShowBatchModal(false)
+    setEditing(false); setEditError(null); setShowCuttingSheet(false); setShowBatchLabels(null)
     setDetailLot(lot)
     try {
       const res = await getLot(lot.id)
@@ -307,7 +304,7 @@ export default function LotsPage() {
 
   const closeDetail = () => {
     setDetailLot(null); setEditing(false); setEditError(null)
-    setShowCuttingSheet(false); setShowBatchModal(false)
+    setShowCuttingSheet(false); setShowBatchLabels(null)
   }
 
   const startEditing = () => {
@@ -352,34 +349,27 @@ export default function LotsPage() {
     }
   }
 
-  const openBatchModal = async () => {
-    setBatchForm({ piece_count: detailLot.total_pieces || '', sku_id: '', notes: '' })
-    setBatchError(null); setShowBatchModal(true)
+  const handleDistribute = async () => {
+    setDistributing(true); setEditError(null)
     try {
-      const res = await getSKUs({ page_size: 200 })
-      const data = res.data.data
-      setSkus(Array.isArray(data) ? data : (data?.data || []))
-    } catch { /* silent */ }
-  }
-
-  const handleCreateBatch = async () => {
-    if (!batchForm.sku_id) return setBatchError('Select a SKU')
-    if (!batchForm.piece_count || parseInt(batchForm.piece_count) <= 0) return setBatchError('Enter piece count')
-    setBatchSaving(true); setBatchError(null)
-    try {
-      await createBatch({
-        lot_id: detailLot.id,
-        sku_id: batchForm.sku_id,
-        piece_count: parseInt(batchForm.piece_count),
-        notes: batchForm.notes || null,
-      })
-      setShowBatchModal(false)
-      const res = await getLot(detailLot.id)
-      setDetailLot(res.data.data || res.data)
+      const res = await distributeLot(detailLot.id)
+      const data = res.data?.data || res.data
+      // Refresh lot detail (now status = distributed)
+      try {
+        const lotRes = await getLot(detailLot.id)
+        setDetailLot(lotRes.data.data || lotRes.data)
+      } catch { /* keep current */ }
       fetchData()
+      // Open batch label sheet
+      setShowBatchLabels({
+        batches: data.batches || [],
+        lotCode: data.lot_code || detailLot.lot_code,
+        designNo: data.design_no || detailLot.design_no,
+        lotDate: data.lot_date || detailLot.lot_date,
+      })
     } catch (err) {
-      setBatchError(err.response?.data?.detail || 'Failed to create batch')
-    } finally { setBatchSaving(false) }
+      setEditError(err.response?.data?.detail || 'Failed to distribute lot')
+    } finally { setDistributing(false) }
   }
 
   // ═══════════════════════════════════════════
@@ -669,10 +659,11 @@ export default function LotsPage() {
               </svg>
               Print
             </button>
-            {/* Create Batch */}
-            {(detailLot.status === 'open' || detailLot.status === 'cutting') && (
-              <button onClick={openBatchModal} className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white transition-colors">
-                + Create Batch
+            {/* Distribute — auto-create batches from size pattern */}
+            {detailLot.status === 'cutting' && (
+              <button onClick={handleDistribute} disabled={distributing}
+                className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-50 transition-colors">
+                {distributing ? 'Distributing...' : `Distribute (${Object.values(detailLot.default_size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} Batches)`}
               </button>
             )}
             {/* Edit (open status only) */}
@@ -851,44 +842,16 @@ export default function LotsPage() {
         {/* ── CuttingSheet print overlay ── */}
         {showCuttingSheet && <CuttingSheet lot={detailLot} onClose={() => setShowCuttingSheet(false)} />}
 
-        {/* ── Create Batch Modal ── */}
-        <Modal open={showBatchModal} onClose={() => setShowBatchModal(false)}
-          title={`Create Batch from ${detailLot.lot_code}`}
-          actions={
-            <>
-              <button onClick={() => setShowBatchModal(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleCreateBatch} disabled={batchSaving}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-                {batchSaving ? 'Creating...' : 'Create Batch'}
-              </button>
-            </>
-          }>
-          <div className="space-y-4">
-            {batchError && <ErrorAlert message={batchError} onDismiss={() => setBatchError(null)} />}
-            <div className="rounded-lg bg-emerald-50 p-3 text-sm">
-              <span className="font-medium text-emerald-700">Lot {detailLot.lot_code}</span> — {detailLot.total_pieces} pieces, {(detailLot.lot_rolls || []).length} rolls, Design {detailLot.design_no}
-            </div>
-            <div>
-              <label className={LABEL}>SKU *</label>
-              <select value={batchForm.sku_id} onChange={e => setBatchForm(f => ({ ...f, sku_id: e.target.value }))} className={INPUT}>
-                <option value="">Select SKU...</option>
-                {skus.map(s => <option key={s.id} value={s.id}>{s.sku_code} — {s.product_name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={LABEL}>Piece Count</label>
-              <input type="number" value={batchForm.piece_count}
-                onChange={e => setBatchForm(f => ({ ...f, piece_count: e.target.value }))}
-                className={INPUT} />
-              <p className="mt-1 text-xs text-gray-400">Total available: {detailLot.total_pieces} pieces</p>
-            </div>
-            <div>
-              <label className={LABEL}>Notes</label>
-              <textarea value={batchForm.notes} onChange={e => setBatchForm(f => ({ ...f, notes: e.target.value }))} rows={2}
-                placeholder="Optional notes..." className={INPUT} />
-            </div>
-          </div>
-        </Modal>
+        {/* ── Batch Label Sheet (after distribute) ── */}
+        {showBatchLabels && (
+          <BatchLabelSheet
+            batches={showBatchLabels.batches}
+            lotCode={showBatchLabels.lotCode}
+            designNo={showBatchLabels.designNo}
+            lotDate={showBatchLabels.lotDate}
+            onClose={() => setShowBatchLabels(null)}
+          />
+        )}
       </div>
     )
   }

@@ -15,7 +15,7 @@ from app.core.security import (
     verify_token,
     build_token_payload,
 )
-from app.core.permissions import get_role_permissions, get_role_permission_list
+from app.core.permissions import get_role_permissions, get_role_permission_list, ALL_PERMISSIONS
 from app.core.exceptions import UnauthorizedError, TokenExpiredError
 from app.config import get_settings
 
@@ -42,7 +42,18 @@ class AuthService:
             raise UnauthorizedError("User account is deactivated")
 
         role_name = user.role.name if user.role else "unknown"
-        permissions = get_role_permission_list(role_name)
+
+        # Read permissions from DB (role.permissions JSON column)
+        # Falls back to hardcoded dict if DB permissions are empty/missing
+        db_permissions = user.role.permissions if user.role and user.role.permissions else None
+        if db_permissions and isinstance(db_permissions, dict):
+            # DB stores {perm_name: True/False} — extract granted ones
+            permissions = [k for k, v in db_permissions.items() if v]
+        else:
+            permissions = get_role_permission_list(role_name)
+
+        # Build full permission map for frontend (all keys, True/False)
+        permissions_map = {perm: perm in permissions for perm in ALL_PERMISSIONS}
 
         payload = build_token_payload(
             user_id=str(user.id),
@@ -60,7 +71,7 @@ class AuthService:
             full_name=user.full_name,
             role=role_name,
             role_display_name=user.role.display_name if user.role else None,
-            permissions=get_role_permissions(role_name),
+            permissions=permissions_map,
         )
 
         return TokenResponse(
@@ -107,7 +118,13 @@ class AuthService:
             raise UnauthorizedError("User account is deactivated")
 
         role_name = user.role.name if user.role else "unknown"
-        permissions = get_role_permission_list(role_name)
+
+        # Read permissions from DB (same logic as login)
+        db_permissions = user.role.permissions if user.role and user.role.permissions else None
+        if db_permissions and isinstance(db_permissions, dict):
+            permissions = [k for k, v in db_permissions.items() if v]
+        else:
+            permissions = get_role_permission_list(role_name)
 
         new_payload = build_token_payload(
             user_id=str(user.id),

@@ -14,7 +14,8 @@ class Batch(Base):
 
     batch_code: Mapped[str] = mapped_column(String(50), unique=True)
     lot_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lots.id"), index=True)
-    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"), index=True)
+    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
+    size: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     piece_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     color_breakdown: Mapped[dict | None] = mapped_column(JSON)
@@ -33,7 +34,7 @@ class Batch(Base):
 
     # Relationships
     lot: Mapped[Lot | None] = relationship(back_populates="batches")
-    sku: Mapped[SKU] = relationship(back_populates="batches")
+    sku: Mapped[SKU | None] = relationship(back_populates="batches")
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     assignments: Mapped[list[BatchAssignment]] = relationship(back_populates="batch")
     roll_consumptions: Mapped[list[BatchRollConsumption]] = relationship(

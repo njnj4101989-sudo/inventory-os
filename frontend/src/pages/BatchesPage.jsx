@@ -18,14 +18,19 @@ const COLUMNS = [
     render: (val) => val ? `${val.lot_code} (D${val.design_no})` : '—',
   },
   {
+    key: 'size',
+    label: 'Size',
+    render: (val) => val ? <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">{val}</span> : '—',
+  },
+  {
     key: 'sku',
     label: 'SKU',
-    render: (val) => (
+    render: (val) => val ? (
       <div>
-        <span className="font-medium">{val?.sku_code}</span>
-        <span className="ml-1 text-xs text-gray-400">{val?.product_name}</span>
+        <span className="font-medium">{val.sku_code}</span>
+        <span className="ml-1 text-xs text-gray-400">{val.product_name}</span>
       </div>
-    ),
+    ) : <span className="text-gray-400">—</span>,
   },
   {
     key: 'piece_count',
@@ -123,7 +128,7 @@ export default function BatchesPage() {
       const lot = lotList.find((l) => l.id === createForm.lot_id)
       await createBatch({
         lot_id: createForm.lot_id,
-        sku_id: lot?.sku?.id || '',
+        sku_id: lot?.sku?.id || null,
         piece_count: parseInt(createForm.piece_count),
         notes: createForm.notes || null,
       })

@@ -20,6 +20,7 @@ function App() {
         {/* Public — no auth required */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/scan/roll/:rollCode" element={<ScanPage />} />
+        <Route path="/scan/batch/:batchCode" element={<ScanPage />} />
         <Route path="/scan" element={<ScanPage />} />
 
         {/* Protected — Layout shell with sidebar + header */}

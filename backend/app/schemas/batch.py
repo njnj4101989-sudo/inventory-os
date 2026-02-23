@@ -45,8 +45,9 @@ class BatchCreate(BaseModel):
     """POST /batches — create batch from a lot."""
 
     lot_id: UUID
-    sku_id: UUID
+    sku_id: UUID | None = None
     piece_count: int
+    size: str | None = None
     color_breakdown: dict | None = None  # e.g. {"Green": 100, "Red": 50}
     notes: str | None = None
 
@@ -72,7 +73,8 @@ class BatchResponse(BaseSchema):
     id: UUID
     batch_code: str
     lot: LotBrief | None = None
-    sku: SKUBrief
+    sku: SKUBrief | None = None
+    size: str | None = None
     quantity: int
     piece_count: int
     color_breakdown: dict | None = None

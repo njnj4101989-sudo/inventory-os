@@ -14,9 +14,9 @@ from sqlalchemy.orm import selectinload
 
 from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll
-from app.schemas.lot import LotCreate, LotUpdate, LotResponse
-from app.schemas import PaginatedParams
-from app.core.code_generator import next_lot_code
+from app.models.batch import Batch
+from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate, LotResponse
+from app.core.code_generator import next_lot_code, _extract_number, next_batch_code
 from app.core.exceptions import (
     NotFoundError,
     InsufficientStockError,
@@ -28,8 +28,17 @@ class LotService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_lots(self, params: PaginatedParams) -> dict:
+    async def get_lots(self, params: LotFilterParams) -> dict:
+        # Build filter conditions
+        conditions = []
+        if params.status:
+            conditions.append(Lot.status == params.status)
+        if params.design_no:
+            conditions.append(Lot.design_no.ilike(f"%{params.design_no}%"))
+
         count_stmt = select(func.count()).select_from(Lot)
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
@@ -46,6 +55,8 @@ class LotService:
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
         )
+        if conditions:
+            stmt = stmt.where(*conditions)
         result = await self.db.execute(stmt)
         lots = result.scalars().unique().all()
 
@@ -240,6 +251,89 @@ class LotService:
         await self.db.delete(lot_roll)
         await self.db.flush()
         return await self.get_lot(lot_id)
+
+    async def distribute_lot(self, lot_id: UUID, created_by: UUID) -> dict:
+        """Auto-create batches from lot size pattern, set lot status to distributed."""
+        lot = await self._get_or_404(lot_id)
+        if lot.status != "cutting":
+            raise InvalidStateTransitionError(
+                f"Lot {lot.lot_code} must be in 'cutting' status to distribute (current: '{lot.status}')"
+            )
+
+        size_pattern = lot.default_size_pattern or {}
+        if not size_pattern:
+            raise InvalidStateTransitionError("Lot has no size pattern — cannot distribute")
+
+        # Compute color_breakdown from lot_rolls
+        color_breakdown = {}
+        for lr in (lot.lot_rolls or []):
+            color = lr.roll.color if lr.roll else "Unknown"
+            color_breakdown[color] = (color_breakdown.get(color, 0) + (lr.num_pallas or 0))
+
+        # Get current max batch code once, generate all sequentially
+        from sqlalchemy import func, select as sa_select
+        result = await self.db.execute(sa_select(func.max(Batch.batch_code)))
+        current_max = _extract_number(result.scalar(), "BATCH-")
+
+        batches_created = []
+        seq = current_max
+
+        for size_name, count in size_pattern.items():
+            for _ in range(int(count)):
+                seq += 1
+                batch_code = f"BATCH-{seq:04d}"
+                qr_url = f"/scan/batch/{batch_code}"
+
+                batch = Batch(
+                    batch_code=batch_code,
+                    lot_id=lot.id,
+                    sku_id=None,
+                    size=size_name,
+                    quantity=lot.total_pallas or 0,
+                    piece_count=lot.total_pallas or 0,
+                    color_breakdown=color_breakdown,
+                    status="created",
+                    qr_code_data=qr_url,
+                    created_by=created_by,
+                )
+                self.db.add(batch)
+                batches_created.append({
+                    "batch_code": batch_code,
+                    "size": size_name,
+                    "piece_count": lot.total_pallas or 0,
+                    "color_breakdown": color_breakdown,
+                    "qr_code_data": qr_url,
+                })
+
+        # Set lot status to distributed
+        lot.status = "distributed"
+        await self.db.flush()
+
+        # Collect IDs for response
+        batch_responses = []
+        for bc in batches_created:
+            # Query the batch we just created for its ID
+            stmt = select(Batch).where(Batch.batch_code == bc["batch_code"])
+            result = await self.db.execute(stmt)
+            b = result.scalar_one_or_none()
+            if b:
+                batch_responses.append({
+                    "id": str(b.id),
+                    "batch_code": b.batch_code,
+                    "size": b.size,
+                    "piece_count": b.piece_count,
+                    "color_breakdown": b.color_breakdown,
+                    "qr_code_data": b.qr_code_data,
+                })
+
+        return {
+            "lot_id": str(lot.id),
+            "lot_code": lot.lot_code,
+            "design_no": lot.design_no,
+            "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
+            "batches_created": len(batch_responses),
+            "batches": batch_responses,
+        }
 
     async def _get_or_404(self, lot_id: UUID) -> Lot:
         stmt = (

@@ -34,14 +34,19 @@
 
 ---
 
-## Current State (Session 33 — 2026-02-23)
+## Current State (Session 35 — 2026-02-24)
 
-### NEXT (Session 34)
-1. **Batches page overhaul** — align to API_REFERENCE.md §8, lot→batch flow UX
-2. **SKUs page overhaul** — align to API_REFERENCE.md §6
-3. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
-4. **"Free" size support** — confirm with user if needed in size pattern
-5. **Feriwala (waste disposition)** — deferred feature, add when client requests
+### IMMEDIATE (Next Session — Start Here)
+1. **Restart backend with `--reload`** — `uvicorn app.main:app --reload --port 8000`. Migration `259d2dcafe7b` (size column + nullable sku_id) already applied.
+2. **Test distribute flow** — Create lot → move to cutting → click "Distribute (N Batches)" → verify N batches created, lot status = distributed, label sheet opens
+3. **Test batch passport** — Navigate to `/scan/batch/BATCH-0001` → passport renders, Claim button works for logged-in tailors
+4. **Test BatchesPage** — verify Size column shows, null SKU shows "—"
+
+### NEXT
+1. **SKUs page overhaul** — align to API_REFERENCE.md §6
+2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
+3. **"Free" size support** — confirm with user if needed in size pattern
+4. **Feriwala (waste disposition)** — deferred feature, add when client requests
 
 ### What's Done
 - **Phase 6A (Backend):** COMPLETE — 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
@@ -54,9 +59,98 @@
 - **Session 29: Job Challan DB Model + Full-Stack Integration:** COMPLETE
 - **Session 30: Partial Weight Send for VA Processing:** COMPLETE
 - **Session 31: Lot Page Redesign — Challan-Style Cutting Sheet:** COMPLETE
-- **Session 32: Palla Meter + Lot Overlay UX Tightening:** COMPLETE — see below
-- **Session 33: Lot Detail Overhaul + Roll Picker Filters:** COMPLETE — see below
+- **Session 32: Palla Meter + Lot Overlay UX Tightening:** COMPLETE
+- **Session 33: Lot Detail Overhaul + Roll Picker Filters:** COMPLETE
+- **Session 34: Lot Status Filter Fix:** COMPLETE (needs backend restart)
+- **Session 35: Lot Distribution → Batch Auto-Creation + Batch QR + Tailor Claim:** COMPLETE — see below
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
+
+### What's Built This Session (Session 35)
+
+#### Lot Distribution → Batch Auto-Creation + Batch QR + Tailor Claim — COMPLETE
+
+**Why:** Batches were created manually one-at-a-time (pick SKU, enter piece count). Real-world flow: cutter cuts all layers at once, sorts by SIZE into bundles. Each bundle = one batch. Size pattern `{L: 2, XL: 6, XXL: 6, 3XL: 4}` = 18 bundles. Batches need QR labels for tailor claiming.
+
+**Changes:**
+
+**1. Backend — Model + Migration (259d2dcafe7b)**
+| File | Change |
+|------|--------|
+| `models/batch.py` | Added `size: String(20), nullable, indexed`. Made `sku_id` nullable. `sku` relationship → `SKU | None` |
+| `schemas/batch.py` | `BatchCreate.sku_id` → `UUID | None = None`, added `size`. `BatchResponse.sku` → `SKUBrief | None`, added `size` |
+| Migration | `batch_alter_table` for SQLite: add `size` column, make `sku_id` nullable |
+
+**2. Backend — Service Logic**
+| Method | File | Description |
+|--------|------|-------------|
+| `distribute_lot()` | `lot_service.py` | Load lot (must be 'cutting'), read size pattern, compute color_breakdown from lot_rolls, generate N batch codes sequentially, create Batch per size×count with `piece_count=total_pallas`, set `qr_code_data=/scan/batch/{code}`, set lot status to 'distributed' |
+| `get_batch_passport()` | `batch_service.py` | Public lookup by `batch_code` (not UUID). Returns `_to_response()` + lot-derived fields (design_no, lot_date, default_size_pattern) |
+| `claim_batch()` | `batch_service.py` | Tailor claims unclaimed batch: validates status='created', creates BatchAssignment, sets status='assigned' |
+| `_to_response()` | `batch_service.py` | Added `size` field |
+| `create_batch()` | `batch_service.py` | Accepts `size` and `sku_id=None` |
+
+**3. Backend — API Endpoints**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `POST /lots/{id}/distribute` | lot_manage | Auto-creates batches from size pattern, returns all batch data |
+| `GET /batches/passport/{batch_code}` | **Public** | Batch passport for QR scan |
+| `POST /batches/claim/{batch_code}` | batch_start (tailor) | Tailor claims unclaimed batch |
+
+**4. Frontend — New Components**
+| File | Description |
+|------|-------------|
+| `BatchQRLabel.jsx` | Single batch label: QR (88px, scan URL) + Batch Code + **Size** (large bold) + Lot/Pieces/Design/Date |
+| `BatchLabelSheet.jsx` | A4 sheet overlay, 3-col grid, react-to-print, emerald theme. Same pattern as LabelSheet.jsx |
+
+**5. Frontend — API Layer**
+| Function | File | Description |
+|----------|------|-------------|
+| `distributeLot(lotId)` | `batches.js` | POST /lots/{id}/distribute. Mock: generates batches from lot's size pattern |
+| `getBatchPassport(batchCode)` | `batches.js` | GET /batches/passport/{code}. Mock: finds in batches array |
+| `claimBatch(batchCode)` | `batches.js` | POST /batches/claim/{code}. Mock: sets status=assigned |
+
+**6. Frontend — Page Changes**
+| File | Change |
+|------|--------|
+| `LotsPage.jsx` | Replaced "Create Batch" modal with "Distribute (N Batches)" button. One-click creates all batches + opens BatchLabelSheet. Removed SKU imports, batch form state, batch modal JSX |
+| `ScanPage.jsx` | Added batch passport view (batch identity card with large Size badge, color breakdown, assignment info, lot details). "Claim This Batch" button for logged-in tailors. "Login to Claim" link for unauthenticated. Scanner detects both `/scan/batch/` and `/scan/roll/` URLs |
+| `App.jsx` | Added public route `/scan/batch/:batchCode` |
+| `BatchesPage.jsx` | Added Size column with emerald badge. SKU column handles null gracefully (shows "—") |
+
+**Files changed:**
+| File | Action |
+|------|--------|
+| `backend/app/models/batch.py` | MODIFIED — `size`, nullable `sku_id` |
+| `backend/migrations/versions/259d2dcafe7b_...` | NEW — migration |
+| `backend/app/schemas/batch.py` | MODIFIED — `size`, nullable sku |
+| `backend/app/services/lot_service.py` | MODIFIED — `distribute_lot()` |
+| `backend/app/services/batch_service.py` | MODIFIED — `get_batch_passport()`, `claim_batch()`, `_to_response` size |
+| `backend/app/api/lots.py` | MODIFIED — `POST /{id}/distribute` |
+| `backend/app/api/batches.py` | MODIFIED — `GET /passport/{code}`, `POST /claim/{code}` |
+| `frontend/src/components/common/BatchQRLabel.jsx` | **NEW** — ~35 lines |
+| `frontend/src/components/common/BatchLabelSheet.jsx` | **NEW** — ~120 lines |
+| `frontend/src/api/batches.js` | MODIFIED — 3 new functions |
+| `frontend/src/pages/LotsPage.jsx` | MODIFIED — distribute replaces batch modal |
+| `frontend/src/pages/ScanPage.jsx` | MODIFIED — batch passport + claim |
+| `frontend/src/App.jsx` | MODIFIED — batch scan route |
+| `frontend/src/pages/BatchesPage.jsx` | MODIFIED — Size column, null SKU |
+
+### Previous Session (Session 34 — Mini)
+
+#### Lot Status Filter Bug Fix — APPLIED (needs backend restart)
+
+**Bug:** Clicking Open/Cutting/Distributed tabs on Lots page always showed ALL lots. Frontend sent `?status=open` but backend ignored it — `get_lots()` had no WHERE clause on status.
+
+**Root cause:** Router used generic `PaginatedParams` (no `status` field). Service had no filter logic.
+
+**Fix (3 files):**
+| File | Change |
+|------|--------|
+| `schemas/lot.py` | Added `LotFilterParams(PaginatedParams)` with `status` + `design_no` filters |
+| `api/lots.py` | Swapped `PaginatedParams` → `LotFilterParams` on `list_lots` endpoint |
+| `services/lot_service.py` | Added WHERE conditions for `status` (exact) and `design_no` (ilike). Applied to both count + data queries |
+
+**Status:** Code verified (Python parse OK, imports OK). NOT tested live — user's backend wasn't restarted before session ended. **Start next session by restarting backend with `--reload`.**
 
 ### What's Built This Session (Session 33)
 
