@@ -5,6 +5,8 @@
 **Status:** Updated (Sessions 7-14)
 **Date:** 2026-02-16
 
+> **⚠️ Session 37 Note:** `API_REFERENCE.md` is THE authoritative source for API shapes and supersedes this document when they conflict. Key additions since v1.1: `POST /lots/{id}/distribute` (S35), `GET /batches/passport/{code}` (S35), `POST /batches/claim/{code}` (S35), `POST /job-challans` (S29), `BatchFilterParams` with `size` filter (S36). Batch `sku_id` is now nullable, `size` column added. See `STEP2_DATA_MODEL.md` for current schemas.
+
 ---
 
 ## 4.1 API Overview

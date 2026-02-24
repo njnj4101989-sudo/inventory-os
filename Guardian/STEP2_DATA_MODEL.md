@@ -14,6 +14,13 @@
 > - Batches: lot_id FK, piece_count, color_breakdown
 > - New LOT entity: groups rolls for cutting, palla-based calculations
 > - Roll processing tracking (sent_for_processing workflow)
+>
+> **Session 22-37 Updates (2026-02-17 to 2026-02-24):**
+> - 17 → 22 tables (added `value_additions`, `job_challans`, `product_types`, `colors`, `fabrics`)
+> - Rolls: added `current_weight`, `sr_no`, `supplier_challan_no` columns
+> - Roll processing: removed `process_type`, added required `value_addition_id` FK + optional `job_challan_id` FK
+> - Lots: added `standard_palla_meter`, statuses changed to `open`/`cutting`/`distributed`
+> - Batches: `sku_id` now NULLABLE, added `size` column for size-bundle distribution
 
 ---
 
@@ -27,16 +34,16 @@
 │  USERS & AUTH          RAW MATERIALS         PRODUCTION                    │
 │  ├── users             ├── rolls             ├── skus                      │
 │  ├── roles             ├── suppliers         ├── lots                      │
-│  └── sessions          └── roll_processing   ├── lot_rolls                │
-│                                              ├── batches                   │
-│                                              ├── batch_assignments         │
+│  └── sessions          ├── roll_processing   ├── lot_rolls                │
+│                        ├── value_additions   ├── batches                   │
+│                        └── job_challans      ├── batch_assignments         │
 │                                              └── batch_roll_consumption    │
 │                                                                             │
-│  INVENTORY (EVENT-DRIVEN)                    SALES                         │
-│  ├── inventory_events  ◄── SOURCE OF TRUTH   ├── orders                   │
-│  ├── inventory_state   ◄── COMPUTED VIEW     ├── order_items              │
-│  └── reservations                            ├── invoices                  │
-│                                              └── invoice_items             │
+│  MASTER DATA                                 SALES                         │
+│  ├── product_types     INVENTORY (EVENT)     ├── orders                   │
+│  ├── colors            ├── inventory_events  ├── order_items              │
+│  └── fabrics           ├── inventory_state   ├── invoices                  │
+│                        └── reservations      └── invoice_items             │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -94,18 +101,21 @@
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK | Unique identifier |
-| roll_code | VARCHAR(50) | UNIQUE, NOT NULL | Smart code: `{Challan}-{Fabric3}-{Color5}-{Seq}` (e.g. KT-2026-0451-COT-GREEN-01) |
+| roll_code | VARCHAR(50) | UNIQUE, NOT NULL | Smart code: `{SrNo}-{Fabric3}-{Color5/ColorNo}-{Seq}` (e.g. `1-COT-GREEN/01-01`) |
 | fabric_type | VARCHAR(100) | NOT NULL | Cotton, Silk, Georgette, etc. |
 | color | VARCHAR(50) | NOT NULL | Fabric color |
-| total_weight | DECIMAL(10,3) | NOT NULL | Total weight received (kg) |
-| remaining_weight | DECIMAL(10,3) | NOT NULL | Weight remaining (kg) |
+| total_weight | DECIMAL(10,3) | NOT NULL | Original supplier weight (kg) — **IMMUTABLE** after stock-in |
+| current_weight | DECIMAL(10,3) | NOT NULL | Latest weight after value additions (kg) — mutated by receive/update processing |
+| remaining_weight | DECIMAL(10,3) | NOT NULL | Weight available for cutting/lots (kg) |
 | total_length | DECIMAL(10,2) | NULL | Total meters (optional, for meter-based fabrics) |
 | unit | VARCHAR(20) | DEFAULT 'kg' | Primary unit of measurement |
 | cost_per_unit | DECIMAL(10,2) | | Cost per unit (kg or meter) |
-| status | VARCHAR(20) | DEFAULT 'in_stock' | in_stock, sent_for_processing, in_cutting |
+| status | VARCHAR(20) | DEFAULT 'in_stock' | `in_stock`, `sent_for_processing`, `in_cutting` |
 | supplier_id | UUID | FK → suppliers.id | Supplier reference |
-| supplier_invoice_no | VARCHAR(50) | NULL | Supplier challan/invoice number |
+| supplier_invoice_no | VARCHAR(50) | NULL | Supplier invoice number |
+| supplier_challan_no | VARCHAR(50) | NULL | Supplier challan number (separate from invoice) |
 | supplier_invoice_date | DATE | NULL | Supplier invoice date |
+| sr_no | VARCHAR(20) | NULL | Internal filing serial number (written on physical invoice copy) |
 | received_by | UUID | FK → users.id | Supervisor who received |
 | received_at | TIMESTAMP | DEFAULT NOW() | Stock-in timestamp |
 | notes | TEXT | | Additional notes |
@@ -116,17 +126,46 @@
 |--------|------|-------------|-------------|
 | id | UUID | PK | Unique identifier |
 | roll_id | UUID | FK → rolls.id, NOT NULL | Roll being processed |
-| process_type | VARCHAR(50) | NOT NULL | Type of processing (dyeing, washing, etc.) |
+| value_addition_id | UUID | FK → value_additions.id, **NOT NULL** | Type of VA (embroidery, dyeing, etc.) — **REQUIRED** |
+| job_challan_id | UUID | FK → job_challans.id, NULL | Job challan that initiated this send (if bulk send) |
 | vendor_name | VARCHAR(200) | | External vendor/processor name |
+| vendor_phone | VARCHAR(20) | NULL | Vendor phone number |
 | sent_date | DATE | NOT NULL | Date sent for processing |
 | expected_return_date | DATE | | Expected return date |
 | actual_return_date | DATE | | Actual return date |
-| weight_before | DECIMAL(10,3) | | Weight before processing (kg) |
+| weight_before | DECIMAL(10,3) | | Partial weight sent (kg) — may be less than `current_weight` for partial sends |
 | weight_after | DECIMAL(10,3) | | Weight after processing (kg) |
 | cost | DECIMAL(10,2) | | Processing cost |
 | notes | TEXT | | Processing notes |
-| status | VARCHAR(20) | DEFAULT 'sent' | sent, received, cancelled |
+| status | VARCHAR(20) | DEFAULT 'sent' | `sent`, `received` |
 | created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
+
+> **Note:** `process_type` (free-text) was removed in Session 26. All processing uses `value_addition_id` FK.
+
+#### `value_additions`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK | Unique identifier |
+| name | VARCHAR(100) | NOT NULL | Value addition name (Embroidery, Dying, etc.) |
+| short_code | VARCHAR(10) | UNIQUE, NOT NULL | 3-4 char code for SKU suffix (EMB, DYE, DPT, HWK, SQN, BTC) |
+| description | TEXT | NULL | Description |
+| is_active | BOOLEAN | DEFAULT TRUE | Status |
+| created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
+
+#### `job_challans`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK | Unique identifier |
+| challan_no | VARCHAR(50) | UNIQUE, NOT NULL | Auto-sequential (JC-001, JC-002...) |
+| value_addition_id | UUID | FK → value_additions.id, NOT NULL | Type of VA work |
+| vendor_name | VARCHAR(200) | NOT NULL | Vendor/processor name |
+| vendor_phone | VARCHAR(20) | NULL | Vendor phone |
+| sent_date | DATE | NOT NULL | Date rolls sent |
+| notes | TEXT | NULL | Notes |
+| created_by_id | UUID | FK → users.id | User who created |
+| created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
+
+> **Note:** `POST /job-challans` creates challan + sends all specified rolls atomically. Each roll gets a `RollProcessing` log linked via `job_challan_id`.
 
 ---
 
@@ -141,12 +180,13 @@
 | lot_date | DATE | NOT NULL | Lot creation/cutting date |
 | design_no | VARCHAR(50) | NOT NULL | Design number (e.g. 702) |
 | standard_palla_weight | DECIMAL(10,3) | NOT NULL | Standard weight per palla (kg) |
+| standard_palla_meter | DECIMAL(10,3) | NULL | Standard length per palla (meters) — optional |
 | default_size_pattern | JSONB | NOT NULL | Pieces per palla by size, e.g. `{"L":2,"XL":6,"XXL":6,"3XL":4}` |
 | pieces_per_palla | INTEGER | NOT NULL | Sum of size pattern values (e.g. 18) |
 | total_pallas | INTEGER | NOT NULL | Total pallas across all rolls |
 | total_pieces | INTEGER | NOT NULL | total_pallas x pieces_per_palla |
 | total_weight | DECIMAL(10,3) | NOT NULL | Total fabric weight used (kg) |
-| status | VARCHAR(20) | DEFAULT 'created' | created, in_cutting, completed, cancelled |
+| status | VARCHAR(20) | DEFAULT 'open' | `open`, `cutting`, `distributed` (forward-only transitions) |
 | notes | TEXT | | Additional notes |
 | created_by | UUID | FK → users.id | User who created |
 | created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
@@ -189,8 +229,9 @@
 |--------|------|-------------|-------------|
 | id | UUID | PK | Unique identifier |
 | batch_code | VARCHAR(50) | UNIQUE, NOT NULL | Human-readable batch ID |
-| sku_id | UUID | FK → skus.id, NOT NULL | Product being made |
+| sku_id | UUID | FK → skus.id, **NULL** | Product being made — nullable (linked later for billing) |
 | lot_id | UUID | FK → lots.id, NULL | Source lot (rolls grouped for cutting) |
+| size | VARCHAR(20) | NULL, INDEXED | Size bundle (L, XL, XXL, 3XL) — from lot distribution |
 | quantity | INTEGER | NOT NULL | Pieces in batch |
 | piece_count | INTEGER | NULL | Actual pieces produced |
 | color_breakdown | JSONB | NULL | Per-size piece counts, e.g. `{"L":2,"XL":6,"XXL":6,"3XL":4}` |
@@ -405,7 +446,11 @@
 KEY RELATIONSHIPS:
   Roll ──(lot_rolls N:N)──► Lot ──(lot_id FK)──► Batch
   Roll ──(1:N)──► roll_processing (processing history)
+  roll_processing ──(N:1)──► value_additions (VA type)
+  roll_processing ──(N:1)──► job_challans (challan grouping, nullable)
   Lot.sku_id is NULLABLE (a lot may produce multiple SKUs/sizes)
+  Batch.sku_id is NULLABLE (linked later for billing)
+  Batch.size = size bundle from lot distribution (L/XL/XXL/3XL)
 ```
 
 ---
@@ -430,14 +475,23 @@ CREATED ──► ASSIGNED ──► IN_PROGRESS ──► SUBMITTED ──► C
                               (back to ASSIGNED)
 ```
 
+### Roll Weight Rules
+```
+- total_weight = original supplier weight (IMMUTABLE after stock-in)
+- current_weight = latest weight after value additions
+- remaining_weight = available for cutting/lots
+- On send_for_processing: remaining_weight -= weight_to_send (partial or full)
+- On receive_from_processing: remaining_weight += weight_after, current_weight += (weight_after - weight_before)
+- Roll stays in_stock if remaining_weight > 0 after partial send
+```
+
 ### Roll Consumption (Weight-Based)
 ```
-- rolls.remaining_weight updated on each cut (kg)
 - Lots group rolls for cutting: lot_rolls tracks which rolls are in which lot
-- Batches are created FROM lots (lot_id FK), not directly from rolls
 - Palla = one cutting layer; num_pallas = floor(roll_weight / palla_weight)
+- Batches created via POST /lots/{id}/distribute (auto from size pattern) — NOT manually
 - batch_roll_consumption still tracks per-batch roll usage
-- SUM(weight_used) across lot_rolls ≤ rolls.total_weight
+- SUM(weight_used) across lot_rolls ≤ rolls.current_weight
 ```
 
 ### Reservation Rules
@@ -475,12 +529,13 @@ CREATE INDEX idx_skus_code ON skus(sku_code);
 | Category | Tables |
 |----------|--------|
 | Users & Auth | roles, users |
-| Raw Materials | suppliers, rolls, roll_processing |
+| Raw Materials | suppliers, rolls, roll_processing, value_additions, job_challans |
+| Master Data | product_types, colors, fabrics |
 | Lots | lots, lot_rolls |
 | Production | skus, batches, batch_assignments, batch_roll_consumption |
 | Inventory | inventory_events, inventory_state, reservations |
 | Sales | orders, order_items, invoices, invoice_items |
-| **Total** | **17 tables** |
+| **Total** | **22 tables** |
 
 ---
 

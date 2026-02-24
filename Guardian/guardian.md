@@ -222,8 +222,8 @@ Roll: 1-COT-PINK/07-01
 
 | URL | Shows |
 |-----|-------|
-| `/scan/roll/{roll_code}` | Roll Passport (full chain) |
-| `/scan/batch/{batch_code}` | Batch Passport (Phase 3) |
+| `/scan/roll/{roll_code}` | Roll Passport (full chain) — ✅ Live |
+| `/scan/batch/{batch_code}` | Batch Passport + tailor claim — ✅ Live |
 
 ### Label Layout (A4 — 8 per page)
 
@@ -241,9 +241,10 @@ Roll: 1-COT-PINK/07-01
 
 | Phase | What | Status |
 |-------|------|--------|
-| 1 | Roll QR gen + A4 print + mobile camera scan + Roll Passport page | ⏳ Session 24 |
-| 2 | ValueAddition master + SKU suffix system + effective_sku | ⏳ Next |
-| 3 | Batch QR (use Batch.qr_code_data) + thermal ZPL + finished garment label | 🔮 Later |
+| 1 | Roll QR gen + A4 print + mobile camera scan + Roll Passport page | ✅ S24 |
+| 2 | ValueAddition master + enhanced_roll_code + effective_sku | ✅ S25-26 |
+| 3 | Batch QR + batch passport + tailor claim | ✅ S35 |
+| 4 | Thermal ZPL (Zebra) + finished garment label | 🔮 Future |
 
 ### Libraries
 
@@ -282,9 +283,6 @@ Roll: 1-COT-PINK/07-01
 | DB (prod) | PostgreSQL + asyncpg (future) |
 | CORS origins | `http://localhost:3000`, `http://localhost:5173` (in backend `.env`) |
 | Favicon | Inline SVG emoji in `index.html` (no file needed) |
-
-
-
 
 
 

@@ -5,6 +5,8 @@
 **Status:** Approved
 **Date:** 2026-02-07 (Updated: 2026-02-16)
 
+> **⚠️ Session 37 Note:** For current API shapes and endpoints, always prefer `API_REFERENCE.md` over this document. Key changes since v1.1: lot distribution auto-creates batches (S35), batch passport/claim endpoints (S35), partial weight send (S30), `process_type` removed → `value_addition_id` required (S26). See `STEP2_DATA_MODEL.md` for current table schemas.
+
 ---
 
 ## 3.1 Event System Overview

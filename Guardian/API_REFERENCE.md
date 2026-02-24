@@ -398,6 +398,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "lot_date": "2026-02-07",
   "design_no": "702",
   "standard_palla_weight": 3.60,
+  "standard_palla_meter": null,
   "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
   "pieces_per_palla": 18,
   "total_pallas": 24,
@@ -438,6 +439,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "lot_date": "2026-02-07",
   "design_no": "702",
   "standard_palla_weight": 3.60,
+  "standard_palla_meter": null,
   "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
   "rolls": [
     { "roll_id": "uuid", "palla_weight": 2.860, "size_pattern": null }
@@ -456,7 +458,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 ## 8. Batches (`/api/v1/batches`)
 
 ### GET `/batches`
-**Query:** `status`, `sku_id`, `lot_id`, `page`, `page_size`
+**Query:** `status`, `sku_id`, `lot_id`, `size`, `page`, `page_size`
 **Response:** Paginated array of:
 ```json
 {
@@ -469,11 +471,8 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
     "total_pieces": 432,
     "status": "distributed"
   },
-  "sku": {
-    "id": "uuid",
-    "sku_code": "BLS-101-Red-M",
-    "product_name": "Design 101 Red Medium"
-  },
+  "sku": null,
+  "size": "XL",
   "quantity": 200,
   "piece_count": 200,
   "color_breakdown": { "Green": 108, "Red": 92 },
@@ -504,8 +503,15 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 }
 ```
 
+**Note:** `sku` can be `null` (batches from lot distribution don't have SKU yet — linked later for billing). `size` is the size bundle (L, XL, XXL, 3XL) — present on distributed batches.
+
+When `sku` is present:
+```json
+"sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" }
+```
+
 ### POST `/batches`
-**Request:** `{ lot_id, piece_count, color_breakdown?, notes? }`
+**Request:** `{ lot_id, sku_id? (nullable), size?, piece_count, color_breakdown?, notes? }`
 **Response:** Created batch object
 
 ### POST `/batches/{id}/assign`
@@ -514,6 +520,40 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 
 ### GET `/batches/{id}`
 **Response:** Single batch object (same shape as list item)
+
+### GET `/batches/passport/{batch_code}` (Batch Passport)
+**Auth:** None (public — workers scan QR on floor)
+**Response:**
+```json
+{
+  "id": "uuid",
+  "batch_code": "BATCH-0001",
+  "size": "XL",
+  "piece_count": 9,
+  "status": "created",
+  "color_breakdown": { "Green": 6, "Red": 3 },
+  "lot": { "id": "uuid", "lot_code": "LOT-0003", "design_no": "1009", "status": "distributed" },
+  "design_no": "1009",
+  "lot_date": "2026-02-24",
+  "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
+  "assignment": null,
+  "created_at": "2026-02-24T10:00:00Z"
+}
+```
+
+### POST `/batches/claim/{batch_code}` (Tailor Claim)
+**Auth:** Required (`batch_start` permission — tailor role)
+**Validates:** Batch must have `status = 'created'` (unclaimed).
+**Effect:** Creates `BatchAssignment`, sets `status = 'assigned'`.
+**Response:** Updated batch object
+
+### POST `/lots/{id}/distribute` (Lot Distribution → Batch Auto-Creation)
+**Auth:** Required (`lot_manage` permission)
+**Validates:** Lot must have `status = 'cutting'`.
+**Effect:** Auto-creates N batches from `default_size_pattern`. Each batch gets `size`, `piece_count = total_pallas`, `color_breakdown` from lot_rolls, `qr_code_data = /scan/batch/{code}`. Lot status → `distributed`.
+**Response:** Array of created batch objects
+
+> **Note:** Route ordering in FastAPI: `/passport/{code}` and `/claim/{code}` MUST be defined BEFORE `/{batch_id}` — otherwise FastAPI parses "passport" as UUID → 422.
 
 ---
 
@@ -1111,7 +1151,7 @@ invoice_manage, report_view
 |---------|---------------|
 | Roll    | `in_stock`, `sent_for_processing`, `in_cutting` |
 | Roll Processing | `sent`, `received` |
-| Lot     | `open`, `distributed` |
+| Lot     | `open`, `cutting`, `distributed` |
 | Batch   | `CREATED`, `ASSIGNED`, `STARTED`, `SUBMITTED`, `COMPLETED`, `APPROVED`, `REJECTED` |
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
