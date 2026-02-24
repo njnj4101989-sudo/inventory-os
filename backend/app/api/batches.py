@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_user, require_permission
 from app.models.user import User
-from app.schemas import PaginatedParams
-from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck
+from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchFilterParams
 from app.services.batch_service import BatchService
 
 router = APIRouter(prefix="/batches", tags=["Batches"])
@@ -41,7 +40,7 @@ async def claim_batch(
 
 @router.get("", response_model=None)
 async def list_batches(
-    params: PaginatedParams = Depends(),
+    params: BatchFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("inventory_view"),
 ):
@@ -60,6 +59,18 @@ async def create_batch(
     """Create batch + cut from rolls. Auto-generates batch_code + QR + STOCK_OUT events."""
     svc = BatchService(db)
     result = await svc.create_batch(req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.get("/{batch_id}", response_model=None)
+async def get_batch(
+    batch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Get single batch by ID."""
+    svc = BatchService(db)
+    result = await svc.get_batch(batch_id)
     return {"success": True, "data": result}
 
 

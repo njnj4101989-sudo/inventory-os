@@ -14,7 +14,7 @@ export default function CuttingSheet({ lot, onClose }) {
     pageStyle: `
       @page { size: A4 portrait; margin: 15mm; }
       * { box-sizing: border-box; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       table.cs-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
       .cs-table th { background: #222; color: #fff; font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px; text-align: left; }
       .cs-table th:first-child { width: 30px; text-align: center; }

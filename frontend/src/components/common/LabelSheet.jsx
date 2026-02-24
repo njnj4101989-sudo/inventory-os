@@ -38,7 +38,7 @@ export default function LabelSheet({ rolls, onClose }) {
         border-radius: 4px;
         padding: 5px;
         background: #fff;
-        font-family: 'Segoe UI', Arial, sans-serif;
+        font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
       }
@@ -114,7 +114,7 @@ export default function LabelSheet({ rolls, onClose }) {
           padding: 7px;
           box-sizing: border-box;
           background: #fff;
-          font-family: 'Segoe UI', Arial, sans-serif;
+          font-family: var(--font-family-print, 'Inter', 'Segoe UI', Arial, sans-serif);
           -webkit-font-smoothing: antialiased;
           text-rendering: optimizeLegibility;
         }

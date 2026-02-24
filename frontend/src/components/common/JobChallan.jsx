@@ -18,7 +18,7 @@ export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, ven
     pageStyle: `
       @page { size: A4 portrait; margin: 15mm; }
       * { box-sizing: border-box; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .jc-page { width: 100%; }
       .jc-header { text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 12px; }
       .jc-header h1 { font-size: 18pt; font-weight: 800; margin: 0 0 2px; letter-spacing: 1px; }

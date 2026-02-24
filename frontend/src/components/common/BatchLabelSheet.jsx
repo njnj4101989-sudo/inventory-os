@@ -38,7 +38,7 @@ export default function BatchLabelSheet({ batches, lotCode, designNo, lotDate, o
         border-radius: 4px;
         padding: 5px;
         background: #fff;
-        font-family: 'Segoe UI', Arial, sans-serif;
+        font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
       }
@@ -111,7 +111,7 @@ export default function BatchLabelSheet({ batches, lotCode, designNo, lotDate, o
           display: flex; flex-direction: row; gap: 5px;
           border: 1px dashed #cbd5e1; border-radius: 5px; padding: 7px;
           box-sizing: border-box; background: #fff;
-          font-family: 'Segoe UI', Arial, sans-serif;
+          font-family: var(--font-family-print, 'Inter', 'Segoe UI', Arial, sans-serif);
         }
         .batch-label__qr { flex-shrink: 0; }
         .batch-label__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }

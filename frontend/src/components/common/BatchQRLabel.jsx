@@ -23,13 +23,13 @@ export default function BatchQRLabel({ batch, lotCode, designNo, lotDate, appBas
         <div className="batch-label__row">
           <span className="batch-label__key">Lot</span>
           <span className="batch-label__val">{lotCode || '—'}</span>
-          <span className="batch-label__key" style={{ marginLeft: '6px' }}>Pcs</span>
-          <span className="batch-label__val">{batch?.piece_count ?? '—'}</span>
         </div>
         <div className="batch-label__row">
           <span className="batch-label__key">Design</span>
           <span className="batch-label__val">{designNo || '—'}</span>
-          <span className="batch-label__key" style={{ marginLeft: '6px' }}>Date</span>
+        </div>
+        <div className="batch-label__row">
+          <span className="batch-label__key">Date</span>
           <span className="batch-label__val">{dateStr}</span>
         </div>
       </div>

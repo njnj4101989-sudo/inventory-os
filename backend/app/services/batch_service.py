@@ -17,8 +17,7 @@ from app.models.batch_assignment import BatchAssignment
 from app.models.batch_roll_consumption import BatchRollConsumption
 from app.models.lot import Lot
 from app.models.roll import Roll
-from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchResponse
-from app.schemas import PaginatedParams
+from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchResponse, BatchFilterParams
 from app.core.code_generator import next_batch_code
 from app.core.exceptions import (
     NotFoundError,
@@ -33,8 +32,21 @@ class BatchService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_batches(self, params: PaginatedParams) -> dict:
+    async def get_batches(self, params: BatchFilterParams) -> dict:
+        # Build WHERE conditions
+        conditions = []
+        if params.status:
+            conditions.append(Batch.status == params.status)
+        if params.lot_id:
+            conditions.append(Batch.lot_id == params.lot_id)
+        if params.sku_id:
+            conditions.append(Batch.sku_id == params.sku_id)
+        if params.size:
+            conditions.append(Batch.size == params.size)
+
         count_stmt = select(func.count()).select_from(Batch)
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
@@ -50,9 +62,11 @@ class BatchService:
                 selectinload(Batch.created_by_user),
             )
             .order_by(order)
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if conditions:
+            stmt = stmt.where(*conditions)
+        stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
+
         result = await self.db.execute(stmt)
         batches = result.scalars().unique().all()
 

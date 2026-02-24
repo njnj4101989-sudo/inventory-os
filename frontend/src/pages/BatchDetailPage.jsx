@@ -4,6 +4,7 @@ import { getBatch } from '../api/batches'
 import StatusBadge from '../components/common/StatusBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
+import BatchLabelSheet from '../components/common/BatchLabelSheet'
 
 const TIMELINE_STEPS = [
   { key: 'created_at', label: 'Created', status: 'CREATED' },
@@ -20,6 +21,9 @@ export default function BatchDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Label sheet
+  const [labelBatches, setLabelBatches] = useState(null)
+
   useEffect(() => {
     const fetch = async () => {
       setLoading(true)
@@ -35,6 +39,11 @@ export default function BatchDetailPage() {
     fetch()
   }, [id])
 
+  const handlePrintLabel = () => {
+    if (!batch) return
+    setLabelBatches([batch])
+  }
+
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" text="Loading batch..." /></div>
   if (error) return <ErrorAlert message={error} />
   if (!batch) return <ErrorAlert message="Batch not found" />
@@ -49,25 +58,38 @@ export default function BatchDetailPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-800">{batch.batch_code}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {batch.sku?.sku_code} — {batch.sku?.product_name}
+            {batch.lot ? `${batch.lot.lot_code} — Design ${batch.lot.design_no}` : batch.sku ? `${batch.sku.sku_code} — ${batch.sku.product_name}` : ''}
+            {batch.size && <span className="ml-2 rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">{batch.size}</span>}
           </p>
         </div>
+        <button onClick={handlePrintLabel}
+          className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Print Label
+        </button>
         <StatusBadge status={batch.status} />
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Quantity</p>
-          <p className="mt-1 text-2xl font-bold text-gray-800">{batch.quantity}</p>
+          <p className="text-xs text-gray-500">Pieces</p>
+          <p className="mt-1 text-2xl font-bold text-gray-800">{batch.piece_count ?? batch.quantity ?? '—'}</p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Approved</p>
-          <p className="mt-1 text-2xl font-bold text-green-600">{batch.approved_qty ?? '—'}</p>
+          <p className="text-xs text-gray-500">Size</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-600">{batch.size || '—'}</p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs text-gray-500">Rejected</p>
-          <p className="mt-1 text-2xl font-bold text-red-600">{batch.rejected_qty ?? '—'}</p>
+          <p className="text-xs text-gray-500">Approved / Rejected</p>
+          <p className="mt-1 text-2xl font-bold">
+            <span className="text-green-600">{batch.approved_qty ?? '—'}</span>
+            <span className="text-gray-300 mx-1">/</span>
+            <span className="text-red-600">{batch.rejected_qty ?? '—'}</span>
+          </p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Tailor</p>
@@ -115,7 +137,7 @@ export default function BatchDetailPage() {
               <span className="font-medium">{batch.lot.total_pieces}</span>
             </div>
             {batch.color_breakdown && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <span className="text-gray-500">Colors:</span>
                 {Object.entries(batch.color_breakdown).map(([color, qty]) => (
                   <span key={color} className="rounded bg-gray-100 px-2 py-0.5 text-xs">
@@ -156,6 +178,17 @@ export default function BatchDetailPage() {
           )}
         </dl>
       </div>
+
+      {/* Batch Label Sheet (reprint) */}
+      {labelBatches && (
+        <BatchLabelSheet
+          batches={labelBatches}
+          lotCode={batch.lot?.lot_code || '—'}
+          designNo={batch.lot?.design_no || '—'}
+          lotDate={batch.lot?.lot_date || batch.created_at || ''}
+          onClose={() => setLabelBatches(null)}
+        />
+      )}
     </div>
   )
 }
