@@ -1,92 +1,76 @@
-import { useEffect, useRef, useState } from 'react'
-
-const SCANNER_ID = 'qr-camera-scanner'
+import { useState, useCallback, useEffect } from 'react'
+import { Scanner, setZXingModuleOverrides } from '@yudiel/react-qr-scanner'
 
 export default function CameraScanner({ onScan, onClose }) {
   const [error, setError] = useState(null)
-  const scannerRef = useRef(null)
-  const stoppedRef = useRef(false)
+  const [paused, setPaused] = useState(false)
+  const [ready, setReady] = useState(false)
 
+  // Load WASM from our own server instead of jsdelivr CDN
   useEffect(() => {
-    stoppedRef.current = false
-
-    async function startScanner() {
-      try {
-        const { Html5Qrcode } = await import('html5-qrcode')
-        const scanner = new Html5Qrcode(SCANNER_ID, { verbose: false })
-        scannerRef.current = scanner
-
-        // Use full container as scan region — no qrbox constraint
-        // This scans the ENTIRE camera frame, much better detection
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: undefined },
-          (decodedText) => {
-            if (stoppedRef.current) return
-            stoppedRef.current = true
-            scanner.stop().catch(() => {})
-            onScan(decodedText)
-          },
-          () => {}
-        )
-
-        // Force the video element to fill container properly
-        const container = document.getElementById(SCANNER_ID)
-        if (container) {
-          const video = container.querySelector('video')
-          if (video) {
-            video.style.objectFit = 'cover'
-            video.style.width = '100%'
-            video.style.height = '100%'
-          }
+    setZXingModuleOverrides({
+      locateFile: (path, prefix) => {
+        if (path.endsWith('.wasm')) {
+          return '/zxing_reader.wasm'
         }
-      } catch (err) {
-        setError(err?.message || 'Could not access camera. Please allow camera permission.')
-      }
-    }
+        return prefix + path
+      },
+    })
+    setReady(true)
+  }, [])
 
-    startScanner()
+  const handleScan = useCallback((detectedCodes) => {
+    if (paused || !detectedCodes?.length) return
+    const raw = detectedCodes[0].rawValue
+    if (!raw) return
+    setPaused(true)
+    onScan(raw)
+  }, [paused, onScan])
 
-    return () => {
-      stoppedRef.current = true
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {})
-        scannerRef.current = null
-      }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleClose() {
-    stoppedRef.current = true
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {})
-      scannerRef.current = null
-    }
-    onClose()
-  }
+  const handleError = useCallback((err) => {
+    const msg = err?.message || err?.toString?.() || 'Could not access camera. Please allow camera permission.'
+    setError(msg)
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'rgba(0,0,0,0.9)' }}>
         <span className="text-white font-semibold text-sm">Scan QR Code</span>
-        <button onClick={handleClose} className="text-white/80 active:text-white p-2 -mr-2">
+        <button onClick={onClose} className="text-white/80 active:text-white p-2 -mr-2">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      {/* Camera — single feed, no duplicate */}
+      {/* Camera */}
       <div className="flex-1 relative overflow-hidden">
-        {!error && (
-          <div id={SCANNER_ID} className="absolute inset-0" />
+        {!error && ready && (
+          <Scanner
+            onScan={handleScan}
+            onError={handleError}
+            constraints={{
+              facingMode: 'environment',
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              focusMode: 'continuous',
+            }}
+            paused={paused}
+            allowMultiple={false}
+            scanDelay={200}
+            sound={false}
+            components={{ finder: true, torch: false }}
+            styles={{
+              container: { width: '100%', height: '100%' },
+              video: { objectFit: 'cover' },
+            }}
+          />
         )}
 
-        {/* Crosshair overlay */}
-        {!error && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-56 h-56 border-2 border-white/50 rounded-2xl" />
+        {!error && !ready && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -99,7 +83,7 @@ export default function CameraScanner({ onScan, onClose }) {
               </svg>
             </div>
             <p className="text-white/80 text-sm">{error}</p>
-            <button onClick={handleClose} className="px-4 py-2 bg-white/10 text-white rounded-lg text-sm">
+            <button onClick={onClose} className="px-4 py-2 bg-white/10 text-white rounded-lg text-sm">
               Close
             </button>
           </div>

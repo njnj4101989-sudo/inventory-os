@@ -15,7 +15,7 @@ export default function BatchQRLabel({ batch, lotCode, designNo, lotDate, appBas
   return (
     <div className="batch-label">
       <div className="batch-label__qr">
-        <QRCodeSVG value={scanUrl} size={88} level="M" includeMargin={false} />
+        <QRCodeSVG value={scanUrl} size={130} level="H" includeMargin={true} />
       </div>
       <div className="batch-label__info">
         <div className="batch-label__code">{batchCode}</div>

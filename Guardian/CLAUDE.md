@@ -22,7 +22,7 @@
 
 ---
 
-## Current State (Session 38 — 2026-02-27)
+## Current State (Session 39 — 2026-02-27)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
@@ -30,33 +30,49 @@
 3. Login as `tailor1` → should land on `/my-work` (mobile layout + bottom tabs)
 4. Login as `checker1` → should land on `/qc-queue`
 5. Login as `admin` → should land on `/dashboard` (desktop sidebar unchanged)
+6. Cloudflare tunnel: `cloudflared tunnel --url http://localhost:5173` → phone testing
 
-### Goal: PWA + Mobile Tailor/Checker Workflow (7 Phases)
-Build a complete mobile-first PWA so factory floor workers (tailors/checkers) can scan QR codes, manage their batches, and operate offline.
+### Session 39 — COMPLETE: QR Scanner Migration + Mobile Fixes
 
-### Phase Checklist — ALL COMPLETE
-- [x] **Phase 1:** API Functions + Role-Based Routing
-- [x] **Phase 2:** Mobile Layout + Bottom Tab Bar
-- [x] **Phase 3:** Tailor Dashboard + ScanPage Actions
-- [x] **Phase 4:** Checker QC Dashboard
-- [x] **Phase 5:** PWA Setup (sw.js + manifest + 44 precached entries)
-- [x] **Phase 6:** Offline Support (action queue + sync on reconnect)
-- [x] **Phase 7:** Polish (install prompt + touch UX)
-- [x] **Post-phase:** ScanPage back button, CameraScanner single-window fix
-- **Build:** 179 modules, 0 errors, PWA v1.2.0
+| # | What | Status |
+|---|------|--------|
+| 1 | QR scanner: `html5-qrcode` → `@yudiel/react-qr-scanner@2.5.1` | DONE |
+| 2 | Self-host zxing WASM (`public/zxing_reader.wasm`) — jsdelivr CDN fails on mobile | DONE |
+| 3 | Camera: 1920×1080 + `focusMode: continuous` for better detection | DONE |
+| 4 | QR sizes: 88→130px (print labels), 160px (BatchDetailPage on-screen scan) | DONE |
+| 5 | BatchDetailPage: 160px scannable QR in summary grid (5-col, row-span-2) | DONE |
+| 6 | LoginPage: `autoCapitalize=off` + `toLowerCase()` — phone keyboard fix | DONE |
+| 7 | MyWorkPage: batch cards clickable → navigates to Batch Passport | DONE |
 
-### PENDING — Next Session (S39)
-1. **QR scanner not detecting** — Camera opens fine (single window), shows crosshair, but `html5-qrcode` does NOT decode the QR code when pointed at laptop screen. Possible causes:
-   - Screen glare / moiré pattern from scanning screen-to-screen
-   - QR code on BatchLabelSheet is 88px (`size={88}`) — may be too small for phone camera to resolve
-   - `html5-qrcode` library may need `experimentalFeatures: { useBarCodeDetectorIfSupported: true }` for better detection
-   - QR encodes `http://localhost:5173/scan/batch/BATCH-0019` — the data is valid, issue is optical detection not URL parsing
-   - **Test with printed label first** — screen-to-screen scanning is notoriously unreliable
-   - If still failing: try increasing QR size in BatchQRLabel (`size={88}` → `size={120}`), or switch to `@yudiel/react-qr-scanner` (uses BarcodeDetector API, better mobile support)
-2. **Cloudflare tunnel setup** — `.env` changed to `VITE_API_URL=/api/v1` (relative). `vite.config.js` has `allowedHosts: ['.trycloudflare.com']`. Run: `cloudflared tunnel --url http://localhost:5173`
-3. **Windows firewall** — blocks direct LAN access (192.168.x.x:5173). Need admin to run: `netsh advfirewall firewall add rule name="Vite Dev" dir=in action=allow protocol=TCP localport=5173`
+**Key findings:**
+- `@yudiel/react-qr-scanner` uses `zxing-wasm` (not native BarcodeDetector). WASM loads from jsdelivr CDN by default — **silently fails** on mobile/tunnel. Fix: `setZXingModuleOverrides({ locateFile })` + copy WASM to `public/`
+- Screen-to-screen QR scanning: 160px + `level="H"` + `includeMargin` = minimum for reliable detection at 30-50cm. 130px sufficient for printed labels
+- Phone keyboards autocapitalize usernames → `autoCapitalize="off"` + forced `toLowerCase()` on LoginPage
 
-### Files Created (13)
+### PENDING — Next Session (S40)
+1. **SKUs page overhaul** — align to API_REFERENCE.md §6
+2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
+3. **"Free" size support** — confirm if needed in size pattern
+4. **Feriwala (waste disposition)** — deferred, add when client requests
+5. **QR detection quality** — test with printed labels (should be much better than screen-to-screen)
+6. **Windows firewall** — needs admin `netsh` rule for LAN access on 5173
+
+### Files Created in S39 (1)
+| File | Purpose |
+|------|---------|
+| `frontend/public/zxing_reader.wasm` | Self-hosted WASM for QR scanner (940KB) |
+
+### Files Modified in S39 (5)
+| File | Changes |
+|------|---------|
+| `frontend/src/components/common/CameraScanner.jsx` | Full rewrite: html5-qrcode → @yudiel/react-qr-scanner + WASM self-host |
+| `frontend/src/components/common/BatchQRLabel.jsx` | QR size 88→130px, level M→H, includeMargin |
+| `frontend/src/components/common/QRLabel.jsx` | QR size 88→130px, level M→H, includeMargin |
+| `frontend/src/pages/BatchDetailPage.jsx` | 160px scannable QR in summary grid + QRCodeSVG import |
+| `frontend/src/pages/MyWorkPage.jsx` | Batch cards clickable → Batch Passport, stopPropagation on buttons |
+| `frontend/src/pages/LoginPage.jsx` | autoCapitalize=off + toLowerCase() for mobile keyboards |
+
+### Files Created (S38 — 13)
 | File | Purpose |
 |------|---------|
 | `frontend/src/api/mobile.js` | getMyBatches, getPendingChecks |
@@ -89,7 +105,7 @@ Build a complete mobile-first PWA so factory floor workers (tailors/checkers) ca
 ### Backend (NO changes needed)
 All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit`, `/check`, `GET /mobile/my-batches`, `/mobile/pending-checks`
 
-### After This Session — Next Up
+### After S39 — Next Up
 1. **SKUs page overhaul** — align to API_REFERENCE.md §6
 2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
 3. **"Free" size support** — confirm if needed in size pattern
@@ -114,7 +130,8 @@ All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit
 - **S35:** Lot distribution → batch auto-creation + batch QR + tailor claim
 - **S36:** BatchesPage redesign — lot-grouped card view, pipeline KPIs, smart tabs
 - **S37:** Global typography (Inter font + CSS vars) + batch label PCS field removed
-- **S38:** PWA + Mobile Tailor/Checker Workflow (7 phases — see Phase Checklist above)
+- **S38:** PWA + Mobile Tailor/Checker Workflow (7 phases)
+- **S39:** QR scanner migration (html5-qrcode → @yudiel/react-qr-scanner) + WASM self-host + mobile fixes (login autocapitalize, clickable batch cards, scannable QR on BatchDetailPage)
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
 ---

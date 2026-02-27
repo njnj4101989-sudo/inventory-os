@@ -23,9 +23,9 @@ export default function QRLabel({ roll, appBaseUrl }) {
       <div className="qr-label__qr">
         <QRCodeSVG
           value={scanUrl}
-          size={88}
-          level="M"
-          includeMargin={false}
+          size={130}
+          level="H"
+          includeMargin={true}
         />
       </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMyBatches } from '../api/mobile'
 import { startBatch, submitBatch } from '../api/batches'
 import StatusBadge from '../components/common/StatusBadge'
@@ -12,6 +13,7 @@ async function executeOfflineAction(type, payload) {
 }
 
 export default function MyWorkPage() {
+  const navigate = useNavigate()
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
@@ -111,6 +113,7 @@ export default function MyWorkPage() {
               actionLoading={actionLoading}
               onStart={handleStart}
               onSubmit={handleSubmit}
+              onTap={(b) => navigate(`/scan/batch/${encodeURIComponent(b.batch_code)}`)}
             />
           ))}
         </div>
@@ -128,14 +131,22 @@ function KPI({ label, value, color }) {
   )
 }
 
-function BatchCard({ batch, actionLoading, onStart, onSubmit }) {
+function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
   const isLoading = actionLoading === batch.id
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+    <div
+      onClick={() => onTap(batch)}
+      className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 active:bg-gray-50 cursor-pointer transition-colors"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</div>
+            <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
           <div className="flex items-center gap-2 mt-1.5">
             {batch.size && (
               <span className="inline-flex items-center bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 text-xs font-bold text-emerald-700">
@@ -154,11 +165,11 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit }) {
           )}
         </div>
 
-        {/* Action button */}
+        {/* Action button — stopPropagation so card tap doesn't fire */}
         <div className="flex-shrink-0">
           {batch.status === 'assigned' && (
             <button
-              onClick={() => onStart(batch.id)}
+              onClick={(e) => { e.stopPropagation(); onStart(batch.id) }}
               disabled={isLoading}
               className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
@@ -167,7 +178,7 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit }) {
           )}
           {batch.status === 'in_progress' && (
             <button
-              onClick={() => onSubmit(batch.id)}
+              onClick={(e) => { e.stopPropagation(); onSubmit(batch.id) }}
               disabled={isLoading}
               className="px-4 py-2 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
             >

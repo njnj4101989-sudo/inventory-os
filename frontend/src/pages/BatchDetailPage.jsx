@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import { getBatch } from '../api/batches'
 import StatusBadge from '../components/common/StatusBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -55,7 +56,7 @@ export default function BatchDetailPage() {
         <button onClick={() => navigate('/batches')} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
           &larr; Back
         </button>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-800">{batch.batch_code}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {batch.lot ? `${batch.lot.lot_code} — Design ${batch.lot.design_no}` : batch.sku ? `${batch.sku.sku_code} — ${batch.sku.product_name}` : ''}
@@ -73,17 +74,28 @@ export default function BatchDetailPage() {
         <StatusBadge status={batch.status} />
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      {/* Summary cards + QR */}
+      <div className="grid grid-cols-5 gap-4">
+        {/* QR — scannable from phone */}
+        <div className="row-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm flex flex-col items-center justify-center">
+          <QRCodeSVG
+            value={`${window.location.origin}/scan/batch/${encodeURIComponent(batch.batch_code)}`}
+            size={160}
+            level="H"
+            includeMargin={true}
+          />
+          <p className="mt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Scan to view</p>
+        </div>
+        {/* KPI cards — 2×2 grid in remaining 4 cols */}
+        <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Pieces</p>
           <p className="mt-1 text-2xl font-bold text-gray-800">{batch.piece_count ?? batch.quantity ?? '—'}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Size</p>
           <p className="mt-1 text-2xl font-bold text-emerald-600">{batch.size || '—'}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Approved / Rejected</p>
           <p className="mt-1 text-2xl font-bold">
             <span className="text-green-600">{batch.approved_qty ?? '—'}</span>
@@ -91,7 +103,7 @@ export default function BatchDetailPage() {
             <span className="text-red-600">{batch.rejected_qty ?? '—'}</span>
           </p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs text-gray-500">Tailor</p>
           <p className="mt-1 text-lg font-semibold text-gray-800">{batch.assignment?.tailor?.full_name || 'Unassigned'}</p>
         </div>
