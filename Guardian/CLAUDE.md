@@ -42,7 +42,19 @@ Build a complete mobile-first PWA so factory floor workers (tailors/checkers) ca
 - [x] **Phase 5:** PWA Setup (sw.js + manifest + 44 precached entries)
 - [x] **Phase 6:** Offline Support (action queue + sync on reconnect)
 - [x] **Phase 7:** Polish (install prompt + touch UX)
+- [x] **Post-phase:** ScanPage back button, CameraScanner single-window fix
 - **Build:** 179 modules, 0 errors, PWA v1.2.0
+
+### PENDING — Next Session (S39)
+1. **QR scanner not detecting** — Camera opens fine (single window), shows crosshair, but `html5-qrcode` does NOT decode the QR code when pointed at laptop screen. Possible causes:
+   - Screen glare / moiré pattern from scanning screen-to-screen
+   - QR code on BatchLabelSheet is 88px (`size={88}`) — may be too small for phone camera to resolve
+   - `html5-qrcode` library may need `experimentalFeatures: { useBarCodeDetectorIfSupported: true }` for better detection
+   - QR encodes `http://localhost:5173/scan/batch/BATCH-0019` — the data is valid, issue is optical detection not URL parsing
+   - **Test with printed label first** — screen-to-screen scanning is notoriously unreliable
+   - If still failing: try increasing QR size in BatchQRLabel (`size={88}` → `size={120}`), or switch to `@yudiel/react-qr-scanner` (uses BarcodeDetector API, better mobile support)
+2. **Cloudflare tunnel setup** — `.env` changed to `VITE_API_URL=/api/v1` (relative). `vite.config.js` has `allowedHosts: ['.trycloudflare.com']`. Run: `cloudflared tunnel --url http://localhost:5173`
+3. **Windows firewall** — blocks direct LAN access (192.168.x.x:5173). Need admin to run: `netsh advfirewall firewall add rule name="Vite Dev" dir=in action=allow protocol=TCP localport=5173`
 
 ### Files Created (13)
 | File | Purpose |
