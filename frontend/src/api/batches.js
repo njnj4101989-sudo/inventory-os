@@ -154,3 +154,49 @@ export async function getBatch(id) {
   }
   return client.get(`/batches/${id}`)
 }
+
+export async function startBatch(id) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (batch.status !== 'assigned') throw { response: { data: { detail: `Cannot start batch in '${batch.status}' status` } } }
+    batch.status = 'in_progress'
+    batch.started_at = new Date().toISOString()
+    return mockResponse(batch, 'Batch started')
+  }
+  return client.post(`/batches/${id}/start`)
+}
+
+export async function submitBatch(id) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (batch.status !== 'in_progress') throw { response: { data: { detail: `Cannot submit batch in '${batch.status}' status` } } }
+    batch.status = 'submitted'
+    batch.submitted_at = new Date().toISOString()
+    return mockResponse(batch, 'Batch submitted')
+  }
+  return client.post(`/batches/${id}/submit`)
+}
+
+export async function checkBatch(id, data) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (batch.status !== 'submitted') throw { response: { data: { detail: `Cannot check batch in '${batch.status}' status` } } }
+    batch.approved_qty = data.approved_qty
+    batch.rejected_qty = data.rejected_qty
+    batch.rejection_reason = data.rejection_reason || null
+    batch.checked_at = new Date().toISOString()
+    if (data.rejected_qty > 0 && data.approved_qty === 0) {
+      batch.status = 'assigned'
+      batch.started_at = null
+      batch.submitted_at = null
+    } else {
+      batch.status = 'completed'
+      batch.completed_at = new Date().toISOString()
+    }
+    return mockResponse(batch, 'Batch checked')
+  }
+  return client.post(`/batches/${id}/check`, data)
+}

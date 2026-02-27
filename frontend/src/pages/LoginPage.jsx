@@ -2,17 +2,23 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
+function getLandingPath(role) {
+  if (role === 'tailor') return '/my-work'
+  if (role === 'checker') return '/qc-queue'
+  return '/dashboard'
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, role } = useAuth()
   const navigate = useNavigate()
 
   // If already logged in, redirect
   if (isAuthenticated) {
-    navigate('/dashboard', { replace: true })
+    navigate(getLandingPath(role), { replace: true })
     return null
   }
 
@@ -21,8 +27,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(username, password)
-      navigate('/dashboard', { replace: true })
+      const user = await login(username, password)
+      navigate(getLandingPath(user.role), { replace: true })
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid credentials')
     } finally {

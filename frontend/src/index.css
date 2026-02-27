@@ -28,6 +28,17 @@
   code, pre, kbd {
     font-family: var(--font-family-mono);
   }
+
+  /* Mobile touch optimizations */
+  html {
+    touch-action: manipulation; /* no 300ms tap delay */
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Safe area for bottom nav (notched phones) */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── Semantic typography classes (opt-in) ── */

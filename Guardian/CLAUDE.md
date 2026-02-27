@@ -22,14 +22,62 @@
 
 ---
 
-## Current State (Session 37 — 2026-02-24)
+## Current State (Session 38 — 2026-02-27)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
-2. Test BatchesPage redesign at /batches — lot-grouped cards, pipeline KPIs, tabs, expand/collapse
-3. Test backend filters — `GET /batches?status=created&lot_id=...&size=L`
+2. `cd frontend && npm run dev` → test at http://localhost:5173
+3. Login as `tailor1` → should land on `/my-work` (mobile layout + bottom tabs)
+4. Login as `checker1` → should land on `/qc-queue`
+5. Login as `admin` → should land on `/dashboard` (desktop sidebar unchanged)
 
-### Next Up
+### Goal: PWA + Mobile Tailor/Checker Workflow (7 Phases)
+Build a complete mobile-first PWA so factory floor workers (tailors/checkers) can scan QR codes, manage their batches, and operate offline.
+
+### Phase Checklist — ALL COMPLETE
+- [x] **Phase 1:** API Functions + Role-Based Routing
+- [x] **Phase 2:** Mobile Layout + Bottom Tab Bar
+- [x] **Phase 3:** Tailor Dashboard + ScanPage Actions
+- [x] **Phase 4:** Checker QC Dashboard
+- [x] **Phase 5:** PWA Setup (sw.js + manifest + 44 precached entries)
+- [x] **Phase 6:** Offline Support (action queue + sync on reconnect)
+- [x] **Phase 7:** Polish (install prompt + touch UX)
+- **Build:** 179 modules, 0 errors, PWA v1.2.0
+
+### Files Created (13)
+| File | Purpose |
+|------|---------|
+| `frontend/src/api/mobile.js` | getMyBatches, getPendingChecks |
+| `frontend/src/components/layout/MobileLayout.jsx` | Mobile shell + bottom tabs |
+| `frontend/src/components/layout/BottomNav.jsx` | Bottom tab navigation |
+| `frontend/src/components/common/OfflineBanner.jsx` | Offline indicator |
+| `frontend/src/components/common/InstallBanner.jsx` | PWA install prompt |
+| `frontend/src/pages/MyWorkPage.jsx` | Tailor dashboard |
+| `frontend/src/pages/QCQueuePage.jsx` | Checker dashboard |
+| `frontend/src/pages/ProfilePage.jsx` | Mobile profile/logout |
+| `frontend/src/hooks/useOnlineStatus.js` | Online/offline detection |
+| `frontend/src/hooks/useOfflineQueue.js` | Action queue + sync |
+| `frontend/src/hooks/useInstallPrompt.js` | PWA install prompt hook |
+| `frontend/public/icons/icon-192.png` | PWA icon |
+| `frontend/public/icons/icon-512.png` | PWA icon |
+
+### Files Modified (9)
+| File | Changes |
+|------|---------|
+| `frontend/package.json` | +vite-plugin-pwa |
+| `frontend/vite.config.js` | PWA plugin + Workbox |
+| `frontend/index.html` | Meta tags (theme-color, apple-touch-icon, viewport-fit) |
+| `frontend/src/index.css` | safe-area-pb, touch-action |
+| `frontend/src/App.jsx` | Dual layout (MobileLayout for tailor/checker) + DefaultRedirect |
+| `frontend/src/routes/ProtectedRoute.jsx` | Role-aware fallback |
+| `frontend/src/pages/LoginPage.jsx` | Role-based redirect |
+| `frontend/src/api/batches.js` | +startBatch, submitBatch, checkBatch |
+| `frontend/src/pages/ScanPage.jsx` | Role-aware action buttons |
+
+### Backend (NO changes needed)
+All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit`, `/check`, `GET /mobile/my-batches`, `/mobile/pending-checks`
+
+### After This Session — Next Up
 1. **SKUs page overhaul** — align to API_REFERENCE.md §6
 2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
 3. **"Free" size support** — confirm if needed in size pattern
@@ -54,11 +102,22 @@
 - **S35:** Lot distribution → batch auto-creation + batch QR + tailor claim
 - **S36:** BatchesPage redesign — lot-grouped card view, pipeline KPIs, smart tabs
 - **S37:** Global typography (Inter font + CSS vars) + batch label PCS field removed
+- **S38:** PWA + Mobile Tailor/Checker Workflow (7 phases — see Phase Checklist above)
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
 ---
 
 ## Key Architecture Decisions
+
+### PWA + Mobile Layout (S38)
+- **Dual layout:** Tailor/Checker get `MobileLayout` (compact header + bottom tabs), Admin/Supervisor/Billing get `Layout` (sidebar)
+- **Role-based routing:** `LoginPage` redirects based on `user.role`; `ProtectedRoute` falls back to role-appropriate landing
+- **BottomNav:** 3 tabs — Scan / My Work (or QC Queue) / Profile. Scan tab navigates to `/scan` (standalone, full-screen camera)
+- **Offline queue:** `useOfflineQueue` hook — localStorage-persisted, auto-syncs on reconnect, optimistic local updates
+- **Conflict resolution:** 400/409 → drop action (already transitioned); 500/network → retry
+- **PWA caching:** Workbox — precache static assets, CacheFirst Google Fonts, NetworkFirst API (5s timeout), StaleWhileRevalidate batch passports
+- **Install prompt:** `useInstallPrompt` captures `beforeinstallprompt`, shows `InstallBanner` in MobileLayout, dismisses for session
+- **Touch UX:** `touch-action: manipulation` (no 300ms delay), `safe-area-pb` for notched phones
 
 ### Weight System (3 fields on Roll)
 - `total_weight` — original supplier weight, **IMMUTABLE** after stock-in

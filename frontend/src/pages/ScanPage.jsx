@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
-import { getBatchPassport, claimBatch } from '../api/batches'
+import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch } from '../api/batches'
 import CameraScanner from '../components/common/CameraScanner'
 
 /**
@@ -21,8 +21,13 @@ export default function ScanPage() {
   const [showScanner, setShowScanner] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [claimSuccess, setClaimSuccess] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionSuccess, setActionSuccess] = useState(null)
+  const [checkForm, setCheckForm] = useState({ approved: '', rejected: '', reason: '' })
 
   const isLoggedIn = !!localStorage.getItem('access_token')
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
+  const userRole = currentUser.role || null
 
   useEffect(() => {
     if (rollCode) {
@@ -68,6 +73,47 @@ export default function ScanPage() {
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to claim batch')
     } finally { setClaiming(false) }
+  }
+
+  async function handleStartBatch() {
+    if (!batchPassport) return
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await startBatch(batchPassport.id)
+      setActionSuccess('Batch started!')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to start batch')
+    } finally { setActionLoading(false) }
+  }
+
+  async function handleSubmitBatch() {
+    if (!batchPassport) return
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await submitBatch(batchPassport.id)
+      setActionSuccess('Submitted for QC!')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to submit batch')
+    } finally { setActionLoading(false) }
+  }
+
+  async function handleCheckBatch() {
+    if (!batchPassport) return
+    const total = batchPassport.piece_count || batchPassport.quantity || 0
+    const a = parseInt(checkForm.approved) || 0
+    const r = parseInt(checkForm.rejected) || 0
+    if (a + r !== total) { setError(`Approved + Rejected must equal ${total}`); return }
+    if (r > 0 && !checkForm.reason.trim()) { setError('Please provide a rejection reason'); return }
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await checkBatch(batchPassport.id, { approved_qty: a, rejected_qty: r, rejection_reason: r > 0 ? checkForm.reason.trim() : null })
+      setActionSuccess(a > 0 ? 'Batch approved!' : 'Batch rejected — returned to tailor')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to check batch')
+    } finally { setActionLoading(false) }
   }
 
   function handleScan(decodedText) {
@@ -244,7 +290,14 @@ export default function ScanPage() {
               </Section>
             )}
 
-            {/* Claim button */}
+            {/* Action buttons — role-aware */}
+            {actionSuccess && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                <div className="text-emerald-700 font-semibold text-sm">{actionSuccess}</div>
+              </div>
+            )}
+
+            {/* Claim (tailor + created) */}
             {batchPassport.status === 'created' && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
                 {claimSuccess ? (
@@ -262,6 +315,64 @@ export default function ScanPage() {
                     </a>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Start Work (tailor + assigned) */}
+            {userRole === 'tailor' && batchPassport.status === 'assigned' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <button onClick={handleStartBatch} disabled={actionLoading}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  {actionLoading ? 'Starting...' : 'Start Work'}
+                </button>
+              </div>
+            )}
+
+            {/* Submit for QC (tailor + in_progress) */}
+            {userRole === 'tailor' && batchPassport.status === 'in_progress' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <button onClick={handleSubmitBatch} disabled={actionLoading}
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                  {actionLoading ? 'Submitting...' : 'Submit for QC'}
+                </button>
+              </div>
+            )}
+
+            {/* QC Check (checker + submitted) */}
+            {userRole === 'checker' && batchPassport.status === 'submitted' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
+                    <input type="number" min="0" value={checkForm.approved}
+                      onChange={(e) => {
+                        const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
+                        setCheckForm((f) => ({ ...f, approved: v, rejected: String(Math.max(0, total - (parseInt(v) || 0))) }))
+                      }}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
+                    <input type="number" min="0" value={checkForm.rejected}
+                      onChange={(e) => {
+                        const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
+                        setCheckForm((f) => ({ ...f, rejected: v, approved: String(Math.max(0, total - (parseInt(v) || 0))) }))
+                      }}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
+                  </div>
+                </div>
+                {parseInt(checkForm.rejected) > 0 && (
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
+                    <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm((f) => ({ ...f, reason: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
+                  </div>
+                )}
+                <button onClick={handleCheckBatch} disabled={actionLoading}
+                  className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
+                  {actionLoading ? 'Checking...' : 'Submit Check'}
+                </button>
               </div>
             )}
 
