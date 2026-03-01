@@ -1,63 +1,113 @@
 import { useState, useEffect, useRef } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
 
-const SCANNER_ID = 'camera-scanner-region'
+const HAS_BARCODE_DETECTOR = 'BarcodeDetector' in window
 
 export default function CameraScanner({ onScan, onClose }) {
   const [error, setError] = useState(null)
   const [starting, setStarting] = useState(true)
+  const videoRef = useRef(null)
   const scannedRef = useRef(false)
 
   useEffect(() => {
+    if (!HAS_BARCODE_DETECTOR) return // handled by fallback branch
+    let stopped = false
+    let stream = null
+
+    async function startNative() {
+      try {
+        const detector = new BarcodeDetector({ formats: ['qr_code'] })
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        })
+        if (stopped) { stream.getTracks().forEach(t => t.stop()); return }
+
+        const video = videoRef.current
+        video.srcObject = stream
+        await video.play()
+        setStarting(false)
+
+        // Scan loop — detect directly from video element, no canvas
+        async function scanLoop() {
+          while (!stopped && !scannedRef.current) {
+            try {
+              const results = await detector.detect(video)
+              if (results.length > 0 && !scannedRef.current) {
+                scannedRef.current = true
+                onScan(results[0].rawValue)
+                return
+              }
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 60))
+          }
+        }
+        scanLoop()
+      } catch (err) {
+        if (stopped) return
+        const msg = err?.message || String(err)
+        if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
+          setError('Camera permission denied. Please allow camera access and try again.')
+        } else if (msg.includes('NotFoundError')) {
+          setError('No camera found on this device.')
+        } else if (msg.includes('NotReadableError')) {
+          setError('Camera is in use by another app.')
+        } else {
+          setError(msg)
+        }
+        setStarting(false)
+      }
+    }
+
+    startNative()
+
+    return () => {
+      stopped = true
+      if (stream) stream.getTracks().forEach(t => t.stop())
+    }
+  }, [onScan])
+
+  // Desktop fallback — lazy-load html5-qrcode only when needed
+  useEffect(() => {
+    if (HAS_BARCODE_DETECTOR) return
     let cancelled = false
     let scanner = null
+    const SCANNER_ID = 'html5qr-fallback'
 
-    // Wait one frame so the container has real dimensions
-    const raf = requestAnimationFrame(() => {
+    async function startFallback() {
+      const { Html5Qrcode } = await import('html5-qrcode')
+      if (cancelled) return
+
+      // Wait for DOM element
+      await new Promise(r => requestAnimationFrame(r))
       scanner = new Html5Qrcode(SCANNER_ID, {
-        useBarCodeDetectorIfSupported: true,
         formatsToSupport: [0],
       })
 
-      scanner
-        .start(
+      try {
+        await scanner.start(
           { facingMode: 'environment' },
-          {
-            fps: 15,
-            qrbox: { width: 250, height: 250 },
-            disableFlip: true,
-          },
-          (decodedText) => {
+          { fps: 15, qrbox: { width: 250, height: 250 }, disableFlip: true },
+          (text) => {
             if (scannedRef.current) return
             scannedRef.current = true
             scanner.stop().catch(() => {})
-            onScan(decodedText)
+            onScan(text)
           },
           () => {}
         )
-        .then(() => {
-          if (!cancelled) setStarting(false)
-        })
-        .catch((err) => {
-          if (cancelled) return
-          const msg = err?.message || String(err)
-          if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
-            setError('Camera permission denied. Please allow camera access and try again.')
-          } else if (msg.includes('NotFoundError') || msg.includes('Requested device not found')) {
-            setError('No camera found on this device.')
-          } else if (msg.includes('NotReadableError') || msg.includes('Could not start video source')) {
-            setError('Camera is in use by another app. Close other camera apps and try again.')
-          } else {
-            setError(msg)
-          }
+        if (!cancelled) setStarting(false)
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message || 'Camera error')
           setStarting(false)
-        })
-    })
+        }
+      }
+    }
+
+    startFallback()
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(raf)
-      if (scanner && scanner.isScanning) {
+      if (scanner?.isScanning) {
         scanner.stop().then(() => scanner.clear()).catch(() => {
           try { scanner.clear() } catch (_) {}
         })
@@ -69,17 +119,6 @@ export default function CameraScanner({ onScan, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Only override what's needed — don't fight library positioning */}
-      <style>{`
-        #${SCANNER_ID} video {
-          object-fit: cover !important;
-          height: 100vh !important;
-        }
-        #${SCANNER_ID} #qr-shaded-region {
-          display: none !important;
-        }
-      `}</style>
-
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3" style={{ background: 'rgba(0,0,0,0.7)' }}>
         <span className="text-white font-semibold text-sm">Scan QR Code</span>
@@ -90,15 +129,28 @@ export default function CameraScanner({ onScan, onClose }) {
         </button>
       </div>
 
-      {/* Scanner container — explicit viewport size, clip overflow */}
-      {!error && (
-        <div
-          id={SCANNER_ID}
-          style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}
+      {/* Native camera (mobile) */}
+      {!error && HAS_BARCODE_DETECTOR && (
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover"
+          playsInline
+          muted
         />
       )}
 
-      {/* Scanning guide overlay */}
+      {/* html5-qrcode fallback (desktop) */}
+      {!error && !HAS_BARCODE_DETECTOR && (
+        <>
+          <style>{`
+            #html5qr-fallback video { object-fit: cover !important; height: 100vh !important; }
+            #html5qr-fallback #qr-shaded-region { display: none !important; }
+          `}</style>
+          <div id="html5qr-fallback" style={{ width: '100vw', height: '100vh', overflow: 'hidden' }} />
+        </>
+      )}
+
+      {/* Scanning guide */}
       {!error && !starting && (
         <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
           <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at center, transparent 120px, rgba(0,0,0,0.45) 160px)' }} />
@@ -137,7 +189,7 @@ export default function CameraScanner({ onScan, onClose }) {
       {/* Footer */}
       {!error && (
         <div className="absolute bottom-0 left-0 right-0 z-20 py-5 text-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
-          <p className="text-white/60 text-xs">Align QR code within the frame</p>
+          <p className="text-white/60 text-xs">Point camera at QR code</p>
         </div>
       )}
     </div>
