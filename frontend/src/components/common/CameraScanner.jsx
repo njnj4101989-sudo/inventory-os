@@ -22,7 +22,11 @@ export default function CameraScanner({ onScan, onClose }) {
       scanner
         .start(
           { facingMode: 'environment' },
-          { fps: 10 },
+          {
+            fps: 15,
+            qrbox: { width: 250, height: 250 },
+            disableFlip: true,
+          },
           (decodedText) => {
             if (scannedRef.current) return
             scannedRef.current = true
@@ -70,6 +74,9 @@ export default function CameraScanner({ onScan, onClose }) {
         #${SCANNER_ID} video {
           object-fit: cover !important;
           height: 100vh !important;
+        }
+        #${SCANNER_ID} #qr-shaded-region {
+          display: none !important;
         }
       `}</style>
 
