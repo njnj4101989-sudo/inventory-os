@@ -22,15 +22,66 @@
 
 ---
 
-## Current State (Session 39 — 2026-02-27)
+## Current State (Session 41 — 2026-03-01)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
-3. Login as `tailor1` → should land on `/my-work` (mobile layout + bottom tabs)
-4. Login as `checker1` → should land on `/qc-queue`
-5. Login as `admin` → should land on `/dashboard` (desktop sidebar unchanged)
-6. Cloudflare tunnel: `cloudflared tunnel --url http://localhost:5173` → phone testing
+3. **Production:** `https://inventory.drsblouse.com` (Vercel) → backend via Cloudflare Named Tunnel
+4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### Session 41 — QR Scanner: Switch to html5-qrcode + Native BarcodeDetector
+
+| # | What | Status |
+|---|------|--------|
+| 1 | `npm uninstall @yudiel/react-qr-scanner` + `npm install html5-qrcode` | DONE |
+| 2 | Delete `frontend/public/zxing_reader.wasm` (940KB) | DONE |
+| 3 | Rewrite `CameraScanner.jsx` — `Html5Qrcode` class + `useBarCodeDetectorIfSupported: true` | DONE |
+| 4 | Grep stale refs (`@yudiel`, `zxing`) — 0 results | DONE |
+| 5 | `npm run build` — 0 errors, 43 precache entries | DONE |
+
+**Why:** `@yudiel/react-qr-scanner` used zxing-wasm (JS/WASM decoder) — slow on factory floor Android phones, poor low-light performance, 940KB WASM download. `html5-qrcode` with `useBarCodeDetectorIfSupported: true` enables **native BarcodeDetector API** on Chrome 83+ Android — hardware GPU/DSP QR decoding, 5-10x faster, zero WASM.
+
+**Key config:**
+- `Html5Qrcode` class (not `Html5QrcodeScanner`) — custom full-screen overlay UI
+- `formatsToSupport: [0]` (QR_CODE only) — prevents false positives from fabric barcodes
+- `fps: 15`, `qrbox: 250×250`
+- `scannedRef` (useRef) for synchronous duplicate prevention
+- Cleanup: `stop().then(clear())` in useEffect return
+
+**Files changed:** `CameraScanner.jsx` (rewrite), `package.json` (dep swap)
+**Files deleted:** `frontend/public/zxing_reader.wasm`
+**Files NOT changed:** ScanPage.jsx, QRLabel.jsx, BatchQRLabel.jsx, BatchDetailPage.jsx, vite.config.js
+
+### Session 40 — Vercel + Cloudflare Named Tunnel Deployment Prep
+
+| # | What | Status |
+|---|------|--------|
+| 1 | `frontend/vercel.json` — SPA rewrites for React Router | DONE |
+| 2 | `frontend/vite.config.js` — add `inventory.drsblouse.com` to allowedHosts | DONE |
+| 3 | `.env.production` already in root `.gitignore` — no change needed | DONE |
+| 4 | Build verified — 0 errors | DONE |
+| 5 | Cloudflare account created (`drssurat1008@gmail.com`) | DONE |
+| 6 | `drsblouse.com` added to Cloudflare (Free plan, nameservers NOT changed) | DONE |
+| 7 | `cloudflared` CLI installed (v2025.8.1) | DONE |
+| 8 | `cloudflared tunnel login` — cert.pem not saving | BLOCKED |
+
+**BLOCKER: `cert.pem` not saved after `cloudflared tunnel login`**
+- Clicked Authorize in browser but cert.pem not written to `~/.cloudflared/`
+- Likely cause: Git Bash callback issue. **Try from Windows CMD:** `cloudflared.exe tunnel login`
+- Alternative: Zero Trust dashboard → Tunnels (stuck on payment page, try incognito/disable ad blocker)
+
+**Resume checklist (next session):**
+1. Fix `cloudflared tunnel login` — run from **Windows CMD** (not Git Bash): `cloudflared.exe tunnel login`
+2. After cert.pem saves: `cloudflared tunnel create inventory-api` → get UUID
+3. Create `~/.cloudflared/config.yml` pointing to `localhost:8000`
+4. Test: `cloudflared tunnel run inventory-api` → verify `https://<UUID>.cfargotunnel.com/api/v1/health`
+5. Vercel: Import repo → root dir = `frontend` → set `VITE_API_URL` = tunnel URL
+6. GoDaddy: CNAME `inventory` → `cname.vercel-dns.com`
+7. Vercel: Add custom domain `inventory.drsblouse.com`
+8. Backend `.env`: Add Vercel URL + custom domain to `ALLOWED_ORIGINS`
+9. Auto-start: `start-inventory.bat` in Windows Startup folder
+10. Backup: Task Scheduler daily SQLite copy
 
 ### Session 39 — COMPLETE: QR Scanner Migration + Mobile Fixes
 
@@ -49,13 +100,12 @@
 - Screen-to-screen QR scanning: 160px + `level="H"` + `includeMargin` = minimum for reliable detection at 30-50cm. 130px sufficient for printed labels
 - Phone keyboards autocapitalize usernames → `autoCapitalize="off"` + forced `toLowerCase()` on LoginPage
 
-### PENDING — Next Session (S40)
+### PENDING — Next Session (S41)
 1. **SKUs page overhaul** — align to API_REFERENCE.md §6
 2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
 3. **"Free" size support** — confirm if needed in size pattern
 4. **Feriwala (waste disposition)** — deferred, add when client requests
 5. **QR detection quality** — test with printed labels (should be much better than screen-to-screen)
-6. **Windows firewall** — needs admin `netsh` rule for LAN access on 5173
 
 ### Files Created in S39 (1)
 | File | Purpose |
@@ -132,6 +182,8 @@ All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit
 - **S37:** Global typography (Inter font + CSS vars) + batch label PCS field removed
 - **S38:** PWA + Mobile Tailor/Checker Workflow (7 phases)
 - **S39:** QR scanner migration (html5-qrcode → @yudiel/react-qr-scanner) + WASM self-host + mobile fixes (login autocapitalize, clickable batch cards, scannable QR on BatchDetailPage)
+- **S40:** Vercel + Cloudflare Named Tunnel deployment prep (vercel.json SPA rewrites, allowedHosts config)
+- **S41:** QR scanner switch back to `html5-qrcode` + native BarcodeDetector — removed zxing-wasm (940KB), faster on Android factory phones
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
 ---

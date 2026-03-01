@@ -1,36 +1,71 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Scanner, setZXingModuleOverrides } from '@yudiel/react-qr-scanner'
+import { useState, useEffect, useRef } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
+
+const SCANNER_ID = 'camera-scanner-region'
 
 export default function CameraScanner({ onScan, onClose }) {
   const [error, setError] = useState(null)
-  const [paused, setPaused] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [starting, setStarting] = useState(true)
+  const scannerRef = useRef(null)
+  const scannedRef = useRef(false)
 
-  // Load WASM from our own server instead of jsdelivr CDN
   useEffect(() => {
-    setZXingModuleOverrides({
-      locateFile: (path, prefix) => {
-        if (path.endsWith('.wasm')) {
-          return '/zxing_reader.wasm'
-        }
-        return prefix + path
-      },
+    let cancelled = false
+
+    const scanner = new Html5Qrcode(SCANNER_ID, {
+      useBarCodeDetectorIfSupported: true,
+      formatsToSupport: [0], // QR_CODE = 0
     })
-    setReady(true)
-  }, [])
+    scannerRef.current = scanner
 
-  const handleScan = useCallback((detectedCodes) => {
-    if (paused || !detectedCodes?.length) return
-    const raw = detectedCodes[0].rawValue
-    if (!raw) return
-    setPaused(true)
-    onScan(raw)
-  }, [paused, onScan])
+    scanner
+      .start(
+        { facingMode: 'environment' },
+        {
+          fps: 15,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+          disableFlip: false,
+        },
+        (decodedText) => {
+          if (scannedRef.current) return
+          scannedRef.current = true
+          scanner.stop().catch(() => {})
+          onScan(decodedText)
+        },
+        () => {
+          // ignore per-frame decode failures (expected when no QR in view)
+        }
+      )
+      .then(() => {
+        if (!cancelled) setStarting(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const msg = err?.message || String(err)
+        if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
+          setError('Camera permission denied. Please allow camera access and try again.')
+        } else if (msg.includes('NotFoundError') || msg.includes('Requested device not found')) {
+          setError('No camera found on this device.')
+        } else if (msg.includes('NotReadableError') || msg.includes('Could not start video source')) {
+          setError('Camera is in use by another app. Close other camera apps and try again.')
+        } else {
+          setError(msg)
+        }
+        setStarting(false)
+      })
 
-  const handleError = useCallback((err) => {
-    const msg = err?.message || err?.toString?.() || 'Could not access camera. Please allow camera permission.'
-    setError(msg)
-  }, [])
+    return () => {
+      cancelled = true
+      if (scanner.isScanning) {
+        scanner.stop().then(() => scanner.clear()).catch(() => {
+          try { scanner.clear() } catch (_) {}
+        })
+      } else {
+        try { scanner.clear() } catch (_) {}
+      }
+    }
+  }, [onScan])
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -46,29 +81,14 @@ export default function CameraScanner({ onScan, onClose }) {
 
       {/* Camera */}
       <div className="flex-1 relative overflow-hidden">
-        {!error && ready && (
-          <Scanner
-            onScan={handleScan}
-            onError={handleError}
-            constraints={{
-              facingMode: 'environment',
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              focusMode: 'continuous',
-            }}
-            paused={paused}
-            allowMultiple={false}
-            scanDelay={200}
-            sound={false}
-            components={{ finder: true, torch: false }}
-            styles={{
-              container: { width: '100%', height: '100%' },
-              video: { objectFit: 'cover' },
-            }}
+        {!error && (
+          <div
+            id={SCANNER_ID}
+            style={{ width: '100%', height: '100%' }}
           />
         )}
 
-        {!error && !ready && (
+        {!error && starting && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
           </div>
