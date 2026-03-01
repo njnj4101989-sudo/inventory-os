@@ -30,7 +30,13 @@ export default function LoginPage() {
       const user = await login(username, password)
       navigate(getLandingPath(user.role), { replace: true })
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials')
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail)
+      } else if (err.code === 'ERR_NETWORK' || !err.response) {
+        setError('Cannot reach server. If using tunnel, wait 30s and retry.')
+      } else {
+        setError(`Login failed (${err.response?.status || 'unknown'}). Check connection.`)
+      }
     } finally {
       setLoading(false)
     }

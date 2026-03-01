@@ -43,10 +43,11 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
 )
 
-# CORS
+# CORS — explicit origins + wildcard tunnel domains for dev/testing
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"https://.*\.trycloudflare\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
