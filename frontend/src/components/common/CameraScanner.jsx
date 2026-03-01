@@ -22,10 +22,11 @@ export default function CameraScanner({ onScan, onClose }) {
       .start(
         { facingMode: 'environment' },
         {
-          fps: 15,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-          disableFlip: false,
+          fps: 10,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.65)
+            return { width: size, height: size }
+          },
         },
         (decodedText) => {
           if (scannedRef.current) return
@@ -33,9 +34,7 @@ export default function CameraScanner({ onScan, onClose }) {
           scanner.stop().catch(() => {})
           onScan(decodedText)
         },
-        () => {
-          // ignore per-frame decode failures (expected when no QR in view)
-        }
+        () => {}
       )
       .then(() => {
         if (!cancelled) setStarting(false)
@@ -69,6 +68,19 @@ export default function CameraScanner({ onScan, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      {/* Force html5-qrcode internal elements to overlay, not stack */}
+      <style>{`
+        #${SCANNER_ID} {
+          position: relative !important;
+          overflow: hidden !important;
+        }
+        #${SCANNER_ID} video {
+          object-fit: cover !important;
+          min-height: 100% !important;
+          min-width: 100% !important;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ background: 'rgba(0,0,0,0.9)' }}>
         <span className="text-white font-semibold text-sm">Scan QR Code</span>
@@ -79,17 +91,17 @@ export default function CameraScanner({ onScan, onClose }) {
         </button>
       </div>
 
-      {/* Camera */}
+      {/* Camera — absolute-fill so html5-qrcode can't overflow */}
       <div className="flex-1 relative overflow-hidden">
         {!error && (
           <div
             id={SCANNER_ID}
-            style={{ width: '100%', height: '100%' }}
+            className="absolute inset-0"
           />
         )}
 
         {!error && starting && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
           </div>
         )}
