@@ -240,7 +240,6 @@ export default function ScanPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <h1 className="text-lg font-bold text-gray-900 font-mono">{batchPassport.batch_code}</h1>
-                  {/* Size — large prominent badge */}
                   {batchPassport.size && (
                     <div className="mt-2 inline-flex items-center gap-2 bg-emerald-50 border-2 border-emerald-200 rounded-xl px-4 py-2">
                       <span className="text-xs font-bold text-emerald-600 uppercase">Size</span>
@@ -257,52 +256,21 @@ export default function ScanPage() {
                   <QRCodeSVG value={window.location.href} size={64} level="M" includeMargin={false} />
                 </div>
               </div>
-
-              {/* Key metrics */}
-              <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
-                <Metric label="Pieces" value={batchPassport.piece_count} />
-                <Metric label="Lot" value={batchPassport.lot?.lot_code} />
-                <Metric label="Design" value={batchPassport.design_no || batchPassport.lot?.design_no} />
-              </div>
             </div>
 
-            {/* Color breakdown */}
-            {batchPassport.color_breakdown && Object.keys(batchPassport.color_breakdown).length > 0 && (
-              <Section title="Colors" icon="🎨">
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(batchPassport.color_breakdown).map(([color, count]) => (
-                    <div key={color} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5">
-                      <span className="inline-block h-3 w-3 rounded-full border border-gray-200" style={{ backgroundColor: color.toLowerCase() }} />
-                      <span className="text-sm font-medium text-gray-700">{color}</span>
-                      <span className="text-xs text-gray-400">{count} pallas</span>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            )}
-
-            {/* Assignment info */}
-            {batchPassport.assignment && (
-              <Section title="Assignment" icon="🧵">
-                <InfoRow label="Tailor" value={batchPassport.assignment.tailor?.full_name} />
-                <InfoRow label="Assigned" value={batchPassport.assigned_at
-                  ? new Date(batchPassport.assigned_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                  : null} />
-              </Section>
-            )}
-
-            {/* Lot info */}
-            {batchPassport.lot && (
-              <Section title="Lot Details" icon="📦">
-                <InfoRow label="Lot Code" value={batchPassport.lot.lot_code} />
-                <InfoRow label="Design" value={batchPassport.lot.design_no || batchPassport.design_no} />
-                <InfoRow label="Date" value={batchPassport.lot_date
-                  ? new Date(batchPassport.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                  : null} />
-                <InfoRow label="Total Pieces" value={batchPassport.lot.total_pieces} />
-                <InfoRow label="Status" value={batchPassport.lot.status} />
-              </Section>
-            )}
+            {/* Batch details — single card with everything the tailor needs */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <InfoRow label="Design No." value={batchPassport.design_no || batchPassport.lot?.design_no} />
+              <InfoRow label="Lot" value={batchPassport.lot?.lot_code} />
+              <InfoRow label="Date" value={batchPassport.lot_date
+                ? new Date(batchPassport.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                : null} />
+              <InfoRow label="Pieces" value={batchPassport.piece_count} />
+              <InfoRow label="Tailor" value={batchPassport.assignments?.[0]?.tailor?.full_name || batchPassport.assignment?.tailor?.full_name} />
+              {batchPassport.assigned_at && (
+                <InfoRow label="Assigned" value={new Date(batchPassport.assigned_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+              )}
+            </div>
 
             {/* Action buttons — role-aware */}
             {actionSuccess && (
