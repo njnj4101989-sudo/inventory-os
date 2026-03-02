@@ -388,6 +388,42 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 
 **S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{design_no}-{color}-{size}+{VA1}+{VA2}...`, and fires `ready_stock_in` inventory event per color.
 
+### GET `/skus/{id}`
+**Response:** Single SKU object (same fields as list) + `source_batches` array:
+```json
+{
+  "...sku fields...",
+  "source_batches": [
+    {
+      "id": "uuid",
+      "batch_code": "BATCH-0001",
+      "status": "packed",
+      "size": "XL",
+      "piece_count": 200,
+      "color_qc": { "Green": { "expected": 108, "approved": 106, "rejected": 2, "reason": "..." } },
+      "approved_qty": 196,
+      "rejected_qty": 4,
+      "lot": { "id": "uuid", "lot_code": "LOT-0001", "design_no": "702" },
+      "tailor": { "id": "uuid", "full_name": "Amit Singh" },
+      "packed_at": "2026-02-07T18:00:00Z",
+      "processing_logs": [
+        {
+          "id": "uuid",
+          "value_addition": { "name": "Embroidery", "short_code": "EMB" },
+          "status": "received",
+          "pieces_sent": 200,
+          "pieces_received": 198,
+          "cost": 4500,
+          "phase": "stitching",
+          "created_at": "2026-02-08"
+        }
+      ]
+    }
+  ]
+}
+```
+**Note:** `source_batches` enables the "pricing decision" view — admin sees full batch/lot/VA context.
+
 ### POST `/skus`
 **Request:** `{ product_type, design_no, color, size, product_name, base_price, description? }`
 **Response:** Single SKU object (with `stock: { total_qty: 0, available_qty: 0, reserved_qty: 0 }`)

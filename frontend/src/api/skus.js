@@ -21,6 +21,42 @@ export async function getSKUs(params = {}) {
   return client.get('/skus', { params })
 }
 
+export async function getSKU(id) {
+  if (USE_MOCK) {
+    const sku = skus.find((s) => s.id === id)
+    if (!sku) return mockResponse(null, 'SKU not found')
+    // Build mock source_batches from batches that reference this SKU
+    const { batches } = await import('./mock')
+    const sourceBatches = batches
+      .filter((b) => b.sku?.id === id)
+      .map((b) => ({
+        id: b.id,
+        batch_code: b.batch_code,
+        status: b.status,
+        size: b.lot?.design_no ? b.batch_code.split('-').pop() : null,
+        piece_count: b.piece_count,
+        color_qc: b.color_qc,
+        approved_qty: b.approved_qty,
+        rejected_qty: b.rejected_qty,
+        lot: b.lot ? { id: b.lot.id, lot_code: b.lot.lot_code, design_no: b.lot.design_no } : null,
+        tailor: b.assignment?.tailor || null,
+        packed_at: b.packed_at,
+        processing_logs: (b.processing_logs || []).map((p) => ({
+          id: p.id,
+          value_addition: p.value_addition,
+          status: p.status,
+          pieces_sent: p.pieces_sent,
+          pieces_received: p.pieces_received,
+          cost: p.cost,
+          phase: p.phase,
+          created_at: p.sent_date,
+        })),
+      }))
+    return mockResponse({ ...sku, source_batches: sourceBatches })
+  }
+  return client.get(`/skus/${id}`)
+}
+
 export async function createSKU(data) {
   if (USE_MOCK) {
     const code = `${data.product_type}-${data.design_no || '999'}-${data.color}-${data.size}`

@@ -23,13 +23,24 @@
 
 ---
 
-## Current State (Session 46 — 2026-03-03)
+## Current State (Session 47 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### SKU Detail Overlay + Color Master — IN PROGRESS (S47)
+
+**S47 Tasks 1-3 (Complete):**
+- **Task 1 — SKU VA badges:** Already done in S46 (`SKUCodeDisplay` with `VA_COLORS` map).
+- **Task 2 — SKU detail overlay:** Full-page overlay (fixed z-50) on row click. Shows: SKU code with VA badges, stock KPIs (total/available/reserved + color/size/type), inline price + description editors with save, source batch cards (batch_code, status, lot info, tailor, packed_at, QC summary, VA processing pills), aggregated per-color QC breakdown table.
+  - Backend: `GET /skus/{id}` with `source_batches` (batch→lot→assignments→processing_logs loaded via selectinload)
+  - Frontend: `getSKU(id)` API function + mock. Detail overlay replaces edit modal on row click. Modal kept for "Manual SKU" create only.
+- **Task 3 — Color master wiring:** Shared `utils/colorUtils.js` — `loadColorMap()` fetches `GET /masters/colors/all` once (lazy, cached), `colorHex(name)` uses master hex_codes first → hash fallback. Wired into SKUsPage, ScanPage, LotsPage (removed 2 duplicate COLOR_MAP/COLOR_HEX constants).
+
+**Build: 0 errors.**
 
 ### Per-Color QC + SKU Auto-Generation — COMPLETE (S46)
 
@@ -68,15 +79,15 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ---
 
-### PENDING — Next Session (S47)
+### PENDING — S47 Continued
 
-**PHASE B: SKUs Page Enhancement + Color Master + Page Overhauls**
+**PHASE B (remaining): Page Overhauls**
 
 | # | Task | Detail | Effort |
 |---|------|--------|--------|
-| 1 | **SKU VA badges in table** | Show colored `+EMB` `+BTN` `+HST` badges (like rolls page) inside the SKU code column. Already parsing VA suffix — just need the colored pill styling matching `VA_COLORS` map. Admin sees at a glance which VAs a product has. | Small |
-| 2 | **SKU detail overlay on row click** | Full-page overlay (not modal) when admin clicks a SKU row. Shows: SKU code with VA badges, source batch/lot info (lot_code, design_no, product_type), per-color QC breakdown if available, VA processing history from source batch, stock levels (total/available/reserved), price editor (inline), description editor. This is the "pricing decision" view — admin needs all context in one place. | Medium |
-| 3 | **Wire Color master for pixel-perfect dots** | Fetch `GET /masters/colors` once on app load (or lazy on first use). Build a `colorHexMap` from Color master table (`{name: hex_code}`). Replace the hash-based `colorDot()`/`colorHex()` fallback in ScanPage + SKUsPage + LotsPage with real hex from Color master. Keep hash fallback for colors not in master. Add `hex_code` column to Color master if not present. | Small |
+| 1 | ~~SKU VA badges~~ | ✅ Done S46 | — |
+| 2 | ~~SKU detail overlay~~ | ✅ Done S47 | — |
+| 3 | ~~Color master wiring~~ | ✅ Done S47 | — |
 | 4 | Orders page — align to API_REFERENCE.md §10 | Full overhaul: order lines with SKU picker (auto-generated SKUs now available), stock check on order create, status workflow | Medium |
 | 5 | Invoices page — align to API_REFERENCE.md §11 | Full overhaul: invoice generation from orders, SKU-based line items with prices from SKU master | Medium |
 
@@ -270,6 +281,12 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Backend: +product_type on Lot, +color_qc on Batch, migration `a8a7f6a87d98`, check_batch per-color mode, pack_batch auto-SKU generation, sku_service.find_or_create(), ready_stock_in fix in inventory_service
 - Frontend: ScanPage per-color QC table, LotsPage product_type dropdown, SKUsPage full overhaul (finished goods catalog with VA badges, stock indicators, KPIs, filters)
 - Docs: API_REFERENCE (BatchCheck per-color, lot product_type, SKU auto-gen), STEP2 (+2 columns), CLAUDE.md
+- Build: 0 errors
+
+### S47: SKU Detail Overlay + Color Master (in progress)
+- Backend: `GET /skus/{id}` with `source_batches` (batch→lot→assignments→processing_logs). `sku_service._batch_brief()` helper.
+- Frontend: `getSKU(id)` API + mock. SKU detail overlay (full-page, pricing decision view). Create modal kept for manual SKU.
+- Shared `utils/colorUtils.js` — `loadColorMap()` lazy-fetches Color master → `colorHex()` uses hex_codes. Wired into SKUsPage, ScanPage, LotsPage.
 - Build: 0 errors
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI

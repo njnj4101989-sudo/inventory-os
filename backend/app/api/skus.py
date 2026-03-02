@@ -26,6 +26,18 @@ async def list_skus(
     return {"success": True, **result}
 
 
+@router.get("/{sku_id}", response_model=None)
+async def get_sku(
+    sku_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Get single SKU with stock levels and source batch traceability."""
+    svc = SKUService(db)
+    result = await svc.get_sku(sku_id)
+    return {"success": True, "data": result}
+
+
 @router.post("", response_model=None, status_code=201)
 async def create_sku(
     req: SKUCreate,

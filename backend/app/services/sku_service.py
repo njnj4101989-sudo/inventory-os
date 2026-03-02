@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.sku import SKU
+from app.models.batch import Batch
+from app.models.batch_assignment import BatchAssignment
+from app.models.batch_processing import BatchProcessing
 from app.models.inventory_state import InventoryState
 from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse
 from app.schemas import PaginatedParams
@@ -53,7 +56,27 @@ class SKUService:
         inv_stmt = select(InventoryState).where(InventoryState.sku_id == sku_id)
         inv_result = await self.db.execute(inv_stmt)
         inv = inv_result.scalar_one_or_none()
-        return self._to_response(sku, inv)
+
+        # Load source batches with lot, assignments (tailor), processing logs (VA)
+        batch_stmt = (
+            select(Batch)
+            .where(Batch.sku_id == sku_id)
+            .options(
+                selectinload(Batch.lot),
+                selectinload(Batch.assignments).selectinload(
+                    BatchAssignment.tailor
+                ),
+                selectinload(Batch.processing_logs).selectinload(
+                    BatchProcessing.value_addition
+                ),
+            )
+        )
+        batch_result = await self.db.execute(batch_stmt)
+        batches = batch_result.scalars().all()
+
+        resp = self._to_response(sku, inv)
+        resp["source_batches"] = [self._batch_brief(b) for b in batches]
+        return resp
 
     async def create_sku(self, req: SKUCreate) -> dict:
         # Auto-generate sku_code: ProductType-DesignNo-Color-Size
@@ -134,6 +157,56 @@ class SKUService:
         self.db.add(state)
         await self.db.flush()
         return sku
+
+    def _batch_brief(self, b: Batch) -> dict:
+        """Compact batch info for SKU detail view."""
+        tailor = None
+        if b.assignments:
+            a = b.assignments[-1]  # latest assignment
+            if a.tailor:
+                tailor = {"id": str(a.tailor.id), "full_name": a.tailor.full_name}
+
+        lot_brief = None
+        if b.lot:
+            lot_brief = {
+                "id": str(b.lot.id),
+                "lot_code": b.lot.lot_code,
+                "design_no": b.lot.design_no,
+            }
+
+        processing = []
+        for p in (b.processing_logs or []):
+            va_info = None
+            if p.value_addition:
+                va_info = {
+                    "name": p.value_addition.name,
+                    "short_code": p.value_addition.short_code,
+                }
+            processing.append({
+                "id": str(p.id),
+                "value_addition": va_info,
+                "status": p.status,
+                "pieces_sent": p.pieces_sent,
+                "pieces_received": p.pieces_received,
+                "cost": float(p.cost) if p.cost else None,
+                "phase": p.phase,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            })
+
+        return {
+            "id": str(b.id),
+            "batch_code": b.batch_code,
+            "status": b.status,
+            "size": b.size,
+            "piece_count": b.piece_count,
+            "color_qc": b.color_qc,
+            "approved_qty": b.approved_qty,
+            "rejected_qty": b.rejected_qty,
+            "lot": lot_brief,
+            "tailor": tailor,
+            "packed_at": b.packed_at.isoformat() if b.packed_at else None,
+            "processing_logs": processing,
+        }
 
     async def _get_or_404(self, sku_id: UUID) -> SKU:
         stmt = select(SKU).where(SKU.id == sku_id)

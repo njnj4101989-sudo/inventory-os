@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { getLots, getLot, createLot, updateLot } from '../api/lots'
 import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
+import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import Pagination from '../components/common/Pagination'
@@ -138,6 +139,7 @@ export default function LotsPage() {
     } finally { setLoading(false) }
   }, [page, statusFilter])
 
+  useEffect(() => { loadColorMap() }, [])
   useEffect(() => { fetchData() }, [fetchData])
 
   const fetchRolls = useCallback(async () => {
@@ -530,7 +532,7 @@ export default function LotsPage() {
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-xs font-semibold text-gray-700"><RollCodeDisplay roll={r} /></div>
                           <div className="mt-0.5 flex items-center gap-1.5">
-                            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: r.color?.toLowerCase() || '#9ca3af' }} />
+                            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: colorHex(r.color) }} />
                             <span className="text-[11px] text-gray-500 truncate">{r.color || '—'}</span>
                             <span className="ml-auto text-[11px] font-semibold text-emerald-600 tabular-nums whitespace-nowrap">{r.remaining_weight} kg</span>
                           </div>

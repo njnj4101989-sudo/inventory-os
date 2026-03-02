@@ -4,6 +4,7 @@ import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
+import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
 
 /**
@@ -45,6 +46,7 @@ export default function ScanPage() {
   const userRole = currentUser.role || null
   const perms = currentUser.permissions || {}
 
+  useEffect(() => { loadColorMap() }, [])
   useEffect(() => {
     if (rollCode) {
       fetchRollPassport(rollCode)
@@ -504,7 +506,7 @@ export default function ScanPage() {
                               <tr key={color} className="border-b border-gray-50">
                                 <td className="py-1.5 px-2">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorDot(color) }} />
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
                                     <span className="font-medium text-gray-800 truncate max-w-[80px]">{color}</span>
                                   </div>
                                 </td>
@@ -847,25 +849,6 @@ export default function ScanPage() {
   )
 }
 
-// ── Color dot helper ──
-const COLOR_MAP = {
-  red: '#ef4444', blue: '#3b82f6', green: '#22c55e', yellow: '#eab308', pink: '#ec4899',
-  purple: '#a855f7', orange: '#f97316', black: '#1f2937', white: '#e5e7eb', brown: '#92400e',
-  navy: '#1e3a5f', maroon: '#7f1d1d', beige: '#d4c5a9', cream: '#fffdd0', grey: '#9ca3af', gray: '#9ca3af',
-  sky: '#38bdf8', teal: '#14b8a6', coral: '#f87171', peach: '#fda4af', olive: '#84cc16', gold: '#ca8a04',
-}
-
-function colorDot(name) {
-  if (!name) return '#9ca3af'
-  const lower = name.toLowerCase()
-  for (const [key, hex] of Object.entries(COLOR_MAP)) {
-    if (lower.includes(key)) return hex
-  }
-  // Generate a consistent hash color
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return `hsl(${Math.abs(hash) % 360}, 55%, 55%)`
-}
 
 // ── Small reusable sub-components (defined outside to avoid focus loss) ──
 
