@@ -72,11 +72,16 @@ class BatchAssign(BaseModel):
 
 
 class BatchCheck(BaseModel):
-    """POST /batches/{id}/check — QC result."""
+    """POST /batches/{id}/check — QC result.
 
-    approved_qty: int
-    rejected_qty: int
+    Per-color mode: send color_qc dict, approved_qty/rejected_qty are auto-computed.
+    Legacy flat mode: send approved_qty + rejected_qty directly.
+    """
+
+    approved_qty: int | None = None
+    rejected_qty: int | None = None
     rejection_reason: str | None = None
+    color_qc: dict | None = None  # {color: {expected, approved, rejected, reason}, ...}
 
 
 class BatchPack(BaseModel):
@@ -117,4 +122,5 @@ class BatchResponse(BaseSchema):
     approved_qty: int | None = None
     rejected_qty: int | None = None
     rejection_reason: str | None = None
+    color_qc: dict | None = None
     notes: str | None = None

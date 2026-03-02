@@ -165,7 +165,7 @@ class InventoryService:
             await self.db.flush()
 
         # Update based on event type
-        if event_type in ("stock_in", "return"):
+        if event_type in ("stock_in", "return", "ready_stock_in"):
             state.total_qty += quantity
         elif event_type in ("stock_out", "loss"):
             state.total_qty = max(0, state.total_qty - quantity)
@@ -228,6 +228,7 @@ class InventoryService:
             computed_total = (
                 (totals.get("stock_in", 0) or 0)
                 + (totals.get("return", 0) or 0)
+                + (totals.get("ready_stock_in", 0) or 0)
                 - (totals.get("stock_out", 0) or 0)
                 - (totals.get("loss", 0) or 0)
             )

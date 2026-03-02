@@ -103,6 +103,38 @@ class SKUService:
         inv = inv_result.scalar_one_or_none()
         return self._to_response(sku, inv)
 
+    async def find_or_create(
+        self, sku_code: str, product_type: str, product_name: str, color: str, size: str
+    ) -> SKU:
+        """Find existing SKU by code, or create new one with InventoryState."""
+        stmt = select(SKU).where(SKU.sku_code == sku_code)
+        result = await self.db.execute(stmt)
+        sku = result.scalar_one_or_none()
+        if sku:
+            return sku
+
+        sku = SKU(
+            sku_code=sku_code,
+            product_type=product_type,
+            product_name=product_name,
+            color=color,
+            size=size,
+            is_active=True,
+        )
+        self.db.add(sku)
+        await self.db.flush()
+
+        # Auto-create InventoryState
+        state = InventoryState(
+            sku_id=sku.id,
+            total_qty=0,
+            available_qty=0,
+            reserved_qty=0,
+        )
+        self.db.add(state)
+        await self.db.flush()
+        return sku
+
     async def _get_or_404(self, sku_id: UUID) -> SKU:
         stmt = select(SKU).where(SKU.id == sku_id)
         result = await self.db.execute(stmt)

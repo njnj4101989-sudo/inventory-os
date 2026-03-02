@@ -28,6 +28,12 @@
 > - Value additions: added `applicable_to` column (`roll`/`garment`/`both`)
 > - BatchChallan: mirrors JobChallan for garment-level VA sends (BC-001, BC-002...)
 > - BatchProcessing: mirrors RollProcessing for garment VA (tracks pieces, not weight)
+>
+> **Session 46 Updates (2026-03-03):**
+> - Lots: added `product_type` column (VARCHAR(10), DEFAULT 'BLS')
+> - Batches: added `color_qc` column (JSON, nullable) — per-color QC data from checker
+> - SKUs: auto-generated at pack time via `find_or_create()` — one SKU per color with VA suffix
+> - Inventory: `ready_stock_in` event now updates InventoryState (was silently skipped before)
 
 ---
 
@@ -223,6 +229,7 @@
 | sku_id | UUID | FK → skus.id, NULL | Optional SKU reference (lot may produce multiple SKUs) |
 | lot_date | DATE | NOT NULL | Lot creation/cutting date |
 | design_no | VARCHAR(50) | NOT NULL | Design number (e.g. 702) |
+| product_type | VARCHAR(10) | DEFAULT 'BLS' | Product type: BLS, KRT, SAR, DRS, OTH |
 | standard_palla_weight | DECIMAL(10,3) | NOT NULL | Standard weight per palla (kg) |
 | standard_palla_meter | DECIMAL(10,3) | NULL | Standard length per palla (meters) — optional |
 | default_size_pattern | JSONB | NOT NULL | Pieces per palla by size, e.g. `{"L":2,"XL":6,"XXL":6,"3XL":4}` |
@@ -295,6 +302,7 @@
 | approved_qty | INTEGER | | Pieces approved by checker |
 | rejected_qty | INTEGER | | Pieces rejected by checker |
 | rejection_reason | TEXT | | Why pieces rejected |
+| color_qc | JSON | NULL | Per-color QC data: `{color: {expected, approved, rejected, reason}}` |
 | notes | TEXT | | Additional notes |
 
 #### `batch_assignments`

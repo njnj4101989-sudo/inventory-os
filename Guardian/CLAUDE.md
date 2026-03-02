@@ -23,13 +23,38 @@
 
 ---
 
-## Current State (Session 45 — 2026-03-03)
+## Current State (Session 46 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### Per-Color QC + SKU Auto-Generation — COMPLETE (S46)
+
+**Problem solved:** When batches were packed, `sku_id` was null → `ready_stock_in` silently skipped → inventory never updated. QC only had flat approved/rejected with no per-color breakdown.
+
+**S46 (Backend):**
+- `product_type` column on Lot model (VARCHAR(10), default 'BLS')
+- `color_qc` column on Batch model (JSON, nullable) — per-color QC data
+- Migration `a8a7f6a87d98` (batch_alter_table for SQLite)
+- `batch_service.check_batch()` — per-color mode (color_qc dict) + legacy flat mode (backward compat)
+- `batch_service.pack_batch()` — auto-generates per-color SKUs via `sku_service.find_or_create()`, fires `ready_stock_in` events per color
+- `sku_service.find_or_create()` — idempotent SKU creation with InventoryState
+- `inventory_service.create_event()` — fixed `ready_stock_in` to actually update InventoryState (was missing from event type list)
+- `inventory_service.reconcile()` — includes `ready_stock_in` in total computation
+- `lot_service` + `_to_response` — passes `product_type` everywhere (create, response, LotBrief)
+
+**S46 (Frontend):**
+- ScanPage: per-color QC table (color dot + expected + approved + rejected + reason per row) with totals footer. Falls back to flat form when no color_breakdown.
+- LotsPage: `product_type` dropdown (BLS/KRT/SAR/DRS/OTH) in lot creation form, passed to backend
+- SKUsPage: Full overhaul → "Finished Goods" catalog with VA badges (SKUCodeDisplay), color dots, stock indicators (green/amber/red), KPI strip (Total SKUs / In Stock / Total Pieces / Auto-Generated), type + stock filters, info banner about auto-generation
+- Mock data: `product_type: 'BLS'` on lots, `color_qc` on packed batch, `product_type` in batch lot briefs, 2 new VA-suffixed SKU samples
+
+**S46 (Docs):** API_REFERENCE (BatchCheck per-color mode, lot product_type, SKU auto-gen note), STEP2 (+product_type, +color_qc columns), CLAUDE.md session log.
+
+**Build: 0 errors.**
 
 ### Batch VA + Packing — COMPLETE (S43-S45)
 
@@ -43,38 +68,47 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ---
 
-### PENDING — Next Session (S46)
+### PENDING — Next Session (S47)
 
-**PHASE B: Page Overhauls**
+**PHASE B: SKUs Page Enhancement + Color Master + Page Overhauls**
 
-| # | Task | Effort |
-|---|------|--------|
-| 1 | SKUs page — align to API_REFERENCE.md §6 | Medium |
-| 2 | Orders page — align to API_REFERENCE.md §10 | Medium |
-| 3 | Invoices page — align to API_REFERENCE.md §11 | Medium |
+| # | Task | Detail | Effort |
+|---|------|--------|--------|
+| 1 | **SKU VA badges in table** | Show colored `+EMB` `+BTN` `+HST` badges (like rolls page) inside the SKU code column. Already parsing VA suffix — just need the colored pill styling matching `VA_COLORS` map. Admin sees at a glance which VAs a product has. | Small |
+| 2 | **SKU detail overlay on row click** | Full-page overlay (not modal) when admin clicks a SKU row. Shows: SKU code with VA badges, source batch/lot info (lot_code, design_no, product_type), per-color QC breakdown if available, VA processing history from source batch, stock levels (total/available/reserved), price editor (inline), description editor. This is the "pricing decision" view — admin needs all context in one place. | Medium |
+| 3 | **Wire Color master for pixel-perfect dots** | Fetch `GET /masters/colors` once on app load (or lazy on first use). Build a `colorHexMap` from Color master table (`{name: hex_code}`). Replace the hash-based `colorDot()`/`colorHex()` fallback in ScanPage + SKUsPage + LotsPage with real hex from Color master. Keep hash fallback for colors not in master. Add `hex_code` column to Color master if not present. | Small |
+| 4 | Orders page — align to API_REFERENCE.md §10 | Full overhaul: order lines with SKU picker (auto-generated SKUs now available), stock check on order create, status workflow | Medium |
+| 5 | Invoices page — align to API_REFERENCE.md §11 | Full overhaul: invoice generation from orders, SKU-based line items with prices from SKU master | Medium |
 
 **PHASE C: Deploy**
 
 | # | Step | Guide |
 |---|------|-------|
-| 4 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
-| 5 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
-| 6 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
-| 7 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
-| 8 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+| 6 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
+| 7 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
+| 8 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
+| 9 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
+| 10 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
 
 **NICE-TO-HAVE (post-deploy):**
 
 | # | Task |
 |---|------|
-| 9 | "Free" size support in size pattern |
-| 10 | Feriwala (waste disposition) |
-| 11 | Reports page enrichment |
-| 12 | Thermal printer ZPL templates |
+| 11 | "Free" size support in size pattern |
+| 12 | Feriwala (waste disposition) |
+| 13 | Reports page enrichment |
+| 14 | Thermal printer ZPL templates |
 
 ---
 
 ## Key Architecture Decisions
+
+### Per-Color QC + SKU Auto-Gen (S46)
+- **Per-color QC:** `color_qc` JSON on Batch: `{color: {expected, approved, rejected, reason}}`. Falls back to flat `approved_qty/rejected_qty` for backward compat.
+- **SKU auto-generation at pack time:** `pack_batch()` reads `color_qc` → for each color with `approved > 0` → `find_or_create()` SKU with code `{product_type}-{design_no}-{color}-{size}+{VA1}+{VA2}` → fire `ready_stock_in` per color
+- **`product_type` on Lot:** BLS/KRT/SAR/DRS/OTH — flows from lot → batch → SKU code. Default 'BLS'.
+- **`ready_stock_in` fix:** Was listed in event creation but NOT in the `if event_type in (...)` that updates InventoryState. Now included.
+- **SKUsPage overhaul:** "Finished Goods" catalog — VA badges parsed from sku_code suffix, stock indicators, KPI strip, info banner about auto-generation. Manual create is secondary.
 
 ### Batch VA + Packing (S43-S45)
 - **7-state batch machine:** created → assigned → in_progress → submitted → checked → packing → packed (`completed` renamed to `checked`)
@@ -231,6 +265,12 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - S43: Backend — 2 new models (BatchChallan, BatchProcessing), migration, services, 6 new endpoints, 4 garment VA seeds
 - S44: Frontend — VA modals, 7-state UI, permission system upgrade (4 new permissions, `require_role` → `require_permission`)
 - S45: Testing + docs — dashboard KPIs, batch passport print, E2E audit (no gaps), mock data fixes, STEP2/STEP3/API_REFERENCE updated
+
+### S46: Per-Color QC + SKU Auto-Generation (complete)
+- Backend: +product_type on Lot, +color_qc on Batch, migration `a8a7f6a87d98`, check_batch per-color mode, pack_batch auto-SKU generation, sku_service.find_or_create(), ready_stock_in fix in inventory_service
+- Frontend: ScanPage per-color QC table, LotsPage product_type dropdown, SKUsPage full overhaul (finished goods catalog with VA badges, stock indicators, KPIs, filters)
+- Docs: API_REFERENCE (BatchCheck per-color, lot product_type, SKU auto-gen), STEP2 (+2 columns), CLAUDE.md
+- Build: 0 errors
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 

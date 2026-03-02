@@ -37,6 +37,7 @@ class Batch(Base):
     packed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     packed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     pack_reference: Mapped[str | None] = mapped_column(String(50))
+    color_qc: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
     lot: Mapped[Lot | None] = relationship(back_populates="batches")

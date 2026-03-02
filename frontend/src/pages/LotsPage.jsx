@@ -112,6 +112,7 @@ export default function LotsPage() {
   const [rollFilterVA, setRollFilterVA] = useState('')
   const [form, setForm] = useState({
     lot_date: new Date().toISOString().split('T')[0],
+    product_type: 'BLS',
     design_no: '', standard_palla_weight: '', standard_palla_meter: '',
     size_pattern: { ...DEFAULT_SIZE_PATTERN },
     rolls: [], notes: '',
@@ -255,7 +256,7 @@ export default function LotsPage() {
   const openCreate = () => {
     setFormError(null); setRollSearch('')
     setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA('')
-    setForm({ lot_date: new Date().toISOString().split('T')[0], design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
+    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
     setShowCreate(true)
   }
 
@@ -266,7 +267,7 @@ export default function LotsPage() {
     setSaving(true); setFormError(null)
     try {
       await createLot({
-        lot_date: form.lot_date, design_no: form.design_no,
+        lot_date: form.lot_date, product_type: form.product_type || 'BLS', design_no: form.design_no,
         standard_palla_weight: parseFloat(form.standard_palla_weight),
         standard_palla_meter: form.standard_palla_meter ? parseFloat(form.standard_palla_meter) : null,
         default_size_pattern: form.size_pattern,
@@ -412,6 +413,17 @@ export default function LotsPage() {
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
                     LOT-{String(total + 1).padStart(4, '0')}
                   </div>
+                </div>
+                <div className="w-20">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Type</label>
+                  <select value={form.product_type} onChange={e => setField('product_type', e.target.value)}
+                    className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                    <option value="BLS">BLS</option>
+                    <option value="KRT">KRT</option>
+                    <option value="SAR">SAR</option>
+                    <option value="DRS">DRS</option>
+                    <option value="OTH">OTH</option>
+                  </select>
                 </div>
                 <div className="w-24">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Design *</label>

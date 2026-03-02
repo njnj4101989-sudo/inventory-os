@@ -17,6 +17,7 @@ class Lot(Base):
     sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
     lot_date: Mapped[datetime] = mapped_column(Date)
     design_no: Mapped[str] = mapped_column(String(50))
+    product_type: Mapped[str] = mapped_column(String(10), default="BLS", server_default="'BLS'")
     standard_palla_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     standard_palla_meter: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     default_size_pattern: Mapped[dict] = mapped_column(JSON)

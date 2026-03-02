@@ -386,9 +386,12 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 ```
 **IMPORTANT:** `stock` is a nested object with 3 fields. Backend must JOIN with `InventoryState` to produce this.
 
+**S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{design_no}-{color}-{size}+{VA1}+{VA2}...`, and fires `ready_stock_in` inventory event per color.
+
 ### POST `/skus`
 **Request:** `{ product_type, design_no, color, size, product_name, base_price, description? }`
 **Response:** Single SKU object (with `stock: { total_qty: 0, available_qty: 0, reserved_qty: 0 }`)
+**Note:** Manual creation is secondary — auto-generated from batch packing is the primary flow.
 
 ### PATCH `/skus/{id}`
 **Request:** `{ product_name?, base_price?, description?, is_active? }`
@@ -406,6 +409,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "id": "uuid",
   "lot_code": "LOT-0001",
   "lot_date": "2026-02-07",
+  "product_type": "BLS",
   "design_no": "702",
   "standard_palla_weight": 3.60,
   "standard_palla_meter": null,
@@ -447,6 +451,7 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 ```json
 {
   "lot_date": "2026-02-07",
+  "product_type": "BLS",
   "design_no": "702",
   "standard_palla_weight": 3.60,
   "standard_palla_meter": null,
@@ -497,6 +502,7 @@ created → assigned → in_progress → submitted → checked → packing → p
     "id": "uuid",
     "lot_code": "LOT-0001",
     "design_no": "702",
+    "product_type": "BLS",
     "total_pieces": 432,
     "status": "distributed"
   },
@@ -505,6 +511,7 @@ created → assigned → in_progress → submitted → checked → packing → p
   "quantity": 200,
   "piece_count": 200,
   "color_breakdown": { "Green": 108, "Red": 92 },
+  "color_qc": { "Green": { "expected": 108, "approved": 106, "rejected": 2, "reason": "..." }, "Red": { "expected": 92, "approved": 90, "rejected": 2, "reason": null } },
   "status": "checked",
   "qr_code_data": "https://inv.local/batch/uuid",
   "has_pending_va": false,
@@ -561,7 +568,11 @@ created → assigned → in_progress → submitted → checked → packing → p
 - `packed_at` — timestamp (nullable)
 - `pack_reference` — box/bundle label string (nullable)
 
-**Note:** `sku` can be `null` (batches from lot distribution don't have SKU yet — linked later for billing). `size` is the size bundle (L, XL, XXL, 3XL) — present on distributed batches.
+**New fields (S46):**
+- `color_qc` — JSON dict, per-color QC breakdown: `{color: {expected, approved, rejected, reason}}`. Populated by checker at QC step. `null` if legacy flat QC.
+- `lot.product_type` — string (BLS, KRT, SAR, DRS, OTH) — used for SKU code generation at pack time.
+
+**Note:** `sku` can be `null` (batches from lot distribution don't have SKU yet — auto-generated at pack time from `color_qc`). `size` is the size bundle (L, XL, XXL, 3XL) — present on distributed batches.
 
 When `sku` is present:
 ```json
@@ -637,8 +648,9 @@ When `sku` is present:
 
 ### POST `/batches/{id}/check` (QC Check)
 **Auth:** Required (`batch_check` permission — checker role)
-**Request:** `{ approved_qty, rejected_qty, rejection_reason? }`
-**Validates:** `approved_qty + rejected_qty = batch.piece_count`. If `rejected_qty > 0`, `rejection_reason` required.
+**Request (per-color mode):** `{ color_qc: { "Red": { expected: 92, approved: 90, rejected: 2, reason: "..." }, "Green": { ... } } }`
+**Request (legacy flat mode):** `{ approved_qty: 196, rejected_qty: 4, rejection_reason?: "..." }`
+**Validates:** Sum of approved + rejected = batch.piece_count. Per-color mode auto-computes totals.
 **Effect:**
 - Partial/full approval: `status → 'checked'`, sets `checked_at`, `checked_by`
 - Full rejection (`rejected_qty = piece_count`): `status → 'in_progress'` (rework)

@@ -181,6 +181,20 @@ export const skus = [
     is_active: true,
     stock: { total_qty: 40, available_qty: 40, reserved_qty: 0 },
   },
+  {
+    id: uid('sku4'), sku_code: 'BLS-702-Green-XL+EMB', product_type: 'BLS',
+    product_name: 'Design 702 Green XL + Embroidery', color: 'Green', size: 'XL',
+    description: 'Auto-generated from batch packing', base_price: 0,
+    is_active: true,
+    stock: { total_qty: 106, available_qty: 106, reserved_qty: 0 },
+  },
+  {
+    id: uid('sku5'), sku_code: 'BLS-702-Red-XL+EMB', product_type: 'BLS',
+    product_name: 'Design 702 Red XL + Embroidery', color: 'Red', size: 'XL',
+    description: 'Auto-generated from batch packing', base_price: 0,
+    is_active: true,
+    stock: { total_qty: 90, available_qty: 90, reserved_qty: 0 },
+  },
 ]
 
 // ── Lots ──────────────────────────────────────────────
@@ -188,6 +202,7 @@ export const lots = [
   {
     id: uid('d1'), lot_code: 'LOT-0001',
     lot_date: '2026-02-07',
+    product_type: 'BLS',
     design_no: '702',
     standard_palla_weight: 3.60,
     default_size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 },
@@ -228,7 +243,7 @@ export const lots = [
 export const batches = [
   {
     id: uid('f'), batch_code: 'BATCH-0001',
-    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', total_pieces: 432, status: 'distributed' },
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', product_type: 'BLS', total_pieces: 432, status: 'distributed' },
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 200, piece_count: 200,
     color_breakdown: { Green: 108, Red: 92 },
@@ -250,6 +265,10 @@ export const batches = [
       },
     ],
     has_pending_va: false,
+    color_qc: {
+      Green: { expected: 108, approved: 106, rejected: 2, reason: 'Minor stitching defects' },
+      Red: { expected: 92, approved: 90, rejected: 2, reason: 'Minor stitching defects' },
+    },
     created_at: '2026-02-07T10:00:00Z',
     assigned_at: '2026-02-07T11:00:00Z',
     started_at: '2026-02-07T12:00:00Z',
@@ -260,14 +279,15 @@ export const batches = [
     packed_by: { id: uid(2), full_name: 'Ravi Kumar' },
     pack_reference: 'PKG-0001',
     approved_qty: 196, rejected_qty: 4,
-    rejection_reason: 'Minor stitching defects', notes: null,
+    rejection_reason: 'Green: Minor stitching defects; Red: Minor stitching defects', notes: null,
   },
   {
     id: uid('10'), batch_code: 'BATCH-0002',
-    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', total_pieces: 432, status: 'distributed' },
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', product_type: 'BLS', total_pieces: 432, status: 'distributed' },
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 232, piece_count: 232,
     color_breakdown: { Green: 162, Red: 70 },
+    color_qc: null,
     status: 'assigned',
     qr_code_data: `https://inv.local/batch/${uid('10')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },

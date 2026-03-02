@@ -230,30 +230,48 @@ class BatchService:
         return await self.get_batch(batch_id)
 
     async def check_batch(self, batch_id: UUID, req: BatchCheck, checker_id: UUID) -> dict:
-        """QC check — approved → 'checked', full reject → 'in_progress' (rework)."""
+        """QC check — approved → 'checked', full reject → 'in_progress' (rework).
+
+        Per-color mode: color_qc dict with per-color approved/rejected/reason.
+        Legacy flat mode: approved_qty + rejected_qty directly.
+        """
         batch = await self._get_or_404(batch_id)
         if batch.status != "submitted":
             raise InvalidStateTransitionError(
                 f"Cannot check batch in '{batch.status}' status (expected 'submitted')"
             )
 
-        total_check = (req.approved_qty or 0) + (req.rejected_qty or 0)
+        if req.color_qc:
+            # Per-color QC mode
+            batch.color_qc = req.color_qc
+            batch.approved_qty = sum(c.get("approved", 0) for c in req.color_qc.values())
+            batch.rejected_qty = sum(c.get("rejected", 0) for c in req.color_qc.values())
+            reasons = [
+                f"{color}: {c['reason']}"
+                for color, c in req.color_qc.items()
+                if c.get("reason")
+            ]
+            batch.rejection_reason = "; ".join(reasons) if reasons else None
+        else:
+            # Legacy flat mode (backward compatible)
+            batch.approved_qty = req.approved_qty
+            batch.rejected_qty = req.rejected_qty
+            batch.rejection_reason = req.rejection_reason
+
+        total_check = (batch.approved_qty or 0) + (batch.rejected_qty or 0)
         if total_check != batch.quantity:
             raise ValidationError(
-                f"approved_qty ({req.approved_qty}) + rejected_qty ({req.rejected_qty}) "
+                f"approved_qty ({batch.approved_qty}) + rejected_qty ({batch.rejected_qty}) "
                 f"must equal batch quantity ({batch.quantity})"
             )
 
-        batch.approved_qty = req.approved_qty
-        batch.rejected_qty = req.rejected_qty
-        batch.rejection_reason = req.rejection_reason
         batch.checked_at = datetime.now(timezone.utc)
         batch.checked_by = checker_id
 
         if batch.assignments:
             batch.assignments[0].checker_id = checker_id
 
-        if req.rejected_qty == batch.quantity:
+        if batch.rejected_qty == batch.quantity:
             # Full rejection → back to in_progress for rework
             batch.status = "in_progress"
         else:
@@ -281,7 +299,7 @@ class BatchService:
         return await self.get_batch(batch_id)
 
     async def pack_batch(self, batch_id: UUID, req: BatchPack, packer_id: UUID) -> dict:
-        """Supervisor confirms packed — fires ready_stock_in inventory event."""
+        """Supervisor confirms packed — auto-generates per-color SKUs + inventory events."""
         batch = await self._get_or_404(batch_id)
         if batch.status != "packing":
             raise InvalidStateTransitionError(
@@ -294,8 +312,65 @@ class BatchService:
         batch.pack_reference = req.pack_reference
         await self.db.flush()
 
-        # Fire ready_stock_in inventory event
-        if batch.sku_id and batch.approved_qty and batch.approved_qty > 0:
+        # Compute VA codes from received processing logs
+        va_codes = sorted([
+            log.value_addition.short_code
+            for log in (batch.processing_logs or [])
+            if log.status == "received" and log.value_addition and log.value_addition.short_code
+        ])
+        va_suffix = "+" + "+".join(va_codes) if va_codes else ""
+
+        lot = batch.lot
+
+        if batch.color_qc and lot:
+            # Per-color SKU generation
+            from app.services.sku_service import SKUService
+            from app.services.inventory_service import InventoryService
+
+            sku_svc = SKUService(self.db)
+            inv_svc = InventoryService(self.db)
+            product_type = lot.product_type or "BLS"
+            design_no = lot.design_no
+
+            # VA names for product_name
+            va_names = sorted([
+                log.value_addition.name
+                for log in (batch.processing_logs or [])
+                if log.status == "received" and log.value_addition
+            ])
+
+            for color, qc in batch.color_qc.items():
+                approved = qc.get("approved", 0)
+                if approved <= 0:
+                    continue
+
+                sku_code = f"{product_type}-{design_no}-{color}-{batch.size or 'Free'}{va_suffix}"
+                product_name = f"Design {design_no} {color} {batch.size or 'Free'}"
+                if va_names:
+                    product_name += " + " + " + ".join(va_names)
+
+                sku = await sku_svc.find_or_create(
+                    sku_code, product_type, product_name, color, batch.size or "Free"
+                )
+                await inv_svc.create_event(
+                    event_type="ready_stock_in",
+                    item_type="finished_goods",
+                    reference_type="batch",
+                    reference_id=batch.id,
+                    sku_id=sku.id,
+                    quantity=approved,
+                    performed_by=packer_id,
+                    metadata={
+                        "batch_code": batch.batch_code,
+                        "color": color,
+                        "pack_reference": req.pack_reference or "N/A",
+                    },
+                )
+
+            await self.db.flush()
+
+        elif batch.sku_id and batch.approved_qty and batch.approved_qty > 0:
+            # Legacy: single SKU (backward compatible)
             from app.services.inventory_service import InventoryService
 
             inv_svc = InventoryService(self.db)
@@ -598,6 +673,7 @@ class BatchService:
                 "id": str(b.lot.id),
                 "lot_code": b.lot.lot_code,
                 "design_no": b.lot.design_no,
+                "product_type": b.lot.product_type or "BLS",
                 "total_pieces": b.lot.total_pieces,
                 "status": b.lot.status,
             }
@@ -650,6 +726,7 @@ class BatchService:
             else None,
             "packed_at": b.packed_at.isoformat() if b.packed_at else None,
             "pack_reference": b.pack_reference,
+            "color_qc": b.color_qc,
             "rolls_used": [],
             "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
             "started_at": b.started_at.isoformat() if b.started_at else None,
