@@ -22,6 +22,7 @@ class BatchFilterParams(PaginatedParams):
     lot_id: UUID | None = None
     sku_id: UUID | None = None
     size: str | None = None
+    location: str | None = None  # 'in_house' | 'out_house' | None (all)
 
 
 # --- Nested ---
@@ -78,6 +79,12 @@ class BatchCheck(BaseModel):
     rejection_reason: str | None = None
 
 
+class BatchPack(BaseModel):
+    """POST /batches/{id}/pack — packing confirmation."""
+
+    pack_reference: str | None = None  # optional box/bundle label
+
+
 # --- Response ---
 
 
@@ -92,9 +99,15 @@ class BatchResponse(BaseSchema):
     color_breakdown: dict | None = None
     status: str
     qr_code_data: str
+    has_pending_va: bool = False
     created_by_user: UserBrief | None = None
     assignment: AssignmentBrief | None = None
+    checked_by: UserBrief | None = None
+    packed_by: UserBrief | None = None
+    packed_at: datetime | None = None
+    pack_reference: str | None = None
     rolls_used: list[RollUsedBrief] = []
+    processing_logs: list[dict] = []  # BatchProcessingBrief dicts
     created_at: datetime
     assigned_at: datetime | None = None
     started_at: datetime | None = None

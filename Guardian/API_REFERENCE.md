@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 13 API modules
-> **Date:** 2026-02-17 (Session 18)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-02 (Session 42 — Batch VA + Packing)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -457,8 +457,27 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
 
 ## 8. Batches (`/api/v1/batches`)
 
+### Batch States (7 — Enhanced S42)
+
+```
+created → assigned → in_progress → submitted → checked → packing → packed
+                                    ↩ rejected (back to in_progress)
+```
+
+| State | Meaning | VA Allowed? |
+|-------|---------|-------------|
+| `created` | Unclaimed | No |
+| `assigned` | Tailor claimed | No |
+| `in_progress` | Tailor stitching | **Yes** (supervisor sends) |
+| `submitted` | Awaiting QC | No |
+| `checked` | QC passed | **Yes** (supervisor sends for finishing) |
+| `packing` | Being packed | No |
+| `packed` | **Ready Stock** — in inventory | No |
+
+> **Migration:** Old `completed` status → renamed to `checked`. Frontend references updated.
+
 ### GET `/batches`
-**Query:** `status`, `sku_id`, `lot_id`, `size`, `page`, `page_size`
+**Query:** `status`, `sku_id`, `lot_id`, `size`, `location` (`in_house`|`out_house`|`all`), `page`, `page_size`
 **Response:** Paginated array of:
 ```json
 {
@@ -476,8 +495,9 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
   "quantity": 200,
   "piece_count": 200,
   "color_breakdown": { "Green": 108, "Red": 92 },
-  "status": "COMPLETED",
+  "status": "checked",
   "qr_code_data": "https://inv.local/batch/uuid",
+  "has_pending_va": false,
   "created_by_user": {
     "id": "uuid",
     "full_name": "Ravi Kumar"
@@ -489,19 +509,47 @@ This is computed client-side from roll data — no dedicated backend endpoint ne
     },
     "assigned_at": "2026-02-07T11:00:00Z"
   },
+  "checked_by": { "id": "uuid", "full_name": "Suresh Checker" },
+  "packed_by": null,
+  "packed_at": null,
+  "pack_reference": null,
   "rolls_used": [],
+  "processing_logs": [
+    {
+      "id": "uuid",
+      "batch_challan_id": "uuid",
+      "challan_no": "BC-001",
+      "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
+      "processor_name": "Raju Hand-stone Works",
+      "pieces_sent": 15,
+      "pieces_received": 15,
+      "cost": 2500.00,
+      "status": "received",
+      "phase": "stitching",
+      "sent_date": "2026-03-03",
+      "received_date": "2026-03-05",
+      "notes": null
+    }
+  ],
   "created_at": "2026-02-07T10:00:00Z",
   "assigned_at": "2026-02-07T11:00:00Z",
   "started_at": "2026-02-07T12:00:00Z",
   "submitted_at": "2026-02-07T16:00:00Z",
   "checked_at": "2026-02-07T17:00:00Z",
-  "completed_at": "2026-02-07T17:00:00Z",
   "approved_qty": 196,
   "rejected_qty": 4,
   "rejection_reason": "Minor stitching defects",
   "notes": null
 }
 ```
+
+**New fields (S42):**
+- `has_pending_va` — boolean, `true` if any `processing_logs` have `status='sent'`
+- `processing_logs[]` — array of garment-level VA records (from `batch_processing` table)
+- `checked_by` — nested user who did QC (nullable)
+- `packed_by` — nested user who packed (nullable)
+- `packed_at` — timestamp (nullable)
+- `pack_reference` — box/bundle label string (nullable)
 
 **Note:** `sku` can be `null` (batches from lot distribution don't have SKU yet — linked later for billing). `size` is the size bundle (L, XL, XXL, 3XL) — present on distributed batches.
 
@@ -516,10 +564,10 @@ When `sku` is present:
 
 ### POST `/batches/{id}/assign`
 **Request:** `{ tailor_id: "uuid" }`
-**Response:** Updated batch object (status → `ASSIGNED`, `assignment` populated)
+**Response:** Updated batch object (status → `assigned`, `assignment` populated)
 
 ### GET `/batches/{id}`
-**Response:** Single batch object (same shape as list item)
+**Response:** Single batch object (same shape as list item, with `processing_logs[]`)
 
 ### GET `/batches/passport/{batch_code}` (Batch Passport)
 **Auth:** None (public — workers scan QR on floor)
@@ -530,13 +578,36 @@ When `sku` is present:
   "batch_code": "BATCH-0001",
   "size": "XL",
   "piece_count": 9,
-  "status": "created",
+  "status": "in_progress",
+  "has_pending_va": true,
   "color_breakdown": { "Green": 6, "Red": 3 },
   "lot": { "id": "uuid", "lot_code": "LOT-0003", "design_no": "1009", "status": "distributed" },
   "design_no": "1009",
   "lot_date": "2026-02-24",
   "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
-  "assignment": null,
+  "assignment": {
+    "tailor": { "id": "uuid", "full_name": "Amit Singh" },
+    "assigned_at": "2026-02-24T11:00:00Z"
+  },
+  "checked_by": null,
+  "packed_by": null,
+  "packed_at": null,
+  "pack_reference": null,
+  "processing_logs": [
+    {
+      "id": "uuid",
+      "challan_no": "BC-001",
+      "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
+      "processor_name": "Raju Hand-stone Works",
+      "pieces_sent": 9,
+      "pieces_received": null,
+      "cost": null,
+      "status": "sent",
+      "phase": "stitching",
+      "sent_date": "2026-03-03",
+      "received_date": null
+    }
+  ],
   "created_at": "2026-02-24T10:00:00Z"
 }
 ```
@@ -547,13 +618,43 @@ When `sku` is present:
 **Effect:** Creates `BatchAssignment`, sets `status = 'assigned'`.
 **Response:** Updated batch object
 
+### POST `/batches/{id}/submit` (Submit for QC)
+**Auth:** Required (tailor — must be assigned tailor)
+**Validates:** `status = 'in_progress'`. **BLOCKED if `has_pending_va = true`** (pieces still at VA vendor).
+**Effect:** `status → 'submitted'`, sets `submitted_at`.
+**Error (if VA pending):** `400 — "Cannot submit: X pieces still at VA vendor"`
+**Response:** Updated batch object
+
+### POST `/batches/{id}/check` (QC Check)
+**Auth:** Required (`batch_check` permission — checker role)
+**Request:** `{ approved_qty, rejected_qty, rejection_reason? }`
+**Validates:** `approved_qty + rejected_qty = batch.piece_count`. If `rejected_qty > 0`, `rejection_reason` required.
+**Effect:**
+- Partial/full approval: `status → 'checked'`, sets `checked_at`, `checked_by`
+- Full rejection (`rejected_qty = piece_count`): `status → 'in_progress'` (rework)
+**Response:** Updated batch object
+
+### POST `/batches/{id}/ready-for-packing` (NEW — S42)
+**Auth:** Required (`batch_check` permission — checker role)
+**Validates:** `status = 'checked'`. **BLOCKED if `has_pending_va = true`** (pieces still at finishing vendor).
+**Effect:** `status → 'packing'`.
+**Error (if VA pending):** `400 — "Cannot pack: X pieces still at finishing vendor"`
+**Response:** Updated batch object
+
+### POST `/batches/{id}/pack` (NEW — S42)
+**Auth:** Required (`batch_assign` permission — supervisor/admin)
+**Request:** `{ pack_reference?: "BOX-A12" }`
+**Validates:** `status = 'packing'`.
+**Effect:** `status → 'packed'`, sets `packed_by`, `packed_at`, `pack_reference`. Creates `InventoryEvent(type='ready_stock_in')`.
+**Response:** Updated batch object
+
 ### POST `/lots/{id}/distribute` (Lot Distribution → Batch Auto-Creation)
 **Auth:** Required (`lot_manage` permission)
 **Validates:** Lot must have `status = 'cutting'`.
 **Effect:** Auto-creates N batches from `default_size_pattern`. Each batch gets `size`, `piece_count = total_pallas`, `color_breakdown` from lot_rolls, `qr_code_data = /scan/batch/{code}`. Lot status → `distributed`.
 **Response:** Array of created batch objects
 
-> **Note:** Route ordering in FastAPI: `/passport/{code}` and `/claim/{code}` MUST be defined BEFORE `/{batch_id}` — otherwise FastAPI parses "passport" as UUID → 422.
+> **Note:** Route ordering in FastAPI: `/passport/{code}`, `/claim/{code}`, `/ready-for-packing`, `/pack` MUST be defined BEFORE `/{batch_id}` — otherwise FastAPI parses path as UUID → 422.
 
 ---
 
@@ -716,10 +817,10 @@ When `sku` is present:
 **Response:**
 ```json
 {
-  "rolls": { "total": 6, "with_remaining": 2 },
+  "rolls": { "total": 6, "with_remaining": 2, "out_for_va": 1 },
   "lots": { "total": 1, "open": 0, "distributed": 1 },
-  "batches": { "created": 0, "assigned": 1, "in_progress": 0, "submitted": 0, "completed_today": 1 },
-  "inventory": { "total_skus": 3, "low_stock_skus": 0 },
+  "batches": { "created": 0, "assigned": 1, "in_progress": 0, "submitted": 0, "checked": 1, "packing": 0, "packed_today": 2, "out_for_va": 3 },
+  "inventory": { "total_skus": 3, "low_stock_skus": 0, "ready_stock_pieces": 150 },
   "orders": { "pending": 1, "processing": 1, "shipped_today": 1 },
   "revenue_today": 1770.0,
   "revenue_month": 12500.0
@@ -1021,27 +1122,48 @@ If roll is not yet in a batch, `effective_sku` is `null`.
 
 > Phase 2. Master data entity. Admin/supervisor only.
 > Controls which process types appear in effective SKU suffix.
+> **S42 update:** Added `applicable_to` field — filters VAs by roll/garment context.
 
 ### GET `/masters/value-additions`
-**Response:** `[{ id, name, short_code, description, is_active }, ...]`
+**Query:** `applicable_to` (`roll`|`garment`|`both`|omit for all)
+**Response:** Array of:
+```json
+{
+  "id": "uuid",
+  "name": "Embroidery",
+  "short_code": "EMB",
+  "applicable_to": "both",
+  "description": "Machine/hand embroidery on fabric or garments",
+  "is_active": true
+}
+```
 
 ### POST `/masters/value-additions`
-**Request:** `{ name: string, short_code: string (3-4 chars, uppercase), description?: string }`
+**Request:** `{ name, short_code (3-4 chars uppercase), applicable_to? (default: "both"), description? }`
 **Response:** Created value addition object
 
 ### PATCH `/masters/value-additions/{id}`
-**Request:** `{ name?, short_code?, description?, is_active? }`
+**Request:** `{ name?, short_code?, applicable_to?, description?, is_active? }`
 **Response:** Updated value addition
 
-### Seed Data (auto-seeded on first run)
+### Downstream Filtering
+- **Job Challan** (roll VA send): shows VAs where `applicable_to` = `'roll'` or `'both'`
+- **Batch Challan** (garment VA send): shows VAs where `applicable_to` = `'garment'` or `'both'`
+- **Masters page**: shows all with colored badge (Roll=purple, Garment=green, Both=blue)
+
+### Seed Data (auto-seeded on first run — 10 entries)
 ```json
 [
-  { "name": "Embroidery",    "short_code": "EMB" },
-  { "name": "Dying",         "short_code": "DYE" },
-  { "name": "Digital Print", "short_code": "DPT" },
-  { "name": "Handwork",      "short_code": "HWK" },
-  { "name": "Sequin Work",   "short_code": "SQN" },
-  { "name": "Batik",         "short_code": "BTC" }
+  { "name": "Embroidery",    "short_code": "EMB", "applicable_to": "both" },
+  { "name": "Dying",         "short_code": "DYE", "applicable_to": "roll" },
+  { "name": "Digital Print", "short_code": "DPT", "applicable_to": "both" },
+  { "name": "Handwork",      "short_code": "HWK", "applicable_to": "both" },
+  { "name": "Sequin Work",   "short_code": "SQN", "applicable_to": "both" },
+  { "name": "Batik",         "short_code": "BTC", "applicable_to": "roll" },
+  { "name": "Hand Stones",   "short_code": "HST", "applicable_to": "garment" },
+  { "name": "Button Work",   "short_code": "BTN", "applicable_to": "garment" },
+  { "name": "Lace Work",     "short_code": "LCW", "applicable_to": "garment" },
+  { "name": "Finishing",     "short_code": "FIN", "applicable_to": "garment" }
 ]
 ```
 
@@ -1136,6 +1258,96 @@ Creates a job challan and sends all specified rolls for processing atomically.
 
 ---
 
+## 17. Batch Challans (`/api/v1/batch-challans`) — NEW S42
+
+> Garment-level Value Addition tracking. Mirrors Job Challans (§16) but for batches (pieces) instead of rolls (weight).
+> **Spec:** `Guardian/BATCH_VA_PACKING_SPEC.md`
+
+### POST `/batch-challans` (Create + Send Batches for VA)
+**Auth:** Required (`batch_assign` permission — supervisor/admin)
+**Request:**
+```json
+{
+  "processor_name": "Raju Hand-stone Works",
+  "value_addition_id": "uuid",
+  "batches": [
+    { "batch_id": "uuid", "pieces_to_send": 15 },
+    { "batch_id": "uuid", "pieces_to_send": 20 }
+  ],
+  "notes": "Hand stones on neckline area"
+}
+```
+**Validates:**
+- Each batch must be in `in_progress` or `checked` status (VA allowed states)
+- `pieces_to_send > 0` and `<= batch.piece_count`
+- `value_addition_id` must have `applicable_to` = `'garment'` or `'both'`
+
+**Effect:** Creates `BatchChallan` + one `BatchProcessing` record per batch (atomic transaction). Each record gets `phase` = `'stitching'` (if batch `in_progress`) or `'post_qc'` (if batch `checked`). Auto-sequential `challan_no`: BC-001, BC-002...
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "challan_no": "BC-001",
+  "processor_name": "Raju Hand-stone Works",
+  "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
+  "total_pieces": 35,
+  "total_cost": null,
+  "status": "sent",
+  "sent_date": "2026-03-03T10:00:00Z",
+  "received_date": null,
+  "notes": "Hand stones on neckline area",
+  "created_by_user": { "id": "uuid", "full_name": "Ravi Kumar" },
+  "created_at": "2026-03-03T10:00:00Z",
+  "batch_items": [
+    {
+      "id": "uuid",
+      "batch": { "id": "uuid", "batch_code": "BATCH-0001", "size": "XL" },
+      "pieces_sent": 15,
+      "pieces_received": null,
+      "cost": null,
+      "status": "sent",
+      "phase": "stitching"
+    },
+    {
+      "id": "uuid",
+      "batch": { "id": "uuid", "batch_code": "BATCH-0002", "size": "L" },
+      "pieces_sent": 20,
+      "pieces_received": null,
+      "cost": null,
+      "status": "sent",
+      "phase": "stitching"
+    }
+  ]
+}
+```
+
+### GET `/batch-challans` (List)
+**Auth:** Required
+**Query:** `processor_name`, `value_addition_id`, `status` (`sent`|`received`), `page`, `page_size`
+**Response:** Paginated list of challan objects (same shape as create response).
+
+### GET `/batch-challans/{id}` (Detail)
+**Auth:** Required
+**Response:** Single challan object with full `batch_items[]`.
+
+### POST `/batch-challans/{id}/receive` (Receive Batches Back from VA)
+**Auth:** Required (`batch_assign` permission — supervisor/admin)
+**Request:**
+```json
+{
+  "batches": [
+    { "batch_id": "uuid", "pieces_received": 15, "cost": 2500.00 },
+    { "batch_id": "uuid", "pieces_received": 20, "cost": 3200.00 }
+  ],
+  "notes": "All pieces returned in good condition"
+}
+```
+**Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). When all items received, challan `status → 'received'`, `total_cost` = sum of costs.
+**Response:** Updated challan object
+
+---
+
 ## Appendix A: All Permission Keys
 
 ```
@@ -1152,7 +1364,9 @@ invoice_manage, report_view
 | Roll    | `in_stock`, `sent_for_processing`, `in_cutting` |
 | Roll Processing | `sent`, `received` |
 | Lot     | `open`, `cutting`, `distributed` |
-| Batch   | `CREATED`, `ASSIGNED`, `STARTED`, `SUBMITTED`, `COMPLETED`, `APPROVED`, `REJECTED` |
+| Batch   | `created`, `assigned`, `in_progress`, `submitted`, `checked`, `packing`, `packed` |
+| Batch Processing | `sent`, `received` |
+| Batch Challan | `sent`, `received` |
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
 
@@ -1173,3 +1387,7 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `performed_by` | Inventory Events | `{ id, full_name }` |
 | `stock` | SKUs | `{ total_qty, available_qty, reserved_qty }` |
 | `period` | Inventory Movement | `{ from, to }` |
+| `checked_by` | Batches | `{ id, full_name }` |
+| `packed_by` | Batches | `{ id, full_name }` |
+| `value_addition` | BatchProcessing, BatchChallan | `{ id, name, short_code }` |
+| `batch` | BatchChallan items | `{ id, batch_code, size }` |

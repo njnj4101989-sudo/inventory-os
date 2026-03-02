@@ -103,12 +103,18 @@ COLORS = [
 ]
 
 VALUE_ADDITIONS = [
-    {"name": "Embroidery",    "short_code": "EMB",  "description": "Machine or hand embroidery work"},
-    {"name": "Dying",         "short_code": "DYE",  "description": "Fabric dying / color treatment"},
-    {"name": "Digital Print", "short_code": "DPT",  "description": "Digital printing on fabric"},
-    {"name": "Handwork",      "short_code": "HWK",  "description": "Manual handwork / embellishment"},
-    {"name": "Sequin Work",   "short_code": "SQN",  "description": "Sequin application work"},
-    {"name": "Batik",         "short_code": "BTC",  "description": "Batik dyeing technique"},
+    # Roll-level VAs (fabric processing before cutting)
+    {"name": "Embroidery",    "short_code": "EMB",  "applicable_to": "both",    "description": "Machine or hand embroidery work"},
+    {"name": "Dying",         "short_code": "DYE",  "applicable_to": "roll",    "description": "Fabric dying / color treatment"},
+    {"name": "Digital Print", "short_code": "DPT",  "applicable_to": "both",    "description": "Digital printing on fabric"},
+    {"name": "Handwork",      "short_code": "HWK",  "applicable_to": "both",    "description": "Manual handwork / embellishment"},
+    {"name": "Sequin Work",   "short_code": "SQN",  "applicable_to": "both",    "description": "Sequin application work"},
+    {"name": "Batik",         "short_code": "BTC",  "applicable_to": "roll",    "description": "Batik dyeing technique"},
+    # Garment-level VAs (post-cutting, during/after stitching)
+    {"name": "Hand Stones",   "short_code": "HST",  "applicable_to": "garment", "description": "Decorative stones placed by hand"},
+    {"name": "Button Work",   "short_code": "BTN",  "applicable_to": "garment", "description": "Button, hook, and fastener attachment"},
+    {"name": "Lace Work",     "short_code": "LCW",  "applicable_to": "garment", "description": "Lace border and trim application"},
+    {"name": "Finishing",     "short_code": "FIN",  "applicable_to": "garment", "description": "Final touch-ups, thread cutting, ironing"},
 ]
 
 FABRICS = [

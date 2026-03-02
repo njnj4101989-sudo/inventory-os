@@ -39,6 +39,8 @@ Available agents: frontend, backend, database, ml-vision, devops, docs
 | `STEP4_API_CONTRACTS.md` | `Guardian/` | Endpoint paths, auth, permissions (v1.1) | ~6K |
 | `STEP5_FOLDER_STRUCTURE.md` | `Guardian/` | File placement rules, layer architecture | ~4K |
 | `STEP6_EXECUTION_PLAN.md` | `Guardian/` | Phase breakdown, task dependencies, 6B plan | ~3K |
+| `AWS_DEPLOYMENT.md` | `Guardian/` | Hybrid deploy plan (Vercel + EC2 + RDS) — step-by-step | ~3K |
+| `BATCH_VA_PACKING_SPEC.md` | `Guardian/` | Garment VA + packing + ready stock — full spec + 30-task checklist | ~5K |
 | `mock.js` | `frontend/src/api/` | Mock data store — the ground truth for field shapes | ~5K |
 | `MEMORY.md` | `.claude/projects/.../memory/` | Auto-memory — key patterns, lessons learned | ~2K |
 
@@ -342,16 +344,18 @@ Roll: 1-COT-PINK/07-01
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-03-01 10:04:27_
+_Last sync: 2026-03-02 22:27:05_
 ```
 {
-  "summary": "Project has 13 tracked code files (~5819 lines total).",
+  "summary": "Project has 13 tracked code files (~5864 lines total).",
   "recent_files": [
-    "guardian.md (363 lines)",
+    "CLAUDE.md (353 lines)",
+    ".claude\\settings.local.json (61 lines)",
+    "guardian.md (365 lines)",
     "project-context.json (17 lines)",
-    "CLAUDE.md (312 lines)",
-    ".claude\\settings.local.json (59 lines)",
     "STEP4_API_CONTRACTS.md (1320 lines)"
   ],
   "language_breakdown": {
@@ -359,7 +363,7 @@ _Last sync: 2026-03-01 10:04:27_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 5819,
-  "last_updated": "2026-03-01 10:04:27"
+  "total_lines": 5864,
+  "last_updated": "2026-03-02 22:27:05"
 }
 ```

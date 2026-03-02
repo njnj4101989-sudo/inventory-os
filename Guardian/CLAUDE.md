@@ -17,41 +17,139 @@
 | `STEP4_API_CONTRACTS.md` | Endpoint paths, auth, permissions | Route/controller work |
 | `STEP5_FOLDER_STRUCTURE.md` | File placement, layer rules | New file creation |
 | `STEP6_EXECUTION_PLAN.md` | Phase breakdown, task dependencies | Planning |
+| `AWS_DEPLOYMENT.md` | Hybrid deploy plan (Vercel + EC2 + RDS) | Deployment day |
+| `BATCH_VA_PACKING_SPEC.md` | Garment VA + packing + ready stock spec | Before S43-S45 coding |
 
-**Quick lookup:** API shapes → `API_REFERENCE.md` | Table columns → `STEP2` | Events → `STEP3` | Endpoints → `STEP4` | Roles → `STEP1 §1.4` | Batch state machine → `STEP3 §3.4`
+**Quick lookup:** API shapes → `API_REFERENCE.md` | Table columns → `STEP2` | Events → `STEP3` | Endpoints → `STEP4` | Roles → `STEP1 §1.4` | Batch state machine → `BATCH_VA_PACKING_SPEC.md §2` | Deploy → `AWS_DEPLOYMENT.md`
 
 ---
 
-## Current State (Session 41 — 2026-03-01)
+## Current State (Session 42 — 2026-03-02)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
-3. **Production:** `https://inventory.drsblouse.com` (Vercel) → backend via Cloudflare Named Tunnel
+3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
 
-### Session 41 — QR Scanner: Switch to html5-qrcode + Native BarcodeDetector
+### Session 42 — AWS Decision + Production Roadmap
 
 | # | What | Status |
 |---|------|--------|
-| 1 | `npm uninstall @yudiel/react-qr-scanner` + `npm install html5-qrcode` | DONE |
+| 1 | Reviewed AWS deployment guide (user's document) | DONE |
+| 2 | Decision: **Hybrid** — Vercel (frontend) + AWS EC2/RDS (backend/DB) | DECIDED |
+| 3 | Created `Guardian/AWS_DEPLOYMENT.md` — condensed step-by-step for our setup | DONE |
+| 4 | Cloudflare tunnel approach **ABANDONED** — replaced by AWS EC2 | DECIDED |
+| 5 | Full frontend audit: all 14 pages functional, 17 API modules, zero stubs | DONE |
+| 6 | Production roadmap defined (see below) | DONE |
+| 7 | Batch VA + Packing flow designed (full business discussion) | DONE |
+| 8 | Created `Guardian/BATCH_VA_PACKING_SPEC.md` — 31-task implementation checklist | DONE |
+| 9 | Updated `API_REFERENCE.md` — §8 batch states, §15 VA applicable_to, §17 batch challans | DONE |
+| 10 | Backend tasks 1-2,4-5 DONE: models, schemas, seeds created | DONE |
+
+**S42 Backend files created/modified:**
+| File | Status |
+|------|--------|
+| `backend/app/models/batch_challan.py` | **CREATED** — BatchChallan model |
+| `backend/app/models/batch_processing.py` | **CREATED** — BatchProcessing model |
+| `backend/app/models/batch.py` | **MODIFIED** — +checked_by, packed_by, packed_at, pack_reference, processing_logs relationship |
+| `backend/app/models/value_addition.py` | **MODIFIED** — +applicable_to column |
+| `backend/app/models/__init__.py` | **MODIFIED** — registered BatchChallan, BatchProcessing |
+| `backend/app/schemas/batch_challan.py` | **CREATED** — all challan schemas |
+| `backend/app/schemas/batch.py` | **MODIFIED** — +has_pending_va, processing_logs, packing fields, BatchPack, location filter |
+| `backend/app/schemas/master.py` | **MODIFIED** — +applicable_to on VA schemas |
+| `backend/seeds/seed_data.py` | **MODIFIED** — 10 VA seeds (was 6), with applicable_to |
+
+**S43 resume — remaining backend tasks:**
+| # | Task | Status |
+|---|------|--------|
+| 3 | Alembic migration (new tables + batch changes + completed→checked) | PENDING |
+| 6 | batch_challan_service.py + batch_challans router (4 endpoints) | PENDING |
+| 7 | batch_service.py updates (VA guards, ready-for-packing, pack, inventory event) | PENDING |
+
+**Key decisions:**
+- Vercel frontend = free forever, zero maintenance, already has `vercel.json` SPA rewrites
+- AWS backend = EC2 t2.micro (free 12mo) + RDS PostgreSQL db.t3.micro (free 12mo)
+- Cloudflare tunnel dropped — cert.pem issue irrelevant now
+- Cost after year 1: ~₹2,300/mo (EC2 + RDS only, frontend stays free)
+- Deploy doc: `Guardian/AWS_DEPLOYMENT.md`
+
+### Production Roadmap — Complete Before Deploy
+
+**PHASE A: Batch VA + Packing (S43-S45) — spec: `BATCH_VA_PACKING_SPEC.md`**
+
+| # | Task | Session | Effort |
+|---|------|---------|--------|
+| 1 | Backend: BatchChallan + BatchProcessing models, migrations, services, endpoints | S43 | Large |
+| 2 | Backend: Enhanced batch states (7), VA guards, packing flow, ready stock event | S43 | Medium |
+| 3 | Frontend: VA modals, packing buttons, batch passport timeline, in/out-house filters | S44 | Large |
+| 4 | E2E testing: full pipeline stock-in → VA → lot → batch → VA → QC → VA → pack → ready stock | S45 | Medium |
+
+**PHASE B: Page Overhauls**
+
+| # | Task | Effort |
+|---|------|--------|
+| 5 | SKUs page — align to API_REFERENCE.md §6 | Medium |
+| 6 | Orders page — align to API_REFERENCE.md §10 | Medium |
+| 7 | Invoices page — align to API_REFERENCE.md §11 | Medium |
+
+**PHASE C: Deploy**
+
+| # | Step | Guide |
+|---|------|-------|
+| 8 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
+| 9 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
+| 10 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
+| 11 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
+| 12 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+
+**NICE-TO-HAVE (post-deploy):**
+
+| # | Task |
+|---|------|
+| 13 | "Free" size support in size pattern |
+| 14 | Feriwala (waste disposition) |
+| 15 | Reports page enrichment |
+| 16 | Thermal printer ZPL templates |
+
+### Session 41 — Native BarcodeDetector + CORS fix + Batch Passport Cleanup
+
+| # | What | Status |
+|---|------|--------|
+| 1 | Package swap: `@yudiel/react-qr-scanner` → `html5-qrcode` | DONE |
 | 2 | Delete `frontend/public/zxing_reader.wasm` (940KB) | DONE |
-| 3 | Rewrite `CameraScanner.jsx` — `Html5Qrcode` class + `useBarCodeDetectorIfSupported: true` | DONE |
-| 4 | Grep stale refs (`@yudiel`, `zxing`) — 0 results | DONE |
-| 5 | `npm run build` — 0 errors, 43 precache entries | DONE |
+| 3 | CameraScanner: native `BarcodeDetector` API on mobile (Chrome 83+) | DONE |
+| 4 | CameraScanner: `html5-qrcode` lazy-loaded as desktop fallback | DONE |
+| 5 | Fix double camera view (html5-qrcode video stacking issue) | DONE |
+| 6 | CORS: `allow_origin_regex` for `*.trycloudflare.com` (dev testing) | DONE |
+| 7 | LoginPage: show real error (network/CORS/status) not generic "Invalid credentials" | DONE |
+| 8 | Batch passport: remove colors section, single clean details card | DONE |
 
-**Why:** `@yudiel/react-qr-scanner` used zxing-wasm (JS/WASM decoder) — slow on factory floor Android phones, poor low-light performance, 940KB WASM download. `html5-qrcode` with `useBarCodeDetectorIfSupported: true` enables **native BarcodeDetector API** on Chrome 83+ Android — hardware GPU/DSP QR decoding, 5-10x faster, zero WASM.
+**CameraScanner architecture (final):**
+- **Mobile (Chrome Android 83+):** `BarcodeDetector.detect(videoElement)` directly — no canvas, no library, hardware GPU/DSP decoding. Scan loop every 60ms. Near-instant detection.
+- **Desktop (no BarcodeDetector):** `html5-qrcode` lazy-loaded via `import()`. `qrbox: 250×250`, `fps: 15`, `disableFlip: true`. Library's `#qr-shaded-region` hidden via CSS (we draw our own corner brackets).
+- **UI:** Full-viewport camera (`position: absolute; object-fit: cover`), CSS corner brackets via radial gradient + border elements, header/footer float on top via `z-20`.
+- **Contract unchanged:** `onScan(string)` + `onClose()`
 
-**Key config:**
-- `Html5Qrcode` class (not `Html5QrcodeScanner`) — custom full-screen overlay UI
-- `formatsToSupport: [0]` (QR_CODE only) — prevents false positives from fabric barcodes
-- `fps: 15`, `qrbox: 250×250`
-- `scannedRef` (useRef) for synchronous duplicate prevention
-- Cleanup: `stop().then(clear())` in useEffect return
+**CORS for tunnel testing:**
+- `backend/app/main.py`: `allow_origin_regex=r"https://.*\.trycloudflare\.com"` — any quick tunnel URL auto-allowed. **Remove for production.**
+- Tunnel warm-up: new URLs take 30-60s to propagate to all Cloudflare edge nodes. Phone may fail initially — this is Cloudflare, not our code.
 
-**Files changed:** `CameraScanner.jsx` (rewrite), `package.json` (dep swap)
-**Files deleted:** `frontend/public/zxing_reader.wasm`
-**Files NOT changed:** ScanPage.jsx, QRLabel.jsx, BatchQRLabel.jsx, BatchDetailPage.jsx, vite.config.js
+**Batch passport redesign:**
+- Removed: Colors section (redundant — every batch from a lot has same 17-20 colors), separate Assignment section, separate Lot Details section
+- Single details card: Design No., Lot, Date, Pieces, Tailor, Assigned date
+- Action buttons unchanged (Claim / Start Work / Submit QC / QC Check)
+
+**Files modified (4):**
+| File | Changes |
+|------|---------|
+| `frontend/src/components/common/CameraScanner.jsx` | Full rewrite: native BarcodeDetector + html5-qrcode fallback |
+| `frontend/src/pages/ScanPage.jsx` | Batch passport: remove colors, clean layout |
+| `frontend/src/pages/LoginPage.jsx` | Real error messages instead of generic "Invalid credentials" |
+| `backend/app/main.py` | `allow_origin_regex` for trycloudflare.com |
+
+**Files deleted (1):** `frontend/public/zxing_reader.wasm`
+**Package changes:** `-@yudiel/react-qr-scanner`, `+html5-qrcode` (kept as desktop fallback)
 
 ### Session 40 — Vercel + Cloudflare Named Tunnel Deployment Prep
 
@@ -100,12 +198,16 @@
 - Screen-to-screen QR scanning: 160px + `level="H"` + `includeMargin` = minimum for reliable detection at 30-50cm. 130px sufficient for printed labels
 - Phone keyboards autocapitalize usernames → `autoCapitalize="off"` + forced `toLowerCase()` on LoginPage
 
-### PENDING — Next Session (S41)
-1. **SKUs page overhaul** — align to API_REFERENCE.md §6
-2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
-3. **"Free" size support** — confirm if needed in size pattern
-4. **Feriwala (waste disposition)** — deferred, add when client requests
-5. **QR detection quality** — test with printed labels (should be much better than screen-to-screen)
+### PENDING — Next Session (S43)
+1. **Batch VA + Packing — Backend** → `BATCH_VA_PACKING_SPEC.md` §10 tasks 1-14
+   - BatchChallan + BatchProcessing models + migration
+   - Enhanced batch states (7), VA guards, packing endpoints
+   - Seed new VA types (HST, BTN, LCW, FIN)
+   - Update batch passport (include VA logs + has_pending_va)
+2. **Session 44:** Batch VA + Packing — Frontend (tasks 15-24)
+3. **Session 45:** E2E testing + polish (tasks 25-30)
+4. **Then:** SKUs / Orders / Invoices page overhauls
+5. **Then:** AWS deployment (`AWS_DEPLOYMENT.md`)
 
 ### Files Created in S39 (1)
 | File | Purpose |
@@ -155,11 +257,10 @@
 ### Backend (NO changes needed)
 All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit`, `/check`, `GET /mobile/my-batches`, `/mobile/pending-checks`
 
-### After S39 — Next Up
-1. **SKUs page overhaul** — align to API_REFERENCE.md §6
-2. **Orders/Invoices page overhauls** — align to API_REFERENCE.md §10/§11
-3. **"Free" size support** — confirm if needed in size pattern
-4. **Feriwala (waste disposition)** — deferred, add when client requests
+### After S39 — Completed in S40-S42
+- S40: Vercel + Cloudflare deployment prep (vercel.json, allowedHosts)
+- S41: Native BarcodeDetector + CORS + batch passport cleanup
+- S42: AWS hybrid architecture decision + production roadmap + full audit
 
 ### What's Done
 - **Phase 6A (Backend):** 22 models, 19 schemas, 15 services, 16 routers, 83+ endpoints
@@ -183,7 +284,8 @@ All endpoints already exist and are tested: `POST /batches/{id}/start`, `/submit
 - **S38:** PWA + Mobile Tailor/Checker Workflow (7 phases)
 - **S39:** QR scanner migration (html5-qrcode → @yudiel/react-qr-scanner) + WASM self-host + mobile fixes (login autocapitalize, clickable batch cards, scannable QR on BatchDetailPage)
 - **S40:** Vercel + Cloudflare Named Tunnel deployment prep (vercel.json SPA rewrites, allowedHosts config)
-- **S41:** QR scanner switch back to `html5-qrcode` + native BarcodeDetector — removed zxing-wasm (940KB), faster on Android factory phones
+- **S41:** Native BarcodeDetector on mobile (instant QR scanning) + html5-qrcode desktop fallback + CORS wildcard for tunnel testing + batch passport cleanup (removed colors, single details card)
+- **S42:** AWS hybrid architecture decision (Vercel frontend + EC2/RDS backend). Cloudflare tunnel abandoned. Full frontend audit (14 pages functional, 17 API modules, zero stubs). Production roadmap defined. `AWS_DEPLOYMENT.md` created.
 - **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
 ---

@@ -32,11 +32,22 @@ class Batch(Base):
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    # Packing fields (S42 — Batch VA + Packing)
+    checked_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    packed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    packed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pack_reference: Mapped[str | None] = mapped_column(String(50))
+
     # Relationships
     lot: Mapped[Lot | None] = relationship(back_populates="batches")
     sku: Mapped[SKU | None] = relationship(back_populates="batches")
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
+    checked_by_user: Mapped[User | None] = relationship(foreign_keys=[checked_by])
+    packed_by_user: Mapped[User | None] = relationship(foreign_keys=[packed_by])
     assignments: Mapped[list[BatchAssignment]] = relationship(back_populates="batch")
     roll_consumptions: Mapped[list[BatchRollConsumption]] = relationship(
+        back_populates="batch"
+    )
+    processing_logs: Mapped[list[BatchProcessing]] = relationship(
         back_populates="batch"
     )
