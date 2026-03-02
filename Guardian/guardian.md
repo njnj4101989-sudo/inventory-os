@@ -40,7 +40,7 @@ Available agents: frontend, backend, database, ml-vision, devops, docs
 | `STEP5_FOLDER_STRUCTURE.md` | `Guardian/` | File placement rules, layer architecture | ~4K |
 | `STEP6_EXECUTION_PLAN.md` | `Guardian/` | Phase breakdown, task dependencies, 6B plan | ~3K |
 | `AWS_DEPLOYMENT.md` | `Guardian/` | Hybrid deploy plan (Vercel + EC2 + RDS) — step-by-step | ~3K |
-| `BATCH_VA_PACKING_SPEC.md` | `Guardian/` | Garment VA + packing + ready stock — full spec + 30-task checklist | ~5K |
+| ~~`BATCH_VA_PACKING_SPEC.md`~~ | Deleted (S45) | Merged into STEP2/STEP3/API_REFERENCE — spec complete | — |
 | `mock.js` | `frontend/src/api/` | Mock data store — the ground truth for field shapes | ~5K |
 | `MEMORY.md` | `.claude/projects/.../memory/` | Auto-memory — key patterns, lessons learned | ~2K |
 
@@ -350,24 +350,28 @@ Roll: 1-COT-PINK/07-01
 
 
 
+
+
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-03-03 00:15:58_
+_Last sync: 2026-03-03 01:26:07_
 ```
 {
-  "summary": "Project has 15 tracked code files (~6839 lines total).",
+  "summary": "Project has 14 tracked code files (~6333 lines total).",
   "recent_files": [
-    "CLAUDE.md (435 lines)",
-    "guardian.md (371 lines)",
-    "project-context.json (17 lines)",
-    "API_REFERENCE.md (1393 lines)",
-    "BATCH_VA_PACKING_SPEC.md (486 lines)"
+    "CLAUDE.md (263 lines)",
+    "guardian.md (375 lines)",
+    "API_REFERENCE.md (1418 lines)",
+    "STEP3_EVENT_CONTRACTS.md (663 lines)",
+    "STEP2_DATA_MODEL.md (606 lines)"
   ],
   "language_breakdown": {
-    ".md": 12,
+    ".md": 11,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 6839,
-  "last_updated": "2026-03-03 00:15:58"
+  "total_lines": 6333,
+  "last_updated": "2026-03-03 01:26:07"
 }
 ```

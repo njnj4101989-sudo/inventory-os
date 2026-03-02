@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
@@ -25,6 +26,18 @@ export default function ScanPage() {
   const [actionSuccess, setActionSuccess] = useState(null)
   const [checkForm, setCheckForm] = useState({ approved: '', rejected: '', reason: '' })
   const [packRef, setPackRef] = useState('')
+  const passportPrintRef = useRef(null)
+
+  const handlePrintPassport = useReactToPrint({
+    contentRef: passportPrintRef,
+    documentTitle: `Batch-Passport-${batchCode || 'unknown'}`,
+    pageStyle: `
+      @page { size: A4 portrait; margin: 12mm; }
+      * { box-sizing: border-box; }
+      body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+    `,
+  })
 
   const isLoggedIn = !!localStorage.getItem('access_token')
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
@@ -207,16 +220,30 @@ export default function ScanPage() {
           </div>
           <span className="font-semibold text-gray-900 text-sm">{pageTitle}</span>
         </div>
-        <button
-          onClick={() => setShowScanner(true)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-lg hover:opacity-90 ${batchCode ? 'bg-emerald-600' : 'bg-blue-600'}`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
-          </svg>
-          Scan QR
-        </button>
+        <div className="flex items-center gap-2">
+          {batchPassport && (
+            <button
+              onClick={handlePrintPassport}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print
+            </button>
+          )}
+          <button
+            onClick={() => setShowScanner(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-lg hover:opacity-90 ${batchCode ? 'bg-emerald-600' : 'bg-blue-600'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
+            </svg>
+            Scan QR
+          </button>
+        </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6">
@@ -262,7 +289,7 @@ export default function ScanPage() {
 
         {/* ═══════ BATCH PASSPORT ═══════ */}
         {!loading && !error && batchPassport && (
-          <div className="space-y-4">
+          <div className="space-y-4" ref={passportPrintRef}>
             {/* Batch identity card */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <div className="flex items-start justify-between gap-4">
@@ -355,120 +382,122 @@ export default function ScanPage() {
               </Section>
             )}
 
-            {/* Action buttons — role-aware */}
-            {actionSuccess && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                <div className="text-emerald-700 font-semibold text-sm">{actionSuccess}</div>
-              </div>
-            )}
+            {/* Action buttons — role-aware (hidden in print) */}
+            <div className="no-print space-y-4">
+              {actionSuccess && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                  <div className="text-emerald-700 font-semibold text-sm">{actionSuccess}</div>
+                </div>
+              )}
 
-            {/* Claim (tailor + created) */}
-            {batchPassport.status === 'created' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
-                {claimSuccess ? (
-                  <div className="text-emerald-700 font-semibold">Batch claimed successfully!</div>
-                ) : isLoggedIn ? (
-                  <button onClick={handleClaim} disabled={claiming}
-                    className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                    {claiming ? 'Claiming...' : 'Claim This Batch'}
+              {/* Claim (tailor + created) */}
+              {batchPassport.status === 'created' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-center">
+                  {claimSuccess ? (
+                    <div className="text-emerald-700 font-semibold">Batch claimed successfully!</div>
+                  ) : isLoggedIn ? (
+                    <button onClick={handleClaim} disabled={claiming}
+                      className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                      {claiming ? 'Claiming...' : 'Claim This Batch'}
+                    </button>
+                  ) : (
+                    <div>
+                      <p className="text-gray-500 text-sm mb-3">Login to claim this batch</p>
+                      <a href="/login" className="inline-block px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
+                        Login to Claim
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Start Work (batch_start permission + assigned) */}
+              {perms.batch_start && batchPassport.status === 'assigned' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <button onClick={handleStartBatch} disabled={actionLoading}
+                    className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Starting...' : 'Start Work'}
                   </button>
-                ) : (
-                  <div>
-                    <p className="text-gray-500 text-sm mb-3">Login to claim this batch</p>
-                    <a href="/login" className="inline-block px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
-                      Login to Claim
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Start Work (batch_start permission + assigned) */}
-            {perms.batch_start && batchPassport.status === 'assigned' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <button onClick={handleStartBatch} disabled={actionLoading}
-                  className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                  {actionLoading ? 'Starting...' : 'Start Work'}
-                </button>
-              </div>
-            )}
-
-            {/* Submit for QC (batch_submit permission + in_progress) */}
-            {perms.batch_submit && batchPassport.status === 'in_progress' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <button onClick={handleSubmitBatch} disabled={actionLoading}
-                  className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
-                  {actionLoading ? 'Submitting...' : 'Submit for QC'}
-                </button>
-              </div>
-            )}
-
-            {/* QC Check (batch_check permission + submitted) */}
-            {perms.batch_check && batchPassport.status === 'submitted' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
-                    <input type="number" min="0" value={checkForm.approved}
-                      onChange={(e) => {
-                        const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
-                        setCheckForm((f) => ({ ...f, approved: v, rejected: String(Math.max(0, total - (parseInt(v) || 0))) }))
-                      }}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
-                    <input type="number" min="0" value={checkForm.rejected}
-                      onChange={(e) => {
-                        const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
-                        setCheckForm((f) => ({ ...f, rejected: v, approved: String(Math.max(0, total - (parseInt(v) || 0))) }))
-                      }}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
-                  </div>
                 </div>
-                {parseInt(checkForm.rejected) > 0 && (
+              )}
+
+              {/* Submit for QC (batch_submit permission + in_progress) */}
+              {perms.batch_submit && batchPassport.status === 'in_progress' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <button onClick={handleSubmitBatch} disabled={actionLoading}
+                    className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Submitting...' : 'Submit for QC'}
+                  </button>
+                </div>
+              )}
+
+              {/* QC Check (batch_check permission + submitted) */}
+              {perms.batch_check && batchPassport.status === 'submitted' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
+                      <input type="number" min="0" value={checkForm.approved}
+                        onChange={(e) => {
+                          const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
+                          setCheckForm((f) => ({ ...f, approved: v, rejected: String(Math.max(0, total - (parseInt(v) || 0))) }))
+                        }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
+                      <input type="number" min="0" value={checkForm.rejected}
+                        onChange={(e) => {
+                          const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
+                          setCheckForm((f) => ({ ...f, rejected: v, approved: String(Math.max(0, total - (parseInt(v) || 0))) }))
+                        }}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
+                    </div>
+                  </div>
+                  {parseInt(checkForm.rejected) > 0 && (
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
+                      <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm((f) => ({ ...f, reason: e.target.value }))}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
+                    </div>
+                  )}
+                  <button onClick={handleCheckBatch} disabled={actionLoading}
+                    className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Checking...' : 'Submit Check'}
+                  </button>
+                </div>
+              )}
+
+              {/* Ready for Packing (batch_ready_packing permission + checked + no pending VA) */}
+              {perms.batch_ready_packing && batchPassport.status === 'checked' && !batchPassport.has_pending_va && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <button onClick={handleReadyForPacking} disabled={actionLoading}
+                    className="w-full py-3 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Processing...' : 'Ready for Packing'}
+                  </button>
+                </div>
+              )}
+
+              {/* Mark Packed (batch_pack permission + packing) */}
+              {perms.batch_pack && batchPassport.status === 'packing' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Confirm Packing</h3>
                   <div className="mb-3">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
-                    <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm((f) => ({ ...f, reason: e.target.value }))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Box / Bundle Reference (optional)</label>
+                    <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                      placeholder="e.g. BOX-A12" />
                   </div>
-                )}
-                <button onClick={handleCheckBatch} disabled={actionLoading}
-                  className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  {actionLoading ? 'Checking...' : 'Submit Check'}
-                </button>
-              </div>
-            )}
-
-            {/* Ready for Packing (batch_ready_packing permission + checked + no pending VA) */}
-            {perms.batch_ready_packing && batchPassport.status === 'checked' && !batchPassport.has_pending_va && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <button onClick={handleReadyForPacking} disabled={actionLoading}
-                  className="w-full py-3 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors">
-                  {actionLoading ? 'Processing...' : 'Ready for Packing'}
-                </button>
-              </div>
-            )}
-
-            {/* Mark Packed (batch_pack permission + packing) */}
-            {perms.batch_pack && batchPassport.status === 'packing' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Confirm Packing</h3>
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Box / Bundle Reference (optional)</label>
-                  <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                    placeholder="e.g. BOX-A12" />
+                  <button onClick={handlePackBatch} disabled={actionLoading}
+                    className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Packing...' : 'Mark as Packed'}
+                  </button>
                 </div>
-                <button onClick={handlePackBatch} disabled={actionLoading}
-                  className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  {actionLoading ? 'Packing...' : 'Mark as Packed'}
-                </button>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Packed info */}
+            {/* Packed info (show in print too) */}
             {batchPassport.status === 'packed' && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                 <div className="text-green-700 font-semibold text-sm">Packed & Ready Stock</div>

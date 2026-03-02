@@ -108,7 +108,17 @@ Paginated endpoints return:
     "inventory_adjust": true,
     "order_manage": true,
     "invoice_manage": true,
-    "report_view": true
+    "report_view": true,
+    "batch_start": true,
+    "batch_submit": true,
+    "batch_check": true,
+    "batch_assign": true,
+    "batch_send_va": true,
+    "batch_receive_va": true,
+    "batch_ready_packing": true,
+    "batch_pack": true,
+    "va_manage": true,
+    "masters_manage": true
   },
   "user_count": 1
 }
@@ -817,15 +827,30 @@ When `sku` is present:
 **Response:**
 ```json
 {
-  "rolls": { "total": 6, "with_remaining": 2, "out_for_va": 1 },
+  "rolls": { "total": 6, "with_remaining": 2 },
   "lots": { "total": 1, "open": 0, "distributed": 1 },
-  "batches": { "created": 0, "assigned": 1, "in_progress": 0, "submitted": 0, "checked": 1, "packing": 0, "packed_today": 2, "out_for_va": 3 },
-  "inventory": { "total_skus": 3, "low_stock_skus": 0, "ready_stock_pieces": 150 },
+  "batches": {
+    "created": 0, "assigned": 1, "in_progress": 0, "submitted": 0,
+    "checked": 0, "packing": 0, "packed": 1,
+    "checked_today": 1, "packed_today": 1
+  },
+  "inventory": { "total_skus": 3, "low_stock_skus": 0 },
   "orders": { "pending": 1, "processing": 1, "shipped_today": 1 },
   "revenue_today": 1770.0,
-  "revenue_month": 12500.0
+  "revenue_month": 12500.0,
+  "rolls_out_house": 1,
+  "batches_out_house": 0,
+  "ready_stock_pieces": 196
 }
 ```
+
+**New fields (S45):**
+- `batches.checked/packing/packed` — 7-state pipeline counts (replaces old `completed_today`)
+- `batches.checked_today` — batches that passed QC today
+- `batches.packed_today` — batches packed today
+- `rolls_out_house` — rolls with `status='sent_for_processing'`
+- `batches_out_house` — distinct batches with pending `BatchProcessing` records (`status='sent'`)
+- `ready_stock_pieces` — total `piece_count` of all `packed` batches
 
 ### GET `/dashboard/tailor-performance`
 **Query:** `period` (`7d`|`30d`|`90d`)
@@ -1261,7 +1286,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 ## 17. Batch Challans (`/api/v1/batch-challans`) — NEW S42
 
 > Garment-level Value Addition tracking. Mirrors Job Challans (§16) but for batches (pieces) instead of rolls (weight).
-> **Spec:** `Guardian/BATCH_VA_PACKING_SPEC.md`
+> **Models:** `STEP2_DATA_MODEL.md` §2.2 | **State machine:** `STEP3_EVENT_CONTRACTS.md` §3.4
 
 ### POST `/batch-challans` (Create + Send Batches for VA)
 **Auth:** Required (`batch_assign` permission — supervisor/admin)

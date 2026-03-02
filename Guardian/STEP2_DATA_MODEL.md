@@ -21,6 +21,13 @@
 > - Roll processing: removed `process_type`, added required `value_addition_id` FK + optional `job_challan_id` FK
 > - Lots: added `standard_palla_meter`, statuses changed to `open`/`cutting`/`distributed`
 > - Batches: `sku_id` now NULLABLE, added `size` column for size-bundle distribution
+>
+> **Session 43-45 Updates (2026-03-03):**
+> - 22 → 24 tables (added `batch_challans`, `batch_processing`)
+> - Batches: added `checked_by`, `packed_by`, `packed_at`, `pack_reference` columns; status `COMPLETED` renamed to `CHECKED`, new states `PACKING`, `PACKED`
+> - Value additions: added `applicable_to` column (`roll`/`garment`/`both`)
+> - BatchChallan: mirrors JobChallan for garment-level VA sends (BC-001, BC-002...)
+> - BatchProcessing: mirrors RollProcessing for garment VA (tracks pieces, not weight)
 
 ---
 
@@ -148,6 +155,7 @@
 | id | UUID | PK | Unique identifier |
 | name | VARCHAR(100) | NOT NULL | Value addition name (Embroidery, Dying, etc.) |
 | short_code | VARCHAR(10) | UNIQUE, NOT NULL | 3-4 char code for SKU suffix (EMB, DYE, DPT, HWK, SQN, BTC) |
+| applicable_to | VARCHAR(20) | DEFAULT 'roll' | `roll`, `garment`, or `both` — which pipeline this VA applies to |
 | description | TEXT | NULL | Description |
 | is_active | BOOLEAN | DEFAULT TRUE | Status |
 | created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
@@ -166,6 +174,42 @@
 | created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
 
 > **Note:** `POST /job-challans` creates challan + sends all specified rolls atomically. Each roll gets a `RollProcessing` log linked via `job_challan_id`.
+
+#### `batch_challans`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK | Unique identifier |
+| challan_no | VARCHAR(50) | UNIQUE, NOT NULL | Auto-sequential (BC-001, BC-002...) |
+| value_addition_id | UUID | FK → value_additions.id, NOT NULL | Type of garment VA work |
+| vendor_name | VARCHAR(200) | NOT NULL | Vendor/processor name |
+| vendor_phone | VARCHAR(20) | NULL | Vendor phone |
+| sent_date | DATE | NOT NULL | Date batches sent |
+| pieces_sent | INTEGER | NOT NULL | Total pieces sent |
+| notes | TEXT | NULL | Notes |
+| created_by_id | UUID | FK → users.id | User who created |
+| created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
+
+> **Note:** Mirrors `job_challans` but for garment-level VA. `POST /batch-challans` creates challan + sends specified batches atomically.
+
+#### `batch_processing`
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK | Unique identifier |
+| batch_id | UUID | FK → batches.id, NOT NULL | Batch being processed |
+| batch_challan_id | UUID | FK → batch_challans.id, NULL | Challan that initiated this send |
+| value_addition_id | UUID | FK → value_additions.id, NOT NULL | Type of garment VA |
+| vendor_name | VARCHAR(200) | | External vendor name |
+| vendor_phone | VARCHAR(20) | NULL | Vendor phone |
+| pieces_sent | INTEGER | NOT NULL | Pieces sent for VA |
+| pieces_received | INTEGER | NULL | Pieces returned after VA |
+| cost | DECIMAL(10,2) | NULL | Processing cost |
+| sent_date | DATE | NOT NULL | Date sent |
+| received_date | DATE | NULL | Date received back |
+| notes | TEXT | NULL | Notes |
+| status | VARCHAR(20) | DEFAULT 'sent' | `sent`, `received` |
+| created_at | TIMESTAMP | DEFAULT NOW() | Record creation time |
+
+> **Note:** Mirrors `roll_processing` but tracks pieces (not weight). Garment VA — embroidery, button work, lace work, finishing, etc.
 
 ---
 
@@ -235,7 +279,7 @@
 | quantity | INTEGER | NOT NULL | Pieces in batch |
 | piece_count | INTEGER | NULL | Actual pieces produced |
 | color_breakdown | JSONB | NULL | Per-size piece counts, e.g. `{"L":2,"XL":6,"XXL":6,"3XL":4}` |
-| status | VARCHAR(20) | NOT NULL | CREATED, ASSIGNED, IN_PROGRESS, SUBMITTED, CHECKED, COMPLETED |
+| status | VARCHAR(20) | NOT NULL | CREATED, ASSIGNED, IN_PROGRESS, SUBMITTED, CHECKED, PACKING, PACKED |
 | qr_code_data | TEXT | NOT NULL | QR code content |
 | created_by | UUID | FK → users.id | Supervisor who created |
 | created_at | TIMESTAMP | DEFAULT NOW() | Batch creation time |
@@ -243,7 +287,11 @@
 | started_at | TIMESTAMP | | When tailor started |
 | submitted_at | TIMESTAMP | | When tailor submitted |
 | checked_at | TIMESTAMP | | When checker inspected |
-| completed_at | TIMESTAMP | | When fully completed |
+| completed_at | TIMESTAMP | | When fully completed (legacy — use checked_at) |
+| checked_by | UUID | FK → users.id, NULL | Checker who inspected |
+| packed_by | UUID | FK → users.id, NULL | User who packed |
+| packed_at | TIMESTAMP | NULL | When batch was packed |
+| pack_reference | VARCHAR(100) | NULL | External packing reference |
 | approved_qty | INTEGER | | Pieces approved by checker |
 | rejected_qty | INTEGER | | Pieces rejected by checker |
 | rejection_reason | TEXT | | Why pieces rejected |
@@ -448,6 +496,9 @@ KEY RELATIONSHIPS:
   Roll ──(1:N)──► roll_processing (processing history)
   roll_processing ──(N:1)──► value_additions (VA type)
   roll_processing ──(N:1)──► job_challans (challan grouping, nullable)
+  Batch ──(1:N)──► batch_processing (garment VA history)
+  batch_processing ──(N:1)──► value_additions (VA type)
+  batch_processing ──(N:1)──► batch_challans (challan grouping, nullable)
   Lot.sku_id is NULLABLE (a lot may produce multiple SKUs/sizes)
   Batch.sku_id is NULLABLE (linked later for billing)
   Batch.size = size bundle from lot distribution (L/XL/XXL/3XL)
@@ -466,13 +517,18 @@ KEY RELATIONSHIPS:
 - Available = Stock - Reserved
 ```
 
-### Batch State Machine
+### Batch State Machine (7 states — S43+)
 ```
-CREATED ──► ASSIGNED ──► IN_PROGRESS ──► SUBMITTED ──► CHECKED ──► COMPLETED
+CREATED ──► ASSIGNED ──► IN_PROGRESS ──► SUBMITTED ──► CHECKED ──► PACKING ──► PACKED
                 │                              │
                 │                              │
                 └──────────── REJECTED ◄───────┘
                               (back to ASSIGNED)
+
+VA Guards:
+  - SUBMITTED → CHECKED: blocked if batch has pending VA (batch_processing.status='sent')
+  - CHECKED → PACKING: requires "Ready for Packing" action (no pending VA)
+  - PACKING → PACKED: fires ready_stock_in event → inventory_events
 ```
 
 ### Roll Weight Rules
@@ -529,13 +585,13 @@ CREATE INDEX idx_skus_code ON skus(sku_code);
 | Category | Tables |
 |----------|--------|
 | Users & Auth | roles, users |
-| Raw Materials | suppliers, rolls, roll_processing, value_additions, job_challans |
+| Raw Materials | suppliers, rolls, roll_processing, value_additions, job_challans, batch_challans, batch_processing |
 | Master Data | product_types, colors, fabrics |
 | Lots | lots, lot_rolls |
 | Production | skus, batches, batch_assignments, batch_roll_consumption |
 | Inventory | inventory_events, inventory_state, reservations |
 | Sales | orders, order_items, invoices, invoice_items |
-| **Total** | **22 tables** |
+| **Total** | **24 tables** |
 
 ---
 

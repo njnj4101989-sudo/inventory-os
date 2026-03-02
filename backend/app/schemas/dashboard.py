@@ -19,7 +19,17 @@ class BatchesSummary(BaseSchema):
     assigned: int
     in_progress: int
     submitted: int
-    completed_today: int
+    checked: int = 0
+    packing: int = 0
+    packed: int = 0
+    checked_today: int = 0
+    packed_today: int = 0
+
+
+class LotsSummary(BaseSchema):
+    total: int
+    open: int
+    distributed: int
 
 
 class InventorySummary(BaseSchema):
@@ -40,11 +50,15 @@ class SummaryResponse(BaseSchema):
     """GET /dashboard/summary."""
 
     rolls: RollsSummary
+    lots: LotsSummary
     batches: BatchesSummary
     inventory: InventorySummary
     orders: OrdersSummary
     revenue_today: Decimal
     revenue_month: Decimal
+    rolls_out_house: int = 0
+    batches_out_house: int = 0
+    ready_stock_pieces: int = 0
 
 
 class PerformanceResponse(BaseSchema):

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.roll import Roll
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
+from app.models.batch_processing import BatchProcessing
 from app.models.lot import Lot, LotRoll
 from app.models.sku import SKU
 from app.models.inventory_state import InventoryState
@@ -35,18 +36,43 @@ class DashboardService:
             select(func.count()).select_from(Roll).where(Roll.remaining_weight > 0)
         )).scalar() or 0
 
-        # Batches by status
+        # Batches by status (7-state machine: S43 migration renamed completed→checked)
         batch_counts = {}
-        for status in ("created", "assigned", "in_progress", "submitted", "completed"):
+        for status in ("created", "assigned", "in_progress", "submitted", "checked", "packing", "packed"):
             count = (await self.db.execute(
                 select(func.count()).select_from(Batch).where(Batch.status == status)
             )).scalar() or 0
             batch_counts[status] = count
 
-        completed_today = (await self.db.execute(
+        checked_today = (await self.db.execute(
             select(func.count()).select_from(Batch).where(
-                Batch.status == "completed",
-                func.date(Batch.completed_at) == today,
+                Batch.status.in_(["checked", "packing", "packed"]),
+                func.date(Batch.checked_at) == today,
+            )
+        )).scalar() or 0
+
+        packed_today = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(
+                Batch.status == "packed",
+                func.date(Batch.packed_at) == today,
+            )
+        )).scalar() or 0
+
+        # Out-house counts
+        rolls_out_house = (await self.db.execute(
+            select(func.count()).select_from(Roll).where(Roll.status == "sent_for_processing")
+        )).scalar() or 0
+
+        batches_out_house = (await self.db.execute(
+            select(func.count(func.distinct(BatchProcessing.batch_id))).where(
+                BatchProcessing.status == "sent"
+            )
+        )).scalar() or 0
+
+        # Ready stock = packed batches total pieces
+        ready_stock_pieces = (await self.db.execute(
+            select(func.coalesce(func.sum(Batch.piece_count), 0)).where(
+                Batch.status == "packed"
             )
         )).scalar() or 0
 
@@ -117,8 +143,15 @@ class DashboardService:
                 "assigned": batch_counts.get("assigned", 0),
                 "in_progress": batch_counts.get("in_progress", 0),
                 "submitted": batch_counts.get("submitted", 0),
-                "completed_today": completed_today,
+                "checked": batch_counts.get("checked", 0),
+                "packing": batch_counts.get("packing", 0),
+                "packed": batch_counts.get("packed", 0),
+                "checked_today": checked_today,
+                "packed_today": packed_today,
             },
+            "rolls_out_house": rolls_out_house,
+            "batches_out_house": batches_out_house,
+            "ready_stock_pieces": int(ready_stock_pieces),
             "inventory": {
                 "total_skus": total_skus,
                 "low_stock_skus": low_stock,
@@ -152,9 +185,9 @@ class DashboardService:
                 .join(BatchAssignment, BatchAssignment.batch_id == Batch.id)
                 .where(
                     BatchAssignment.tailor_id == tailor.id,
-                    Batch.status == "completed",
-                    func.date(Batch.completed_at) >= from_date,
-                    func.date(Batch.completed_at) <= to_date,
+                    Batch.status.in_(["checked", "packing", "packed"]),
+                    func.date(Batch.checked_at) >= from_date,
+                    func.date(Batch.checked_at) <= to_date,
                 )
             )
             batch_result = await self.db.execute(batch_stmt)
@@ -363,9 +396,9 @@ class DashboardService:
 
         # Approved/rejected from batches in date range
         batch_stmt = select(Batch).where(
-            Batch.status == "completed",
-            func.date(Batch.completed_at) >= from_date,
-            func.date(Batch.completed_at) <= to_date,
+            Batch.status.in_(["checked", "packing", "packed"]),
+            func.date(Batch.checked_at) >= from_date,
+            func.date(Batch.checked_at) <= to_date,
         )
         batch_result = await self.db.execute(batch_stmt)
         completed_batches = batch_result.scalars().all()

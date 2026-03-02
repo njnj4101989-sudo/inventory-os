@@ -232,7 +232,7 @@ export const batches = [
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 200, piece_count: 200,
     color_breakdown: { Green: 108, Red: 92 },
-    status: 'COMPLETED',
+    status: 'packed',
     qr_code_data: `https://inv.local/batch/${uid('f')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     assignment: {
@@ -240,12 +240,25 @@ export const batches = [
       assigned_at: '2026-02-07T11:00:00Z',
     },
     rolls_used: [],
+    processing_logs: [
+      {
+        id: uid('p1'), value_addition: { id: uid('va1'), name: 'Embroidery', short_code: 'EMB' },
+        status: 'received', phase: 'stitching', processor_name: 'Shree Embroidery Works',
+        pieces_sent: 200, pieces_received: 198, cost: 4500,
+        sent_date: '2026-02-08', received_date: '2026-02-10',
+        challan_no: 'BC-001', notes: null,
+      },
+    ],
+    has_pending_va: false,
     created_at: '2026-02-07T10:00:00Z',
     assigned_at: '2026-02-07T11:00:00Z',
     started_at: '2026-02-07T12:00:00Z',
     submitted_at: '2026-02-07T16:00:00Z',
     checked_at: '2026-02-07T17:00:00Z',
     completed_at: '2026-02-07T17:00:00Z',
+    packed_at: '2026-02-07T18:00:00Z',
+    packed_by: { id: uid(2), full_name: 'Ravi Kumar' },
+    pack_reference: 'PKG-0001',
     approved_qty: 196, rejected_qty: 4,
     rejection_reason: 'Minor stitching defects', notes: null,
   },
@@ -255,7 +268,7 @@ export const batches = [
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 232, piece_count: 232,
     color_breakdown: { Green: 162, Red: 70 },
-    status: 'ASSIGNED',
+    status: 'assigned',
     qr_code_data: `https://inv.local/batch/${uid('10')}`,
     created_by_user: { id: uid(2), full_name: 'Ravi Kumar' },
     assignment: {
@@ -263,9 +276,12 @@ export const batches = [
       assigned_at: '2026-02-08T09:00:00Z',
     },
     rolls_used: [],
+    processing_logs: [],
+    has_pending_va: false,
     created_at: '2026-02-08T08:00:00Z',
     assigned_at: '2026-02-08T09:00:00Z',
     started_at: null, submitted_at: null, checked_at: null, completed_at: null,
+    packed_at: null, packed_by: null, pack_reference: null,
     approved_qty: null, rejected_qty: null, rejection_reason: null, notes: null,
   },
 ]
@@ -392,11 +408,14 @@ export const invoices = [
 export const dashboardSummary = {
   rolls: { total: 6, with_remaining: 2 },
   lots: { total: 1, open: 0, distributed: 1 },
-  batches: { created: 0, assigned: 1, in_progress: 0, submitted: 0, completed_today: 1 },
+  batches: { created: 0, assigned: 1, in_progress: 0, submitted: 0, checked: 0, packing: 0, packed: 1, checked_today: 1, packed_today: 1 },
   inventory: { total_skus: 3, low_stock_skus: 0 },
   orders: { pending: 1, processing: 1, shipped_today: 1 },
   revenue_today: 1770.0,
   revenue_month: 12500.0,
+  rolls_out_house: 1,
+  batches_out_house: 0,
+  ready_stock_pieces: 196,
 }
 
 export const tailorPerformance = [
