@@ -16,6 +16,7 @@ from app.api import (
     skus,
     lots,
     batches,
+    batch_challans,
     inventory,
     orders,
     invoices,
@@ -36,6 +37,7 @@ api_router.include_router(rolls.router)
 api_router.include_router(skus.router)
 api_router.include_router(lots.router)
 api_router.include_router(batches.router)
+api_router.include_router(batch_challans.router)
 api_router.include_router(inventory.router)
 api_router.include_router(orders.router)
 api_router.include_router(invoices.router)

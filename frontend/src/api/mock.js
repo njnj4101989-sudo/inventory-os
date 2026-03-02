@@ -10,16 +10,19 @@ const uid = (n) => `00000000-0000-4000-a000-00000000000${n}`
 export const PERMISSIONS = {
   admin: {
     user_manage: true, role_manage: true, supplier_manage: true,
-    stock_in: true, lot_manage: true, inventory_view: true, inventory_adjust: true,
+    stock_in: true, lot_manage: true,
+    batch_send_va: true, batch_receive_va: true, batch_ready_packing: true, batch_pack: true,
+    inventory_view: true, inventory_adjust: true,
     order_manage: true, invoice_manage: true, report_view: true,
   },
   supervisor: {
     supplier_manage: true, stock_in: true, roll_cut: true,
     lot_manage: true, batch_create: true, batch_assign: true,
+    batch_send_va: true, batch_receive_va: true, batch_ready_packing: true, batch_pack: true,
     inventory_view: true, inventory_adjust: true, report_view: true,
   },
   tailor: { batch_start: true, batch_submit: true },
-  checker: { batch_check: true },
+  checker: { batch_check: true, batch_ready_packing: true },
   billing: {
     inventory_view: true, order_manage: true,
     invoice_manage: true, report_view: true,

@@ -193,10 +193,35 @@ export async function checkBatch(id, data) {
       batch.started_at = null
       batch.submitted_at = null
     } else {
-      batch.status = 'completed'
+      batch.status = 'checked'
       batch.completed_at = new Date().toISOString()
     }
     return mockResponse(batch, 'Batch checked')
   }
   return client.post(`/batches/${id}/check`, data)
+}
+
+export async function readyForPacking(id) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (batch.status !== 'checked') throw { response: { data: { detail: `Cannot mark ready for packing in '${batch.status}' status` } } }
+    if (batch.has_pending_va) throw { response: { data: { detail: 'Cannot pack — pieces still at VA vendor' } } }
+    batch.status = 'packing'
+    return mockResponse(batch, 'Batch ready for packing')
+  }
+  return client.post(`/batches/${id}/ready-for-packing`)
+}
+
+export async function packBatch(id, data = {}) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (batch.status !== 'packing') throw { response: { data: { detail: `Cannot pack batch in '${batch.status}' status` } } }
+    batch.status = 'packed'
+    batch.packed_at = new Date().toISOString()
+    batch.pack_reference = data.pack_reference || null
+    return mockResponse(batch, 'Batch packed')
+  }
+  return client.post(`/batches/${id}/pack`, data)
 }

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { getBatches } from '../api/batches'
 import SearchInput from '../components/common/SearchInput'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import SendForVAModal from '../components/batches/SendForVAModal'
+import ReceiveFromVAModal from '../components/batches/ReceiveFromVAModal'
 
 // ─── Status constants ───────────────────────────────────────────
 const STATUS_DOT = {
@@ -10,7 +12,9 @@ const STATUS_DOT = {
   assigned:    'bg-blue-400',
   in_progress: 'bg-yellow-400',
   submitted:   'bg-purple-400',
-  completed:   'bg-emerald-400',
+  checked:     'bg-emerald-400',
+  packing:     'bg-orange-400',
+  packed:      'bg-green-400',
 }
 
 const STATUS_LABEL = {
@@ -18,16 +22,20 @@ const STATUS_LABEL = {
   assigned:    'Assigned',
   in_progress: 'In Progress',
   submitted:   'Submitted',
-  completed:   'Completed',
+  checked:     'Checked',
+  packing:     'Packing',
+  packed:      'Packed',
 }
 
-const PIPELINE = ['created', 'assigned', 'in_progress', 'submitted', 'completed']
+const PIPELINE = ['created', 'assigned', 'in_progress', 'submitted', 'checked', 'packing', 'packed']
 const PIPELINE_COLORS = {
   created:     { bg: 'bg-gray-50',    text: 'text-gray-600',    border: 'border-gray-200',    accent: 'text-gray-800' },
   assigned:    { bg: 'bg-blue-50',    text: 'text-blue-600',    border: 'border-blue-200',    accent: 'text-blue-800' },
   in_progress: { bg: 'bg-yellow-50',  text: 'text-yellow-600',  border: 'border-yellow-200',  accent: 'text-yellow-800' },
   submitted:   { bg: 'bg-purple-50',  text: 'text-purple-600',  border: 'border-purple-200',  accent: 'text-purple-800' },
-  completed:   { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', accent: 'text-emerald-800' },
+  checked:     { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', accent: 'text-emerald-800' },
+  packing:     { bg: 'bg-orange-50',  text: 'text-orange-600',  border: 'border-orange-200',  accent: 'text-orange-800' },
+  packed:      { bg: 'bg-green-50',   text: 'text-green-600',   border: 'border-green-200',   accent: 'text-green-800' },
 }
 
 const TABS = [
@@ -43,7 +51,7 @@ function getLotWorkflowState(batches) {
   if (!batches || batches.length === 0) return 'unclaimed'
   const statuses = batches.map((b) => b.status)
   if (statuses.every((s) => s === 'created')) return 'unclaimed'
-  if (statuses.every((s) => s === 'completed')) return 'done'
+  if (statuses.every((s) => s === 'packed' || s === 'checked' || s === 'packing')) return 'done'
   if (statuses.some((s) => s === 'submitted')) return 'in_review'
   return 'in_production'
 }
@@ -82,7 +90,7 @@ function SizeBreakdown({ batches }) {
 
 function LotProgressBar({ batches }) {
   const total = batches.length
-  const completed = batches.filter((b) => b.status === 'completed').length
+  const completed = batches.filter((b) => ['checked', 'packing', 'packed'].includes(b.status)).length
   const active = batches.filter((b) => ['assigned', 'in_progress', 'submitted'].includes(b.status)).length
   const pct = total > 0 ? Math.round(((completed + active * 0.5) / total) * 100) : 0
 
@@ -277,6 +285,16 @@ export default function BatchesPage() {
   const [search, setSearch] = useState('')
   const [expandedLots, setExpandedLots] = useState(new Set())
 
+  // VA modals
+  const [showSendVA, setShowSendVA] = useState(false)
+  const [showReceiveVA, setShowReceiveVA] = useState(false)
+  const [locationFilter, setLocationFilter] = useState('all')
+
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
+  const perms = currentUser.permissions || {}
+  const canSendVA = !!perms.batch_send_va
+  const canReceiveVA = !!perms.batch_receive_va
+
   // Label sheet
   const [labelBatches, setLabelBatches] = useState(null)
   const [labelLotCode, setLabelLotCode] = useState('')
@@ -299,14 +317,18 @@ export default function BatchesPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Pipeline KPI counts
-  const pipelineCounts = useMemo(() => {
+  // Pipeline KPI counts + VA stats
+  const { pipelineCounts, outForVACount, readyStockCount } = useMemo(() => {
     const counts = {}
     PIPELINE.forEach((s) => { counts[s] = 0 })
+    let outVA = 0
+    let readyStock = 0
     allBatches.forEach((b) => {
       if (counts[b.status] !== undefined) counts[b.status]++
+      if (b.has_pending_va) outVA++
+      if (b.status === 'packed') readyStock += (b.piece_count || 0)
     })
-    return counts
+    return { pipelineCounts: counts, outForVACount: outVA, readyStockCount: readyStock }
   }, [allBatches])
 
   // Group batches by lot
@@ -389,7 +411,7 @@ export default function BatchesPage() {
       </div>
 
       {/* Pipeline KPI bar */}
-      <div className="mt-5 grid grid-cols-5 gap-3">
+      <div className="mt-5 grid grid-cols-7 gap-2">
         {PIPELINE.map((status) => {
           const c = PIPELINE_COLORS[status]
           return (
@@ -400,6 +422,40 @@ export default function BatchesPage() {
           )
         })}
       </div>
+
+      {/* VA action buttons */}
+      {(canSendVA || canReceiveVA) && (
+        <div className="mt-5 flex items-center gap-2">
+          {canSendVA && (
+            <button onClick={() => setShowSendVA(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              Send for VA
+            </button>
+          )}
+          {canReceiveVA && (
+            <button onClick={() => setShowReceiveVA(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Receive from VA
+            </button>
+          )}
+          {outForVACount > 0 && (
+            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium">
+              {outForVACount} batch{outForVACount !== 1 ? 'es' : ''} out for VA
+            </span>
+          )}
+          {readyStockCount > 0 && (
+            <span className="text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 font-medium">
+              {readyStockCount} pcs ready stock
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Tabs + Search */}
       <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
@@ -483,6 +539,19 @@ export default function BatchesPage() {
           onClose={() => setLabelBatches(null)}
         />
       )}
+
+      {/* VA Modals */}
+      <SendForVAModal
+        open={showSendVA}
+        onClose={() => setShowSendVA(false)}
+        batches={allBatches}
+        onSuccess={fetchData}
+      />
+      <ReceiveFromVAModal
+        open={showReceiveVA}
+        onClose={() => setShowReceiveVA(false)}
+        onSuccess={fetchData}
+      />
     </div>
   )
 }

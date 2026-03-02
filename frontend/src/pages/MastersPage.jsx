@@ -54,11 +54,28 @@ const FABRIC_COLUMNS = [
   { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
 ]
 
+const APPLICABLE_BADGE = {
+  roll:    'bg-purple-100 text-purple-700',
+  garment: 'bg-green-100 text-green-700',
+  both:    'bg-blue-100 text-blue-700',
+}
+
 const VA_COLUMNS = [
   { key: 'short_code', label: 'Code', render: (v) => <span className="inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-bold text-violet-700 font-mono">+{v}</span> },
   { key: 'name', label: 'Name', render: (v) => <span className="font-medium">{v}</span> },
+  { key: 'applicable_to', label: 'Applies To', render: (v) => {
+    const val = v || 'both'
+    return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${APPLICABLE_BADGE[val] || APPLICABLE_BADGE.both}`}>{val}</span>
+  }},
   { key: 'description', label: 'Description', render: (v) => v || <span className="text-gray-400">—</span> },
   { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
+]
+
+const VA_FILTER_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'roll', label: 'Roll' },
+  { key: 'garment', label: 'Garment' },
+  { key: 'both', label: 'Both' },
 ]
 
 export default function MastersPage() {
@@ -72,6 +89,9 @@ export default function MastersPage() {
   const [colorData, setColorData] = useState([])
   const [fabricData, setFabricData] = useState([])
   const [vaData, setVaData] = useState([])
+
+  // VA filter
+  const [vaFilter, setVaFilter] = useState('all')
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
@@ -110,7 +130,11 @@ export default function MastersPage() {
   // ── Filtered data ──
   const q = search.toLowerCase()
   const filteredData = (() => {
-    const list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : vaData
+    let list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : vaData
+    // VA applicable_to filter
+    if (tab === 'value_additions' && vaFilter !== 'all') {
+      list = list.filter((item) => (item.applicable_to || 'both') === vaFilter)
+    }
     if (!q) return list
     return list.filter((item) =>
       item.name.toLowerCase().includes(q) ||
@@ -125,7 +149,7 @@ export default function MastersPage() {
     setFormError(null)
     if (tab === 'product_types') setForm({ code: '', name: '', description: '' })
     else if (tab === 'colors') setForm({ name: '', code: '', color_no: '', hex_code: '#000000' })
-    else if (tab === 'value_additions') setForm({ short_code: '', name: '', description: '' })
+    else if (tab === 'value_additions') setForm({ short_code: '', name: '', description: '', applicable_to: 'both' })
     else setForm({ code: '', name: '', description: '' })
     setModalOpen(true)
   }
@@ -135,7 +159,7 @@ export default function MastersPage() {
     setFormError(null)
     if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     else if (tab === 'colors') setForm({ name: item.name, color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
-    else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', is_active: item.is_active })
+    else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', applicable_to: item.applicable_to || 'both', is_active: item.is_active })
     else setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     setModalOpen(true)
   }
@@ -173,7 +197,7 @@ export default function MastersPage() {
         else await createFabric({ code: form.code.trim(), name: form.name.trim(), description: form.description || null })
       } else {
         if (editing) await updateValueAddition(editing.id, form)
-        else await createValueAddition({ short_code: form.short_code.trim(), name: form.name.trim(), description: form.description || null })
+        else await createValueAddition({ short_code: form.short_code.trim(), name: form.name.trim(), description: form.description || null, applicable_to: form.applicable_to || 'both' })
       }
       setModalOpen(false)
       fetchData()
@@ -220,6 +244,20 @@ export default function MastersPage() {
       </div>
 
       {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+
+      {/* VA filter tabs */}
+      {tab === 'value_additions' && (
+        <div className="mt-4 flex gap-1.5">
+          {VA_FILTER_TABS.map((f) => (
+            <button key={f.key} onClick={() => setVaFilter(f.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                vaFilter === f.key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Search + Count */}
       <div className="mt-4 flex items-center justify-between">
@@ -276,6 +314,19 @@ export default function MastersPage() {
                 disabled={editing != null}
                 className={`${INPUT} font-mono max-w-[160px] ${editing ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
               <p className="mt-1 text-xs text-gray-400">Appended to roll code after processing (e.g. +EMB). Max 4 uppercase chars.</p>
+            </div>
+          )}
+
+          {/* Applicable To — value additions */}
+          {tab === 'value_additions' && (
+            <div>
+              <label className={LABEL}>Applies To</label>
+              <select value={form.applicable_to || 'both'} onChange={(e) => set('applicable_to', e.target.value)} className={INPUT}>
+                <option value="both">Both (Roll + Garment)</option>
+                <option value="roll">Roll Only</option>
+                <option value="garment">Garment Only</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-400">Controls where this VA appears: job challans (roll), batch challans (garment), or both.</p>
             </div>
           )}
 

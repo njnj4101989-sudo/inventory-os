@@ -1,4 +1,4 @@
-"""Batch routes — full lifecycle: create, assign, start, submit, check, QR."""
+"""Batch routes — full lifecycle: create, assign, start, submit, check, pack, QR."""
 
 from uuid import UUID
 
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_user, require_permission
 from app.models.user import User
-from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchFilterParams
+from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchPack, BatchFilterParams
 from app.services.batch_service import BatchService
 
 router = APIRouter(prefix="/batches", tags=["Batches"])
@@ -118,9 +118,34 @@ async def check_batch(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("batch_check"),
 ):
-    """QC check (SUBMITTED → COMPLETED or back to ASSIGNED on full reject)."""
+    """QC check (SUBMITTED → CHECKED or back to IN_PROGRESS on full reject)."""
     svc = BatchService(db)
     result = await svc.check_batch(batch_id, req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{batch_id}/ready-for-packing", response_model=None)
+async def ready_for_packing(
+    batch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_ready_packing"),
+):
+    """Checker marks batch ready for packing (CHECKED → PACKING). Blocked if VA pending."""
+    svc = BatchService(db)
+    result = await svc.ready_for_packing(batch_id, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{batch_id}/pack", response_model=None)
+async def pack_batch(
+    batch_id: UUID,
+    req: BatchPack,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_pack"),
+):
+    """Supervisor confirms packed (PACKING → PACKED). Fires ready_stock_in event."""
+    svc = BatchService(db)
+    result = await svc.pack_batch(batch_id, req, current_user.id)
     return {"success": True, "data": result}
 
 

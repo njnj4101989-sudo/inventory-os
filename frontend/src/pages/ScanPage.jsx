@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
-import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch } from '../api/batches'
+import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
 import CameraScanner from '../components/common/CameraScanner'
 
 /**
@@ -24,10 +24,12 @@ export default function ScanPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionSuccess, setActionSuccess] = useState(null)
   const [checkForm, setCheckForm] = useState({ approved: '', rejected: '', reason: '' })
+  const [packRef, setPackRef] = useState('')
 
   const isLoggedIn = !!localStorage.getItem('access_token')
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
   const userRole = currentUser.role || null
+  const perms = currentUser.permissions || {}
 
   useEffect(() => {
     if (rollCode) {
@@ -116,6 +118,30 @@ export default function ScanPage() {
     } finally { setActionLoading(false) }
   }
 
+  async function handleReadyForPacking() {
+    if (!batchPassport) return
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await readyForPacking(batchPassport.id)
+      setActionSuccess('Marked ready for packing!')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to mark ready for packing')
+    } finally { setActionLoading(false) }
+  }
+
+  async function handlePackBatch() {
+    if (!batchPassport) return
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await packBatch(batchPassport.id, { pack_reference: packRef.trim() || null })
+      setActionSuccess('Batch packed! Ready stock added.')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to pack batch')
+    } finally { setActionLoading(false) }
+  }
+
   function handleScan(decodedText) {
     setShowScanner(false)
     // Detect batch or roll URL
@@ -140,14 +166,16 @@ export default function ScanPage() {
     assigned: 'bg-blue-100 text-blue-700',
     in_progress: 'bg-yellow-100 text-yellow-700',
     submitted: 'bg-purple-100 text-purple-700',
-    completed: 'bg-green-100 text-green-700',
+    checked: 'bg-emerald-100 text-emerald-700',
+    packing: 'bg-orange-100 text-orange-700',
+    packed: 'bg-green-100 text-green-700',
     CREATED: 'bg-gray-100 text-gray-600',
     ASSIGNED: 'bg-blue-100 text-blue-700',
     STARTED: 'bg-yellow-100 text-yellow-700',
     SUBMITTED: 'bg-purple-100 text-purple-700',
-    COMPLETED: 'bg-green-100 text-green-700',
-    APPROVED: 'bg-emerald-100 text-emerald-700',
-    REJECTED: 'bg-red-100 text-red-700',
+    CHECKED: 'bg-emerald-100 text-emerald-700',
+    PACKING: 'bg-orange-100 text-orange-700',
+    PACKED: 'bg-green-100 text-green-700',
   }
 
   const pageTitle = batchCode ? 'Batch Passport' : 'Roll Passport'
@@ -272,6 +300,61 @@ export default function ScanPage() {
               )}
             </div>
 
+            {/* Out-house VA alert */}
+            {batchPassport.has_pending_va && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Out-House — VA Pending</p>
+                  {(batchPassport.processing_logs || []).filter((l) => l.status === 'sent').map((log, i) => (
+                    <p key={i} className="text-xs text-amber-600 mt-0.5">
+                      {log.pieces_sent} pcs at {log.processor_name || 'vendor'} ({log.value_addition?.short_code})
+                      {log.sent_date && ` since ${new Date(log.sent_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VA Processing Timeline */}
+            {(batchPassport.processing_logs || []).length > 0 && (
+              <Section title="Value Additions" icon="✨">
+                {batchPassport.processing_logs.map((log, i) => (
+                  <div key={log.id || i} className="py-2 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {log.value_addition && (
+                          <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.value_addition.short_code}</span>
+                        )}
+                        <span className="text-sm font-medium text-gray-900">{log.value_addition?.name || '—'}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          log.phase === 'post_qc' ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500'
+                        }`}>
+                          {log.phase === 'post_qc' ? 'Post-QC' : 'Stitching'}
+                        </span>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {log.status === 'received' ? 'Returned' : 'Sent'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+                      <span>{log.processor_name}</span>
+                      {log.challan_no && <span>{log.challan_no}</span>}
+                      <span>{log.pieces_sent} pcs sent</span>
+                      {log.pieces_received != null && <span>{log.pieces_received} pcs back</span>}
+                      {log.sent_date && <span>Sent: {new Date(log.sent_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                      {log.received_date && <span>Back: {new Date(log.received_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
+                      {log.cost != null && <span>Cost: ₹{parseFloat(log.cost).toLocaleString('en-IN')}</span>}
+                    </div>
+                  </div>
+                ))}
+              </Section>
+            )}
+
             {/* Action buttons — role-aware */}
             {actionSuccess && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
@@ -300,8 +383,8 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Start Work (tailor + assigned) */}
-            {userRole === 'tailor' && batchPassport.status === 'assigned' && (
+            {/* Start Work (batch_start permission + assigned) */}
+            {perms.batch_start && batchPassport.status === 'assigned' && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <button onClick={handleStartBatch} disabled={actionLoading}
                   className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -310,8 +393,8 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Submit for QC (tailor + in_progress) */}
-            {userRole === 'tailor' && batchPassport.status === 'in_progress' && (
+            {/* Submit for QC (batch_submit permission + in_progress) */}
+            {perms.batch_submit && batchPassport.status === 'in_progress' && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <button onClick={handleSubmitBatch} disabled={actionLoading}
                   className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
@@ -320,8 +403,8 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* QC Check (checker + submitted) */}
-            {userRole === 'checker' && batchPassport.status === 'submitted' && (
+            {/* QC Check (batch_check permission + submitted) */}
+            {perms.batch_check && batchPassport.status === 'submitted' && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -355,6 +438,48 @@ export default function ScanPage() {
                   className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actionLoading ? 'Checking...' : 'Submit Check'}
                 </button>
+              </div>
+            )}
+
+            {/* Ready for Packing (batch_ready_packing permission + checked + no pending VA) */}
+            {perms.batch_ready_packing && batchPassport.status === 'checked' && !batchPassport.has_pending_va && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <button onClick={handleReadyForPacking} disabled={actionLoading}
+                  className="w-full py-3 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors">
+                  {actionLoading ? 'Processing...' : 'Ready for Packing'}
+                </button>
+              </div>
+            )}
+
+            {/* Mark Packed (batch_pack permission + packing) */}
+            {perms.batch_pack && batchPassport.status === 'packing' && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Confirm Packing</h3>
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Box / Bundle Reference (optional)</label>
+                  <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                    placeholder="e.g. BOX-A12" />
+                </div>
+                <button onClick={handlePackBatch} disabled={actionLoading}
+                  className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
+                  {actionLoading ? 'Packing...' : 'Mark as Packed'}
+                </button>
+              </div>
+            )}
+
+            {/* Packed info */}
+            {batchPassport.status === 'packed' && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                <div className="text-green-700 font-semibold text-sm">Packed & Ready Stock</div>
+                {batchPassport.pack_reference && (
+                  <p className="text-xs text-green-600 mt-1">Box: {batchPassport.pack_reference}</p>
+                )}
+                {batchPassport.packed_at && (
+                  <p className="text-xs text-green-500 mt-0.5">
+                    {new Date(batchPassport.packed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
               </div>
             )}
 

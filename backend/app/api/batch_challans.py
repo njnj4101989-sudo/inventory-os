@@ -1,0 +1,73 @@
+"""Batch Challan routes — send/receive garment batches for VA processing.
+
+4 endpoints:
+  POST   /batch-challans           Create challan + send batches for VA
+  GET    /batch-challans           List challans (paginated, filterable)
+  GET    /batch-challans/{id}      Get single challan with batch items
+  POST   /batch-challans/{id}/receive   Receive batches back from VA vendor
+"""
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_db, require_permission
+from app.models.user import User
+from app.schemas.batch_challan import (
+    BatchChallanCreate,
+    BatchChallanFilterParams,
+    BatchChallanReceive,
+)
+from app.services.batch_challan_service import BatchChallanService
+
+router = APIRouter(prefix="/batch-challans", tags=["Batch Challans"])
+
+
+@router.post("", response_model=None, status_code=201)
+async def create_batch_challan(
+    req: BatchChallanCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_send_va"),
+):
+    """Create a batch challan and send batches for VA (atomic)."""
+    svc = BatchChallanService(db)
+    result = await svc.create_challan(req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.get("", response_model=None)
+async def list_batch_challans(
+    params: BatchChallanFilterParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_send_va"),
+):
+    """List batch challans with pagination and filters."""
+    svc = BatchChallanService(db)
+    result = await svc.get_challans(params)
+    return {"success": True, **result}
+
+
+@router.get("/{challan_id}", response_model=None)
+async def get_batch_challan(
+    challan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_send_va"),
+):
+    """Get a single batch challan with all batch processing records."""
+    svc = BatchChallanService(db)
+    result = await svc.get_challan(challan_id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{challan_id}/receive", response_model=None)
+async def receive_batch_challan(
+    challan_id: UUID,
+    req: BatchChallanReceive,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_receive_va"),
+):
+    """Receive all batches back from VA vendor."""
+    svc = BatchChallanService(db)
+    result = await svc.receive_challan(challan_id, req, current_user.id)
+    return {"success": True, "data": result}

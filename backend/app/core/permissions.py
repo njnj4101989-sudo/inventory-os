@@ -27,6 +27,10 @@ PERM_INVENTORY_ADJUST = "inventory_adjust"
 PERM_ORDER_MANAGE = "order_manage"
 PERM_INVOICE_MANAGE = "invoice_manage"
 PERM_REPORT_VIEW = "report_view"
+PERM_BATCH_SEND_VA = "batch_send_va"
+PERM_BATCH_RECEIVE_VA = "batch_receive_va"
+PERM_BATCH_READY_PACKING = "batch_ready_packing"
+PERM_BATCH_PACK = "batch_pack"
 
 ALL_PERMISSIONS: list[str] = [
     PERM_USER_MANAGE,
@@ -40,6 +44,10 @@ ALL_PERMISSIONS: list[str] = [
     PERM_BATCH_START,
     PERM_BATCH_SUBMIT,
     PERM_BATCH_CHECK,
+    PERM_BATCH_SEND_VA,
+    PERM_BATCH_RECEIVE_VA,
+    PERM_BATCH_READY_PACKING,
+    PERM_BATCH_PACK,
     PERM_INVENTORY_VIEW,
     PERM_INVENTORY_ADJUST,
     PERM_ORDER_MANAGE,
@@ -58,6 +66,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         PERM_SUPPLIER_MANAGE,
         PERM_STOCK_IN,
         PERM_LOT_MANAGE,
+        PERM_BATCH_SEND_VA,
+        PERM_BATCH_RECEIVE_VA,
+        PERM_BATCH_READY_PACKING,
+        PERM_BATCH_PACK,
         PERM_INVENTORY_VIEW,
         PERM_INVENTORY_ADJUST,
         PERM_ORDER_MANAGE,
@@ -71,6 +83,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         PERM_LOT_MANAGE,
         PERM_BATCH_CREATE,
         PERM_BATCH_ASSIGN,
+        PERM_BATCH_SEND_VA,
+        PERM_BATCH_RECEIVE_VA,
+        PERM_BATCH_READY_PACKING,
+        PERM_BATCH_PACK,
         PERM_INVENTORY_VIEW,
         PERM_INVENTORY_ADJUST,
         PERM_REPORT_VIEW,
@@ -81,6 +97,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "checker": [
         PERM_BATCH_CHECK,
+        PERM_BATCH_READY_PACKING,
     ],
     "billing": [
         PERM_INVENTORY_VIEW,

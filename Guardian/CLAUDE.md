@@ -24,7 +24,58 @@
 
 ---
 
-## Current State (Session 42 — 2026-03-02)
+## Current State (Session 44 — 2026-03-03)
+
+### Session 44 — Batch VA + Packing Frontend + Permission System Upgrade
+
+| # | What | Status |
+|---|------|--------|
+| 1 | `batchChallans.js` — API module (create, list, get, receive) with mock store | DONE |
+| 2 | `batches.js` — added `readyForPacking()`, `packBatch()` + mock: `completed→checked` | DONE |
+| 3 | StatusBadge — 7 batch states (checked, packing, packed) both cases | DONE |
+| 4 | MastersPage — `applicable_to` column badge (Roll=purple, Garment=green, Both=blue) + filter tabs + dropdown in form | DONE |
+| 5 | ScanPage — VA timeline, out-house alert, Ready for Packing + Mark Packed buttons | DONE |
+| 6 | `SendForVAModal.jsx` — select batches, VA type, vendor, pieces | DONE |
+| 7 | `ReceiveFromVAModal.jsx` — select pending challan, enter pieces + cost | DONE |
+| 8 | BatchesPage — 7-state KPIs, VA send/receive buttons, out-for-VA + ready-stock badges, VA modals integrated | DONE |
+| 9 | **Permission system upgrade** — 4 new permissions (`batch_send_va`, `batch_receive_va`, `batch_ready_packing`, `batch_pack`) | DONE |
+| 10 | Backend routes switched from `require_role` → `require_permission` (batch_challans + batches) | DONE |
+| 11 | Frontend switched from hardcoded role checks → permission-based (`perms.batch_pack` etc.) | DONE |
+| 12 | Mock.js PERMISSIONS updated with 4 new keys for all roles | DONE |
+| 13 | Build verified — 0 errors | DONE |
+
+**S44 Permission System Changes:**
+- `permissions.py`: +4 constants (`PERM_BATCH_SEND_VA/RECEIVE_VA/READY_PACKING/PACK`) + updated `ALL_PERMISSIONS` + `ROLE_PERMISSIONS` defaults
+- Default grants: admin + supervisor get all 4; checker gets `batch_ready_packing`; tailor gets none
+- **All manageable from Roles page** — admin can toggle any permission for any role
+- Backend: `batch_challans.py` switched from `require_role("admin","supervisor")` → `require_permission("batch_send_va"/"batch_receive_va")`
+- Backend: `batches.py` ready-for-packing → `require_permission("batch_ready_packing")`, pack → `require_permission("batch_pack")`
+- Frontend: ScanPage uses `perms.batch_start/submit/check/ready_packing/pack` instead of `userRole === 'tailor'` etc.
+- Frontend: BatchesPage uses `perms.batch_send_va/receive_va` instead of `isSupervisorOrAdmin`
+
+**S44 Files created:**
+| File | Purpose |
+|------|---------|
+| `frontend/src/api/batchChallans.js` | Batch challan CRUD + mock store |
+| `frontend/src/components/batches/SendForVAModal.jsx` | Send batches for VA — batch picker + VA type + vendor |
+| `frontend/src/components/batches/ReceiveFromVAModal.jsx` | Receive from VA — challan picker + pieces + cost |
+
+**S44 Files modified:**
+| File | Changes |
+|------|---------|
+| `backend/app/core/permissions.py` | +4 permission constants, updated ALL_PERMISSIONS + ROLE_PERMISSIONS |
+| `backend/app/api/batch_challans.py` | `require_role` → `require_permission` (4 endpoints) |
+| `backend/app/api/batches.py` | `require_role` → `require_permission` (ready-for-packing, pack) |
+| `frontend/src/api/mock.js` | PERMISSIONS dict +4 keys for admin/supervisor/checker |
+| `frontend/src/api/batches.js` | +readyForPacking, +packBatch, completed→checked in mock |
+| `frontend/src/components/common/StatusBadge.jsx` | +checked/packing/packed colors (both cases) |
+| `frontend/src/pages/MastersPage.jsx` | applicable_to badge + filter tabs + dropdown in VA form |
+| `frontend/src/pages/ScanPage.jsx` | VA timeline, out-house alert, 2 new buttons, permission-based checks |
+| `frontend/src/pages/BatchesPage.jsx` | 7-state pipeline, VA buttons, modals, permission-based |
+
+---
+
+## Previous State (Session 43 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
@@ -32,40 +83,34 @@
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
 
-### Session 42 — AWS Decision + Production Roadmap
+### Session 43 — Batch VA + Packing Backend Complete
 
 | # | What | Status |
 |---|------|--------|
-| 1 | Reviewed AWS deployment guide (user's document) | DONE |
-| 2 | Decision: **Hybrid** — Vercel (frontend) + AWS EC2/RDS (backend/DB) | DECIDED |
-| 3 | Created `Guardian/AWS_DEPLOYMENT.md` — condensed step-by-step for our setup | DONE |
-| 4 | Cloudflare tunnel approach **ABANDONED** — replaced by AWS EC2 | DECIDED |
-| 5 | Full frontend audit: all 14 pages functional, 17 API modules, zero stubs | DONE |
-| 6 | Production roadmap defined (see below) | DONE |
-| 7 | Batch VA + Packing flow designed (full business discussion) | DONE |
-| 8 | Created `Guardian/BATCH_VA_PACKING_SPEC.md` — 31-task implementation checklist | DONE |
-| 9 | Updated `API_REFERENCE.md` — §8 batch states, §15 VA applicable_to, §17 batch challans | DONE |
-| 10 | Backend tasks 1-2,4-5 DONE: models, schemas, seeds created | DONE |
+| 1 | Alembic migration `b1c2d3e4f5a6` — batch_challans + batch_processing tables, packing cols on batches, applicable_to on value_additions, completed→checked status migration | DONE |
+| 2 | Seeded 4 new garment VAs (HST, BTN, LCW, FIN) + updated existing 6 VA applicable_to values | DONE |
+| 3 | `batch_challan_service.py` — create, receive, list, get (mirrors JobChallanService) | DONE |
+| 4 | `batch_service.py` full rewrite — VA guards on submit/packing, check→checked (not completed), ready_for_packing, pack_batch with ready_stock_in event, processing_logs in _to_response, has_pending_va, location filter, enhanced scan_batch_qr with role-aware actions | DONE |
+| 5 | `batch_challans.py` router — 4 endpoints (create, list, get, receive) with supervisor/admin role gate | DONE |
+| 6 | `batches.py` router — +ready-for-packing, +pack endpoints | DONE |
+| 7 | `router.py` — registered batch_challans router | DONE |
+| 8 | Server startup test — clean import, all 16 batch routes registered | DONE |
 
-**S42 Backend files created/modified:**
-| File | Status |
-|------|--------|
-| `backend/app/models/batch_challan.py` | **CREATED** — BatchChallan model |
-| `backend/app/models/batch_processing.py` | **CREATED** — BatchProcessing model |
-| `backend/app/models/batch.py` | **MODIFIED** — +checked_by, packed_by, packed_at, pack_reference, processing_logs relationship |
-| `backend/app/models/value_addition.py` | **MODIFIED** — +applicable_to column |
-| `backend/app/models/__init__.py` | **MODIFIED** — registered BatchChallan, BatchProcessing |
-| `backend/app/schemas/batch_challan.py` | **CREATED** — all challan schemas |
-| `backend/app/schemas/batch.py` | **MODIFIED** — +has_pending_va, processing_logs, packing fields, BatchPack, location filter |
-| `backend/app/schemas/master.py` | **MODIFIED** — +applicable_to on VA schemas |
-| `backend/seeds/seed_data.py` | **MODIFIED** — 10 VA seeds (was 6), with applicable_to |
+**S43 Files created:**
+| File | Purpose |
+|------|---------|
+| `backend/migrations/versions/b1c2d3e4f5a6_batch_va_packing_tables_and_columns.py` | Migration: 2 new tables + batch cols + VA applicable_to + status migration |
+| `backend/app/services/batch_challan_service.py` | BatchChallan CRUD: create/receive/list/get |
+| `backend/app/api/batch_challans.py` | 4 REST endpoints for batch challans |
 
-**S43 resume — remaining backend tasks:**
-| # | Task | Status |
-|---|------|--------|
-| 3 | Alembic migration (new tables + batch changes + completed→checked) | PENDING |
-| 6 | batch_challan_service.py + batch_challans router (4 endpoints) | PENDING |
-| 7 | batch_service.py updates (VA guards, ready-for-packing, pack, inventory event) | PENDING |
+**S43 Files modified:**
+| File | Changes |
+|------|---------|
+| `backend/app/services/batch_service.py` | Full rewrite: VA guards, 7-state machine, packing flow, processing_logs in response |
+| `backend/app/api/batches.py` | +ready-for-packing, +pack endpoints, +require_role import, +BatchPack import |
+| `backend/app/api/router.py` | +batch_challans router registration |
+
+### Session 42 — AWS Decision + Production Roadmap (previous)
 
 **Key decisions:**
 - Vercel frontend = free forever, zero maintenance, already has `vercel.json` SPA rewrites
@@ -198,16 +243,19 @@
 - Screen-to-screen QR scanning: 160px + `level="H"` + `includeMargin` = minimum for reliable detection at 30-50cm. 130px sufficient for printed labels
 - Phone keyboards autocapitalize usernames → `autoCapitalize="off"` + forced `toLowerCase()` on LoginPage
 
-### PENDING — Next Session (S43)
-1. **Batch VA + Packing — Backend** → `BATCH_VA_PACKING_SPEC.md` §10 tasks 1-14
-   - BatchChallan + BatchProcessing models + migration
-   - Enhanced batch states (7), VA guards, packing endpoints
-   - Seed new VA types (HST, BTN, LCW, FIN)
-   - Update batch passport (include VA logs + has_pending_va)
-2. **Session 44:** Batch VA + Packing — Frontend (tasks 15-24)
-3. **Session 45:** E2E testing + polish (tasks 25-30)
-4. **Then:** SKUs / Orders / Invoices page overhauls
-5. **Then:** AWS deployment (`AWS_DEPLOYMENT.md`)
+### PENDING — Next Session (S44)
+1. **Batch VA + Packing — Frontend** → `BATCH_VA_PACKING_SPEC.md` §10 tasks 15-25
+   - Masters page: applicable_to badge + filter + form field
+   - Status colors/labels updated for 7 states
+   - Batch passport: VA timeline + out-house alert + Ready for Packing + Mark Packed buttons
+   - Send for VA modal + Receive from VA modal
+   - BatchesPage: in-house/out-house filter + VA indicators
+   - Dashboard: out-house KPIs + ready stock count
+   - API module: batchChallans.js + mock data
+   - Update batches.js API (new endpoints)
+2. **Session 45:** E2E testing + polish (tasks 26-31)
+3. **Then:** SKUs / Orders / Invoices page overhauls
+4. **Then:** AWS deployment (`AWS_DEPLOYMENT.md`)
 
 ### Files Created in S39 (1)
 | File | Purpose |
