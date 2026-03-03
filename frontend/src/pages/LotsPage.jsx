@@ -117,6 +117,7 @@ export default function LotsPage() {
   const [rollFilterColor, setRollFilterColor] = useState('')
   const [rollFilterSupplier, setRollFilterSupplier] = useState('')
   const [rollFilterVA, setRollFilterVA] = useState('')
+  const [rollGroupBy, setRollGroupBy] = useState('sr_no')
   const [form, setForm] = useState({
     lot_date: new Date().toISOString().split('T')[0],
     product_type: 'BLS',
@@ -171,7 +172,7 @@ export default function LotsPage() {
       pendingPreselect.current = pre
       navigate('/lots', { replace: true, state: {} })
       setFormError(null); setRollSearch('')
-      setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA('')
+      setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA(''); setRollGroupBy('sr_no')
       setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
       setShowCreate(true)
     }
@@ -302,7 +303,7 @@ export default function LotsPage() {
 
   const openCreate = () => {
     setFormError(null); setRollSearch('')
-    setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA('')
+    setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA(''); setRollGroupBy('sr_no')
     setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
     setShowCreate(true)
   }
@@ -574,37 +575,59 @@ export default function LotsPage() {
                   {filterOptions.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <span className="ml-auto text-[11px] text-gray-400">{addableRolls.length} available</span>
+                <div className="h-4 w-px bg-gray-300 mx-1" />
+                <select value={rollGroupBy} onChange={e => setRollGroupBy(e.target.value)}
+                  className="rounded bg-gray-100 border-0 px-2 py-1 text-[11px] font-medium text-gray-600 focus:ring-1 focus:ring-emerald-500 cursor-pointer">
+                  <option value="sr_no">Group: Sr. No.</option>
+                  <option value="fabric">Group: Fabric</option>
+                  <option value="color">Group: Color</option>
+                  <option value="supplier">Group: Supplier</option>
+                </select>
               </div>
 
-              {/* Available rolls — grouped by Sr. No. (invoice) */}
+              {/* Available rolls — grouped dynamically */}
               {addableRolls.length > 0 && (() => {
-                // Group rolls by sr_no
-                const srGroups = []
-                const srMap = {}
+                const groups = [], map = {}
                 for (const r of addableRolls) {
-                  const key = r.sr_no || '—'
-                  if (!srMap[key]) {
-                    srMap[key] = { sr_no: key, fabric: r.fabric_type || '—', supplier: r.supplier?.name || '—', invoiceNo: r.supplier_invoice_no || '', rolls: [] }
-                    srGroups.push(srMap[key])
+                  let key, label, sublabel
+                  switch (rollGroupBy) {
+                    case 'fabric':
+                      key = r.fabric_type || '—'
+                      label = key; sublabel = ''
+                      break
+                    case 'color':
+                      key = r.color || '—'
+                      label = key; sublabel = ''
+                      break
+                    case 'supplier':
+                      key = r.supplier?.name || '—'
+                      label = key; sublabel = ''
+                      break
+                    default:
+                      key = r.sr_no || '—'
+                      label = key; sublabel = `${r.fabric_type || ''} · ${r.supplier?.name || ''}${r.supplier_invoice_no ? ` · ${r.supplier_invoice_no}` : ''}`
                   }
-                  srMap[key].rolls.push(r)
+                  if (!map[key]) { map[key] = { key, label, sublabel, rolls: [] }; groups.push(map[key]) }
+                  map[key].rolls.push(r)
                 }
-                // Sort by sr_no numerically
-                srGroups.sort((a, b) => (parseInt(a.sr_no) || 0) - (parseInt(b.sr_no) || 0))
+                if (rollGroupBy === 'sr_no') groups.sort((a, b) => { const an = parseInt(a.key), bn = parseInt(b.key); if (isNaN(an)) return 1; if (isNaN(bn)) return -1; return an - bn })
+                else groups.sort((a, b) => { if (a.key === '—') return 1; if (b.key === '—') return -1; return a.key.localeCompare(b.key) })
+
+                const badgeStyle = { sr_no: 'bg-blue-600 text-white', fabric: 'bg-sky-100 text-sky-700', color: 'bg-gray-200 text-gray-700', supplier: 'bg-amber-100 text-amber-700' }
 
                 return (
                   <div className="border-b bg-gray-50/50 px-4 py-3 max-h-72 overflow-y-auto">
                     <div className="space-y-2">
-                      {srGroups.map(grp => {
+                      {groups.map(grp => {
                         const totalWeight = grp.rolls.reduce((s, r) => s + parseFloat(r.remaining_weight || 0), 0)
                         return (
-                          <div key={grp.sr_no} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                            {/* Group header */}
+                          <div key={grp.key} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                             <div className="flex items-center justify-between bg-gray-50 border-b border-gray-100 px-3 py-1.5">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-600 text-[10px] font-bold text-white flex-shrink-0">{grp.sr_no}</span>
-                                <span className="text-[11px] font-semibold text-gray-700 truncate">{grp.fabric}</span>
-                                <span className="text-[10px] text-gray-400 truncate">{grp.supplier}{grp.invoiceNo ? ` · ${grp.invoiceNo}` : ''}</span>
+                                {rollGroupBy === 'color' && <span className="inline-block h-3 w-3 rounded-full flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: colorHex(grp.label) }} />}
+                                <span className={`inline-flex items-center justify-center rounded px-1.5 text-[10px] font-bold flex-shrink-0 ${rollGroupBy === 'sr_no' ? 'h-5 w-5 ' : 'h-5 px-2 '}${badgeStyle[rollGroupBy]}`}>{rollGroupBy === 'sr_no' ? grp.label : ''}</span>
+                                {rollGroupBy !== 'sr_no' && <span className="text-[11px] font-semibold text-gray-700 truncate">{grp.label}</span>}
+                                {grp.sublabel && <span className="text-[10px] text-gray-400 truncate">{grp.sublabel}</span>}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-[10px] text-gray-400">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} kg</span>
@@ -614,7 +637,6 @@ export default function LotsPage() {
                                 </button>
                               </div>
                             </div>
-                            {/* Roll cards */}
                             <div className="flex flex-wrap gap-1.5 px-3 py-2">
                               {grp.rolls.map(r => (
                                 <button key={r.id} onClick={() => addRoll(r.id)}

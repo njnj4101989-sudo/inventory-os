@@ -23,7 +23,7 @@
 
 ---
 
-## Current State (Session 51 — 2026-03-03)
+## Current State (Session 52 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
@@ -71,15 +71,19 @@
 
 ---
 
-### NEXT: PHASE C — AWS Deploy
+### S52: Roll Picker "Group By" Switcher — COMPLETE
 
-| # | Step | Guide |
-|---|------|-------|
-| 6 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
-| 7 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
-| 8 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
-| 9 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
-| 10 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+**Zero backend changes.** Single file modified: `LotsPage.jsx`.
+
+- New state: `rollGroupBy` (default `'sr_no'`) — reset on overlay open + preselect flow
+- **Dropdown placement:** Right side of filter bar second row, after "N available" count, separated by a divider. Styled as compact `bg-gray-100 border-0` select — visually distinct from filter dropdowns (it's a view mode, not a filter)
+- **4 grouping modes:** Sr. No. (numeric sort) / Fabric (alpha) / Color (alpha + color dot) / Supplier (alpha)
+- **Dynamic badge styling:** Sr. No. = blue numbered badge, Fabric = sky badge, Color = color dot + gray badge, Supplier = amber badge
+- **Group header:** `g.label` (primary) + `g.sublabel` (secondary, only in Sr. No. mode — shows fabric · supplier · invoice)
+- **Unchanged:** Roll chip rendering, `+ All` bulk-add, selected rolls table, all filters, preselect from Invoice (S51), keyboard hints
+
+**File modified:** `LotsPage.jsx`
+**Build: 0 errors.**
 
 ---
 
@@ -414,6 +418,22 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ## Session History (Compressed)
 
+### S52: Roll Picker "Group By" Switcher (complete)
+- New `rollGroupBy` state with 4 modes: Sr. No. / Fabric / Color / Supplier
+- Compact dropdown in filter bar (right side, after "N available") — `bg-gray-100 border-0` styling, separated by divider
+- Dynamic grouping: Sr. No. (numeric sort + sublabel), others (alpha sort, colored badges)
+- Badge colors: Sr. No.=blue, Fabric=sky, Color=dot+gray, Supplier=amber
+- Reset on overlay open + preselect flow. Roll chips + "+ All" unchanged
+- Build: 0 errors
+
+### S51: Invoice-to-Lot Shortcut (complete)
+- LotsPage receiver: `useLocation` + `pendingPreselect` ref + 2 useEffects (detect preselectedRolls → auto-open create overlay → populate form.rolls after availableRolls loads) + info banner
+- Option C: "Create Lot (N)" emerald button in All Rolls bulk action bar (between Print Labels and Send for Processing)
+- Option B: Shift+Click selection on Invoice Detail roll weight buttons + hint strip + Select All + sticky emerald action bar (Create Lot + Send for Processing)
+- Option A: "Create Lot from Invoice" button in Invoice Detail actions + multi-design dialog (groups by fabric_type, single→navigate directly, multiple→picker modal)
+- Zero backend changes — all data via React Router `location.state`
+- Build: 0 errors
+
 ### Phase 6A+6B (S1-6) — Full Stack Scaffold
 - Backend: 22 ORM models, Alembic, 19 schemas, 15 services, 16 routers, seeds, Dockerfile
 - Frontend: Vite+React+Tailwind, 15 API modules (client+mock), 14 pages, auth, layout
@@ -475,14 +495,6 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Part A: Order Create overlay → picker pattern (Design cards → click to select → grid below). New states: `selectedDesigns`, `pickerGroups`, `selectedGroups`
 - Part B: Typography global uplift — `index.css` new classes (.typo-label, .typo-data), DataTable `<th>` global fix, zero text-[9px] remaining, labels upgraded to text-gray-500/text-[11px] across 7 pages
 - Part C: Full keyboard system — Ctrl+S save, Escape with dirty-check confirmation dialog, auto-focus Name, Enter chain through customer→search→grid, Tab/Enter grid cell navigation (right→wrap-down), price Enter→grid, keyboard hint strip in footer
-- Build: 0 errors
-
-### S51: Invoice-to-Lot Shortcut (complete)
-- LotsPage receiver: `useLocation` + `pendingPreselect` ref + 2 useEffects (detect preselectedRolls → auto-open create overlay → populate form.rolls after availableRolls loads) + info banner
-- Option C: "Create Lot (N)" emerald button in All Rolls bulk action bar (between Print Labels and Send for Processing)
-- Option B: Shift+Click selection on Invoice Detail roll weight buttons + hint strip + Select All + sticky emerald action bar (Create Lot + Send for Processing)
-- Option A: "Create Lot from Invoice" button in Invoice Detail actions + multi-design dialog (groups by fabric_type, single→navigate directly, multiple→picker modal)
-- Zero backend changes — all data via React Router `location.state`
 - Build: 0 errors
 
 ### S50: KPI Card Typography + Dashboard Grid + Sidebar Sections (complete)
