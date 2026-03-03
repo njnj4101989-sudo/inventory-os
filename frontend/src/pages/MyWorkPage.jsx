@@ -125,8 +125,8 @@ export default function MyWorkPage() {
 function KPI({ label, value, color }) {
   return (
     <div className={`rounded-xl px-3 py-3 text-center ${color}`}>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs font-medium mt-0.5">{label}</div>
+      <div className="text-2xl font-bold tabular-nums">{value}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5">{label}</div>
     </div>
   )
 }

@@ -64,6 +64,14 @@ const OUT_HOUSE_CARDS = [
     value: (s) => s.ready_stock_pieces || 0,
     format: (s) => `${s.batches?.packed || 0} batches packed`,
   },
+  {
+    key: 'lots',
+    label: 'Active Lots',
+    icon: 'M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 0 3 3 0 004.243 0zm0-5.758a3 3 0 10-4.243 0 3 3 0 004.243 0z',
+    color: 'bg-cyan-500',
+    value: (s) => s.lots?.total || 0,
+    format: (s) => `${s.lots?.open || 0} open, ${s.lots?.distributed || 0} distributed`,
+  },
 ]
 
 export default function DashboardPage() {
@@ -114,7 +122,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Out-House & Ready Stock */}
-      <div className="mt-6 grid gap-5 sm:grid-cols-3">
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {OUT_HOUSE_CARDS.map((card) => (
           <div key={card.key} className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
             <div className="flex items-center gap-3">
@@ -138,17 +146,17 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold text-gray-800">Batch Pipeline</h2>
         <div className="mt-4 grid grid-cols-7 gap-2">
           {[
-            { label: 'Created', value: summary.batches.created, color: 'bg-gray-100 text-gray-700' },
-            { label: 'Assigned', value: summary.batches.assigned, color: 'bg-blue-100 text-blue-700' },
-            { label: 'In Progress', value: summary.batches.in_progress, color: 'bg-yellow-100 text-yellow-700' },
-            { label: 'Submitted', value: summary.batches.submitted, color: 'bg-purple-100 text-purple-700' },
-            { label: 'Checked', value: summary.batches.checked || 0, color: 'bg-indigo-100 text-indigo-700' },
-            { label: 'Packing', value: summary.batches.packing || 0, color: 'bg-orange-100 text-orange-700' },
-            { label: 'Packed', value: summary.batches.packed || 0, color: 'bg-green-100 text-green-700' },
+            { label: 'Created', value: summary.batches.created, bg: 'bg-gray-100', accent: 'text-gray-800', muted: 'text-gray-500' },
+            { label: 'Assigned', value: summary.batches.assigned, bg: 'bg-blue-100', accent: 'text-blue-800', muted: 'text-blue-600' },
+            { label: 'In Progress', value: summary.batches.in_progress, bg: 'bg-yellow-100', accent: 'text-yellow-800', muted: 'text-yellow-600' },
+            { label: 'Submitted', value: summary.batches.submitted, bg: 'bg-purple-100', accent: 'text-purple-800', muted: 'text-purple-600' },
+            { label: 'Checked', value: summary.batches.checked || 0, bg: 'bg-indigo-100', accent: 'text-indigo-800', muted: 'text-indigo-600' },
+            { label: 'Packing', value: summary.batches.packing || 0, bg: 'bg-orange-100', accent: 'text-orange-800', muted: 'text-orange-600' },
+            { label: 'Packed', value: summary.batches.packed || 0, bg: 'bg-green-100', accent: 'text-green-800', muted: 'text-green-600' },
           ].map((stage) => (
-            <div key={stage.label} className={`rounded-lg p-3 text-center ${stage.color}`}>
-              <p className="text-2xl font-bold">{stage.value}</p>
-              <p className="mt-1 text-xs font-medium">{stage.label}</p>
+            <div key={stage.label} className={`rounded-lg p-3 text-center ${stage.bg}`}>
+              <p className={`text-2xl font-bold tabular-nums ${stage.accent}`}>{stage.value}</p>
+              <p className={`mt-1 text-[11px] font-semibold uppercase tracking-wide ${stage.muted}`}>{stage.label}</p>
             </div>
           ))}
         </div>

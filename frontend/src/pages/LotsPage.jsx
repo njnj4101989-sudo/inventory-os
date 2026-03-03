@@ -603,12 +603,12 @@ export default function LotsPage() {
             {form.rolls.length > 0 && (
               <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4">
                 <div className="grid grid-cols-6 gap-3 text-center">
-                  <div><div className="text-xl font-bold text-amber-600">{totals.colors}</div><div className="text-xs text-gray-500">Colors</div></div>
-                  <div><div className="text-xl font-bold text-gray-600">{form.rolls.length}</div><div className="text-xs text-gray-500">Rolls</div></div>
-                  <div><div className="text-xl font-bold text-blue-700">{totals.pallas}</div><div className="text-xs text-gray-500">Pallas</div></div>
-                  <div><div className="text-xl font-bold text-emerald-700">{totals.pieces}</div><div className="text-xs text-gray-500">Pieces</div></div>
-                  <div><div className="text-xl font-bold text-purple-700">{totals.weight.toFixed(3)}</div><div className="text-xs text-gray-500">Weight (kg)</div></div>
-                  <div><div className="text-xl font-bold text-red-500">{totals.waste.toFixed(3)}</div><div className="text-xs text-gray-500">Waste (kg)</div></div>
+                  <div><div className="text-xl font-bold text-amber-600">{totals.colors}</div><div className="typo-label">Colors</div></div>
+                  <div><div className="text-xl font-bold text-gray-600">{form.rolls.length}</div><div className="typo-label">Rolls</div></div>
+                  <div><div className="text-xl font-bold text-blue-700">{totals.pallas}</div><div className="typo-label">Pallas</div></div>
+                  <div><div className="text-xl font-bold text-emerald-700">{totals.pieces}</div><div className="typo-label">Pieces</div></div>
+                  <div><div className="text-xl font-bold text-purple-700">{totals.weight.toFixed(3)}</div><div className="typo-label">Weight (kg)</div></div>
+                  <div><div className="text-xl font-bold text-red-500">{totals.waste.toFixed(3)}</div><div className="typo-label">Waste (kg)</div></div>
                 </div>
               </div>
             )}
@@ -835,12 +835,12 @@ export default function LotsPage() {
             {/* ── Summary KPIs ── */}
             <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4">
               <div className="grid grid-cols-6 gap-3 text-center">
-                <div><div className="text-xl font-bold text-amber-600">{colorCount}</div><div className="text-xs text-gray-500">Colors</div></div>
-                <div><div className="text-xl font-bold text-gray-600">{(detailLot.lot_rolls || []).length}</div><div className="text-xs text-gray-500">Rolls</div></div>
-                <div><div className="text-xl font-bold text-blue-700">{detailLot.total_pallas}</div><div className="text-xs text-gray-500">Pallas</div></div>
-                <div><div className="text-xl font-bold text-emerald-700">{detailLot.total_pieces}</div><div className="text-xs text-gray-500">Pieces</div></div>
-                <div><div className="text-xl font-bold text-purple-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)}</div><div className="text-xs text-gray-500">Weight (kg)</div></div>
-                <div><div className="text-xl font-bold text-red-500">{totalWaste.toFixed(3)}</div><div className="text-xs text-gray-500">Waste (kg)</div></div>
+                <div><div className="text-xl font-bold text-amber-600">{colorCount}</div><div className="typo-label">Colors</div></div>
+                <div><div className="text-xl font-bold text-gray-600">{(detailLot.lot_rolls || []).length}</div><div className="typo-label">Rolls</div></div>
+                <div><div className="text-xl font-bold text-blue-700">{detailLot.total_pallas}</div><div className="typo-label">Pallas</div></div>
+                <div><div className="text-xl font-bold text-emerald-700">{detailLot.total_pieces}</div><div className="typo-label">Pieces</div></div>
+                <div><div className="text-xl font-bold text-purple-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)}</div><div className="typo-label">Weight (kg)</div></div>
+                <div><div className="text-xl font-bold text-red-500">{totalWaste.toFixed(3)}</div><div className="typo-label">Waste (kg)</div></div>
               </div>
             </div>
 

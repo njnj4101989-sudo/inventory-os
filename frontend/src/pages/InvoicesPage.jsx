@@ -55,9 +55,9 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color = 'slate' }) {
   return (
     <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
-      <p className="text-[11px] font-medium opacity-80">{label}</p>
-      <p className="mt-0.5 text-lg font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[11px] opacity-70">{sub}</p>}
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/85">{label}</p>
+      <p className="mt-0.5 text-xl font-bold leading-tight">{value}</p>
+      {sub && <p className="text-[11px] font-medium text-white/75">{sub}</p>}
     </div>
   )
 }

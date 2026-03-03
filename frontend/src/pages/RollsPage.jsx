@@ -1511,19 +1511,19 @@ export default function RollsPage() {
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
                   <div className="text-2xl font-bold text-orange-700">{procRolls.length}</div>
-                  <div className="text-xs text-orange-500">Rolls Out</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-500">Rolls Out</div>
                 </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
                   <div className="text-2xl font-bold text-blue-700">{totalWeight.toFixed(3)} kg</div>
-                  <div className="text-xs text-blue-500">Total Weight</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">Total Weight</div>
                 </div>
                 <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
                   <div className="text-2xl font-bold text-purple-700">{vendorCount}</div>
-                  <div className="text-xs text-purple-500">Vendors</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-purple-500">Vendors</div>
                 </div>
                 <div className="rounded-lg bg-red-50 border border-red-100 p-3">
                   <div className="text-2xl font-bold text-red-700">{overdueCount}</div>
-                  <div className="text-xs text-red-500">Overdue (&gt;14 days)</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-red-500">Overdue (&gt;14 days)</div>
                 </div>
               </div>
             )}

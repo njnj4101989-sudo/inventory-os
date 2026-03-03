@@ -445,8 +445,8 @@ const KPI_COLORS = {
 function KPICard({ label, value, color }) {
   return (
     <div className={`rounded-lg border px-4 py-3 ${KPI_COLORS[color] || KPI_COLORS.blue}`}>
-      <div className="text-lg font-bold">{value}</div>
-      <div className="text-xs opacity-75">{label}</div>
+      <div className="text-xl font-bold">{value}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide">{label}</div>
     </div>
   )
 }

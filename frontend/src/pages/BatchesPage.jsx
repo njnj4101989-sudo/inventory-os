@@ -417,7 +417,7 @@ export default function BatchesPage() {
           return (
             <div key={status} className={`rounded-xl border ${c.border} ${c.bg} px-4 py-3 text-center`}>
               <div className={`text-2xl font-bold tabular-nums ${c.accent}`}>{pipelineCounts[status]}</div>
-              <div className={`text-xs font-medium mt-0.5 ${c.text}`}>{STATUS_LABEL[status]}</div>
+              <div className={`text-[11px] font-semibold uppercase tracking-wide mt-0.5 ${c.text}`}>{STATUS_LABEL[status]}</div>
             </div>
           )
         })}
