@@ -4,9 +4,19 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.order import OrderBrief
 from app.schemas.sku import SKUBrief
+
+
+# --- Filter Params ---
+
+
+class InvoiceFilterParams(PaginatedParams):
+    """Query parameters for invoice listing."""
+
+    status: str | None = None
+    search: str | None = None
 
 
 # --- Nested ---

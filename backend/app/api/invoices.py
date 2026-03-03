@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas import PaginatedParams
+from app.schemas.invoice import InvoiceFilterParams
 from app.services.invoice_service import InvoiceService
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
@@ -16,14 +16,26 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
 @router.get("", response_model=None)
 async def list_invoices(
-    params: PaginatedParams = Depends(),
+    params: InvoiceFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("invoice_manage"),
 ):
-    """List invoices with pagination. Filters: status."""
+    """List invoices with pagination. Filters: status, search."""
     svc = InvoiceService(db)
     result = await svc.get_invoices(params)
     return {"success": True, **result}
+
+
+@router.get("/{invoice_id}", response_model=None)
+async def get_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Get single invoice by ID."""
+    svc = InvoiceService(db)
+    result = await svc.get_invoice(invoice_id)
+    return {"success": True, "data": result}
 
 
 @router.patch("/{invoice_id}/pay", response_model=None)

@@ -6,8 +6,19 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.sku import SKUBrief
+
+
+# --- Filter Params ---
+
+
+class OrderFilterParams(PaginatedParams):
+    """Query parameters for order listing."""
+
+    status: str | None = None
+    source: str | None = None
+    search: str | None = None
 
 
 # --- Brief ---
@@ -79,7 +90,9 @@ class OrderResponse(BaseSchema):
     external_order_ref: str | None = None
     customer_name: str | None = None
     customer_phone: str | None = None
+    customer_address: str | None = None
     status: str
     items: list[OrderItemResponse] = []
     total_amount: Decimal | None = None
+    notes: str | None = None
     created_at: datetime

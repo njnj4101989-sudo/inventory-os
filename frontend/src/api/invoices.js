@@ -7,9 +7,24 @@ export async function getInvoices(params = {}) {
   if (USE_MOCK) {
     let filtered = [...invoices]
     if (params.status) filtered = filtered.filter((inv) => inv.status === params.status)
+    if (params.search) {
+      const q = params.search.toLowerCase()
+      filtered = filtered.filter(
+        (inv) => inv.invoice_number.toLowerCase().includes(q) ||
+                 (inv.order?.customer_name && inv.order.customer_name.toLowerCase().includes(q))
+      )
+    }
     return mockPaginated(filtered, params.page, params.page_size)
   }
   return client.get('/invoices', { params })
+}
+
+export async function getInvoice(id) {
+  if (USE_MOCK) {
+    const invoice = invoices.find((inv) => inv.id === id)
+    return mockResponse(invoice)
+  }
+  return client.get(`/invoices/${id}`)
 }
 
 export async function markPaid(id) {

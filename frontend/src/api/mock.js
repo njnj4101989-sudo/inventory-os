@@ -353,10 +353,11 @@ export const orders = [
     id: uid('14'), order_number: 'ORD-0001', source: 'web',
     external_order_ref: null,
     customer_name: 'Priya Sharma', customer_phone: '9876543210',
-    status: 'pending',
+    customer_address: '12, Ring Road, Surat 395003',
+    status: 'pending', notes: 'Urgent delivery needed',
     items: [
       {
-        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium', color: 'Red', size: 'M', base_price: 450.0 },
         quantity: 5, unit_price: 450.0, total_price: 2250.0, fulfilled_qty: 0,
       },
     ],
@@ -366,10 +367,11 @@ export const orders = [
     id: uid('15'), order_number: 'ORD-0002', source: 'ecommerce',
     external_order_ref: 'DRS-1234',
     customer_name: 'Anita Verma', customer_phone: '9876543212',
-    status: 'shipped',
+    customer_address: '45, Textile Market, Ahmedabad 380002',
+    status: 'shipped', notes: null,
     items: [
       {
-        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
+        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large', color: 'Blue', size: 'L', base_price: 500.0 },
         quantity: 3, unit_price: 500.0, total_price: 1500.0, fulfilled_qty: 3,
       },
     ],
@@ -379,14 +381,15 @@ export const orders = [
     id: uid('16'), order_number: 'ORD-0003', source: 'web',
     external_order_ref: null,
     customer_name: 'Rahul Gupta', customer_phone: '9876543213',
-    status: 'processing',
+    customer_address: '78, Station Road, Mumbai 400001',
+    status: 'processing', notes: 'Call before shipping',
     items: [
       {
-        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium', color: 'Red', size: 'M', base_price: 450.0 },
         quantity: 10, unit_price: 450.0, total_price: 4500.0, fulfilled_qty: 0,
       },
       {
-        sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small' },
+        sku: { id: uid('e'), sku_code: 'BLS-103-Green-S', product_name: 'Design 103 Green Small', color: 'Green', size: 'S', base_price: 750.0 },
         quantity: 5, unit_price: 750.0, total_price: 3750.0, fulfilled_qty: 0,
       },
     ],
@@ -398,26 +401,28 @@ export const orders = [
 export const invoices = [
   {
     id: uid('17'), invoice_number: 'INV-0001',
-    order: { order_number: 'ORD-0002', customer_name: 'Anita Verma' },
+    order: { id: uid('15'), order_number: 'ORD-0002', customer_name: 'Anita Verma', customer_phone: '9876543212', customer_address: '45, Textile Market, Ahmedabad 380002' },
     subtotal: 1500.0, tax_amount: 270.0, discount_amount: 0,
-    total_amount: 1770.0, status: 'paid',
+    total_amount: 1770.0, status: 'paid', notes: null,
     issued_at: '2026-02-07T15:00:00Z', paid_at: '2026-02-07T16:00:00Z',
+    created_at: '2026-02-07T15:00:00Z',
     items: [
       {
-        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large' },
+        sku: { id: uid('d'), sku_code: 'BLS-102-Blue-L', product_name: 'Design 102 Blue Large', color: 'Blue', size: 'L', base_price: 500.0 },
         quantity: 3, unit_price: 500.0, total_price: 1500.0,
       },
     ],
   },
   {
     id: uid('18'), invoice_number: 'INV-0002',
-    order: { order_number: 'ORD-0001', customer_name: 'Priya Sharma' },
+    order: { id: uid('14'), order_number: 'ORD-0001', customer_name: 'Priya Sharma', customer_phone: '9876543210', customer_address: '12, Ring Road, Surat 395003' },
     subtotal: 2250.0, tax_amount: 405.0, discount_amount: 100.0,
-    total_amount: 2555.0, status: 'issued',
+    total_amount: 2555.0, status: 'issued', notes: 'Discount applied for bulk order',
     issued_at: '2026-02-08T08:30:00Z', paid_at: null,
+    created_at: '2026-02-08T08:30:00Z',
     items: [
       {
-        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
+        sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium', color: 'Red', size: 'M', base_price: 450.0 },
         quantity: 5, unit_price: 450.0, total_price: 2250.0,
       },
     ],

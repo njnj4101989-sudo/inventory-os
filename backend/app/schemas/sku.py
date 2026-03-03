@@ -17,6 +17,9 @@ class SKUBrief(BaseSchema):
     id: UUID
     sku_code: str
     product_name: str
+    color: str | None = None
+    size: str | None = None
+    base_price: Decimal | None = None
 
 
 class StockBrief(BaseSchema):

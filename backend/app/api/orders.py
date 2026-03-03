@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas import PaginatedParams
-from app.schemas.order import OrderCreate, ReturnRequest
+from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest
 from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.get("", response_model=None)
 async def list_orders(
-    params: PaginatedParams = Depends(),
+    params: OrderFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("order_manage"),
 ):
@@ -24,6 +23,18 @@ async def list_orders(
     svc = OrderService(db)
     result = await svc.get_orders(params)
     return {"success": True, **result}
+
+
+@router.get("/{order_id}", response_model=None)
+async def get_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("order_manage"),
+):
+    """Get single order by ID."""
+    svc = OrderService(db)
+    result = await svc.get_order(order_id)
+    return {"success": True, "data": result}
 
 
 @router.post("", response_model=None, status_code=201)

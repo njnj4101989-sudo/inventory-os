@@ -773,7 +773,8 @@ When `sku` is present:
 ## 10. Orders (`/api/v1/orders`)
 
 ### GET `/orders`
-**Query:** `status`, `source`, `search`, `page`, `page_size`
+**Query:** `OrderFilterParams` — `status`, `source`, `search`, `page`, `page_size`, `sort_by`, `sort_order`
+- `search` does `ILIKE` on `order_number` + `customer_name`
 **Response:** Paginated array of:
 ```json
 {
@@ -783,13 +784,18 @@ When `sku` is present:
   "external_order_ref": null,
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
+  "customer_address": "12, Ring Road, Surat 395003",
   "status": "pending",
+  "notes": "Urgent delivery needed",
   "items": [
     {
       "sku": {
         "id": "uuid",
         "sku_code": "BLS-101-Red-M",
-        "product_name": "Design 101 Red Medium"
+        "product_name": "Design 101 Red Medium",
+        "color": "Red",
+        "size": "M",
+        "base_price": 450.0
       },
       "quantity": 5,
       "unit_price": 450.0,
@@ -801,7 +807,10 @@ When `sku` is present:
   "created_at": "2026-02-08T08:00:00Z"
 }
 ```
-**IMPORTANT:** `items[].sku` is a nested object (NOT `sku_id`). Each item has `fulfilled_qty`.
+**IMPORTANT:** `items[].sku` is a nested object with `color`, `size`, `base_price` (S48 extension). Each item has `fulfilled_qty`.
+
+### GET `/orders/{id}`
+**Response:** Single order object (same shape as list items). Uses `selectinload` for items + sku.
 
 ### POST `/orders`
 **Request:**
@@ -810,15 +819,18 @@ When `sku` is present:
   "source": "web",
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
+  "customer_address": "12, Ring Road, Surat 395003",
   "items": [
     { "sku_id": "uuid", "quantity": 5, "unit_price": 450.0 }
-  ]
+  ],
+  "notes": "Optional notes"
 }
 ```
 **Response:** Created order object
+**Stock validation (S48):** Checks `InventoryState.available_qty` per item. Raises `InsufficientStockError` if insufficient.
 
 ### POST `/orders/{id}/ship`
-**Response:** Updated order (status → `shipped`)
+**Response:** Updated order (status → `shipped`) + auto-creates invoice
 
 ### POST `/orders/{id}/cancel`
 **Response:** Updated order (status → `cancelled`)
@@ -828,15 +840,19 @@ When `sku` is present:
 ## 11. Invoices (`/api/v1/invoices`)
 
 ### GET `/invoices`
-**Query:** `status`, `page`, `page_size`
+**Query:** `InvoiceFilterParams` — `status`, `search`, `page`, `page_size`, `sort_by`, `sort_order`
+- `search` does `ILIKE` on `invoice_number` + `customer_name` (JOIN to Order)
 **Response:** Paginated array of:
 ```json
 {
   "id": "uuid",
   "invoice_number": "INV-0001",
   "order": {
+    "id": "uuid",
     "order_number": "ORD-0002",
-    "customer_name": "Anita Verma"
+    "customer_name": "Anita Verma",
+    "customer_phone": "9876543212",
+    "customer_address": "45, Textile Market, Ahmedabad 380002"
   },
   "subtotal": 1500.0,
   "tax_amount": 270.0,
@@ -845,12 +861,16 @@ When `sku` is present:
   "status": "paid",
   "issued_at": "2026-02-07T15:00:00Z",
   "paid_at": "2026-02-07T16:00:00Z",
+  "created_at": "2026-02-07T15:00:00Z",
   "items": [
     {
       "sku": {
         "id": "uuid",
         "sku_code": "BLS-102-Blue-L",
-        "product_name": "Design 102 Blue Large"
+        "product_name": "Design 102 Blue Large",
+        "color": "Blue",
+        "size": "L",
+        "base_price": 500.0
       },
       "quantity": 3,
       "unit_price": 500.0,
@@ -859,7 +879,10 @@ When `sku` is present:
   ]
 }
 ```
-**IMPORTANT:** `order` is a nested object with `order_number` + `customer_name`. `items[].sku` is nested.
+**IMPORTANT:** `order` is a nested object with `id`, `order_number`, `customer_name`, `customer_phone`, `customer_address` (S48 extension). `items[].sku` includes `color`, `size`, `base_price`.
+
+### GET `/invoices/{id}`
+**Response:** Single invoice object (same shape as list items). Uses `selectinload` for order + items + sku.
 
 ### PATCH `/invoices/{id}/pay`
 **Response:** Updated invoice (status → `paid`, `paid_at` set)

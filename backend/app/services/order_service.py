@@ -11,8 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.sku import SKU
-from app.schemas.order import OrderCreate, ReturnRequest, OrderResponse
-from app.schemas import PaginatedParams
+from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, OrderResponse
 from app.core.code_generator import next_order_number
 from app.core.exceptions import (
     NotFoundError,
@@ -26,8 +25,22 @@ class OrderService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_orders(self, params: PaginatedParams) -> dict:
+    async def get_orders(self, params: OrderFilterParams) -> dict:
+        filters = []
+        if params.status:
+            filters.append(Order.status == params.status)
+        if params.source:
+            filters.append(Order.source == params.source)
+        if params.search:
+            q = f"%{params.search}%"
+            filters.append(
+                (Order.order_number.ilike(q)) | (Order.customer_name.ilike(q))
+            )
+
         count_stmt = select(func.count()).select_from(Order)
+        if filters:
+            for f in filters:
+                count_stmt = count_stmt.where(f)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
@@ -41,6 +54,9 @@ class OrderService:
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
         )
+        if filters:
+            for f in filters:
+                stmt = stmt.where(f)
         result = await self.db.execute(stmt)
         orders = result.scalars().unique().all()
 
@@ -61,6 +77,8 @@ class OrderService:
         total_amount = 0.0
         order_items = []
 
+        from app.models.inventory_state import InventoryState
+
         for item in req.items:
             # Verify SKU exists
             sku_stmt = select(SKU).where(SKU.id == item.sku_id)
@@ -68,6 +86,16 @@ class OrderService:
             sku = sku_result.scalar_one_or_none()
             if not sku:
                 raise NotFoundError(f"SKU {item.sku_id} not found")
+
+            # Stock check
+            inv_stmt = select(InventoryState).where(InventoryState.sku_id == item.sku_id)
+            inv_result = await self.db.execute(inv_stmt)
+            inv_state = inv_result.scalar_one_or_none()
+            available = inv_state.available_qty if inv_state else 0
+            if available < item.quantity:
+                raise InsufficientStockError(
+                    f"SKU {sku.sku_code}: requested {item.quantity}, available {available}"
+                )
 
             total_price = item.quantity * item.unit_price
             total_amount += total_price
@@ -246,6 +274,9 @@ class OrderService:
                         "id": str(item.sku.id),
                         "sku_code": item.sku.sku_code,
                         "product_name": item.sku.product_name,
+                        "color": item.sku.color,
+                        "size": item.sku.size,
+                        "base_price": float(item.sku.base_price) if item.sku.base_price else None,
                     } if item.sku else None,
                     "quantity": item.quantity,
                     "unit_price": float(item.unit_price) if item.unit_price else 0,

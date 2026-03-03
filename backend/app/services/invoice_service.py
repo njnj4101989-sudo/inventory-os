@@ -12,8 +12,7 @@ from app.models.invoice import Invoice
 from app.models.invoice_item import InvoiceItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
-from app.schemas.invoice import InvoiceResponse
-from app.schemas import PaginatedParams
+from app.schemas.invoice import InvoiceFilterParams, InvoiceResponse
 from app.core.code_generator import next_invoice_number
 from app.core.exceptions import NotFoundError, InvalidStateTransitionError
 
@@ -22,8 +21,23 @@ class InvoiceService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_invoices(self, params: PaginatedParams) -> dict:
+    async def get_invoices(self, params: InvoiceFilterParams) -> dict:
+        filters = []
+        if params.status:
+            filters.append(Invoice.status == params.status)
+        if params.search:
+            q = f"%{params.search}%"
+            filters.append(
+                (Invoice.invoice_number.ilike(q))
+                | (Order.customer_name.ilike(q))
+            )
+
         count_stmt = select(func.count()).select_from(Invoice)
+        if params.search:
+            count_stmt = count_stmt.join(Order, Invoice.order_id == Order.id)
+        if filters:
+            for f in filters:
+                count_stmt = count_stmt.where(f)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
@@ -37,6 +51,11 @@ class InvoiceService:
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
         )
+        if params.search:
+            stmt = stmt.join(Order, Invoice.order_id == Order.id, isouter=True)
+        if filters:
+            for f in filters:
+                stmt = stmt.where(f)
         result = await self.db.execute(stmt)
         invoices = result.scalars().unique().all()
 
@@ -140,6 +159,8 @@ class InvoiceService:
                 "id": str(inv.order.id),
                 "order_number": inv.order.order_number,
                 "customer_name": inv.order.customer_name,
+                "customer_phone": inv.order.customer_phone,
+                "customer_address": inv.order.customer_address,
             } if inv.order else None,
             "subtotal": float(inv.subtotal) if inv.subtotal else 0,
             "tax_amount": float(inv.tax_amount) if inv.tax_amount else 0,
@@ -155,6 +176,9 @@ class InvoiceService:
                         "id": str(item.sku.id),
                         "sku_code": item.sku.sku_code,
                         "product_name": item.sku.product_name,
+                        "color": item.sku.color,
+                        "size": item.sku.size,
+                        "base_price": float(item.sku.base_price) if item.sku.base_price else None,
                     } if item.sku else None,
                     "quantity": item.quantity,
                     "unit_price": float(item.unit_price) if item.unit_price else 0,

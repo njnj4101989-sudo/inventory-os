@@ -23,7 +23,7 @@
 
 ---
 
-## Current State (Session 47 — 2026-03-03)
+## Current State (Session 48 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
@@ -31,7 +31,48 @@
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
 
-### SKU Detail Overlay + Color Master — IN PROGRESS (S47)
+### Orders + Invoices Wholesale Overhaul — S48 (ERP compaction in progress)
+
+**S48 (Backend):**
+- `SKUBrief` extended: +`color`, +`size`, +`base_price` — auto-flows to OrderItemResponse.sku and InvoiceItemResponse.sku
+- `OrderFilterParams(PaginatedParams)`: +`status`, +`source`, +`search` (ilike on order_number + customer_name)
+- `InvoiceFilterParams(PaginatedParams)`: +`status`, +`search` (ilike on invoice_number + customer_name via JOIN to Order)
+- `GET /orders/{id}` — single-fetch route (placed before /{id}/ship)
+- `GET /invoices/{id}` — single-fetch route (placed before /{id}/pay)
+- `order_service.create_order()` — stock check via `InventoryState.available_qty` → raises `InsufficientStockError`
+- `order_service._to_response()` — extended sku dict (+color, +size, +base_price)
+- `invoice_service._to_response()` — extended sku dict (+color, +size, +base_price), extended order dict (+customer_phone, +customer_address)
+- `OrderResponse` schema: +`customer_address`, +`notes`
+
+**S48 (Frontend):**
+- `orders.js`: +`getOrder(id)`, fixed mock `createOrder()` to look up real SKU from `skus[]` instead of dummy `sku_code: 'XXX'`
+- `invoices.js`: +`getInvoice(id)`, +`search` filter support in mock `getInvoices()`
+- Mock data enriched: orders (+customer_address, +notes, +color/size/base_price in sku), invoices (+id/phone/address in order, +notes, +created_at, +color/size/base_price in sku)
+- **OrdersPage full rewrite:**
+  - KPI strip: Total Orders / Pending / Processing / Shipped Today / Revenue
+  - Tab pills: All / Pending / Processing / Shipped / Cancelled / Returned
+  - Source filter dropdown + search bar
+  - Detail overlay (full-page z-50): customer info cards, items table with SKUCodeDisplay + color dots, grand total, Ship/Cancel actions
+  - **Create overlay (design-grid entry):** Customer section → design search → grouped cards per `{type}-{design}` → colors as rows × sizes as columns → qty inputs with stock availability → price per design → sticky footer with totals
+  - Replaced old modal + OrderForm.jsx (one-by-one SKU adding)
+- **InvoicesPage full rewrite:**
+  - KPI strip: Total Invoices / Unpaid (count + amount) / Paid (count + amount) / Revenue
+  - Tab pills: All / Unpaid / Paid + search bar
+  - Detail overlay (full-page z-50): Bill To card, invoice info, line items with SKUCodeDisplay + color dots, CGST/SGST breakdown, Mark Paid action
+  - **Print overlay** (A4 react-to-print): TAX INVOICE header, Bill To, line items table, CGST 9% + SGST 9% + discount → Grand Total, payment status box, signature line — ALL inline styles for print compatibility
+- `OrderForm.jsx` deleted (no longer imported)
+
+**S48 (Docs):**
+- API_REFERENCE §10: +GET /orders/{id}, OrderFilterParams, extended sku dict, stock validation note, customer_address + notes in POST
+- API_REFERENCE §11: +GET /invoices/{id}, InvoiceFilterParams, extended order dict (+phone, +address), extended sku dict
+
+**ERP Compaction (dense padding) — PARTIAL:**
+- OrdersPage: ✅ DONE — KPICard p-2.5, detail overlay p-4/space-y-3, info cards p-2, table cells px-2 py-1.5 text-xs, grid cells w-14 text-xs py-0.5, create overlay inputs px-2 py-1 text-xs, design headers px-3 py-1.5, footer px-4 py-2
+- InvoicesPage: ❌ PENDING — needs same compaction (KPICard, detail overlay, table cells, print overlay stays as-is for A4)
+
+**Build: 0 errors.**
+
+### SKU Detail Overlay + Color Master — COMPLETE (S47)
 
 **S47 Tasks 1-3 (Complete):**
 - **Task 1 — SKU VA badges:** Already done in S46 (`SKUCodeDisplay` with `VA_COLORS` map).
@@ -79,17 +120,17 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ---
 
-### PENDING — S47 Continued
+### PENDING — S48 Continued
 
-**PHASE B (remaining): Page Overhauls**
+**PHASE B: Page Overhauls — ALL COMPLETE**
 
-| # | Task | Detail | Effort |
-|---|------|--------|--------|
-| 1 | ~~SKU VA badges~~ | ✅ Done S46 | — |
-| 2 | ~~SKU detail overlay~~ | ✅ Done S47 | — |
-| 3 | ~~Color master wiring~~ | ✅ Done S47 | — |
-| 4 | Orders page — align to API_REFERENCE.md §10 | Full overhaul: order lines with SKU picker (auto-generated SKUs now available), stock check on order create, status workflow | Medium |
-| 5 | Invoices page — align to API_REFERENCE.md §11 | Full overhaul: invoice generation from orders, SKU-based line items with prices from SKU master | Medium |
+| # | Task | Status |
+|---|------|--------|
+| 1 | ~~SKU VA badges~~ | ✅ S46 |
+| 2 | ~~SKU detail overlay~~ | ✅ S47 |
+| 3 | ~~Color master wiring~~ | ✅ S47 |
+| 4 | ~~Orders page overhaul~~ | ✅ S48 |
+| 5 | ~~Invoices page overhaul~~ | ✅ S48 |
 
 **PHASE C: Deploy**
 
@@ -283,10 +324,18 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Docs: API_REFERENCE (BatchCheck per-color, lot product_type, SKU auto-gen), STEP2 (+2 columns), CLAUDE.md
 - Build: 0 errors
 
-### S47: SKU Detail Overlay + Color Master (in progress)
+### S47: SKU Detail Overlay + Color Master (complete)
 - Backend: `GET /skus/{id}` with `source_batches` (batch→lot→assignments→processing_logs). `sku_service._batch_brief()` helper.
 - Frontend: `getSKU(id)` API + mock. SKU detail overlay (full-page, pricing decision view). Create modal kept for manual SKU.
 - Shared `utils/colorUtils.js` — `loadColorMap()` lazy-fetches Color master → `colorHex()` uses hex_codes. Wired into SKUsPage, ScanPage, LotsPage.
+- Build: 0 errors
+
+### S48: Orders + Invoices Wholesale Overhaul (complete)
+- Backend: SKUBrief +color/size/base_price, OrderFilterParams, InvoiceFilterParams, GET /orders/{id}, GET /invoices/{id}, stock check on create_order(), extended sku/order dicts in _to_response()
+- Frontend: OrdersPage full rewrite (KPIs, tabs, source filter, design-grid create overlay, detail overlay with Ship/Cancel), InvoicesPage full rewrite (KPIs, tabs, search, detail overlay, A4 print overlay with react-to-print)
+- Deleted: OrderForm.jsx (replaced by design-grid embedded in OrdersPage create overlay)
+- Mock data enriched: +customer_address, +notes, +color/size/base_price in sku, +id/phone/address in invoice order
+- Docs: API_REFERENCE §10-11 updated with new routes, filter params, extended shapes
 - Build: 0 errors
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI

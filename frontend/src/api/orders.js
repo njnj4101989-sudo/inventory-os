@@ -1,5 +1,5 @@
 import client from './client'
-import { orders, mockPaginated, mockResponse } from './mock'
+import { orders, skus, mockPaginated, mockResponse } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -20,6 +20,14 @@ export async function getOrders(params = {}) {
   return client.get('/orders', { params })
 }
 
+export async function getOrder(id) {
+  if (USE_MOCK) {
+    const order = orders.find((o) => o.id === id)
+    return mockResponse(order)
+  }
+  return client.get(`/orders/${id}`)
+}
+
 export async function createOrder(data) {
   if (USE_MOCK) {
     const nextNum = `ORD-${String(orders.length + 1).padStart(4, '0')}`
@@ -33,19 +41,24 @@ export async function createOrder(data) {
       external_order_ref: null,
       customer_name: data.customer_name,
       customer_phone: data.customer_phone,
+      customer_address: data.customer_address || null,
       status: 'pending',
-      items: (data.items || []).map((item) => ({
-        sku: { id: item.sku_id, sku_code: 'XXX', product_name: 'Product' },
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.quantity * item.unit_price,
-        fulfilled_qty: 0,
-      })),
+      notes: data.notes || null,
+      items: (data.items || []).map((item) => {
+        const sku = skus.find((s) => s.id === item.sku_id)
+        return {
+          sku: sku ? { id: sku.id, sku_code: sku.sku_code, product_name: sku.product_name, color: sku.color, size: sku.size, base_price: sku.base_price } : { id: item.sku_id, sku_code: '—', product_name: '—' },
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.quantity * item.unit_price,
+          fulfilled_qty: 0,
+        }
+      }),
       total_amount: totalAmount,
       created_at: new Date().toISOString(),
     }
     orders.push(newOrder)
-    return mockResponse({ order: newOrder, reservations: [] }, 'Order created. Stock reserved.')
+    return mockResponse(newOrder, 'Order created. Stock reserved.')
   }
   return client.post('/orders', data)
 }
@@ -54,7 +67,7 @@ export async function shipOrder(id) {
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)
     if (order) order.status = 'shipped'
-    return mockResponse({ order }, 'Order shipped')
+    return mockResponse(order, 'Order shipped')
   }
   return client.post(`/orders/${id}/ship`)
 }
@@ -63,7 +76,7 @@ export async function cancelOrder(id) {
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)
     if (order) order.status = 'cancelled'
-    return mockResponse({ order }, 'Order cancelled')
+    return mockResponse(order, 'Order cancelled')
   }
   return client.post(`/orders/${id}/cancel`)
 }
