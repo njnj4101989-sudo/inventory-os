@@ -56,15 +56,9 @@ export default defineConfig({
             },
           },
           {
-            // API calls — network first with cache fallback
+            // API calls — network only (never serve stale API data)
             urlPattern: /\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            handler: 'NetworkOnly',
           },
           {
             // Batch passport — stale while revalidate (critical for QR scan)
