@@ -5,7 +5,7 @@
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → http://localhost:5173
-3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
+3. **Production:** `https://inventory.drsblouse.com` (Vercel ✅ LIVE) + `https://api-inventory.drsblouse.com` (AWS EC2 — pending C4)
 4. Login: `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
 
 ---
@@ -29,7 +29,21 @@
 
 ---
 
-## Current State (Session 54 — 2026-03-03)
+## Current State (Session 55 — 2026-03-04)
+
+### S55: C5 Vercel Frontend Deploy — LIVE
+
+- CLAUDE.md optimized: 44K → 12K chars (72% reduction)
+- Vercel project `inventory-os` created (same account as `fashion-ecommerce`/`drsblouse.com`)
+- Env vars: `VITE_API_URL=https://api-inventory.drsblouse.com/api/v1`, `VITE_USE_MOCK=false`
+- GoDaddy CNAME: `inventory` → `cname.vercel-dns.com`
+- **https://inventory.drsblouse.com** — LIVE, SSL active, login page rendering
+- Auto-deploy on push to `main` (Vercel built-in)
+- Vercel CLI authenticated for future domain/project management
+
+---
+
+## Previous State (Session 54 — 2026-03-03)
 
 ### S54: Batch VA Tracking — "Out for VA" Tab + Challan Print
 
@@ -76,7 +90,7 @@
 | C2 | SSE backend — EventBus + streaming endpoint | ✅ S53 |
 | C3 | SSE frontend — Toast + Bell + Notifications | ✅ S53 |
 | C4 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
-| C5 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
+| C5 | Vercel frontend deploy + GoDaddy DNS | ✅ S55 — `inventory.drsblouse.com` LIVE |
 | C6 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
 | C7 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
 
@@ -178,6 +192,7 @@
 | S52 | Roll Picker Group By | 4 modes (Sr.No/Fabric/Color/Supplier), dynamic badges, compact dropdown |
 | S53 | PostgreSQL + SSE Notifications | C1: PG migration code, C2: EventBus + SSE endpoint, C3: Toast + Bell + NotificationContext |
 | S54 | Batch VA Tracking | Out for VA tab, BatchChallan print, next-number preview, onPrintChallan prop |
+| S55 | Vercel Frontend Deploy | CLAUDE.md optimized (44K→12K), Vercel project + env vars + GoDaddy CNAME, `inventory.drsblouse.com` LIVE |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
