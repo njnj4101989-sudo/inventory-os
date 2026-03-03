@@ -84,7 +84,7 @@ export default function BatchDetailPage() {
             level="H"
             includeMargin={true}
           />
-          <p className="mt-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Scan to view</p>
+          <p className="mt-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scan to view</p>
         </div>
         {/* KPI cards — 2×2 grid in remaining 4 cols */}
         <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">

@@ -23,13 +23,60 @@
 
 ---
 
-## Current State (Session 48 — 2026-03-03)
+## Current State (Session 49 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### S49: Order Create Picker Redesign + Typography WOW Factor
+
+**S49 (Part A — Order Create Picker):**
+- Replaced "all-grids-expanded" create overlay with **LotPage-style picker pattern**
+- Design Picker: 3-4 col compact cards (max-h-64, scrollable) — shows design code, color/size counts, stock level, base price, VA badges
+- Click card → adds design to "Selected Designs" area below → shows color×size qty grid
+- Already-selected designs dimmed with "Added" badge in picker
+- Remove (X) button per selected design → clears associated qty data
+- Empty state: dashed border "Click a design card above" prompt
+- Footer upgraded: shows design count + item count + grand total
+- New state: `selectedDesigns` (Set) + `pickerGroups` + `selectedGroups` memos
+- Removed unused `filteredGroups` memo
+
+**S49 (Part B — Typography WOW Factor):**
+- **Global CSS (`index.css`):**
+  - Google Fonts: added weight `300` (light)
+  - `html` base: `text-gray-800` (darker body text)
+  - `.typo-th`: added `text-gray-600` (was unstyled color)
+  - New `.typo-label`: `text-[11px] font-semibold uppercase tracking-wide text-gray-500`
+  - New `.typo-data`: `text-[13px] font-medium text-gray-700`
+- **DataTable.jsx (global fix):** `<th>` color `text-gray-500` → `text-gray-600`, hover `text-gray-700` → `text-gray-800` — ALL pages' table headers upgraded automatically
+- **Per-page typography fixes:**
+  - Zero `text-[9px]` remaining (was 13 occurrences across 2 files)
+  - Labels: `text-gray-400 font-semibold` → `text-gray-500 font-semibold` (RollsPage, SuppliersPage, LotsPage, SKUsPage, BatchDetailPage, InvoicesPage, OrdersPage)
+  - Label size: `text-[10px]` → `text-[11px]` (LotsPage 15 labels, SKUsPage 2, InvoicesPage KPI+headers)
+  - KPI card labels: `text-[10px]` → `text-[11px]` (OrdersPage, InvoicesPage)
+  - Detail table headers: `text-[10px]` → `text-[11px]` + `font-semibold` + `text-gray-600` (OrdersPage, InvoicesPage)
+
+**S49 (Keyboard System — Order Create Overlay):**
+- **Ctrl+S** — save order from anywhere in overlay (global `keydown` listener, gated on `!saving`)
+- **Escape** — safe close with dirty check. Clean form = instant close. Dirty form = centered confirmation dialog ("Discard this order? X items across Y designs") with **Keep Editing** (autoFocus, safe default) and Discard buttons
+- **Auto-focus** — Name field focused on overlay open via `nameRef` (100ms after SKU load)
+- **Enter through customer fields** — Name → Phone → Address → Source → Notes → Design Search. Uses `data-customer-field` attrs + `handleCustomerKeyDown` with `querySelector`
+- **Grid cell navigation** — `Enter/Tab` on qty cell advances right across sizes, wraps to next color row's first cell. Uses `data-grid-row`/`data-grid-col` + `data-qty` attrs. At end of grid → focuses price input. `Shift+Tab` natural backward via browser default
+- **Price input Enter** — focuses first qty cell in same design's grid via `data-design-block` + `data-qty` query
+- **Delete key** — press Delete on any qty cell → inline confirmation bar in design header (red: "Remove BLS-101 (12 items)?" [Remove] [Keep]). Keep button autoFocused. Escape dismisses confirmation without closing overlay
+- **tabIndex optimization** — X button: `tabIndex={-1}` (mouse-only, Tab skips). Price input: `tabIndex={-1}` (clickable but Tab skips). Zero wasted Tab stops
+- **Cross-design Tab flow** — last cell of design grid → first `[data-qty]` of next `[data-design-block]` → last design ends at Create button. Uses DOM-ordered `querySelectorAll('[data-qty]')` (handles gaps from missing SKUs)
+- **Cancel buttons** (header + footer) both use `requestClose()` which respects dirty state
+- **Keyboard hint strip** — footer bar: `Enter` Next cell | `Delete` Remove design | `Ctrl+S` Save | `Esc` Close (hidden on mobile via `hidden md:flex`)
+- **Dirty detection** — `isDirty` computed from customerForm (name/phone/address/notes trimmed), selectedDesigns.size, gridQty values
+- **Layered Escape** — Delete confirmation → Discard confirmation → close (innermost dismissed first)
+- **No band-aids:** GridCell component accepts `onKeyDown` + `data-grid-row/col` as first-class props, not patched after the fact
+- **TDZ fix:** `confirmDeleteDesign`/`cancelDeleteDesign` useCallback declarations placed BEFORE the useEffect that references them (avoids temporal dead zone crash)
+
+**Build: 0 errors.**
 
 ### Orders + Invoices Wholesale Overhaul — S48 (ERP compaction in progress)
 
@@ -66,9 +113,9 @@
 - API_REFERENCE §10: +GET /orders/{id}, OrderFilterParams, extended sku dict, stock validation note, customer_address + notes in POST
 - API_REFERENCE §11: +GET /invoices/{id}, InvoiceFilterParams, extended order dict (+phone, +address), extended sku dict
 
-**ERP Compaction (dense padding) — PARTIAL:**
+**ERP Compaction (dense padding) — COMPLETE:**
 - OrdersPage: ✅ DONE — KPICard p-2.5, detail overlay p-4/space-y-3, info cards p-2, table cells px-2 py-1.5 text-xs, grid cells w-14 text-xs py-0.5, create overlay inputs px-2 py-1 text-xs, design headers px-3 py-1.5, footer px-4 py-2
-- InvoicesPage: ❌ PENDING — needs same compaction (KPICard, detail overlay, table cells, print overlay stays as-is for A4)
+- InvoicesPage: ✅ DONE — KPICard p-2.5, detail overlay p-4/space-y-3, info cards p-2, table cells px-2 py-1.5 text-xs, amount summary text-xs w-64, actions px-4 py-1.5 text-xs. Print overlay untouched (A4 needs full padding)
 
 **Build: 0 errors.**
 
@@ -328,6 +375,12 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Backend: `GET /skus/{id}` with `source_batches` (batch→lot→assignments→processing_logs). `sku_service._batch_brief()` helper.
 - Frontend: `getSKU(id)` API + mock. SKU detail overlay (full-page, pricing decision view). Create modal kept for manual SKU.
 - Shared `utils/colorUtils.js` — `loadColorMap()` lazy-fetches Color master → `colorHex()` uses hex_codes. Wired into SKUsPage, ScanPage, LotsPage.
+- Build: 0 errors
+
+### S49: Order Create Picker Redesign + Typography + Keyboard System (complete)
+- Part A: Order Create overlay → picker pattern (Design cards → click to select → grid below). New states: `selectedDesigns`, `pickerGroups`, `selectedGroups`
+- Part B: Typography global uplift — `index.css` new classes (.typo-label, .typo-data), DataTable `<th>` global fix, zero text-[9px] remaining, labels upgraded to text-gray-500/text-[11px] across 7 pages
+- Part C: Full keyboard system — Ctrl+S save, Escape with dirty-check confirmation dialog, auto-focus Name, Enter chain through customer→search→grid, Tab/Enter grid cell navigation (right→wrap-down), price Enter→grid, keyboard hint strip in footer
 - Build: 0 errors
 
 ### S48: Orders + Invoices Wholesale Overhaul (complete)

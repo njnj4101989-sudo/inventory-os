@@ -1329,7 +1329,7 @@ export default function RollsPage() {
               {/* Row 1: Status pills + Availability pills */}
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Status:</span>
+                  <span className="text-xs font-medium text-gray-500 uppercase mr-1">Status:</span>
                   {STATUS_PILLS.map((p) => (
                     <button key={p.key} onClick={() => { setRollStatusFilter(p.key); setRollPage(1) }}
                       className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
@@ -1340,7 +1340,7 @@ export default function RollsPage() {
                 </div>
                 <div className="h-5 w-px bg-gray-200" />
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Stock:</span>
+                  <span className="text-xs font-medium text-gray-500 uppercase mr-1">Stock:</span>
                   {AVAIL_PILLS.map((p) => (
                     <button key={p.key} onClick={() => { setRollAvailFilter(p.key); setRollPage(1) }}
                       className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
@@ -1542,7 +1542,7 @@ export default function RollsPage() {
                   {uniqueVendors.map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-gray-400 uppercase mr-1">Duration:</span>
+                  <span className="text-xs font-medium text-gray-500 uppercase mr-1">Duration:</span>
                   {[
                     { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
                     { key: 'week', label: '≤ 7 days', active: 'bg-green-100 text-green-700 ring-1 ring-green-300' },
@@ -2064,7 +2064,7 @@ export default function RollsPage() {
                       {/* Color-wise weight grid */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                             Color-wise Rolls <span className="font-normal normal-case text-gray-400 ml-1">(Enter on empty = new color)</span>
                           </span>
                           <button onClick={() => addColorRow(gIdx)} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
@@ -2490,7 +2490,7 @@ export default function RollsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Left: Material Info */}
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Material Information</h3>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Material Information</h3>
                       <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
                         {[
                           ['Roll Code', <span key="rc" className="font-mono text-primary-600 font-semibold">{detailRoll.roll_code}{detailRoll.enhanced_roll_code && detailRoll.enhanced_roll_code !== detailRoll.roll_code && <span className="text-orange-600">{detailRoll.enhanced_roll_code.slice(detailRoll.roll_code.length)}</span>}</span>],
@@ -2518,7 +2518,7 @@ export default function RollsPage() {
                     {/* Right: Supplier & Receiving */}
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Supplier & Invoice</h3>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Supplier & Invoice</h3>
                         <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
                           {[
                             ['Supplier', detailRoll.supplier?.name || '—'],
@@ -2533,7 +2533,7 @@ export default function RollsPage() {
                         </div>
                       </div>
                       <div>
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Receiving Details</h3>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Receiving Details</h3>
                         <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
                           {[
                             ['Received By', detailRoll.received_by_user?.full_name || '—'],
@@ -2548,7 +2548,7 @@ export default function RollsPage() {
                       </div>
                       {detailRoll.notes && (
                         <div>
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes</h3>
+                          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes</h3>
                           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
                             <p className="text-sm text-gray-700">{detailRoll.notes}</p>
                           </div>
@@ -2560,7 +2560,7 @@ export default function RollsPage() {
                   {/* Processing History */}
                   {procLogs.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Processing History</h3>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Processing History</h3>
                       <div className="space-y-3">
                         {procLogs.map((log, idx) => {
                           const va = log.value_addition

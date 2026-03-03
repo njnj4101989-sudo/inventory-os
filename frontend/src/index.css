@@ -18,6 +18,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    @apply text-gray-800;
   }
 
   /* Tabular numbers for data-heavy tables */
@@ -50,12 +51,20 @@
     @apply text-sm font-semibold uppercase tracking-wider text-gray-500;
   }
   .typo-th {
-    @apply text-xs font-semibold uppercase tracking-wider;
+    @apply text-xs font-semibold uppercase tracking-wider text-gray-600;
     font-variant-numeric: tabular-nums;
   }
   .typo-td {
     @apply text-sm;
     font-variant-numeric: tabular-nums;
+  }
+  .typo-label {
+    @apply font-semibold uppercase tracking-wide text-gray-500;
+    font-size: 11px;
+  }
+  .typo-data {
+    @apply font-medium text-gray-700;
+    font-size: 13px;
   }
   .typo-kpi {
     @apply text-2xl font-bold tracking-tight;

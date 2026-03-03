@@ -55,8 +55,8 @@ export default function DataTable({
             {allCols.map((col, ci) => (
               <th
                 key={col.key + ci}
-                className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 ${
-                  col.sortable !== false ? 'cursor-pointer select-none hover:text-gray-700' : ''
+                className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 ${
+                  col.sortable !== false ? 'cursor-pointer select-none hover:text-gray-800' : ''
                 } ${col.key === '__expand' ? 'w-10' : ''}`}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
               >

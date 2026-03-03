@@ -55,9 +55,9 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color = 'slate' }) {
   return (
     <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
-      <p className="text-[10px] font-medium opacity-80">{label}</p>
+      <p className="text-[11px] font-medium opacity-80">{label}</p>
       <p className="mt-0.5 text-lg font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[10px] opacity-70">{sub}</p>}
+      {sub && <p className="text-[11px] opacity-70">{sub}</p>}
     </div>
   )
 }
@@ -349,13 +349,13 @@ export default function InvoicesPage() {
             {/* Info cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold mb-1">Bill To</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Bill To</p>
                 <p className="text-sm font-bold text-gray-800">{o.customer_name || '—'}</p>
                 {o.customer_phone && <p className="text-xs text-gray-600 mt-0.5">Phone: {o.customer_phone}</p>}
                 {o.customer_address && <p className="text-xs text-gray-600 mt-0.5">{o.customer_address}</p>}
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold mb-1">Invoice Info</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Invoice Info</p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-gray-500">Issued:</span> <span className="font-medium">{inv.issued_at ? new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
                   <div><span className="text-gray-500">Status:</span> <StatusBadge status={inv.status} /></div>
@@ -376,7 +376,7 @@ export default function InvoicesPage() {
             <div className="border rounded overflow-hidden">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50">
-                  <tr className="text-left text-gray-500 text-[10px] uppercase">
+                  <tr className="text-left text-gray-600 text-[11px] font-semibold uppercase">
                     <th className="px-2 py-1.5">#</th>
                     <th className="px-2 py-1.5">SKU</th>
                     <th className="px-2 py-1.5">Color</th>

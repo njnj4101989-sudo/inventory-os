@@ -466,7 +466,7 @@ function StockKPI({ label, value, color, icon }) {
         {icon}
         <span className="text-lg font-bold">{value}</span>
       </div>
-      <div className="text-[10px] uppercase tracking-wide opacity-60 mt-0.5">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide opacity-60 mt-0.5">{label}</div>
     </div>
   )
 }
@@ -510,7 +510,7 @@ function BatchCard({ batch }) {
       {/* VA Processing */}
       {vaLogs.length > 0 && (
         <div className="mt-2 pt-2 border-t border-gray-100">
-          <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1.5">Value Additions</div>
+          <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1.5">Value Additions</div>
           <div className="flex flex-wrap gap-1.5">
             {vaLogs.map(p => {
               const va = p.value_addition

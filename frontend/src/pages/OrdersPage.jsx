@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
@@ -63,14 +63,14 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color = 'slate' }) {
   return (
     <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
-      <p className="text-[10px] font-medium opacity-80">{label}</p>
+      <p className="text-[11px] font-medium opacity-80">{label}</p>
       <p className="mt-0.5 text-lg font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[10px] opacity-70">{sub}</p>}
+      {sub && <p className="text-[11px] opacity-70">{sub}</p>}
     </div>
   )
 }
 
-function GridCell({ available, qty, onChange }) {
+function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRow, 'data-grid-col': gridCol }) {
   const hasStock = available > 0
   return (
     <div className="flex flex-col items-center gap-0">
@@ -80,6 +80,10 @@ function GridCell({ available, qty, onChange }) {
         max={available}
         value={qty || ''}
         onChange={(e) => onChange(parseInt(e.target.value) || 0)}
+        onKeyDown={onKeyDown}
+        data-qty="true"
+        data-grid-row={gridRow}
+        data-grid-col={gridCol}
         className={`w-14 rounded border text-center text-xs py-0.5 focus:outline-none focus:ring-1 ${
           qty > 0
             ? qty > available ? 'border-red-400 focus:ring-red-400 bg-red-50' : 'border-primary-400 focus:ring-primary-400 bg-primary-50'
@@ -87,7 +91,7 @@ function GridCell({ available, qty, onChange }) {
         }`}
         placeholder="0"
       />
-      <span className={`text-[9px] leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
+      <span className={`text-[11px] leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
         {available}
       </span>
     </div>
@@ -159,8 +163,136 @@ export default function OrdersPage() {
   const [gridPrice, setGridPrice] = useState({}) // { designKey: price }
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '', source: 'web', notes: '' })
   const [designSearch, setDesignSearch] = useState('')
+  const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState(null) // design key pending deletion
+  const nameRef = useRef(null)
+
+  /* ── Dirty detection ── */
+  const isDirty = useMemo(() => {
+    if (customerForm.name.trim()) return true
+    if (customerForm.phone.trim()) return true
+    if (customerForm.address.trim()) return true
+    if (customerForm.notes.trim()) return true
+    if (selectedDesigns.size > 0) return true
+    if (Object.values(gridQty).some(q => q > 0)) return true
+    return false
+  }, [customerForm, selectedDesigns, gridQty])
+
+  /* ── Safe close — confirm if dirty ── */
+  const requestClose = useCallback(() => {
+    if (!isDirty) { setCreateMode(false); return }
+    setConfirmDiscard(true)
+  }, [isDirty])
+
+  const confirmAndClose = useCallback(() => {
+    setConfirmDiscard(false)
+    setCreateMode(false)
+  }, [])
+
+  const cancelDiscard = useCallback(() => {
+    setConfirmDiscard(false)
+  }, [])
+
+  /* ── Confirm/cancel design deletion ── */
+  const confirmDeleteDesign = useCallback(() => {
+    if (!deleteConfirmKey) return
+    const removedKey = deleteConfirmKey
+    setDeleteConfirmKey(null)
+    removeDesign(removedKey)
+    // After removal, focus the next design's first cell or the picker search
+    setTimeout(() => {
+      const nextCell = document.querySelector('[data-design-block] [data-qty]')
+      if (nextCell) { nextCell.focus() }
+      else { document.querySelector('[data-design-search] input')?.focus() }
+    }, 60)
+  }, [deleteConfirmKey])
+
+  const cancelDeleteDesign = useCallback(() => {
+    setDeleteConfirmKey(null)
+  }, [])
+
+  /* ── Global keyboard: Ctrl+S, Escape ── */
+  useEffect(() => {
+    if (!createMode) return
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && !saving) {
+        e.preventDefault()
+        handleCreate()
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        // Dismiss innermost dialog first
+        if (deleteConfirmKey) { cancelDeleteDesign(); return }
+        if (confirmDiscard) { cancelDiscard(); return }
+        requestClose()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [createMode, saving, confirmDiscard, deleteConfirmKey, requestClose, cancelDiscard, cancelDeleteDesign])
+
+  /* ── Auto-focus Name field on overlay open ── */
+  useEffect(() => {
+    if (createMode && !skuLoading) {
+      setTimeout(() => nameRef.current?.focus(), 100)
+    }
+  }, [createMode, skuLoading])
+
+  /* ── Grid cell keyboard navigation ── */
+  const handleGridKeyDown = useCallback((e) => {
+    // Delete key → ask to remove this design
+    if (e.key === 'Delete') {
+      const blockKey = e.target.closest('[data-design-block]')?.dataset.designBlock
+      if (blockKey) setDeleteConfirmKey(blockKey)
+      return
+    }
+
+    if (e.key !== 'Enter' && e.key !== 'Tab') return
+    if (e.shiftKey) return // let Shift+Tab work naturally (backward)
+
+    e.preventDefault()
+    const grid = e.target.closest('[data-design-grid]')
+    if (!grid) return
+
+    // All qty inputs in this grid, in DOM order (handles gaps from missing SKUs)
+    const cells = [...grid.querySelectorAll('[data-qty]')]
+    const idx = cells.indexOf(e.target)
+
+    if (idx < cells.length - 1) {
+      // Next cell within this design
+      cells[idx + 1].focus()
+      cells[idx + 1].select()
+    } else {
+      // End of this design → jump to next design block's first cell
+      const currentBlock = grid.closest('[data-design-block]')
+      const allBlocks = [...document.querySelectorAll('[data-design-block]')]
+      const blockIdx = allBlocks.indexOf(currentBlock)
+      if (blockIdx < allBlocks.length - 1) {
+        const nextFirst = allBlocks[blockIdx + 1].querySelector('[data-qty]')
+        if (nextFirst) { nextFirst.focus(); nextFirst.select(); nextFirst.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+      }
+      // Last design, last cell → focus Create button
+      document.querySelector('[data-create-btn]')?.focus()
+    }
+  }, [])
+
+  /* ── Customer field Enter → advance ── */
+  const handleCustomerKeyDown = useCallback((e, fieldName) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    const fields = ['name', 'phone', 'address', 'source', 'notes']
+    const idx = fields.indexOf(fieldName)
+    if (idx < fields.length - 1) {
+      const nextField = document.querySelector(`[data-customer-field="${fields[idx + 1]}"]`)
+      nextField?.focus()
+    } else {
+      // Last customer field → focus design search
+      document.querySelector('[data-design-search] input')?.focus()
+    }
+  }, [])
 
   useEffect(() => { loadColorMap() }, [])
 
@@ -234,6 +366,7 @@ export default function OrdersPage() {
     setGridPrice({})
     setCustomerForm({ name: '', phone: '', address: '', source: 'web', notes: '' })
     setDesignSearch('')
+    setSelectedDesigns(new Set())
     setFormError(null)
     try {
       const res = await getSKUs({ is_active: true, page_size: 500 })
@@ -268,11 +401,6 @@ export default function OrdersPage() {
     }))
   }, [allSKUs])
 
-  const filteredGroups = useMemo(() => {
-    if (!designSearch) return designGroups
-    const q = designSearch.toLowerCase()
-    return designGroups.filter(g => g.key.toLowerCase().includes(q) || g.design.toLowerCase().includes(q))
-  }, [designGroups, designSearch])
 
   /* ── Grid helpers ── */
   const findSKU = (group, color, size) => {
@@ -286,6 +414,33 @@ export default function OrdersPage() {
   const setPrice = (designKey, price) => {
     setGridPrice(prev => ({ ...prev, [designKey]: price }))
   }
+
+  const addDesign = (key) => {
+    setSelectedDesigns(prev => new Set([...prev, key]))
+  }
+
+  const removeDesign = (key) => {
+    setSelectedDesigns(prev => { const next = new Set(prev); next.delete(key); return next })
+    // Clear qty for all SKUs in this design group
+    const group = designGroups.find(g => g.key === key)
+    if (group) {
+      setGridQty(prev => {
+        const next = { ...prev }
+        for (const sku of group.skus) delete next[sku.id]
+        return next
+      })
+    }
+  }
+
+  const selectedGroups = useMemo(() => {
+    return designGroups.filter(g => selectedDesigns.has(g.key))
+  }, [designGroups, selectedDesigns])
+
+  const pickerGroups = useMemo(() => {
+    if (!designSearch) return designGroups
+    const q = designSearch.toLowerCase()
+    return designGroups.filter(g => g.key.toLowerCase().includes(q) || g.design.toLowerCase().includes(q))
+  }, [designGroups, designSearch])
 
   /* ── Create submit ── */
   const handleCreate = async () => {
@@ -361,19 +516,19 @@ export default function OrdersPage() {
             {/* Customer info */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold">Phone</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold">Phone</p>
                 <p className="text-xs font-medium text-gray-800">{o.customer_phone || '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold">Source</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold">Source</p>
                 <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_COLORS[o.source] || 'bg-gray-100 text-gray-600'}`}>{o.source}</span>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold">Date</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold">Date</p>
                 <p className="text-xs font-medium text-gray-800">{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[9px] uppercase text-gray-400 font-semibold">Address</p>
+                <p className="text-[11px] uppercase text-gray-500 font-semibold">Address</p>
                 <p className="text-xs font-medium text-gray-800">{o.customer_address || '—'}</p>
               </div>
             </div>
@@ -394,7 +549,7 @@ export default function OrdersPage() {
             <div className="border rounded overflow-hidden">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50">
-                  <tr className="text-left text-gray-500 text-[10px] uppercase">
+                  <tr className="text-left text-gray-600 text-[11px] font-semibold uppercase">
                     <th className="px-2 py-1.5">SKU</th>
                     <th className="px-2 py-1.5">Color</th>
                     <th className="px-2 py-1.5">Size</th>
@@ -462,14 +617,36 @@ export default function OrdersPage() {
   if (createMode) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden">
+        {/* ── Discard confirmation bar ── */}
+        {confirmDiscard && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
+              <h3 className="text-sm font-bold text-gray-800">Discard this order?</h3>
+              <p className="text-xs text-gray-500">
+                You have <span className="font-semibold text-gray-700">{totalItems}</span> item{totalItems !== 1 ? 's' : ''} across <span className="font-semibold text-gray-700">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''}. This cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={confirmAndClose}
+                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 text-xs font-medium hover:bg-red-50 transition-colors">
+                  Discard
+                </button>
+                <button onClick={cancelDiscard} autoFocus
+                  className="rounded bg-emerald-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-emerald-700 transition-colors">
+                  Keep Editing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="text-lg font-bold leading-tight">New Order</h1>
-            <p className="text-xs opacity-80">Design-Grid &middot; qty per color &times; size</p>
+            <p className="text-xs opacity-80">Pick designs &middot; set qty per color &times; size</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setCreateMode(false)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Cancel</button>
+            <button onClick={requestClose} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={saving || totalItems === 0}
               className="rounded bg-white text-emerald-700 px-4 py-1.5 text-xs font-bold hover:bg-emerald-50 disabled:opacity-50 transition-colors">
               {saving ? 'Creating...' : 'Create Order'}
@@ -485,23 +662,35 @@ export default function OrdersPage() {
             <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <div>
-                <label className="block text-[9px] uppercase text-gray-400 font-semibold mb-0.5">Name *</label>
-                <input type="text" value={customerForm.name} onChange={(e) => setCustomerForm(f => ({ ...f, name: e.target.value }))}
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Name *</label>
+                <input ref={nameRef} type="text" value={customerForm.name}
+                  data-customer-field="name"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, name: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'name')}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Customer name" />
               </div>
               <div>
-                <label className="block text-[9px] uppercase text-gray-400 font-semibold mb-0.5">Phone</label>
-                <input type="text" value={customerForm.phone} onChange={(e) => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Phone</label>
+                <input type="text" value={customerForm.phone}
+                  data-customer-field="phone"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'phone')}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="9876543210" />
               </div>
               <div>
-                <label className="block text-[9px] uppercase text-gray-400 font-semibold mb-0.5">Address</label>
-                <input type="text" value={customerForm.address} onChange={(e) => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Address</label>
+                <input type="text" value={customerForm.address}
+                  data-customer-field="address"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'address')}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Address" />
               </div>
               <div>
-                <label className="block text-[9px] uppercase text-gray-400 font-semibold mb-0.5">Source</label>
-                <select value={customerForm.source} onChange={(e) => setCustomerForm(f => ({ ...f, source: e.target.value }))}
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Source</label>
+                <select value={customerForm.source}
+                  data-customer-field="source"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, source: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'source')}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                   <option value="web">Web</option>
                   <option value="ecommerce">E-commerce</option>
@@ -509,128 +698,238 @@ export default function OrdersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-[9px] uppercase text-gray-400 font-semibold mb-0.5">Notes</label>
-                <input type="text" value={customerForm.notes} onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Notes</label>
+                <input type="text" value={customerForm.notes}
+                  data-customer-field="notes"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'notes')}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Optional notes" />
               </div>
             </div>
-          </div>
-
-          {/* Design search */}
-          <div className="mb-3">
-            <SearchInput value={designSearch} onChange={setDesignSearch} placeholder="Search by design number (e.g. 101, 702)..." />
           </div>
 
           {skuLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
             </div>
-          ) : filteredGroups.length === 0 ? (
+          ) : allSKUs.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              {allSKUs.length === 0 ? 'No active SKUs found. Pack batches first to auto-generate SKUs.' : 'No designs match your search.'}
+              No active SKUs found. Pack batches first to auto-generate SKUs.
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredGroups.map(group => {
-                const groupSubtotal = group.skus.reduce((s, sku) => {
-                  const qty = gridQty[sku.id] || 0
-                  const p = parseSKU(sku.sku_code)
-                  const designKey = `${p.type}-${p.design}`
-                  const price = parseFloat(gridPrice[designKey]) || sku.base_price || 0
-                  return s + qty * price
-                }, 0)
-                const groupQty = group.skus.reduce((s, sku) => s + (gridQty[sku.id] || 0), 0)
-                const firstSku = group.skus[0]
-                const defaultPrice = firstSku?.base_price || 0
-
-                return (
-                  <div key={group.key} className="border rounded-lg overflow-hidden">
-                    {/* Design header */}
-                    <div className="bg-gray-50 px-3 py-1.5 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-800">{group.key}</span>
-                        <span className="text-[10px] text-gray-400">{group.colors.length}c &middot; {group.sizes.length}s</span>
-                        {group.skus[0]?._parsed.vas.length > 0 && (
-                          <span className="flex gap-1">
-                            {group.skus[0]._parsed.vas.map(va => {
-                              const c = VA_COLORS[va] || DEFAULT_VA
-                              return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold ${c.bg} ${c.text}`}>+{va}</span>
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <label className="text-[9px] uppercase text-gray-400 font-semibold">₹/pc</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={gridPrice[group.key] ?? (defaultPrice || '')}
-                            onChange={(e) => setPrice(group.key, e.target.value)}
-                            className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-right focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                            placeholder="₹"
-                          />
-                        </div>
-                        {groupQty > 0 && (
-                          <span className="text-xs font-semibold text-emerald-700">{groupQty}pcs ₹{groupSubtotal.toLocaleString('en-IN')}</span>
-                        )}
-                      </div>
+            <>
+              {/* ── Design Picker ── */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-gray-700">Select Designs</h3>
+                  <span className="text-[11px] text-gray-400">{designGroups.length} designs available</span>
+                </div>
+                <div className="mb-2" data-design-search>
+                  <SearchInput value={designSearch} onChange={setDesignSearch} placeholder="Search by design number (e.g. 101, 702)..." />
+                </div>
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/50 p-2">
+                  {pickerGroups.length === 0 ? (
+                    <p className="text-center py-6 text-gray-400 text-sm">No designs match your search.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {pickerGroups.map(group => {
+                        const isSelected = selectedDesigns.has(group.key)
+                        const firstSku = group.skus[0]
+                        const defaultPrice = firstSku?.base_price || 0
+                        const totalStock = group.skus.reduce((s, sku) => s + (sku.stock?.available_qty || 0), 0)
+                        return (
+                          <button
+                            key={group.key}
+                            onClick={() => !isSelected && addDesign(group.key)}
+                            disabled={isSelected}
+                            className={`rounded-lg border p-2.5 text-left transition-all ${
+                              isSelected
+                                ? 'border-emerald-300 bg-emerald-50/60 opacity-60 cursor-default'
+                                : 'border-gray-200 bg-white hover:border-emerald-400 hover:shadow-sm cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-bold text-gray-800">{group.key}</span>
+                              {isSelected && (
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-100 rounded px-1.5 py-0.5">Added</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] text-gray-500">{group.colors.length}c &middot; {group.sizes.length}s</span>
+                              {defaultPrice > 0 && <span className="text-[11px] text-gray-500">&middot; ₹{defaultPrice}</span>}
+                              <span className={`text-[11px] font-medium ${totalStock > 0 ? 'text-green-600' : 'text-red-400'}`}>&middot; {totalStock} in stock</span>
+                            </div>
+                            {firstSku?._parsed.vas.length > 0 && (
+                              <div className="flex gap-1 mt-1">
+                                {firstSku._parsed.vas.map(va => {
+                                  const c = VA_COLORS[va] || DEFAULT_VA
+                                  return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
+                                })}
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
+                  )}
+                </div>
+              </div>
 
-                    {/* Grid: colors × sizes */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b bg-white">
-                            <th className="px-2 py-1 text-left text-[10px] text-gray-500 font-medium w-28">Color</th>
-                            {group.sizes.map(size => (
-                              <th key={size} className="px-1 py-1 text-center text-[10px] text-gray-500 font-medium">{size}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {group.colors.map(color => (
-                            <tr key={color} className="hover:bg-gray-50/50">
-                              <td className="px-2 py-1">
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="w-2.5 h-2.5 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
-                                  <span className="text-xs font-medium">{color}</span>
+              {/* ── Selected Designs — color×size grids ── */}
+              {selectedGroups.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-gray-700">Order Items ({selectedGroups.length} design{selectedGroups.length > 1 ? 's' : ''})</h3>
+                  {selectedGroups.map(group => {
+                    const groupSubtotal = group.skus.reduce((s, sku) => {
+                      const qty = gridQty[sku.id] || 0
+                      const p = parseSKU(sku.sku_code)
+                      const designKey = `${p.type}-${p.design}`
+                      const price = parseFloat(gridPrice[designKey]) || sku.base_price || 0
+                      return s + qty * price
+                    }, 0)
+                    const groupQty = group.skus.reduce((s, sku) => s + (gridQty[sku.id] || 0), 0)
+                    const firstSku = group.skus[0]
+                    const defaultPrice = firstSku?.base_price || 0
+
+                    return (
+                      <div key={group.key} className="border rounded-lg overflow-hidden" data-design-block={group.key}>
+                        {/* Design header — inline delete confirmation or normal */}
+                        {deleteConfirmKey === group.key ? (
+                          <div className="bg-red-50 border-b border-red-200 px-3 py-2 flex items-center justify-between">
+                            <span className="text-xs font-semibold text-red-700">Remove <span className="font-bold">{group.key}</span>{groupQty > 0 ? ` (${groupQty} items)` : ''}?</span>
+                            <div className="flex items-center gap-2">
+                              <button onClick={confirmDeleteDesign}
+                                className="rounded border border-red-300 text-red-600 px-3 py-1 text-xs font-medium hover:bg-red-100 transition-colors">
+                                Remove
+                              </button>
+                              <button onClick={cancelDeleteDesign} autoFocus
+                                className="rounded bg-gray-600 text-white px-3 py-1 text-xs font-semibold hover:bg-gray-700 transition-colors">
+                                Keep
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-gray-50 px-3 py-1.5 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-gray-800">{group.key}</span>
+                              <span className="text-[11px] text-gray-400">{group.colors.length}c &middot; {group.sizes.length}s</span>
+                              {group.skus[0]?._parsed.vas.length > 0 && (
+                                <span className="flex gap-1">
+                                  {group.skus[0]._parsed.vas.map(va => {
+                                    const c = VA_COLORS[va] || DEFAULT_VA
+                                    return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold ${c.bg} ${c.text}`}>+{va}</span>
+                                  })}
                                 </span>
-                              </td>
-                              {group.sizes.map(size => {
-                                const sku = findSKU(group, color, size)
-                                if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 text-[10px]">—</td>
-                                const avail = sku.stock?.available_qty || 0
-                                return (
-                                  <td key={size} className="px-1 py-1 text-center">
-                                    <GridCell available={avail} qty={gridQty[sku.id] || 0} onChange={(q) => setQty(sku.id, q)} />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1">
+                                <label className="text-[11px] uppercase text-gray-500 font-semibold">₹/pc</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  data-price-input="true"
+                                  tabIndex={-1}
+                                  value={gridPrice[group.key] ?? (defaultPrice || '')}
+                                  onChange={(e) => setPrice(group.key, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Delete') { setDeleteConfirmKey(group.key); return }
+                                    if (e.key !== 'Enter' && e.key !== 'Tab') return
+                                    if (e.shiftKey) return
+                                    e.preventDefault()
+                                    const block = e.target.closest('[data-design-block]')
+                                    const firstCell = block?.querySelector('[data-qty]')
+                                    if (firstCell) { firstCell.focus(); firstCell.select() }
+                                  }}
+                                  className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-right focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  placeholder="₹"
+                                />
+                              </div>
+                              {groupQty > 0 && (
+                                <span className="text-xs font-semibold text-emerald-700">{groupQty}pcs ₹{groupSubtotal.toLocaleString('en-IN')}</span>
+                              )}
+                              <button onClick={() => setDeleteConfirmKey(group.key)} tabIndex={-1}
+                                className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Remove design (Del)">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Grid: colors × sizes */}
+                        <div className="overflow-x-auto" data-design-grid={group.key}>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-white">
+                                <th className="px-2 py-1 text-left text-[11px] text-gray-500 font-medium w-28">Color</th>
+                                {group.sizes.map(size => (
+                                  <th key={size} className="px-1 py-1 text-center text-[11px] text-gray-500 font-medium">{size}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {group.colors.map((color, cIdx) => (
+                                <tr key={color} className="hover:bg-gray-50/50">
+                                  <td className="px-2 py-1">
+                                    <span className="inline-flex items-center gap-1">
+                                      <span className="w-2.5 h-2.5 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
+                                      <span className="text-xs font-medium">{color}</span>
+                                    </span>
                                   </td>
-                                )
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                                  {group.sizes.map((size, sIdx) => {
+                                    const sku = findSKU(group, color, size)
+                                    if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 text-[11px]">—</td>
+                                    const avail = sku.stock?.available_qty || 0
+                                    return (
+                                      <td key={size} className="px-1 py-1 text-center">
+                                        <GridCell available={avail} qty={gridQty[sku.id] || 0} onChange={(q) => setQty(sku.id, q)}
+                                          onKeyDown={handleGridKeyDown}
+                                          data-grid-row={cIdx} data-grid-col={sIdx} />
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {selectedGroups.length === 0 && (
+                <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg mt-2">
+                  <p className="text-sm">Click a design card above to add it to the order</p>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t bg-white px-4 py-2 flex items-center justify-between">
-          <div className="text-xs text-gray-600">
-            <span className="font-semibold text-gray-800">{totalItems}</span> items
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-base font-bold text-gray-800">₹{grandTotal.toLocaleString('en-IN')}</span>
-            <button onClick={() => setCreateMode(false)} className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-            <button onClick={handleCreate} disabled={saving || totalItems === 0}
-              className="rounded bg-emerald-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-              {saving ? 'Creating...' : 'Create Order'}
-            </button>
+        <div className="flex-shrink-0 border-t bg-white px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-xs text-gray-600">
+                <span className="font-semibold text-gray-800">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''} &middot; <span className="font-semibold text-gray-800">{totalItems}</span> items
+              </div>
+              <div className="hidden md:flex items-center gap-3 text-[11px] text-gray-400">
+                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Tab</kbd> Next cell</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Del</kbd> Remove design</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Esc</kbd> Close</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-base font-bold text-gray-800">₹{grandTotal.toLocaleString('en-IN')}</span>
+              <button onClick={requestClose} className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={handleCreate} disabled={saving || totalItems === 0} data-create-btn
+                className="rounded bg-emerald-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                {saving ? 'Creating...' : 'Create Order'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

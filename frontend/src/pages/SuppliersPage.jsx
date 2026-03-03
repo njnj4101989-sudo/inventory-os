@@ -266,7 +266,7 @@ export default function SuppliersPage() {
           <div className="space-y-4">
             {/* Business Info */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Business Information</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Business Information</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Company Name" value={selected.name} />
                 <InfoRow label="Broker" value={selected.broker} />
@@ -281,7 +281,7 @@ export default function SuppliersPage() {
             </div>
             {/* Contact */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contact Details</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contact Details</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Contact Person" value={selected.contact_person} />
                 <InfoRow label="Phone" value={selected.phone} />
@@ -290,7 +290,7 @@ export default function SuppliersPage() {
             </div>
             {/* Address */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Address</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Address</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Address" value={selected.address} />
                 <InfoRow label="City" value={selected.city} />
@@ -325,7 +325,7 @@ export default function SuppliersPage() {
         <div className="space-y-5">
           {/* Section 1: Business Info */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Business Information</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Business Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field name="name" label="Company Name" required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
@@ -339,7 +339,7 @@ export default function SuppliersPage() {
 
           {/* Section 2: Contact Details */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Contact Details</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Contact Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field name="contact_person" label="Contact Person" placeholder="e.g. Krishna Sharma" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="phone" label="Phone" type="tel" placeholder="e.g. 9876543210" hint="10-digit mobile" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
@@ -349,7 +349,7 @@ export default function SuppliersPage() {
 
           {/* Section 3: Address */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Address</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Address</h3>
             <div className="space-y-4">
               <div>
                 <label className={LABEL_CLS}>Street Address</label>

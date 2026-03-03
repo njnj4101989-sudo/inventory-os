@@ -411,13 +411,13 @@ export default function LotsPage() {
             <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
               <div className="flex items-end gap-3">
                 <div className="shrink-0">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
                     LOT-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
                 <div className="w-20">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Type</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Type</label>
                   <select value={form.product_type} onChange={e => setField('product_type', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
                     <option value="BLS">BLS</option>
@@ -428,17 +428,17 @@ export default function LotsPage() {
                   </select>
                 </div>
                 <div className="w-24">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Design *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design *</label>
                   <input ref={designRef} type="text" value={form.design_no} onChange={e => setField('design_no', e.target.value)}
                     placeholder="702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-[130px]">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
                   <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt *</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
@@ -447,7 +447,7 @@ export default function LotsPage() {
                     placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
                     onChange={e => setField('standard_palla_meter', e.target.value)}
                     tabIndex={-1}
@@ -711,18 +711,18 @@ export default function LotsPage() {
               {editing ? (
                 <div className="flex items-end gap-3 flex-wrap">
                   <div className="w-24">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Design *</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design *</label>
                     <input type="text" value={editForm.design_no} onChange={e => setEditForm(f => ({ ...f, design_no: e.target.value }))}
                       className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" autoFocus />
                   </div>
                   <div className="w-24">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
                     <input type="number" step="0.001" value={editForm.standard_palla_weight}
                       onChange={e => setEditForm(f => ({ ...f, standard_palla_weight: e.target.value }))}
                       className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </div>
                   <div className="w-24">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
                     <input type="number" step="0.01" value={editForm.standard_palla_meter || ''}
                       onChange={e => setEditForm(f => ({ ...f, standard_palla_meter: e.target.value }))}
                       className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
@@ -740,24 +740,24 @@ export default function LotsPage() {
               ) : (
                 <div className="flex items-end gap-4">
                   <div>
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
                     <div className="h-[34px] flex items-center text-sm font-semibold text-primary-700">{detailLot.lot_code}</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Design</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design</label>
                     <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.design_no}</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
                     <div className="h-[34px] flex items-center text-sm">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
                     <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.standard_palla_weight} kg</div>
                   </div>
                   {detailLot.standard_palla_meter && (
                     <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</label>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
                       <div className="h-[34px] flex items-center text-sm">{detailLot.standard_palla_meter} m</div>
                     </div>
                   )}
@@ -778,7 +778,7 @@ export default function LotsPage() {
             {/* ── Notes (edit mode) ── */}
             {editing && (
               <div className="rounded-lg border bg-white p-4 shadow-sm">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</label>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Notes</label>
                 <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2}
                   placeholder="Special instructions..." className={INPUT} />
               </div>
