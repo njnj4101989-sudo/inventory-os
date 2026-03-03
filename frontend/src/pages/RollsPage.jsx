@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
 import { createJobChallan, getJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
@@ -416,6 +417,7 @@ const PROCESSED_COLUMNS = [
 ]
 
 export default function RollsPage() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState('invoices')
 
   // Invoice tab state
@@ -477,6 +479,8 @@ export default function RollsPage() {
 
   // Invoice detail modal
   const [selectedInvoice, setSelectedInvoice] = useState(null)
+  const [selectedInvRolls, setSelectedInvRolls] = useState(new Set())
+  const [lotDesignPicker, setLotDesignPicker] = useState(null)
 
   // Individual roll detail/edit modal
   const [detailRoll, setDetailRoll] = useState(null)
@@ -871,8 +875,10 @@ export default function RollsPage() {
   }, [stockInOpen])
 
   // ── Invoice Detail ──
-  const openInvoiceDetail = (inv) => setSelectedInvoice(inv)
+  const openInvoiceDetail = (inv) => { setSelectedInvoice(inv); setSelectedInvRolls(new Set()) }
+  const lastFocusedRollRef = useRef(null)
   const openRollFromInvoice = (roll) => {
+    lastFocusedRollRef.current = roll.id
     setCameFromInvoice(selectedInvoice)
     setSelectedInvoice(null)
     setDetailRoll(roll)
@@ -885,6 +891,14 @@ export default function RollsPage() {
     setEditing(false)
     setSelectedInvoice(cameFromInvoice)
     setCameFromInvoice(null)
+    // Restore focus to the roll that was clicked
+    if (lastFocusedRollRef.current) {
+      const rollId = lastFocusedRollRef.current
+      setTimeout(() => {
+        const btn = document.querySelector(`[data-inv-roll-id="${rollId}"]`)
+        if (btn) { btn.focus(); btn.scrollIntoView({ block: 'center', behavior: 'smooth' }) }
+      }, 100)
+    }
   }
 
   // Track which invoice the roll was opened from (for "Back to Invoice" navigation)
@@ -1442,6 +1456,15 @@ export default function RollsPage() {
                           Print Labels ({selectedRolls.size})
                         </button>
                         <button onClick={() => {
+                            navigate('/lots', { state: { preselectedRolls: getSelectedRollObjects().map(r => r.id) } })
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                          Create Lot ({selectedRolls.size})
+                        </button>
+                        <button onClick={() => {
                             setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                             const wts = {}; getSelectedRollObjects().forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                             setBulkSendError(null)
@@ -1679,7 +1702,7 @@ export default function RollsPage() {
       {/* ════════════════════════════════════════════════════════
           INVOICE DETAIL Modal
          ════════════════════════════════════════════════════════ */}
-      <Modal open={!!selectedInvoice} onClose={() => setSelectedInvoice(null)}
+      <Modal open={!!selectedInvoice} onClose={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }}
         title={selectedInvoice?.invoice_no ? `Invoice: ${selectedInvoice.invoice_no}` : 'Invoice Details'} extraWide
         actions={
           <div className="flex w-full items-center justify-between">
@@ -1694,7 +1717,7 @@ export default function RollsPage() {
                 </button>
               )}
               {selectedInvoice?.rolls?.length > 0 && (
-                <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setShowLabelSheet(true) }}
+                <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowLabelSheet(true) }}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -1702,11 +1725,43 @@ export default function RollsPage() {
                   Print All Labels ({selectedInvoice.rolls.length})
                 </button>
               )}
+              {(() => {
+                const selectable = selectedInvoice?.rolls?.filter(r => r.status === 'in_stock' && parseFloat(r.remaining_weight) > 0) || []
+                if (selectable.length === 0) return null
+                return (
+                  <button onClick={() => {
+                      // Group selectable rolls by fabric_type
+                      const groups = {}
+                      for (const r of selectable) {
+                        const key = r.fabric_type || 'Unknown'
+                        if (!groups[key]) groups[key] = []
+                        groups[key].push(r)
+                      }
+                      const designs = Object.entries(groups).map(([fabric, rolls]) => ({
+                        fabric, rollCount: rolls.length,
+                        totalWeight: rolls.reduce((s, r) => s + parseFloat(r.remaining_weight), 0),
+                        rollIds: rolls.map(r => r.id),
+                      }))
+                      if (designs.length === 1) {
+                        navigate('/lots', { state: { preselectedRolls: designs[0].rollIds } })
+                        setSelectedInvoice(null); setSelectedInvRolls(new Set())
+                      } else {
+                        setLotDesignPicker({ designs, allSelectableIds: selectable.map(r => r.id) })
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    Create Lot ({selectable.length})
+                  </button>
+                )
+              })()}
               {selectedInvoice && !isInvoiceEditable(selectedInvoice) && (
                 <span className="text-xs text-gray-400 italic self-center">Some rolls are used — invoice is read-only</span>
               )}
             </div>
-            <button onClick={() => setSelectedInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
+            <button onClick={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
           </div>
         }
       >
@@ -1728,6 +1783,9 @@ export default function RollsPage() {
           }
           // Unique colors across all groups
           const allColors = new Set(selectedInvoice.rolls.map((r) => r.color || 'Unknown'))
+          // Selectable rolls: in_stock with remaining weight
+          const selectableInvRolls = selectedInvoice.rolls.filter(r => r.status === 'in_stock' && parseFloat(r.remaining_weight) > 0)
+          const selectableInvIds = new Set(selectableInvRolls.map(r => r.id))
 
           return (
             <div className="space-y-4">
@@ -1773,6 +1831,25 @@ export default function RollsPage() {
                   ₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+
+              {/* ── Shift+Click hint + Select All ── */}
+              {selectableInvRolls.length > 0 && (
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <span>Shift+Click to select rolls for lot creation</span>
+                  {selectedInvRolls.size > 0 && (
+                    <span className="font-medium text-blue-600">{selectedInvRolls.size} selected</span>
+                  )}
+                  <button onClick={() => {
+                    if (selectedInvRolls.size === selectableInvRolls.length) {
+                      setSelectedInvRolls(new Set())
+                    } else {
+                      setSelectedInvRolls(new Set(selectableInvRolls.map(r => r.id)))
+                    }
+                  }} className="text-blue-500 hover:text-blue-700 underline">
+                    {selectedInvRolls.size === selectableInvRolls.length ? 'Deselect All' : 'Select All Available'}
+                  </button>
+                </div>
+              )}
 
               {/* ── Design Groups ── */}
               {fabricGroups.map((grp, gIdx) => {
@@ -1827,20 +1904,34 @@ export default function RollsPage() {
                                   const receivedVAs = (roll.processing_logs || []).filter(l => l.status === 'received')
                                   const hasVA = receivedVAs.length > 0
                                   const vaSuffixes = hasVA ? receivedVAs.map(l => l.value_addition?.short_code).filter(Boolean).join('+') : ''
+                                  const isSelectable = selectableInvIds.has(roll.id)
+                                  const isSelected = selectedInvRolls.has(roll.id)
                                   return (
                                     <button
                                       key={roll.id}
-                                      onClick={() => openRollFromInvoice(roll)}
-                                      title={`${roll.roll_code}${vaSuffixes ? '+' + vaSuffixes : ''} — ${wt} kg${hasVA ? ` (now ${currWt})` : ''}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}`}
+                                      data-inv-roll-id={roll.id}
+                                      onClick={(e) => {
+                                        if (e.shiftKey && isSelectable) {
+                                          setSelectedInvRolls(prev => { const next = new Set(prev); if (next.has(roll.id)) next.delete(roll.id); else next.add(roll.id); return next })
+                                        } else {
+                                          openRollFromInvoice(roll)
+                                        }
+                                      }}
+                                      title={`${roll.roll_code}${vaSuffixes ? '+' + vaSuffixes : ''} — ${wt} kg${hasVA ? ` (now ${currWt})` : ''}${isUsed ? ` (${rem} remaining)` : ''}${isProcessing ? ' [Processing]' : ''}${isSelectable ? ' (Shift+Click to select)' : ''}`}
                                       className={`relative inline-flex items-center rounded border px-2.5 py-1 text-sm tabular-nums transition-colors cursor-pointer
-                                        ${isProcessing
-                                          ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100'
-                                          : isUsed
-                                            ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                            : hasVA
-                                              ? 'border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100'
-                                              : 'border-gray-300 bg-white text-gray-800 hover:bg-blue-50 hover:border-blue-300'}`}
+                                        ${isSelected
+                                          ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-50 text-blue-800'
+                                          : isProcessing
+                                            ? 'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100'
+                                            : isUsed
+                                              ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                              : hasVA
+                                                ? 'border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                                                : 'border-gray-300 bg-white text-gray-800 hover:bg-blue-50 hover:border-blue-300'}`}
                                     >
+                                      {isSelected && (
+                                        <svg className="absolute -top-1 -right-1 h-3.5 w-3.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                      )}
                                       {wt.toFixed(3)}
                                       {hasVA && !isProcessing && !isUsed && (
                                         <span className="ml-1 text-[10px] font-bold text-purple-600">+{vaSuffixes}</span>
@@ -1894,9 +1985,81 @@ export default function RollsPage() {
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-orange-500 inline-block" /> Processing</span>
                 <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" /> Partially used</span>
               </div>
+
+              {/* ── Sticky action bar for selected rolls ── */}
+              {selectedInvRolls.size > 0 && (
+                <div className="sticky bottom-0 z-10 mt-3 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/95 backdrop-blur px-5 py-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">{selectedInvRolls.size}</span>
+                    <span className="text-sm font-semibold text-emerald-800">roll{selectedInvRolls.size > 1 ? 's' : ''} selected</span>
+                    <button onClick={() => setSelectedInvRolls(new Set())} className="text-xs text-emerald-500 hover:text-emerald-700 underline">Clear</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => {
+                        navigate('/lots', { state: { preselectedRolls: [...selectedInvRolls] } })
+                        setSelectedInvoice(null); setSelectedInvRolls(new Set())
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      Create Lot ({selectedInvRolls.size})
+                    </button>
+                    <button onClick={() => {
+                        const invRollObjects = selectedInvoice.rolls.filter(r => selectedInvRolls.has(r.id))
+                        setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                        const wts = {}; invRollObjects.forEach(r => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
+                        setBulkSendError(null)
+                        setSelectedInvoice(null); setSelectedInvRolls(new Set())
+                        setBulkSendOpen(true)
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 transition-colors">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      Send for Processing ({selectedInvRolls.size})
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })()}
+      </Modal>
+
+      {/* ════════════════════════════════════════════════════════
+          MULTI-DESIGN LOT PICKER (from Create Lot from Invoice)
+         ════════════════════════════════════════════════════════ */}
+      <Modal open={!!lotDesignPicker} onClose={() => setLotDesignPicker(null)} title="Multiple Fabric Types Found">
+        {lotDesignPicker && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">This invoice has {lotDesignPicker.designs.length} fabric types. Choose which to create a lot for:</p>
+            <div className="space-y-2">
+              {lotDesignPicker.designs.map((d, i) => (
+                <button key={i} onClick={() => {
+                    navigate('/lots', { state: { preselectedRolls: d.rollIds } })
+                    setLotDesignPicker(null); setSelectedInvoice(null); setSelectedInvRolls(new Set())
+                  }}
+                  className="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-left hover:border-emerald-300 hover:bg-emerald-50 transition-colors">
+                  <div>
+                    <span className="text-sm font-semibold text-gray-800">{d.fabric}</span>
+                    <span className="ml-2 text-xs text-gray-500">{d.rollCount} roll{d.rollCount > 1 ? 's' : ''}</span>
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">{d.totalWeight.toFixed(1)} kg</span>
+                </button>
+              ))}
+            </div>
+            <div className="border-t pt-3">
+              <button onClick={() => {
+                  navigate('/lots', { state: { preselectedRolls: lotDesignPicker.allSelectableIds } })
+                  setLotDesignPicker(null); setSelectedInvoice(null); setSelectedInvRolls(new Set())
+                }}
+                className="w-full rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors">
+                Create Combined Lot — all {lotDesignPicker.allSelectableIds.length} rolls
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* ════════════════════════════════════════════════════════

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { getLots, getLot, createLot, updateLot } from '../api/lots'
 import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
@@ -83,6 +84,11 @@ const COLUMNS = [
 ]
 
 export default function LotsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const pendingPreselect = useRef(null)
+  const [preselectedBanner, setPreselectedBanner] = useState(0)
+
   // ── List state ──
   const [lots, setLots] = useState([])
   const [total, setTotal] = useState(0)
@@ -120,6 +126,7 @@ export default function LotsPage() {
   })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
   const designRef = useRef(null)
   const saveRef = useRef(null)
 
@@ -156,6 +163,35 @@ export default function LotsPage() {
       setTimeout(() => designRef.current?.focus(), 100)
     }
   }, [showCreate, fetchRolls])
+
+  // ── Preselected rolls from navigation (Invoice→Lot shortcut) ──
+  useEffect(() => {
+    const pre = location.state?.preselectedRolls
+    if (pre && Array.isArray(pre) && pre.length > 0) {
+      pendingPreselect.current = pre
+      navigate('/lots', { replace: true, state: {} })
+      setFormError(null); setRollSearch('')
+      setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA('')
+      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
+      setShowCreate(true)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (pendingPreselect.current && availableRolls.length > 0) {
+      const ids = pendingPreselect.current
+      pendingPreselect.current = null
+      const matchedIds = ids.filter(id => availableRolls.some(r => r.id === id))
+      if (matchedIds.length > 0) {
+        setForm(f => ({
+          ...f,
+          rolls: matchedIds.map(id => ({ roll_id: id, palla_weight: f.standard_palla_weight || '' }))
+        }))
+        setPreselectedBanner(matchedIds.length)
+        setTimeout(() => setPreselectedBanner(0), 5000)
+      }
+    }
+  }, [availableRolls])
 
   // ══════════════════════════════════════
   // CREATE OVERLAY — Calculations & Filters
@@ -249,7 +285,16 @@ export default function LotsPage() {
     setForm(f => ({ ...f, rolls: [...f.rolls, { roll_id: id, palla_weight: f.standard_palla_weight || '' }] }))
   }
 
-  const removeRoll = (i) => setForm(f => ({ ...f, rolls: f.rolls.filter((_, idx) => idx !== i) }))
+  const addRollsBulk = (ids) => {
+    if (!ids || ids.length === 0) return
+    setForm(f => {
+      const existing = new Set(f.rolls.map(r => r.roll_id))
+      const newEntries = ids.filter(id => !existing.has(id)).map(id => ({ roll_id: id, palla_weight: f.standard_palla_weight || '' }))
+      return { ...f, rolls: [...f.rolls, ...newEntries] }
+    })
+  }
+
+  const removeRoll = (i) => { setPendingDeleteRow(null); setForm(f => ({ ...f, rolls: f.rolls.filter((_, idx) => idx !== i) })) }
 
   const setRollPw = (i, v) => setForm(f => {
     const rolls = [...f.rolls]; rolls[i] = { ...rolls[i], palla_weight: v }; return { ...f, rolls }
@@ -467,6 +512,15 @@ export default function LotsPage() {
               </div>
             </div>
 
+            {/* ── Pre-selected banner ── */}
+            {preselectedBanner > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {preselectedBanner} roll{preselectedBanner > 1 ? 's' : ''} pre-selected from invoice
+                <button onClick={() => setPreselectedBanner(0)} className="ml-auto text-emerald-400 hover:text-emerald-600">&times;</button>
+              </div>
+            )}
+
             {/* ── Rolls Section ── */}
             <div className="rounded-xl border bg-white shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-3">
@@ -522,27 +576,62 @@ export default function LotsPage() {
                 <span className="ml-auto text-[11px] text-gray-400">{addableRolls.length} available</span>
               </div>
 
-              {/* Available rolls — grid cards */}
-              {addableRolls.length > 0 && (
-                <div className="border-b bg-gray-50/50 px-4 py-3">
-                  <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
-                    {addableRolls.slice(0, 60).map(r => (
-                      <button key={r.id} onClick={() => addRoll(r.id)}
-                        className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-sm ${hasVA(r) ? 'border-purple-300 bg-purple-50/30' : 'border-gray-200 bg-white'}`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-semibold text-gray-700"><RollCodeDisplay roll={r} /></div>
-                          <div className="mt-0.5 flex items-center gap-1.5">
-                            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: colorHex(r.color) }} />
-                            <span className="text-[11px] text-gray-500 truncate">{r.color || '—'}</span>
-                            <span className="ml-auto text-[11px] font-semibold text-emerald-600 tabular-nums whitespace-nowrap">{r.remaining_weight} kg</span>
+              {/* Available rolls — grouped by Sr. No. (invoice) */}
+              {addableRolls.length > 0 && (() => {
+                // Group rolls by sr_no
+                const srGroups = []
+                const srMap = {}
+                for (const r of addableRolls) {
+                  const key = r.sr_no || '—'
+                  if (!srMap[key]) {
+                    srMap[key] = { sr_no: key, fabric: r.fabric_type || '—', supplier: r.supplier?.name || '—', invoiceNo: r.supplier_invoice_no || '', rolls: [] }
+                    srGroups.push(srMap[key])
+                  }
+                  srMap[key].rolls.push(r)
+                }
+                // Sort by sr_no numerically
+                srGroups.sort((a, b) => (parseInt(a.sr_no) || 0) - (parseInt(b.sr_no) || 0))
+
+                return (
+                  <div className="border-b bg-gray-50/50 px-4 py-3 max-h-72 overflow-y-auto">
+                    <div className="space-y-2">
+                      {srGroups.map(grp => {
+                        const totalWeight = grp.rolls.reduce((s, r) => s + parseFloat(r.remaining_weight || 0), 0)
+                        return (
+                          <div key={grp.sr_no} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                            {/* Group header */}
+                            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-100 px-3 py-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-600 text-[10px] font-bold text-white flex-shrink-0">{grp.sr_no}</span>
+                                <span className="text-[11px] font-semibold text-gray-700 truncate">{grp.fabric}</span>
+                                <span className="text-[10px] text-gray-400 truncate">{grp.supplier}{grp.invoiceNo ? ` · ${grp.invoiceNo}` : ''}</span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-[10px] text-gray-400">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} kg</span>
+                                <button onClick={() => addRollsBulk(grp.rolls.map(r => r.id))}
+                                  className="rounded px-2 py-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors">
+                                  + All
+                                </button>
+                              </div>
+                            </div>
+                            {/* Roll cards */}
+                            <div className="flex flex-wrap gap-1.5 px-3 py-2">
+                              {grp.rolls.map(r => (
+                                <button key={r.id} onClick={() => addRoll(r.id)}
+                                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-purple-300 bg-purple-50/30' : 'border-gray-200 bg-white'}`}>
+                                  <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
+                                  <span className="text-[11px] text-gray-600 truncate max-w-[60px]">{r.color || '—'}</span>
+                                  <span className="text-[11px] font-semibold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    ))}
+                        )
+                      })}
+                    </div>
                   </div>
-                  {addableRolls.length > 60 && <p className="mt-2 text-center text-[11px] text-gray-400">+{addableRolls.length - 60} more rolls (use search to filter)</p>}
-                </div>
-              )}
+                )
+              })()}
 
               {/* Selected rolls table */}
               {form.rolls.length === 0 ? (
@@ -553,49 +642,109 @@ export default function LotsPage() {
                   <p className="text-sm">Click rolls above to add them to this lot</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-                      <th className="py-2.5 px-4 w-8">#</th>
-                      <th className="px-3">Roll Code</th>
-                      <th className="px-3">Color</th>
-                      <th className="px-3 text-right">Avail. Wt</th>
-                      <th className="px-3 text-right w-28">Palla Wt</th>
-                      <th className="px-3 text-right">Pallas</th>
-                      <th className="px-3 text-right">Pieces</th>
-                      <th className="px-3 text-right">Waste</th>
-                      <th className="px-3 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {form.rolls.map((r, i) => {
-                      const c = rollCalcs[i]
-                      return (
-                        <tr key={r.roll_id} className="border-b hover:bg-gray-50/50">
-                          <td className="py-2 px-4 text-xs text-gray-400">{i + 1}</td>
-                          <td className="px-3"><RollCodeDisplay roll={c.roll} /></td>
-                          <td className="px-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{c.roll?.color || '—'}</span></td>
-                          <td className="px-3 text-right tabular-nums">{c.rem.toFixed(3)}</td>
-                          <td className="px-3 text-right">
-                            <input type="number" step="0.001" value={r.palla_weight} tabIndex={-1}
-                              onChange={e => setRollPw(i, e.target.value)}
-                              className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-                          </td>
-                          <td className="px-3 text-right font-bold tabular-nums">{c.pallas}</td>
-                          <td className="px-3 text-right font-bold text-emerald-700 tabular-nums">{c.pcs}</td>
-                          <td className="px-3 text-right text-red-400 tabular-nums">{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
-                          <td className="px-3">
-                            <button onClick={() => removeRoll(i)} className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors">
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                        <th className="py-2.5 px-4 w-8">#</th>
+                        <th className="px-3">Roll Code</th>
+                        <th className="px-3">Color</th>
+                        <th className="px-3 text-right">Avail. Wt</th>
+                        <th className="px-3 text-right w-28">Palla Wt</th>
+                        <th className="px-3 text-right">Pallas</th>
+                        <th className="px-3 text-right">Pieces</th>
+                        <th className="px-3 text-right">Waste</th>
+                        <th className="px-3 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.rolls.map((r, i) => {
+                        const c = rollCalcs[i]
+                        const isDeletePending = pendingDeleteRow === i
+                        return (
+                          <tr key={r.roll_id} className={`border-b ${isDeletePending ? 'bg-red-50' : 'hover:bg-gray-50/50'}`}>
+                            <td className="py-2 px-4 text-xs text-gray-400">{i + 1}</td>
+                            <td className="px-3"><RollCodeDisplay roll={c.roll} /></td>
+                            <td className="px-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{c.roll?.color || '—'}</span></td>
+                            <td className="px-3 text-right tabular-nums">{c.rem.toFixed(3)}</td>
+                            <td className="px-3 text-right">
+                              <input type="number" step="0.001" value={r.palla_weight}
+                                data-pw-row={i}
+                                onChange={e => setRollPw(i, e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Escape' && pendingDeleteRow !== null) {
+                                    e.preventDefault(); e.stopPropagation(); setPendingDeleteRow(null)
+                                  } else if (e.key === 'Tab' && !e.shiftKey) {
+                                    const nextInput = document.querySelector(`[data-pw-row="${i + 1}"]`)
+                                    if (nextInput) { e.preventDefault(); nextInput.focus(); nextInput.select() }
+                                  } else if (e.key === 'Tab' && e.shiftKey) {
+                                    const prevInput = document.querySelector(`[data-pw-row="${i - 1}"]`)
+                                    if (prevInput) { e.preventDefault(); prevInput.focus(); prevInput.select() }
+                                  } else if (e.key === 'Delete') {
+                                    e.preventDefault()
+                                    setPendingDeleteRow(i)
+                                  } else if (e.key === 'Enter') {
+                                    const nextInput = document.querySelector(`[data-pw-row="${i + 1}"]`)
+                                    if (nextInput) { e.preventDefault(); nextInput.focus(); nextInput.select() }
+                                  }
+                                }}
+                                className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                            </td>
+                            <td className="px-3 text-right font-bold tabular-nums">{c.pallas}</td>
+                            <td className="px-3 text-right font-bold text-emerald-700 tabular-nums">{c.pcs}</td>
+                            <td className="px-3 text-right text-red-400 tabular-nums">{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
+                            <td className="px-3">
+                              <button tabIndex={-1} onClick={() => removeRoll(i)} className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors">
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Delete confirmation bar */}
+                  {pendingDeleteRow !== null && pendingDeleteRow < form.rolls.length && (() => {
+                    const dr = rollCalcs[pendingDeleteRow]
+                    return (
+                      <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 mt-2 mx-4 mb-2">
+                        <span className="text-sm text-red-700">
+                          Remove <span className="font-semibold">{dr?.roll?.roll_code || `Roll #${pendingDeleteRow + 1}`}</span>
+                          {dr?.roll?.color ? ` (${dr.roll.color})` : ''}?
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                              const idx = pendingDeleteRow
+                              const newLen = form.rolls.length - 1
+                              removeRoll(idx)
+                              // After React re-renders, focus the row that now sits at the deleted index (or the last row)
+                              setTimeout(() => {
+                                const target = newLen > 0 ? Math.min(idx, newLen - 1) : -1
+                                if (target >= 0) {
+                                  const el = document.querySelector(`[data-pw-row="${target}"]`)
+                                  if (el) { el.focus(); el.select() }
+                                }
+                              }, 80)
+                            }}
+                            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors">Remove</button>
+                          <button autoFocus onClick={() => setPendingDeleteRow(null)}
+                            onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setPendingDeleteRow(null) } }}
+                            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">Keep</button>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Keyboard hint */}
+                  <div className="hidden md:flex items-center gap-4 px-4 py-1.5 text-[10px] text-gray-400 border-t">
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Tab</kbd> / <kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Enter</kbd> Next row</span>
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Shift+Tab</kbd> Prev row</span>
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Delete</kbd> Remove roll</span>
+                  </div>
+                </div>
               )}
             </div>
 

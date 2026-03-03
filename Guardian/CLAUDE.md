@@ -23,13 +23,65 @@
 
 ---
 
-## Current State (Session 50 — 2026-03-03)
+## Current State (Session 51 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### S51: Invoice-to-Lot Shortcut (Options A+B+C)
+
+**Zero backend changes.** All data flows via React Router `location.state`.
+
+**Task 1 — LotsPage Receiver (Shared):**
+- Added `useLocation`/`useNavigate` imports from `react-router-dom`
+- `pendingPreselect` ref stores roll IDs waiting for `availableRolls` to load
+- First `useEffect` (on mount): detects `location.state.preselectedRolls`, clears router state (prevent re-trigger on refresh), resets create form, opens create overlay
+- Second `useEffect` (on `availableRolls` change): matches pending IDs against loaded rolls, populates `form.rolls`, shows info banner ("N rolls pre-selected from invoice") for 5 seconds
+- Pre-selected rolls appear instantly in the existing roll selection table
+
+**Task 2 — Option C: "Create Lot" in All Rolls Bulk Action Bar:**
+- Added `useNavigate` import + hook to RollsPage
+- Emerald green "Create Lot (N)" button between Print Labels (blue) and Send for Processing (orange)
+- Navigates: `navigate('/lots', { state: { preselectedRolls: selectedRollIds[] } })`
+
+**Task 3 — Option B: Shift+Click Selection in Invoice Detail:**
+- New state: `selectedInvRolls` (Set of roll IDs) — separate from All Rolls tab's `selectedRolls`
+- Cleared on invoice open/close
+- Roll weight buttons: `Shift+Click` toggles selection (only `in_stock` + `remaining_weight > 0`), normal click opens roll detail (existing behavior)
+- Selected rolls: `ring-2 ring-blue-500 bg-blue-50` + small blue checkmark overlay (SVG circle-check, absolute positioned)
+- Hint strip below KPI pills: "Shift+Click to select rolls" + selected count + "Select All Available" / "Deselect All" toggle
+- Sticky action bar (bottom of modal, emerald bg): count badge + "Create Lot (N)" + "Send for Processing (N)"
+- Create Lot navigates to LotsPage with selected roll IDs
+- Send for Processing populates bulk send form from invoice rolls, closes invoice, opens bulk send modal
+
+**Task 4 — Option A: "Create Lot from Invoice" Button + Multi-Design Dialog:**
+- New state: `lotDesignPicker` (`null` or `{ designs[], allSelectableIds[] }`)
+- "Create Lot (N)" button in Invoice Detail actions bar (emerald, next to Print Labels) — only shows when selectable rolls exist
+- On click: groups selectable rolls by `fabric_type`
+  - Single fabric → navigates directly to LotsPage
+  - Multiple fabrics → opens design picker Modal
+- Design Picker Modal: lists each fabric type as a button (name + roll count + total weight), plus "Create Combined Lot — all N rolls" dashed button at bottom
+- Each option navigates to LotsPage with appropriate roll IDs
+
+**Files modified:** `LotsPage.jsx` (receiver), `RollsPage.jsx` (3 sender features)
+**Build: 0 errors.**
+
+---
+
+### NEXT: PHASE C — AWS Deploy
+
+| # | Step | Guide |
+|---|------|-------|
+| 6 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
+| 7 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
+| 8 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
+| 9 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
+| 10 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+
+---
 
 ### S50: KPI Card Typography + Dashboard Grid + Sidebar Sections
 
@@ -60,44 +112,6 @@
 **Build: 0 errors. Commit: `ed2cdf8`**
 
 ---
-
-### NEXT: S51 — Invoice-to-Lot Shortcut (Options A+B+C)
-
-**Goal:** Bridge the gap between stock-in and lot creation. Currently after stock-in, user must navigate to LotsPage and manually find rolls from the picker. Three features planned:
-
-**Option A — "Create Lot from Invoice" button in Invoice Detail:**
-- In RollsPage → Invoices tab → click invoice row → Invoice Detail view
-- Add "Create Lot from Invoice" button
-- Pre-selects ALL rolls from that invoice
-- Navigates to LotsPage with rolls pre-loaded via `navigate('/lots', { state: { preselectedRolls } })`
-
-**Option B — Tick marks in Invoice Detail (selective):**
-- Add checkboxes next to each roll in Invoice Detail table
-- Select specific rolls → sticky action bar appears: "Create Lot (N)" + "Send for Processing (N)"
-- Only `in_stock` rolls with `remaining_weight > 0` are selectable
-- Navigate to LotsPage with ticked rolls only
-- Pre-fillable from invoice context: `fabric_type` → product_type hint, date → lot_date
-
-**Option C — "Create Lot" in All Rolls tab bulk action bar:**
-- Existing checkbox selection already works on All Rolls tab (currently: Print Labels + Send for Processing)
-- Add "Create Lot" button to the sticky bulk action bar
-- Same navigation pattern: `navigate('/lots', { state: { preselectedRolls } })`
-
-**LotsPage receiver (shared by all 3 options):**
-- Detect `location.state.preselectedRolls` in LotsPage
-- Auto-open create overlay → pre-populate `form.rolls` with selected rolls
-- Auto-fill `lot_date` from invoice date if available
-- User fills remaining: design_no, palla_weight, size_pattern → save
-
-**Zero backend changes needed.** All data already exists.
-
-**Implementation order:** Option C first (smallest — add 1 button to existing bar) → Option B (checkboxes in invoice detail) → Option A (convenience button) → LotsPage receiver (shared)
-
-**Key files to modify:**
-- `frontend/src/pages/RollsPage.jsx` — Invoice Detail (options A+B), All Rolls bulk bar (option C)
-- `frontend/src/pages/LotsPage.jsx` — Receive `location.state.preselectedRolls`, auto-open + pre-fill
-
-**Key data flow:** `roll.id` + `roll` object → passed via React Router state → LotsPage reads it → maps to `form.rolls[]` entries with `roll_id` + auto-fetched roll data for calculations
 
 ---
 
@@ -237,18 +251,14 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ---
 
-### PENDING — S51: Invoice-to-Lot Shortcut
-
-**PHASE B2: Workflow Shortcuts (Invoice → Lot)**
+**PHASE B2: Workflow Shortcuts (Invoice → Lot) — COMPLETE (S51)**
 
 | # | Task | Option | Status |
 |---|------|--------|--------|
-| 1 | LotsPage receiver: detect `location.state.preselectedRolls`, auto-open create overlay, pre-fill rolls | Shared | Pending |
-| 2 | "Create Lot" button in All Rolls bulk action bar | C | Pending |
-| 3 | Checkboxes in Invoice Detail roll table + action bar | B | Pending |
-| 4 | "Create Lot from Invoice" button in Invoice Detail | A | Pending |
-
-**Implementation order:** Task 1 (shared receiver) → Task 2 (Option C, smallest) → Task 3 (Option B) → Task 4 (Option A)
+| 1 | LotsPage receiver: preselectedRolls via router state, auto-open + pre-fill | Shared | ✅ S51 |
+| 2 | "Create Lot" button in All Rolls bulk action bar | C | ✅ S51 |
+| 3 | Shift+Click in Invoice Detail + action bar | B | ✅ S51 |
+| 4 | "Create Lot from Invoice" button + multi-design dialog | A | ✅ S51 |
 
 **PHASE B: Page Overhauls — ALL COMPLETE**
 
@@ -465,6 +475,14 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Part A: Order Create overlay → picker pattern (Design cards → click to select → grid below). New states: `selectedDesigns`, `pickerGroups`, `selectedGroups`
 - Part B: Typography global uplift — `index.css` new classes (.typo-label, .typo-data), DataTable `<th>` global fix, zero text-[9px] remaining, labels upgraded to text-gray-500/text-[11px] across 7 pages
 - Part C: Full keyboard system — Ctrl+S save, Escape with dirty-check confirmation dialog, auto-focus Name, Enter chain through customer→search→grid, Tab/Enter grid cell navigation (right→wrap-down), price Enter→grid, keyboard hint strip in footer
+- Build: 0 errors
+
+### S51: Invoice-to-Lot Shortcut (complete)
+- LotsPage receiver: `useLocation` + `pendingPreselect` ref + 2 useEffects (detect preselectedRolls → auto-open create overlay → populate form.rolls after availableRolls loads) + info banner
+- Option C: "Create Lot (N)" emerald button in All Rolls bulk action bar (between Print Labels and Send for Processing)
+- Option B: Shift+Click selection on Invoice Detail roll weight buttons + hint strip + Select All + sticky emerald action bar (Create Lot + Send for Processing)
+- Option A: "Create Lot from Invoice" button in Invoice Detail actions + multi-design dialog (groups by fabric_type, single→navigate directly, multiple→picker modal)
+- Zero backend changes — all data via React Router `location.state`
 - Build: 0 errors
 
 ### S50: KPI Card Typography + Dashboard Grid + Sidebar Sections (complete)
