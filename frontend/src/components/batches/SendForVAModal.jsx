@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import Modal from '../common/Modal'
 import ErrorAlert from '../common/ErrorAlert'
 import { getValueAdditions } from '../../api/masters'
-import { createBatchChallan } from '../../api/batchChallans'
+import { createBatchChallan, getNextBCNumber } from '../../api/batchChallans'
 
-export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
+export default function SendForVAModal({ open, onClose, batches, onSuccess, onPrintChallan }) {
   const [vaList, setVaList] = useState([])
   const [selectedVA, setSelectedVA] = useState('')
   const [processorName, setProcessorName] = useState('')
@@ -12,6 +12,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
   const [selectedBatches, setSelectedBatches] = useState({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [nextChallanNo, setNextChallanNo] = useState('')
 
   // Eligible batches: in_progress (stitching VA) or checked (post-QC VA)
   const eligible = (batches || []).filter((b) => b.status === 'in_progress' || b.status === 'checked')
@@ -21,10 +22,12 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
       getValueAdditions()
         .then((res) => {
           const all = res.data.data || res.data || []
-          // Only garment or both
           setVaList(all.filter((va) => va.is_active && (va.applicable_to || 'both') !== 'roll'))
         })
         .catch(() => {})
+      getNextBCNumber()
+        .then((res) => setNextChallanNo(res.data?.data?.next_challan_no || res.data?.next_challan_no || ''))
+        .catch(() => setNextChallanNo(''))
       // Reset form
       setSelectedVA('')
       setProcessorName('')
@@ -70,7 +73,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
     setSaving(true)
     setError(null)
     try {
-      await createBatchChallan({
+      const res = await createBatchChallan({
         processor_name: processorName.trim(),
         value_addition_id: selectedVA,
         batches: Object.entries(selectedBatches).map(([batch_id, pieces_to_send]) => ({ batch_id, pieces_to_send })),
@@ -79,8 +82,20 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
         _batchMap: batchMap,
         _phase: phase,
       })
+      const challan = res.data?.data || res.data
       onSuccess?.()
       onClose()
+      if (onPrintChallan && challan) {
+        onPrintChallan({
+          challanNo: challan.challan_no,
+          batchItems: challan.batch_items || [],
+          vaName: vaObj?.name || '—',
+          vaShortCode: vaObj?.short_code || '—',
+          processorName: processorName.trim(),
+          sentDate: challan.sent_date || new Date().toISOString(),
+          notes: challan.notes || null,
+        })
+      }
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create batch challan')
     } finally {
@@ -108,6 +123,15 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess }) {
     >
       <div className="space-y-4">
         {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
+
+        {/* Challan Number Preview */}
+        {nextChallanNo && (
+          <div className="flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Challan No.</div>
+            <div className="font-mono font-bold text-amber-900 text-sm">{nextChallanNo}</div>
+            <div className="text-[10px] text-amber-500 ml-auto">Auto-generated</div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>

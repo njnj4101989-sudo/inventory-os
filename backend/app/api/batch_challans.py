@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, require_any_permission
 from app.models.user import User
 from app.schemas.batch_challan import (
     BatchChallanCreate,
@@ -22,6 +22,17 @@ from app.schemas.batch_challan import (
 from app.services.batch_challan_service import BatchChallanService
 
 router = APIRouter(prefix="/batch-challans", tags=["Batch Challans"])
+
+
+@router.get("/next-number", response_model=None)
+async def next_challan_number(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
+):
+    """Peek at the next auto-sequential batch challan number."""
+    svc = BatchChallanService(db)
+    next_no = await svc._next_challan_no()
+    return {"success": True, "data": {"next_challan_no": next_no}}
 
 
 @router.post("", response_model=None, status_code=201)
@@ -40,7 +51,7 @@ async def create_batch_challan(
 async def list_batch_challans(
     params: BatchChallanFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
-    current_user: User = require_permission("batch_send_va"),
+    current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
 ):
     """List batch challans with pagination and filters."""
     svc = BatchChallanService(db)
@@ -52,7 +63,7 @@ async def list_batch_challans(
 async def get_batch_challan(
     challan_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = require_permission("batch_send_va"),
+    current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
 ):
     """Get a single batch challan with all batch processing records."""
     svc = BatchChallanService(db)

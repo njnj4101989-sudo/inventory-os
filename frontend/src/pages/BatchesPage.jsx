@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getBatches } from '../api/batches'
+import { getBatchChallans, getBatchChallan } from '../api/batchChallans'
 import SearchInput from '../components/common/SearchInput'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import BatchChallan from '../components/common/BatchChallan'
 import SendForVAModal from '../components/batches/SendForVAModal'
 import ReceiveFromVAModal from '../components/batches/ReceiveFromVAModal'
 
@@ -45,6 +47,19 @@ const TABS = [
   { key: 'in_review',    label: 'In Review' },
   { key: 'done',         label: 'Done' },
 ]
+
+const VA_COLORS = {
+  EMB: { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300' },
+  DYE: { bg: 'bg-amber-100',  text: 'text-amber-700',  border: 'border-amber-300' },
+  DPT: { bg: 'bg-sky-100',    text: 'text-sky-700',    border: 'border-sky-300' },
+  HWK: { bg: 'bg-rose-100',   text: 'text-rose-700',   border: 'border-rose-300' },
+  SQN: { bg: 'bg-pink-100',   text: 'text-pink-700',   border: 'border-pink-300' },
+  BTC: { bg: 'bg-teal-100',   text: 'text-teal-700',   border: 'border-teal-300' },
+  HST: { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300' },
+  BTN: { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-300' },
+  LCW: { bg: 'bg-lime-100',   text: 'text-lime-700',   border: 'border-lime-300' },
+  FIN: { bg: 'bg-gray-100',   text: 'text-gray-700',   border: 'border-gray-300' },
+}
 
 // ─── Lot workflow state from batch statuses ────────────────────
 function getLotWorkflowState(batches) {
@@ -292,14 +307,24 @@ export default function BatchesPage() {
 
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
   const perms = currentUser.permissions || {}
-  const canSendVA = !!perms.batch_send_va
-  const canReceiveVA = !!perms.batch_receive_va
+  const isAdminOrSuper = ['admin', 'supervisor'].includes(currentUser.role)
+  const canSendVA = !!perms.batch_send_va || isAdminOrSuper
+  const canReceiveVA = !!perms.batch_receive_va || isAdminOrSuper
 
   // Label sheet
   const [labelBatches, setLabelBatches] = useState(null)
   const [labelLotCode, setLabelLotCode] = useState('')
   const [labelDesignNo, setLabelDesignNo] = useState('')
   const [labelLotDate, setLabelLotDate] = useState('')
+
+  // VA tab state
+  const [batchChallansData, setBatchChallansData] = useState([])
+  const [bcLoading, setBcLoading] = useState(false)
+  const [bcVAFilter, setBcVAFilter] = useState('')
+  const [bcProcessorFilter, setBcProcessorFilter] = useState('')
+  const [bcSearch, setBcSearch] = useState('')
+  const [showBatchChallan, setShowBatchChallan] = useState(false)
+  const [batchChallanData, setBatchChallanData] = useState(null)
 
   // Fetch all batches (large page_size)
   const fetchData = useCallback(async () => {
@@ -316,6 +341,32 @@ export default function BatchesPage() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Fetch batch challans for VA tab
+  const fetchBatchChallans = useCallback(async () => {
+    setBcLoading(true)
+    try {
+      const res = await getBatchChallans({ status: 'sent', page_size: 200 })
+      setBatchChallansData(res.data?.data || res.data || [])
+    } catch {
+      setBatchChallansData([])
+    } finally {
+      setBcLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'out_for_va') fetchBatchChallans()
+  }, [activeTab, fetchBatchChallans])
+
+  // Compute visible tabs based on permissions
+  const visibleTabs = useMemo(() => {
+    const base = [...TABS]
+    if (canSendVA || canReceiveVA) {
+      base.push({ key: 'out_for_va', label: 'Out for VA' })
+    }
+    return base
+  }, [canSendVA, canReceiveVA])
 
   // Pipeline KPI counts + VA stats
   const { pipelineCounts, outForVACount, readyStockCount } = useMemo(() => {
@@ -378,6 +429,74 @@ export default function BatchesPage() {
     })
     return counts
   }, [lotGroups])
+
+  // Filtered challans for VA tab
+  const filteredChallans = useMemo(() => {
+    let list = batchChallansData
+    if (bcVAFilter) {
+      list = list.filter((c) => c.value_addition?.short_code === bcVAFilter)
+    }
+    if (bcProcessorFilter) {
+      list = list.filter((c) => c.processor_name === bcProcessorFilter)
+    }
+    if (bcSearch.trim()) {
+      const q = bcSearch.trim().toLowerCase()
+      list = list.filter((c) =>
+        (c.challan_no || '').toLowerCase().includes(q) ||
+        (c.processor_name || '').toLowerCase().includes(q) ||
+        (c.batch_items || []).some((i) => (i.batch?.batch_code || '').toLowerCase().includes(q))
+      )
+    }
+    return list
+  }, [batchChallansData, bcVAFilter, bcProcessorFilter, bcSearch])
+
+  // VA tab KPIs
+  const bcKPIs = useMemo(() => {
+    const challans = batchChallansData
+    const totalPieces = challans.reduce((s, c) => s + (c.total_pieces || 0), 0)
+    const processors = new Set(challans.map((c) => c.processor_name)).size
+    const now = Date.now()
+    const overdue = challans.filter((c) => {
+      const sent = c.sent_date ? new Date(c.sent_date).getTime() : 0
+      return sent > 0 && (now - sent) > 14 * 86400000
+    }).length
+    return { count: challans.length, totalPieces, processors, overdue }
+  }, [batchChallansData])
+
+  // VA filter options
+  const bcFilterOptions = useMemo(() => {
+    const vas = new Set()
+    const procs = new Set()
+    batchChallansData.forEach((c) => {
+      if (c.value_addition?.short_code) vas.add(c.value_addition.short_code)
+      if (c.processor_name) procs.add(c.processor_name)
+    })
+    return { vas: [...vas].sort(), processors: [...procs].sort() }
+  }, [batchChallansData])
+
+  const handlePrintBatchChallan = async (challan) => {
+    try {
+      const res = await getBatchChallan(challan.id)
+      const full = res.data?.data || res.data
+      setBatchChallanData({
+        challanNo: full.challan_no,
+        batchItems: full.batch_items || [],
+        vaName: full.value_addition?.name || '—',
+        vaShortCode: full.value_addition?.short_code || '—',
+        processorName: full.processor_name || '—',
+        sentDate: full.sent_date,
+        notes: full.notes,
+      })
+      setShowBatchChallan(true)
+    } catch {
+      // silently fail
+    }
+  }
+
+  const handlePrintChallanFromSend = (data) => {
+    setBatchChallanData(data)
+    setShowBatchChallan(true)
+  }
 
   const toggleExpand = (lotId) => {
     setExpandedLots((prev) => {
@@ -459,21 +578,29 @@ export default function BatchesPage() {
 
       {/* Tabs + Search */}
       <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex gap-1.5">
-          {TABS.map((tab) => (
+        <div className="flex gap-1.5 flex-wrap">
+          {visibleTabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? tab.key === 'out_for_va' ? 'bg-amber-600 text-white shadow-sm' : 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {tab.label}
-              <span className={`ml-1.5 ${activeTab === tab.key ? 'text-emerald-200' : 'text-gray-400'}`}>
-                {tabCounts[tab.key]}
-              </span>
+              {tab.key === 'out_for_va' ? (
+                batchChallansData.length > 0 && (
+                  <span className={`ml-1.5 ${activeTab === tab.key ? 'text-amber-200' : 'text-amber-500'}`}>
+                    {batchChallansData.length}
+                  </span>
+                )
+              ) : (
+                <span className={`ml-1.5 ${activeTab === tab.key ? 'text-emerald-200' : 'text-gray-400'}`}>
+                  {tabCounts[tab.key]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -494,40 +621,178 @@ export default function BatchesPage() {
         </div>
       )}
 
-      {/* Lot cards */}
-      <div className="mt-4 space-y-3">
-        {loading ? (
-          <>
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </>
-        ) : filteredLotIds.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-            <p className="text-sm font-medium">No lots found</p>
-            <p className="text-xs mt-1">
-              {search ? 'Try a different search term' : 'Distribute lots from the Lots page to create batches'}
-            </p>
+      {/* Content area */}
+      {activeTab === 'out_for_va' ? (
+        <div className="mt-4">
+          {/* VA KPI cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-amber-800">{bcKPIs.count}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-amber-600">Challans Out</div>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-violet-800">{bcKPIs.totalPieces}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-violet-600">Total Pieces</div>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-blue-800">{bcKPIs.processors}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-blue-600">Processors</div>
+            </div>
+            <div className={`rounded-xl border px-4 py-3 text-center ${bcKPIs.overdue > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`text-2xl font-bold tabular-nums ${bcKPIs.overdue > 0 ? 'text-red-800' : 'text-gray-800'}`}>{bcKPIs.overdue}</div>
+              <div className={`text-[11px] font-semibold uppercase tracking-wide mt-0.5 ${bcKPIs.overdue > 0 ? 'text-red-600' : 'text-gray-600'}`}>Overdue (&gt;14d)</div>
+            </div>
           </div>
-        ) : (
-          filteredLotIds.map((lotId) => (
-            <LotCard
-              key={lotId}
-              lotId={lotId}
-              batches={lotGroups[lotId]}
-              expanded={expandedLots.has(lotId)}
-              onToggle={() => toggleExpand(lotId)}
-              onPrint={() => handlePrint(lotId)}
-              onBatchClick={handleBatchClick}
-            />
-          ))
-        )}
-      </div>
+
+          {/* VA filter bar */}
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            <select value={bcVAFilter} onChange={(e) => setBcVAFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs bg-white focus:border-primary-500 focus:outline-none">
+              <option value="">All VA Types</option>
+              {bcFilterOptions.vas.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select value={bcProcessorFilter} onChange={(e) => setBcProcessorFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs bg-white focus:border-primary-500 focus:outline-none">
+              <option value="">All Processors</option>
+              {bcFilterOptions.processors.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <div className="w-48">
+              <SearchInput value={bcSearch} onChange={setBcSearch} placeholder="Search challan, batch..." />
+            </div>
+            {(bcVAFilter || bcProcessorFilter || bcSearch) && (
+              <button onClick={() => { setBcVAFilter(''); setBcProcessorFilter(''); setBcSearch('') }}
+                className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+            )}
+          </div>
+
+          {/* Challan cards */}
+          {bcLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[1,2,3].map((i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : filteredChallans.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-medium">No batch challans out</p>
+              <p className="text-xs mt-1">All batches are in-house</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredChallans.map((challan) => {
+                const vaCode = challan.value_addition?.short_code || '—'
+                const vaStyle = VA_COLORS[vaCode] || { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' }
+                const sentAt = challan.sent_date ? new Date(challan.sent_date) : null
+                const daysOut = sentAt ? Math.floor((Date.now() - sentAt.getTime()) / 86400000) : 0
+                const batchCount = (challan.batch_items || []).length
+                const totalPcs = challan.total_pieces || 0
+                const dateStr = sentAt
+                  ? sentAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+                  : '—'
+
+                return (
+                  <div key={challan.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="px-4 pt-3 pb-3">
+                      {/* Challan header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono font-bold text-sm text-gray-900">{challan.challan_no}</span>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${vaStyle.bg} ${vaStyle.text} border ${vaStyle.border}`}>
+                          {vaCode}
+                        </span>
+                      </div>
+
+                      {/* Processor */}
+                      <div className="text-sm font-medium text-gray-700 mb-2">{challan.processor_name}</div>
+
+                      {/* Stats row */}
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                          {batchCount} batch{batchCount !== 1 ? 'es' : ''}
+                        </span>
+                        <span className="font-semibold text-gray-700">{totalPcs} pcs</span>
+                        <span>{dateStr}</span>
+                      </div>
+
+                      {/* Days out badge */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          daysOut > 14 ? 'bg-red-100 text-red-700' : daysOut > 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {daysOut}d out
+                        </span>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handlePrintBatchChallan(challan)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Print
+                        </button>
+                        {canReceiveVA && (
+                          <button
+                            onClick={() => setShowReceiveVA(true)}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Receive
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Lot cards */
+        <div className="mt-4 space-y-3">
+          {loading ? (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          ) : filteredLotIds.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <p className="text-sm font-medium">No lots found</p>
+              <p className="text-xs mt-1">
+                {search ? 'Try a different search term' : 'Distribute lots from the Lots page to create batches'}
+              </p>
+            </div>
+          ) : (
+            filteredLotIds.map((lotId) => (
+              <LotCard
+                key={lotId}
+                lotId={lotId}
+                batches={lotGroups[lotId]}
+                expanded={expandedLots.has(lotId)}
+                onToggle={() => toggleExpand(lotId)}
+                onPrint={() => handlePrint(lotId)}
+                onBatchClick={handleBatchClick}
+              />
+            ))
+          )}
+        </div>
+      )}
 
       {/* Batch Label Sheet (reprint) */}
       {labelBatches && (
@@ -545,13 +810,28 @@ export default function BatchesPage() {
         open={showSendVA}
         onClose={() => setShowSendVA(false)}
         batches={allBatches}
-        onSuccess={fetchData}
+        onSuccess={() => { fetchData(); if (activeTab === 'out_for_va') fetchBatchChallans() }}
+        onPrintChallan={handlePrintChallanFromSend}
       />
       <ReceiveFromVAModal
         open={showReceiveVA}
         onClose={() => setShowReceiveVA(false)}
-        onSuccess={fetchData}
+        onSuccess={() => { fetchData(); if (activeTab === 'out_for_va') fetchBatchChallans() }}
       />
+
+      {/* Batch Challan Print Overlay */}
+      {showBatchChallan && batchChallanData && (
+        <BatchChallan
+          batchItems={batchChallanData.batchItems}
+          vaName={batchChallanData.vaName}
+          vaShortCode={batchChallanData.vaShortCode}
+          processorName={batchChallanData.processorName}
+          sentDate={batchChallanData.sentDate}
+          notes={batchChallanData.notes}
+          challanNo={batchChallanData.challanNo}
+          onClose={() => { setShowBatchChallan(false); setBatchChallanData(null) }}
+        />
+      )}
     </div>
   )
 }

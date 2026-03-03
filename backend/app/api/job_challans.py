@@ -13,6 +13,17 @@ from app.services.job_challan_service import JobChallanService
 router = APIRouter(prefix="/job-challans", tags=["Job Challans"])
 
 
+@router.get("/next-number", response_model=None)
+async def next_challan_number(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Peek at the next auto-sequential job challan number."""
+    svc = JobChallanService(db)
+    next_no = await svc._next_challan_no()
+    return {"success": True, "data": {"next_challan_no": next_no}}
+
+
 @router.get("", response_model=None)
 async def list_challans(
     params: JobChallanFilterParams = Depends(),

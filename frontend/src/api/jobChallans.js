@@ -43,6 +43,13 @@ export async function createJobChallan(data) {
   return client.post('/job-challans', apiPayload)
 }
 
+export async function getNextJCNumber() {
+  if (USE_MOCK) {
+    return mockResponse({ next_challan_no: `JC-${String(mockSeq + 1).padStart(3, '0')}` })
+  }
+  return client.get('/job-challans/next-number')
+}
+
 export async function getJobChallans(params = {}) {
   if (USE_MOCK) {
     return mockPaginated(mockChallans, params.page, params.page_size)

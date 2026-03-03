@@ -94,6 +94,22 @@ def require_permission(permission: str):
     return Depends(_check)
 
 
+def require_any_permission(*permissions: str):
+    """Dependency that checks if user has ANY of the listed permissions.
+
+    Usage in routes:
+        current_user: User = require_any_permission("batch_send_va", "batch_receive_va")
+    """
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        claims = getattr(current_user, "_token_claims", {})
+        user_perms = claims.get("permissions", [])
+        if not any(p in user_perms for p in permissions):
+            raise ForbiddenError(f"One of permissions required: {', '.join(permissions)}")
+        return current_user
+
+    return Depends(_check)
+
+
 def require_role(*roles: str):
     """Dependency that checks if user's role is in the allowed list.
 

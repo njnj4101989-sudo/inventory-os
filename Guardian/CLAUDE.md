@@ -23,7 +23,47 @@
 
 ---
 
-## Current State (Session 53 — 2026-03-03)
+## Current State (Session 54 — 2026-03-03)
+
+### S54: Batch VA Tracking — "Out for VA" Tab + Challan Print
+
+**Zero backend changes.** All data from existing endpoints.
+
+**Task 1 — BatchChallan.jsx (New File):**
+- A4 print component mirroring `JobChallan.jsx` pattern exactly
+- Title: "BATCH CHALLAN", CSS prefix `bc-`, `documentTitle: Batch-Challan-{no}`
+- Table columns: # / Batch Code / Size / Pieces / Phase (Stitching or Post-QC)
+- Totals: Total Batches + Total Pieces (not weight)
+- Signatures: Sent By + Received By
+
+**Task 2 — SendForVAModal.jsx (Modified):**
+- Added `onPrintChallan` prop
+- After successful `createBatchChallan()`, extracts challan data from response and calls `onPrintChallan()` with `{challanNo, batchItems, vaName, vaShortCode, processorName, sentDate, notes}`
+- Print overlay appears automatically after sending batches for VA
+
+**Task 3 — BatchesPage.jsx (Modified):**
+- **"Out for VA" tab:** Permission-gated (only visible when `canSendVA || canReceiveVA`), amber-styled active state
+- **VA color map:** 10 entries (EMB=purple, DYE=amber, DPT=sky, HWK=rose, SQN=pink, BTC=teal, HST=orange, BTN=indigo, LCW=lime, FIN=gray)
+- **New state:** `batchChallansData`, `bcLoading`, `bcVAFilter`, `bcProcessorFilter`, `bcSearch`, `showBatchChallan`, `batchChallanData`
+- **Fetch:** `fetchBatchChallans()` — `getBatchChallans({ status: 'sent', page_size: 200 })`, triggered on tab switch
+- **4 KPI cards:** Challans Out (amber) / Total Pieces (violet) / Processors (blue) / Overdue >14d (red/gray)
+- **Filter bar:** VA Type dropdown + Processor dropdown + Search + Clear
+- **Challan cards:** 3-col grid, each card shows challan_no, VA badge (color-coded), processor name, batch count, piece count, sent date, days-out badge (green/amber/red), Print + Receive buttons
+- **Print handler:** `handlePrintBatchChallan()` fetches full challan via `getBatchChallan(id)`, opens BatchChallan overlay
+- **Print chaining:** `onPrintChallan` prop wired from SendForVAModal → auto-opens BatchChallan after send
+- **Refresh:** Both SendForVAModal and ReceiveFromVAModal `onSuccess` also call `fetchBatchChallans()` when on VA tab
+- **Tab rendering:** `visibleTabs` computed via `useMemo` (TABS + conditional VA tab), replaced static `TABS.map`
+
+**Task 4 — Batch Passport (No Changes Needed):**
+- ScanPage.jsx lines 381-434 already render VA Processing Timeline with badges, phase pills, status, processor, challan_no, pieces, dates, cost — confirmed complete
+
+**Files created:** 1 (BatchChallan.jsx)
+**Files modified:** 2 (SendForVAModal.jsx, BatchesPage.jsx)
+**Build: 0 errors.**
+
+---
+
+## Previous State (Session 53 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`

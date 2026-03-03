@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
-import { createJobChallan, getJobChallan } from '../api/jobChallans'
+import { createJobChallan, getJobChallan, getNextJCNumber } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
 import { getSuppliers } from '../api/suppliers'
@@ -495,6 +495,7 @@ export default function RollsPage() {
   const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '', weight_to_send: '' })
   const [sendProcSaving, setSendProcSaving] = useState(false)
   const [sendProcError, setSendProcError] = useState(null)
+  const [nextJCNo, setNextJCNo] = useState('')
 
   // Receive from Processing modal
   const [recvProcOpen, setRecvProcOpen] = useState(false)
@@ -1140,11 +1141,18 @@ export default function RollsPage() {
   }
 
   // ── Send for Processing ──
+  const fetchNextJCNo = () => {
+    getNextJCNumber()
+      .then((res) => setNextJCNo(res.data?.data?.next_challan_no || res.data?.next_challan_no || ''))
+      .catch(() => setNextJCNo(''))
+  }
+
   const openSendProcessing = (roll) => {
     setSendProcRoll(roll)
     setSendProcForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
     setSendProcError(null)
     setDetailRoll(null) // close detail modal
+    fetchNextJCNo()
     setSendProcOpen(true)
   }
 
@@ -1468,6 +1476,7 @@ export default function RollsPage() {
                             setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                             const wts = {}; getSelectedRollObjects().forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                             setBulkSendError(null)
+                            fetchNextJCNo()
                             setBulkSendOpen(true)
                           }}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 transition-colors">
@@ -2010,6 +2019,7 @@ export default function RollsPage() {
                         setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                         const wts = {}; invRollObjects.forEach(r => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                         setBulkSendError(null)
+                        fetchNextJCNo()
                         setSelectedInvoice(null); setSelectedInvRolls(new Set())
                         setBulkSendOpen(true)
                       }}
@@ -2809,6 +2819,15 @@ export default function RollsPage() {
       >
         {sendProcError && <div className="mb-4"><ErrorAlert message={sendProcError} onDismiss={() => setSendProcError(null)} /></div>}
 
+        {/* Challan Number Preview */}
+        {nextJCNo && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Challan No.</div>
+            <div className="font-mono font-bold text-amber-900 text-sm">{nextJCNo}</div>
+            <div className="text-[10px] text-amber-500 ml-auto">Auto-generated</div>
+          </div>
+        )}
+
         {sendProcRoll && (
           <div className="mb-5 rounded-lg bg-blue-50 border border-blue-100 p-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -3064,6 +3083,15 @@ export default function RollsPage() {
             <div className="flex-1 overflow-y-auto p-6">
               <div className="mx-auto max-w-4xl space-y-6">
                 {bulkSendError && <ErrorAlert message={bulkSendError} onDismiss={() => setBulkSendError(null)} />}
+
+                {/* Challan Number Preview */}
+                {nextJCNo && (
+                  <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 shadow-sm">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Challan No.</div>
+                    <div className="font-mono font-bold text-amber-900 text-base">{nextJCNo}</div>
+                    <div className="text-[10px] text-amber-500 ml-auto">Auto-generated</div>
+                  </div>
+                )}
 
                 {/* ── Selected Rolls Table ── */}
                 <div className="rounded-xl border border-gray-200 bg-white shadow-sm">

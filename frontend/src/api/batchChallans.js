@@ -40,6 +40,13 @@ export async function createBatchChallan(data) {
   return client.post('/batch-challans', apiPayload)
 }
 
+export async function getNextBCNumber() {
+  if (USE_MOCK) {
+    return mockResponse({ next_challan_no: `BC-${String(mockSeq + 1).padStart(3, '0')}` })
+  }
+  return client.get('/batch-challans/next-number')
+}
+
 export async function getBatchChallans(params = {}) {
   if (USE_MOCK) {
     return mockPaginated(mockBatchChallans, params.page, params.page_size)

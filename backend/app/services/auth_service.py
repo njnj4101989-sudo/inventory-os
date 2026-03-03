@@ -43,14 +43,22 @@ class AuthService:
 
         role_name = user.role.name if user.role else "unknown"
 
-        # Read permissions from DB (role.permissions JSON column)
-        # Falls back to hardcoded dict if DB permissions are empty/missing
+        # Read permissions: merge DB overrides with hardcoded defaults.
+        # This ensures new permissions added to the codebase are automatically
+        # available without requiring a manual role update in the UI.
+        hardcoded = set(get_role_permission_list(role_name))
         db_permissions = user.role.permissions if user.role and user.role.permissions else None
         if db_permissions and isinstance(db_permissions, dict):
-            # DB stores {perm_name: True/False} — extract granted ones
-            permissions = [k for k, v in db_permissions.items() if v]
+            # Start with hardcoded defaults, then apply DB overrides
+            merged = set(hardcoded)
+            for perm_name, granted in db_permissions.items():
+                if granted:
+                    merged.add(perm_name)
+                else:
+                    merged.discard(perm_name)
+            permissions = list(merged)
         else:
-            permissions = get_role_permission_list(role_name)
+            permissions = list(hardcoded)
 
         # Build full permission map for frontend (all keys, True/False)
         permissions_map = {perm: perm in permissions for perm in ALL_PERMISSIONS}
