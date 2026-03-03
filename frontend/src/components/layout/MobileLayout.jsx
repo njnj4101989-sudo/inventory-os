@@ -3,6 +3,7 @@ import BottomNav from './BottomNav'
 import OfflineBanner from '../common/OfflineBanner'
 import InstallBanner from '../common/InstallBanner'
 import { useAuth } from '../../hooks/useAuth'
+import NotificationBell from '../common/NotificationBell'
 
 export default function MobileLayout() {
   const { user, role } = useAuth()
@@ -19,8 +20,11 @@ export default function MobileLayout() {
           </div>
           <span className="text-sm font-bold text-gray-900">Inventory-OS</span>
         </div>
-        <div className="text-xs text-gray-500 font-medium">
-          {user?.full_name}
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <span className="text-xs text-gray-500 font-medium">
+            {user?.full_name}
+          </span>
         </div>
       </header>
 

@@ -327,6 +327,13 @@ class LotService:
                     "qr_code_data": b.qr_code_data,
                 })
 
+        from app.core.event_bus import event_bus
+        await event_bus.emit("lot_distributed", {
+            "lot_code": lot.lot_code,
+            "design_no": lot.design_no,
+            "batch_count": len(batch_responses),
+        }, str(created_by))
+
         return {
             "lot_id": str(lot.id),
             "lot_code": lot.lot_code,

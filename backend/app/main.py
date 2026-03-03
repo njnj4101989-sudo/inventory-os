@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.database import engine
 from app.api.router import api_router
 from app.core.error_handlers import register_exception_handlers
+from app.core.event_bus import event_bus
 from app.tasks import (
     start_reservation_expiry,
     stop_reservation_expiry,
@@ -30,6 +31,7 @@ async def lifespan(_app: FastAPI):
     yield
     stop_reservation_expiry()
     stop_backup_sync()
+    event_bus.close_all()
     await engine.dispose()
 
 

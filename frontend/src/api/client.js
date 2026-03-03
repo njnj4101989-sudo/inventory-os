@@ -76,4 +76,9 @@ client.interceptors.response.use(
   }
 )
 
+/** Base URL for non-axios connections (SSE EventSource). */
+export function getBaseUrl() {
+  return API_URL
+}
+
 export default client

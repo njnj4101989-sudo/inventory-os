@@ -5,6 +5,8 @@ import MobileLayout from './components/layout/MobileLayout'
 import ProtectedRoute from './routes/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import { useAuth } from './hooks/useAuth'
+import { NotificationProvider } from './context/NotificationContext'
+import Toast from './components/common/Toast'
 import routes from './routes/routes'
 
 const ScanPage = lazy(() => import('./pages/ScanPage'))
@@ -21,6 +23,7 @@ const MOBILE_ROLES = ['tailor', 'checker']
 
 function App() {
   return (
+    <NotificationProvider>
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
@@ -85,6 +88,8 @@ function App() {
         <Route path="*" element={<DefaultRedirect />} />
       </Routes>
     </Suspense>
+    <Toast />
+    </NotificationProvider>
   )
 }
 

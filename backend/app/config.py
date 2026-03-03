@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./inventory_os.db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/drs_inventory"
 
     # JWT
     JWT_SECRET: str = "change-me-in-production"

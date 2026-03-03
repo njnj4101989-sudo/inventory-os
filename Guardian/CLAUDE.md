@@ -23,13 +23,57 @@
 
 ---
 
-## Current State (Session 52 — 2026-03-03)
+## Current State (Session 53 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### S53: C1 (PostgreSQL Migration) + C2 (SSE Backend) + C3 (SSE Frontend)
+
+**C1 — PostgreSQL Migration Code:**
+- `requirements.txt`: +`psycopg2-binary==2.9.9` (Alembic sync driver)
+- `config.py`: default `DATABASE_URL` → PostgreSQL format (`.env` overrides to SQLite locally)
+- `.env` / `.env.example`: PostgreSQL as primary, SQLite commented for local dev
+- `alembic.ini`: default URL → PostgreSQL
+- `seed_data.py`: **Removed** Suppliers, SKUs, Fabrics seeds (add real data from Masters page). **Kept** ProductTypes, Colors, ValueAdditions
+- Old migration files: **ALL deleted** (13 files). Fresh migration generated on deploy target
+- Decision: **No local PostgreSQL needed** — SQLite for dev, PostgreSQL on AWS RDS only
+
+**C2 — SSE Backend (Event Bus + Streaming Endpoint):**
+- New `app/core/event_bus.py`: Singleton `EventBus` with `asyncio.Queue` per client. Methods: `subscribe()`, `unsubscribe()`, `emit()`, `close_all()`
+- New `app/api/events.py`: `GET /events/stream?token=<jwt>` SSE endpoint. Auth via query param (EventSource doesn't support headers). 30s heartbeat. Auto-cleanup on disconnect
+- `router.py`: +`events` router
+- `main.py`: +`event_bus.close_all()` in lifespan shutdown
+- **8 emit calls** added to services (1 line each, after `flush()`):
+  - `roll_service.stock_in()` → `roll_stocked_in`
+  - `roll_service.receive_from_processing()` → `va_received`
+  - `batch_service.submit_batch()` → `batch_submitted`
+  - `batch_service.check_batch()` → `batch_checked`
+  - `batch_service.pack_batch()` → `batch_packed`
+  - `batch_service.claim_batch()` → `batch_claimed`
+  - `lot_service.distribute_lot()` → `lot_distributed`
+  - `job_challan_service.create_challan()` → `va_sent`
+  - `batch_challan_service.create_challan()` → `va_sent`
+  - `batch_challan_service.receive_challan()` → `va_received`
+
+**C3 — SSE Frontend (Toast + Bell + Notifications):**
+- `client.js`: +`getBaseUrl()` export for SSE URL construction
+- New `context/NotificationContext.jsx`: SSE EventSource connection (auto-reconnect with exponential backoff), notification state (max 50), toast state (max 3, auto-dismiss 5s), human-readable messages per event type, color + route mapping
+- New `components/common/Toast.jsx`: Fixed bottom-right, stacked, color-coded by event type (green/blue/amber/purple), slide-in animation, auto-dismiss 5s
+- New `components/common/NotificationBell.jsx`: Bell icon with red unread badge, dropdown panel (max-h-96, scrollable), click → navigate to relevant page, "Mark all read" / "Clear all" actions
+- `App.jsx`: Wrapped with `<NotificationProvider>` + `<Toast />`
+- `Header.jsx`: +`<NotificationBell />` (desktop layout)
+- `MobileLayout.jsx`: +`<NotificationBell />` (mobile layout)
+- `index.css`: +`animate-slide-in-right` keyframe animation
+
+**Files created:** 4 (event_bus.py, events.py, NotificationContext.jsx, Toast.jsx, NotificationBell.jsx)
+**Files modified:** 12 (requirements.txt, config.py, .env, .env.example, alembic.ini, seed_data.py, router.py, main.py, roll_service.py, batch_service.py, lot_service.py, job_challan_service.py, batch_challan_service.py, client.js, App.jsx, Header.jsx, MobileLayout.jsx, index.css)
+**Build: 0 errors.**
+
+---
 
 ### S51: Invoice-to-Lot Shortcut (Options A+B+C)
 
@@ -279,13 +323,15 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 **PHASE C: Deploy**
 
-| # | Step | Guide |
-|---|------|-------|
-| 6 | SQLite → PostgreSQL migration code | `AWS_DEPLOYMENT.md` Step 4 |
-| 7 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
-| 8 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
-| 9 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
-| 10 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+| # | Step | Status |
+|---|------|--------|
+| C1 | SQLite → PostgreSQL migration code | ✅ S53 |
+| C2 | SSE backend — EventBus + streaming endpoint | ✅ S53 |
+| C3 | SSE frontend — Toast + Bell + Notifications | ✅ S53 |
+| C4 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
+| C5 | Vercel frontend deploy + GoDaddy DNS | `AWS_DEPLOYMENT.md` Steps 5-6 |
+| C6 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
+| C7 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
 
 **NICE-TO-HAVE (post-deploy):**
 
@@ -417,6 +463,12 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 ---
 
 ## Session History (Compressed)
+
+### S53: PostgreSQL Migration + SSE Real-Time Notifications (complete)
+- C1: PostgreSQL migration code — `psycopg2-binary` added, config.py default→PostgreSQL, seeds cleaned (removed Suppliers/SKUs/Fabrics), old migrations deleted. SQLite stays for local dev, PostgreSQL on AWS RDS only
+- C2: SSE backend — `event_bus.py` singleton (asyncio.Queue per client), `events.py` SSE endpoint (auth via query param, 30s heartbeat), 10 emit calls across 6 services
+- C3: SSE frontend — `NotificationContext.jsx` (EventSource + auto-reconnect + exponential backoff), `Toast.jsx` (bottom-right, color-coded, 5s auto-dismiss), `NotificationBell.jsx` (bell icon + unread badge + dropdown panel), wired into App/Header/MobileLayout
+- Build: 0 errors
 
 ### S52: Roll Picker "Group By" Switcher (complete)
 - New `rollGroupBy` state with 4 modes: Sr. No. / Fabric / Color / Supplier

@@ -120,6 +120,14 @@ class BatchChallanService:
 
         await self.db.flush()
 
+        from app.core.event_bus import event_bus
+        await event_bus.emit("va_sent", {
+            "challan_no": challan.challan_no,
+            "vendor": challan.processor_name,
+            "piece_count": sum(bp.pieces_sent or 0 for bp in challan.batch_items),
+            "type": "garment",
+        }, str(created_by))
+
         # Return response
         return await self.get_challan(challan.id)
 
@@ -159,6 +167,15 @@ class BatchChallanService:
             challan.notes = (challan.notes or "") + f"\nReceived: {req.notes}"
 
         await self.db.flush()
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("va_received", {
+            "challan_no": challan.challan_no,
+            "vendor": challan.processor_name,
+            "piece_count": sum((bp.pieces_received or 0) for bp in challan.batch_items),
+            "type": "garment",
+        }, str(received_by))
+
         return await self.get_challan(challan_id)
 
     async def get_challans(self, params: BatchChallanFilterParams) -> dict:

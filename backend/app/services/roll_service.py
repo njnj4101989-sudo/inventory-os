@@ -270,6 +270,14 @@ class RollService:
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
 
+        from app.core.event_bus import event_bus
+        await event_bus.emit("roll_stocked_in", {
+            "roll_code": roll.roll_code,
+            "sr_no": req.sr_no,
+            "weight": float(roll.total_weight) if roll.total_weight else None,
+            "supplier": roll.supplier.name if roll.supplier else None,
+        }, str(received_by))
+
         return self._to_response(roll)
 
     async def update_roll(self, roll_id: UUID, req: RollUpdate) -> dict:
@@ -445,6 +453,15 @@ class RollService:
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
         )
         roll = (await self.db.execute(reload)).scalar_one()
+
+        from app.core.event_bus import event_bus
+        va_name = log.value_addition.name if log.value_addition else "Processing"
+        await event_bus.emit("va_received", {
+            "roll_code": roll.roll_code,
+            "va_name": va_name,
+            "weight_after": float(req.weight_after) if req.weight_after else None,
+        })
+
         return self._to_response(roll)
 
     async def update_processing_log(

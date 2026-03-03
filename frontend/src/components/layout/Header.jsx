@@ -1,4 +1,5 @@
 import { useAuth } from '../../hooks/useAuth'
+import NotificationBell from '../common/NotificationBell'
 
 const ROLE_COLORS = {
   admin:      'bg-red-100 text-red-700',
@@ -20,6 +21,8 @@ export default function Header() {
 
       {/* User info + logout (right side) */}
       <div className="flex items-center gap-4">
+        <NotificationBell />
+
         {/* Role badge */}
         <span
           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${

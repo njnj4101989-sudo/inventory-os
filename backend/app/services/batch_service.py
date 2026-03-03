@@ -227,6 +227,11 @@ class BatchService:
         batch.submitted_at = datetime.now(timezone.utc)
         await self.db.flush()
 
+        from app.core.event_bus import event_bus
+        await event_bus.emit("batch_submitted", {
+            "batch_code": batch.batch_code,
+        }, str(user_id))
+
         return await self.get_batch(batch_id)
 
     async def check_batch(self, batch_id: UUID, req: BatchCheck, checker_id: UUID) -> dict:
@@ -280,6 +285,15 @@ class BatchService:
             batch.completed_at = datetime.now(timezone.utc)
 
         await self.db.flush()
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("batch_checked", {
+            "batch_code": batch.batch_code,
+            "approved": batch.approved_qty,
+            "rejected": batch.rejected_qty,
+            "status": batch.status,
+        }, str(checker_id))
+
         return await self.get_batch(batch_id)
 
     async def ready_for_packing(self, batch_id: UUID, checker_id: UUID) -> dict:
@@ -388,6 +402,11 @@ class BatchService:
                 },
             )
             await self.db.flush()
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("batch_packed", {
+            "batch_code": batch.batch_code,
+        }, str(packer_id))
 
         return await self.get_batch(batch_id)
 
@@ -605,6 +624,11 @@ class BatchService:
         batch.status = "assigned"
         batch.assigned_at = datetime.now(timezone.utc)
         await self.db.flush()
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("batch_claimed", {
+            "batch_code": batch.batch_code,
+        }, str(tailor_id))
 
         return await self.get_batch_passport(batch_code)
 

@@ -1,70 +1,23 @@
-"""Seed sample suppliers, SKUs, and master data (Product Types, Colors, Fabrics).
+"""Seed essential master data (Product Types, Colors, Value Additions).
 
-Idempotent — skips records that already exist (matched by name / sku_code / code).
+Idempotent — skips records that already exist (matched by code / short_code).
 Run via: python -m seeds.seed_all
+
+NOTE: Suppliers, SKUs, and Fabrics are NOT seeded — add real data from the Masters page.
+SKUs are auto-generated at batch pack time.
 """
 
 import asyncio
 import sys
-from decimal import Decimal
 
 from sqlalchemy import select
 
 sys.path.insert(0, ".")
 
 from app.database import async_session_factory
-from app.models.supplier import Supplier
-from app.models.sku import SKU
 from app.models.product_type import ProductType
 from app.models.color import Color
-from app.models.fabric import Fabric
 from app.models.value_addition import ValueAddition
-
-
-SUPPLIERS = [
-    {
-        "name": "Lakshmi Textiles",
-        "contact_person": "Ramesh Kumar",
-        "phone": "9100000001",
-        "address": "Erode, Tamil Nadu",
-    },
-    {
-        "name": "Bharat Fabrics",
-        "contact_person": "Suresh Patel",
-        "phone": "9100000002",
-        "address": "Surat, Gujarat",
-    },
-]
-
-SKUS = [
-    {
-        "sku_code": "BLS-101-White-M",
-        "product_type": "BLS",
-        "product_name": "White Cotton Blouse",
-        "color": "White",
-        "size": "M",
-        "description": "Standard white cotton blouse, medium size",
-        "base_price": Decimal("250.00"),
-    },
-    {
-        "sku_code": "BLS-102-Black-L",
-        "product_type": "BLS",
-        "product_name": "Black Silk Blouse",
-        "color": "Black",
-        "size": "L",
-        "description": "Premium black silk blouse, large size",
-        "base_price": Decimal("450.00"),
-    },
-    {
-        "sku_code": "BLS-103-Red-S",
-        "product_type": "BLS",
-        "product_name": "Red Cotton Blouse",
-        "color": "Red",
-        "size": "S",
-        "description": "Standard red cotton blouse, small size",
-        "base_price": Decimal("230.00"),
-    },
-]
 
 PRODUCT_TYPES = [
     {"code": "BLS", "name": "Blouse", "description": "Traditional and modern blouse designs"},
@@ -117,24 +70,9 @@ VALUE_ADDITIONS = [
     {"name": "Finishing",     "short_code": "FIN",  "applicable_to": "garment", "description": "Final touch-ups, thread cutting, ironing"},
 ]
 
-FABRICS = [
-    {"code": "COT", "name": "Cotton",    "description": "Natural cotton fabric"},
-    {"code": "SLK", "name": "Silk",      "description": "Pure and blended silk"},
-    {"code": "GGT", "name": "Georgette", "description": "Lightweight georgette"},
-    {"code": "SHK", "name": "Shakira",   "description": "Shakira lycra blend"},
-    {"code": "CHF", "name": "Chiffon",   "description": "Sheer chiffon fabric"},
-    {"code": "RYN", "name": "Rayon",     "description": "Soft rayon fabric"},
-    {"code": "PLY", "name": "Polyester", "description": "Durable polyester"},
-    {"code": "LNN", "name": "Linen",     "description": "Natural linen fabric"},
-    {"code": "CRP", "name": "Crepe",     "description": "Textured crepe fabric"},
-    {"code": "STN", "name": "Satin",     "description": "Smooth satin finish"},
-    {"code": "VLT", "name": "Velvet",    "description": "Plush velvet fabric"},
-    {"code": "OGZ", "name": "Organza",   "description": "Sheer organza fabric"},
-]
-
 
 async def seed_data() -> None:
-    """Insert sample suppliers, SKUs, and master data."""
+    """Insert essential master data: Product Types, Colors, Value Additions."""
     async with async_session_factory() as session:
         # --- Product Types ---
         result = await session.execute(select(ProductType))
@@ -156,16 +94,6 @@ async def seed_data() -> None:
             session.add(Color(**c))
             print(f"  Color '{c['name']}' ({c['code']}) created")
 
-        # --- Fabrics ---
-        result = await session.execute(select(Fabric))
-        existing_fabrics = {f.code for f in result.scalars().all()}
-        for f in FABRICS:
-            if f["code"] in existing_fabrics:
-                print(f"  Fabric '{f['code']}' already exists — skipped")
-                continue
-            session.add(Fabric(**f))
-            print(f"  Fabric '{f['name']}' ({f['code']}) created")
-
         # --- Value Additions ---
         result = await session.execute(select(ValueAddition))
         existing_va = {va.short_code for va in result.scalars().all()}
@@ -176,32 +104,10 @@ async def seed_data() -> None:
             session.add(ValueAddition(**va))
             print(f"  ValueAddition '{va['name']}' ({va['short_code']}) created")
 
-        # --- Suppliers ---
-        result = await session.execute(select(Supplier))
-        existing_suppliers = {s.name for s in result.scalars().all()}
-
-        for s in SUPPLIERS:
-            if s["name"] in existing_suppliers:
-                print(f"  Supplier '{s['name']}' already exists — skipped")
-                continue
-            session.add(Supplier(**s))
-            print(f"  Supplier '{s['name']}' created")
-
-        # --- SKUs ---
-        result = await session.execute(select(SKU))
-        existing_skus = {s.sku_code for s in result.scalars().all()}
-
-        for s in SKUS:
-            if s["sku_code"] in existing_skus:
-                print(f"  SKU '{s['sku_code']}' already exists — skipped")
-                continue
-            session.add(SKU(**s))
-            print(f"  SKU '{s['sku_code']}' created ({s['product_name']})")
-
         await session.commit()
 
 
 if __name__ == "__main__":
-    print("Seeding sample data...")
+    print("Seeding master data...")
     asyncio.run(seed_data())
     print("Done.")

@@ -124,6 +124,14 @@ class JobChallanService:
 
         await self.db.flush()
 
+        from app.core.event_bus import event_bus
+        await event_bus.emit("va_sent", {
+            "challan_no": challan.challan_no,
+            "vendor": challan.vendor_name,
+            "roll_count": len(rolls),
+            "type": "roll",
+        }, str(created_by))
+
         # Reload challan with relationships
         return await self._get_challan_response(challan.id, rolls, weight_sent_map)
 

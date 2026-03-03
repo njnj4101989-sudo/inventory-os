@@ -25,6 +25,7 @@ from app.api import (
     external,
     masters,
     job_challans,
+    events,
 )
 
 api_router = APIRouter()
@@ -46,3 +47,4 @@ api_router.include_router(mobile.router)
 api_router.include_router(external.router)
 api_router.include_router(masters.router)
 api_router.include_router(job_challans.router)
+api_router.include_router(events.router)
