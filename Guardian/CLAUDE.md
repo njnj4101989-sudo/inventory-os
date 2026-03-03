@@ -23,13 +23,83 @@
 
 ---
 
-## Current State (Session 49 — 2026-03-03)
+## Current State (Session 50 — 2026-03-03)
 
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → test at http://localhost:5173
 3. **Production (planned):** `https://inventory.drsblouse.com` (Vercel) + `https://api-inventory.drsblouse.com` (AWS EC2)
 4. Login as `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
+
+### S50: KPI Card Typography + Dashboard Grid + Sidebar Sections
+
+**S50 (Part A — Global KPI Card Text Uplift):**
+- 8 pages updated: Dashboard, Batches, Orders, Invoices, SKUs, Lots, Rolls, MyWork
+- Labels: `text-xs font-medium` / `opacity-75` → `text-[11px] font-semibold uppercase tracking-wide` + explicit colors
+- Dashboard pipeline: split color map (`bg` + `accent` for value + `muted` for label) — values now `-800`, labels `-600`
+- Orders/Invoices gradient cards: `opacity-80/70` → `text-white/85` / `text-white/75`
+- SKUsPage: `opacity-75` removed, `text-lg` → `text-xl`
+- LotsPage: 12 stat labels → `.typo-label` class (existing global CSS)
+- RollsPage processed tab: 4 labels upgraded
+- MyWorkPage: added `tabular-nums` + upgraded labels
+
+**S50 (Part B — Dashboard 4+4 Grid):**
+- Added **Active Lots** card (4th in row 2): `summary.lots.total`, subtitle `X open, Y distributed`, cyan icon
+- Second row grid: `sm:grid-cols-3` → `sm:grid-cols-2 lg:grid-cols-4` — matches row 1
+- Data from existing `summary.lots` object (both mock + real backend already return it)
+
+**S50 (Part C — Sidebar Rearrange with Sections):**
+- Reordered by business function: Commerce → Production → Setup
+- **Commerce** (top): Orders, Invoices, Inventory, Reports — admin's daily workflow
+- **Production** (middle): Rolls → Lots → Batches → SKUs — pipeline left-to-right
+- **Setup** (bottom): Suppliers, Masters, Users & Roles — configure once
+- Section labels: `text-[10px] font-semibold uppercase tracking-widest text-gray-500`, auto-hide when collapsed
+- Compact fit: nav links `py-2.5→py-1.5`, section headers `pt-4→pt-2.5`, gaps `space-y-1→space-y-0.5`, footer `py-3→py-2`
+- All 12 admin items + 3 section labels fit in single viewport without scrollbar
+
+**Build: 0 errors. Commit: `ed2cdf8`**
+
+---
+
+### NEXT: S51 — Invoice-to-Lot Shortcut (Options A+B+C)
+
+**Goal:** Bridge the gap between stock-in and lot creation. Currently after stock-in, user must navigate to LotsPage and manually find rolls from the picker. Three features planned:
+
+**Option A — "Create Lot from Invoice" button in Invoice Detail:**
+- In RollsPage → Invoices tab → click invoice row → Invoice Detail view
+- Add "Create Lot from Invoice" button
+- Pre-selects ALL rolls from that invoice
+- Navigates to LotsPage with rolls pre-loaded via `navigate('/lots', { state: { preselectedRolls } })`
+
+**Option B — Tick marks in Invoice Detail (selective):**
+- Add checkboxes next to each roll in Invoice Detail table
+- Select specific rolls → sticky action bar appears: "Create Lot (N)" + "Send for Processing (N)"
+- Only `in_stock` rolls with `remaining_weight > 0` are selectable
+- Navigate to LotsPage with ticked rolls only
+- Pre-fillable from invoice context: `fabric_type` → product_type hint, date → lot_date
+
+**Option C — "Create Lot" in All Rolls tab bulk action bar:**
+- Existing checkbox selection already works on All Rolls tab (currently: Print Labels + Send for Processing)
+- Add "Create Lot" button to the sticky bulk action bar
+- Same navigation pattern: `navigate('/lots', { state: { preselectedRolls } })`
+
+**LotsPage receiver (shared by all 3 options):**
+- Detect `location.state.preselectedRolls` in LotsPage
+- Auto-open create overlay → pre-populate `form.rolls` with selected rolls
+- Auto-fill `lot_date` from invoice date if available
+- User fills remaining: design_no, palla_weight, size_pattern → save
+
+**Zero backend changes needed.** All data already exists.
+
+**Implementation order:** Option C first (smallest — add 1 button to existing bar) → Option B (checkboxes in invoice detail) → Option A (convenience button) → LotsPage receiver (shared)
+
+**Key files to modify:**
+- `frontend/src/pages/RollsPage.jsx` — Invoice Detail (options A+B), All Rolls bulk bar (option C)
+- `frontend/src/pages/LotsPage.jsx` — Receive `location.state.preselectedRolls`, auto-open + pre-fill
+
+**Key data flow:** `roll.id` + `roll` object → passed via React Router state → LotsPage reads it → maps to `form.rolls[]` entries with `roll_id` + auto-fetched roll data for calculations
+
+---
 
 ### S49: Order Create Picker Redesign + Typography WOW Factor
 
@@ -167,7 +237,18 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 
 ---
 
-### PENDING — S48 Continued
+### PENDING — S51: Invoice-to-Lot Shortcut
+
+**PHASE B2: Workflow Shortcuts (Invoice → Lot)**
+
+| # | Task | Option | Status |
+|---|------|--------|--------|
+| 1 | LotsPage receiver: detect `location.state.preselectedRolls`, auto-open create overlay, pre-fill rolls | Shared | Pending |
+| 2 | "Create Lot" button in All Rolls bulk action bar | C | Pending |
+| 3 | Checkboxes in Invoice Detail roll table + action bar | B | Pending |
+| 4 | "Create Lot from Invoice" button in Invoice Detail | A | Pending |
+
+**Implementation order:** Task 1 (shared receiver) → Task 2 (Option C, smallest) → Task 3 (Option B) → Task 4 (Option A)
 
 **PHASE B: Page Overhauls — ALL COMPLETE**
 
@@ -178,6 +259,9 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 | 3 | ~~Color master wiring~~ | ✅ S47 |
 | 4 | ~~Orders page overhaul~~ | ✅ S48 |
 | 5 | ~~Invoices page overhaul~~ | ✅ S48 |
+| 6 | ~~KPI card typography uplift~~ | ✅ S50 |
+| 7 | ~~Dashboard 4+4 grid + Active Lots card~~ | ✅ S50 |
+| 8 | ~~Sidebar rearrange with sections~~ | ✅ S50 |
 
 **PHASE C: Deploy**
 
@@ -382,6 +466,12 @@ All 31 tasks verified against source code. Spec file deleted — content merged 
 - Part B: Typography global uplift — `index.css` new classes (.typo-label, .typo-data), DataTable `<th>` global fix, zero text-[9px] remaining, labels upgraded to text-gray-500/text-[11px] across 7 pages
 - Part C: Full keyboard system — Ctrl+S save, Escape with dirty-check confirmation dialog, auto-focus Name, Enter chain through customer→search→grid, Tab/Enter grid cell navigation (right→wrap-down), price Enter→grid, keyboard hint strip in footer
 - Build: 0 errors
+
+### S50: KPI Card Typography + Dashboard Grid + Sidebar Sections (complete)
+- Part A: Global KPI card text uplift across 8 pages — opacity→explicit colors, labels→semibold uppercase tracking-wide
+- Part B: Dashboard 4+4 grid — Active Lots card added (from existing summary.lots), second row matched to 4-col
+- Part C: Sidebar rearranged by business function (Commerce→Production→Setup) with section labels, compact padding (no scrollbar)
+- Build: 0 errors, commit: `ed2cdf8`
 
 ### S48: Orders + Invoices Wholesale Overhaul (complete)
 - Backend: SKUBrief +color/size/base_price, OrderFilterParams, InvoiceFilterParams, GET /orders/{id}, GET /invoices/{id}, stock check on create_order(), extended sku/order dicts in _to_response()
