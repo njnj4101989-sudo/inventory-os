@@ -16,8 +16,8 @@ import RollForm from '../components/forms/RollForm'
 import useQuickMaster from '../hooks/useQuickMaster'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 
-const INPUT_CLS = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL_CLS = 'block text-sm font-medium text-gray-700 mb-1'
+const INPUT_CLS = 'w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
+const LABEL_CLS = 'block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5'
 
 // Challan-style fast entry — no per-roll template needed
 
@@ -1980,9 +1980,9 @@ export default function RollsPage() {
                   <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     {/* Design group header bar — matches entry style */}
                     <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{gIdx + 1}</span>
-                        <span className="text-sm font-semibold text-blue-800">{grp.fabric}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{gIdx + 1}</span>
+                        <span className="text-xs font-semibold text-blue-800">{grp.fabric}</span>
                         <span className="text-xs text-blue-500">
                           {grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {grpWeight.toFixed(3)} kg
                           {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
@@ -2188,7 +2188,7 @@ export default function RollsPage() {
       {stockInOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
           {/* ── Top bar (sticky) ── */}
-          <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
+          <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-2 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
@@ -2232,17 +2232,17 @@ export default function RollsPage() {
           </div>
 
           {/* ── Scrollable body ── */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            <div className="mx-auto max-w-6xl space-y-5">
+          <div className="flex-1 overflow-y-auto px-4 py-2">
+            <div className="mx-auto max-w-6xl space-y-2">
               {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
               {/* ── Invoice Header ── */}
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-gray-700">Invoice / Challan Details</h2>
+              <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                <div className="flex items-center justify-between mb-1.5">
+                  <h2 className="text-xs font-semibold text-gray-600">Invoice / Challan Details</h2>
                   <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-300 rounded text-[9px]">Shift+M</kbd> on any dropdown to quick-add master</span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                   <div className="col-span-2 md:col-span-1">
                     <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
                     <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
@@ -2285,12 +2285,12 @@ export default function RollsPage() {
                 const grpValue = grpTotals.weight * (parseFloat(grp.cost_per_unit) || 0)
 
                 return (
-                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div key={gIdx} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
                     {/* Design header bar */}
-                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{gIdx + 1}</span>
-                        <span className="text-sm font-semibold text-blue-800">
+                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{gIdx + 1}</span>
+                        <span className="text-xs font-semibold text-blue-800">
                           {grp.fabric_type.trim() || `Design ${gIdx + 1}`}
                         </span>
                         {grpTotals.count > 0 && (
@@ -2308,9 +2308,9 @@ export default function RollsPage() {
                       )}
                     </div>
 
-                    <div className="p-5 space-y-5">
+                    <div className="px-3 py-2 space-y-2">
                       {/* Fabric / Panna / GSM / Rate / Unit / Notes row */}
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                         <div>
                           <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
                           <select data-master="fabric" data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
@@ -2349,8 +2349,8 @@ export default function RollsPage() {
 
                       {/* Color-wise weight grid */}
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
                             Color-wise Rolls <span className="font-normal normal-case text-gray-400 ml-1">(Enter on empty = new color)</span>
                           </span>
                           <button onClick={() => addColorRow(gIdx)} className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
@@ -2360,19 +2360,19 @@ export default function RollsPage() {
                         </div>
 
                         {/* Grid header */}
-                        <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[180px_1fr_70px] gap-3 items-center">
+                        <div className="rounded-t border border-b-0 border-gray-200 bg-gray-100 px-3 py-1 grid grid-cols-[160px_1fr_50px] gap-2 items-center">
                           <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase">Weights (kg) — Enter/Tab between fields</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
                         </div>
 
                         {/* Grid rows */}
-                        <div className="border border-gray-200 rounded-b-lg divide-y divide-gray-100 bg-white" data-design-group={gIdx}>
+                        <div className="border border-gray-200 rounded-b divide-y divide-gray-100 bg-white" data-design-group={gIdx}>
                           {grp.colorRows.map((row, cIdx) => {
                             const validCount = row.weights.filter((w) => parseFloat(w) > 0).length
                             const rowWeight = row.weights.reduce((s, w) => s + (parseFloat(w) || 0), 0)
                             return (
-                              <div key={cIdx} className="px-4 py-2.5 grid grid-cols-[180px_1fr_70px] gap-3 items-start group hover:bg-gray-50/50">
+                              <div key={cIdx} className="px-3 py-1 grid grid-cols-[160px_1fr_50px] gap-2 items-center group hover:bg-gray-50/50">
                                 {/* Color name */}
                                 <div className="flex items-center gap-1.5">
                                   <select
@@ -2380,7 +2380,7 @@ export default function RollsPage() {
                                     data-color-input="true"
                                     value={row.color}
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
-                                    className="w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    className="w-full rounded border border-gray-300 px-1.5 py-1 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                     onKeyDown={(e) => {
                                       const hasData = row.weights.some((w) => w !== '')
                                       if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
@@ -2430,7 +2430,7 @@ export default function RollsPage() {
                                 </div>
 
                                 {/* Weight inputs */}
-                                <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1">
                                   {row.weights.map((w, wIdx) => (
                                     <div key={wIdx} className="relative">
                                       <input
@@ -2440,7 +2440,7 @@ export default function RollsPage() {
                                         value={w}
                                         onChange={(e) => setWeight(gIdx, cIdx, wIdx, e.target.value)}
                                         placeholder="0.000"
-                                        className="w-[90px] rounded border border-gray-300 px-2 py-1.5 text-sm text-center tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                        className="w-[80px] rounded border border-gray-300 px-1.5 py-1 text-sm text-center tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                                             e.preventDefault()
@@ -2496,7 +2496,7 @@ export default function RollsPage() {
                                     </div>
                                   ))}
                                   <button onClick={() => addWeight(gIdx, cIdx)} title="Add weight"
-                                    className="flex h-[34px] w-[34px] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                                    className="flex h-[28px] w-[28px] items-center justify-center rounded border border-dashed border-gray-300 text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors">
                                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                                   </button>
                                 </div>
@@ -2524,39 +2524,39 @@ export default function RollsPage() {
 
               {/* Add another design group */}
               <button onClick={addDesignGroup}
-                className="w-full rounded-xl border-2 border-dashed border-gray-300 py-4 text-sm font-medium text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                className="w-full rounded-lg border-2 border-dashed border-gray-300 py-2 text-xs font-medium text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
                 + Add Another Design / Fabric
               </button>
 
               {/* Grand total summary */}
               {challanTotals.count > 0 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <div className="flex flex-wrap items-center gap-6 text-sm">
+                <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-4 text-xs">
                     <div>
-                      <span className="text-gray-500">Total Rolls</span>
-                      <div className="text-xl font-bold text-gray-800">{challanTotals.count}</div>
+                      <span className="text-gray-400">Rolls</span>
+                      <div className="text-sm font-bold text-gray-800">{challanTotals.count}</div>
                     </div>
-                    <div className="h-10 w-px bg-gray-200" />
+                    <div className="h-7 w-px bg-gray-200" />
                     <div>
-                      <span className="text-gray-500">Total Weight</span>
-                      <div className="text-xl font-bold text-gray-800">{challanTotals.weight.toFixed(3)} kg</div>
+                      <span className="text-gray-400">Weight</span>
+                      <div className="text-sm font-bold text-gray-800">{challanTotals.weight.toFixed(3)} kg</div>
                     </div>
-                    <div className="h-10 w-px bg-gray-200" />
+                    <div className="h-7 w-px bg-gray-200" />
                     <div>
-                      <span className="text-gray-500">Colors</span>
-                      <div className="text-xl font-bold text-gray-800">{challanTotals.colors}</div>
+                      <span className="text-gray-400">Colors</span>
+                      <div className="text-sm font-bold text-gray-800">{challanTotals.colors}</div>
                     </div>
-                    <div className="h-10 w-px bg-gray-200" />
+                    <div className="h-7 w-px bg-gray-200" />
                     <div>
-                      <span className="text-gray-500">Designs</span>
-                      <div className="text-xl font-bold text-gray-800">{designGroups.length}</div>
+                      <span className="text-gray-400">Designs</span>
+                      <div className="text-sm font-bold text-gray-800">{designGroups.length}</div>
                     </div>
                     {challanTotals.value > 0 && (
                       <>
-                        <div className="h-10 w-px bg-gray-200" />
+                        <div className="h-7 w-px bg-gray-200" />
                         <div>
-                          <span className="text-gray-500">Total Value</span>
-                          <div className="text-xl font-bold text-green-700">₹{challanTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                          <span className="text-gray-400">Value</span>
+                          <div className="text-sm font-bold text-green-700">₹{challanTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                         </div>
                       </>
                     )}
