@@ -184,9 +184,17 @@ export async function getInvoices(params = {}) {
     }
     return mockPaginated(invoices, params.page, params.page_size)
   }
-  // Real API — backend would need a grouped endpoint; fallback to client-side grouping
-  const res = await client.get('/rolls', { params: { page_size: 500, ...params } })
-  const allRolls = res.data.data
+  // Real API — fetch ALL rolls (no limit), then group client-side into invoices
+  const { page, page_size, ...filterParams } = params
+  let allRolls = []
+  let fetchPage = 1
+  while (true) {
+    const res = await client.get('/rolls', { params: { ...filterParams, page_size: 200, page: fetchPage } })
+    const batch = res.data.data || []
+    allRolls = allRolls.concat(batch)
+    if (fetchPage >= (res.data.pages || 1)) break
+    fetchPage++
+  }
   const grouped = {}
   for (const r of allRolls) {
     const key = r.supplier_invoice_no || `NO-INV-${r.id}`
@@ -217,7 +225,14 @@ export async function getInvoices(params = {}) {
   for (const inv of invoices) {
     inv.rolls.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
   }
-  return { data: { data: invoices, total: invoices.length, page: 1, pages: 1 } }
+  // Client-side pagination for invoice list
+  const pg = page || 1
+  const ps = page_size || 20
+  const total = invoices.length
+  const pages = Math.max(1, Math.ceil(total / ps))
+  const start = (pg - 1) * ps
+  const paginated = invoices.slice(start, start + ps)
+  return { data: { data: paginated, total, page: pg, pages } }
 }
 
 /**
