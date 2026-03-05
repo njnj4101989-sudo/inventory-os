@@ -29,288 +29,35 @@
 
 ---
 
-## Current State (Session 63 — 2026-03-06)
+## Current State (Session 64 — 2026-03-06)
 
-### S63: Phase 3 Data Flow Integrity — ALL 9 Findings Fixed
+### S64: Phase 4 Production Readiness — ALL 9 Fixes Deployed
 
-**Race condition protection, state machine hardening, weight mutation safety.**
+**Backend audit COMPLETE.** 4 phases, 59 findings, 58 fixed, 1 deferred (rate limiting).
+Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 
-| Fix | Area | Before | After |
-|-----|------|--------|-------|
-| P3-1 (CRITICAL) | Roll weight race | No row locking — concurrent ops can double-spend weight | `SELECT FOR UPDATE` on all roll weight mutations (PostgreSQL) |
-| P3-2 (CRITICAL) | Roll model | No CHECK on remaining_weight — negative persists silently | `CheckConstraint("remaining_weight >= 0")` |
-| P3-3 (HIGH) | Lot state machine | `LotUpdate` includes `status` — bypasses state machine | Removed `status` from `LotUpdate` schema |
-| P3-4 (HIGH) | Code generators | `SELECT MAX + 1` race — concurrent calls get same code | `ORDER BY DESC LIMIT 1 FOR UPDATE` on PostgreSQL |
-| P3-5 (HIGH) | Roll edit guard | Guard passes after full VA cycle (remaining == current) | Now checks processing_logs + lot_rolls count |
-| P3-6 (MEDIUM) | Batch update | `db.commit()` breaks transaction pattern | Changed to `db.flush()` |
-| P3-7 (MEDIUM) | Roll VA receive | `in_cutting` status overwritten to `in_stock` on VA return | Only transitions from `sent_for_processing` |
-| P3-8 (LOW) | Lot add_roll | Only allows "open" — reviewed, correct | No change needed |
-| P3-9 (LOW) | Batch challan SSE | Accesses `batch_items` before eager reload | Uses `total_pieces` from request data |
+- P4-1: Strong 64-char JWT_SECRET on EC2
+- P4-2: DB credentials redacted from public repo → stored in local `credentials.md`
+- P4-3: Swagger/ReDoc/OpenAPI disabled in production (`APP_ENV=production`)
+- P4-4: `pool_pre_ping=True` + `pool_recycle=1800` on PostgreSQL
+- P4-5: CORS — only `https://inventory.drsblouse.com` (removed localhost)
+- P4-6: Nginx security headers (HSTS, nosniff, DENY, XSS)
+- P4-7: Nginx `client_max_body_size 5m`
+- P4-8: Structured logging with timestamp format
+- P4-9: Rate limiting — DEFERRED (future: `slowapi`)
+- P4-10: `asyncio.get_running_loop()` replaces deprecated `get_event_loop()`
 
-#### Files Changed (9 files)
-- `backend/app/database.py` — `is_postgresql()` helper
-- `backend/app/models/roll.py` — CHECK constraint `remaining_weight >= 0`
-- `backend/app/schemas/lot.py` — Removed `status` from `LotUpdate`
-- `backend/app/core/code_generator.py` — `_max_code()` helper with FOR UPDATE
-- `backend/app/services/roll_service.py` — FOR UPDATE + better edit guard + status preservation
-- `backend/app/services/lot_service.py` — FOR UPDATE on all roll mutations + distribute_lot
-- `backend/app/services/job_challan_service.py` — FOR UPDATE on challan number + roll reads
-- `backend/app/services/batch_challan_service.py` — FOR UPDATE on challan number + SSE fix
-- `backend/app/services/batch_service.py` — `commit()` → `flush()`
+**Commit:** `cd42ae5` | Deployed + smoke tested
 
 ---
 
-### S63 also: Phase 4 Production Readiness — AUDITED (10 findings, 1 fixed)
+## Previous Sessions (S59–S63) — Backend Audit Sprint
 
-**Audit complete.** Read all production files: main.py, database.py, config.py, security.py, permissions.py, event_bus.py, error_handlers.py, exceptions.py, dependencies.py, both background tasks, EC2 .env, Nginx config, systemd service.
-
-**P4-4 FIXED** (pool_pre_ping + pool_recycle added to database.py — committed but not yet pushed).
-
-| # | Severity | Issue | Status |
-|---|----------|-------|--------|
-| P4-1 | HIGH | JWT_SECRET is predictable | PENDING |
-| P4-2 | HIGH | DB password in CLAUDE.md (public repo) | PENDING |
-| P4-3 | HIGH | Swagger docs exposed in production | PENDING |
-| P4-4 | MEDIUM | Missing pool_pre_ping | ✅ FIXED |
-| P4-5 | MEDIUM | localhost origins in prod CORS | PENDING |
-| P4-6 | MEDIUM | No Nginx security headers | PENDING |
-| P4-7 | MEDIUM | No client_max_body_size in Nginx | PENDING |
-| P4-8 | LOW | No structured logging | PENDING |
-| P4-9 | LOW | No rate limiting on login | DEFERRED |
-| P4-10 | LOW | Deprecated asyncio API in tasks | PENDING |
-
-### NEXT SESSION: S64 — Fix Phase 4 Findings + Deploy
-
-**All findings documented in `Guardian/BACKEND_AUDIT_PLAN.md`.**
-
-**Fix order (S64):**
-1. `main.py` — disable Swagger in production (P4-3)
-2. `CLAUDE.md` — remove DB password from docs (P4-2)
-3. `main.py` or tasks — structured logging (P4-8), fix deprecated asyncio (P4-10)
-4. Commit + push all code changes
-5. EC2: generate strong JWT_SECRET (P4-1), remove localhost from CORS (P4-5)
-6. EC2 Nginx: add security headers (P4-6) + client_max_body_size (P4-7)
-7. Restart Nginx + FastAPI
-8. Smoke test
-
-**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md` — Phase 4 section
-
-**Note:** P4-4 (pool_pre_ping) is already fixed in local code but NOT yet pushed/deployed. Push in S64 with other fixes.
-
----
-
-## Previous State (Session 62 — 2026-03-06)
-
-### S62: Phase 2 Query Fixes — ALL 14 Findings Fixed
-
-**Zero logic changes. Pure query optimization. Same response shapes.**
-
-| Fix | Service | Before | After |
-|-----|---------|--------|-------|
-| P2-1 (CRITICAL) | roll_service | Fetch ALL rolls, group/search/paginate in Python | SQL GROUP BY + fetch rolls for visible page only |
-| P2-2 (CRITICAL) | dashboard_service | 7 separate batch COUNT queries in loop | Single `GROUP BY status` |
-| P2-3 (HIGH) | dashboard_service | ~15 individual queries (rolls, lots, orders, revenue) | ~8 queries with CASE WHEN aggregation |
-| P2-4 (HIGH) | dashboard_service | N+1: query lot_rolls per lot (100 lots = 100 queries) | `selectinload(Lot.lot_rolls)` |
-| P2-5 (HIGH) | dashboard_service | Day-by-day revenue loop (30 queries) | Single `GROUP BY DATE(paid_at)` |
-| P2-6 (HIGH) | batch_service | Location filter fetches ALL batches | SQL subquery for out_house IDs |
-| P2-7 (HIGH) | dashboard_service | Per-tailor batch query (20 tailors = 20 queries) | Single batch query + Python grouping |
-| P2-8 (MEDIUM) | lot_service | Per-roll fetch in create_lot (20 queries) | Batch `WHERE id IN (...)` |
-| P2-9 (MEDIUM) | lot_service | Re-query batches by code after flush | Use batch objects directly |
-| P2-10 (MEDIUM) | inventory_service | Per-SKU event query in reconcile | Single `GROUP BY sku_id, event_type` |
-| P2-11 (MEDIUM) | order_service | Per-item SKU+inv fetch (2N queries) | Batch `WHERE id IN (...)` |
-| P2-12 (MEDIUM) | job_challan_service | Deep 4-level eager load | Reviewed — chain IS needed for enhanced_roll_code |
-| P2-13 (LOW) | reservation_service | Per-reservation inv state lookup | Batch fetch all states at once |
-| P2-14 (LOW) | dashboard_service | Per-SKU event+inv queries | Single GROUP BY + batch inv fetch |
-
-#### Files Changed (7 service files)
-- `backend/app/services/dashboard_service.py` — P2-2,3,4,5,7,14
-- `backend/app/services/roll_service.py` — P2-1 (biggest win)
-- `backend/app/services/batch_service.py` — P2-6
-- `backend/app/services/lot_service.py` — P2-8,9
-- `backend/app/services/inventory_service.py` — P2-10
-- `backend/app/services/order_service.py` — P2-11
-- `backend/app/services/reservation_service.py` — P2-13
-- `Guardian/BACKEND_AUDIT_PLAN.md` — Phase 2 marked FIXED
-
----
-
-### NEXT SESSION: S63 — Phase 3 Data Flow Integrity Audit
-
-**Already read for Phase 3 (don't re-read):**
-- `roll_service.py` — FULL (send/receive processing, weight mutations, update_processing_log)
-- `batch_service.py` — FULL (7-state machine, VA guard, pack→SKU auto-gen)
-- `batch_challan_service.py` — FULL (create/receive challan, phase tracking)
-- `lot_service.py` — FULL (create_lot, distribute_lot, add/remove roll)
-- `job_challan_service.py` — FULL (atomic challan + bulk roll send)
-- All models: `roll.py`, `batch.py`, `lot.py` — FULL (constraints, FKs, relationships)
-
-**Phase 3 Audit Checklist — trace the full lifecycle:**
-
-1. **Weight Mutations (Roll)**
-   - `total_weight` — IMMUTABLE after stock-in ✅ (only set in stock_in/bulk_stock_in)
-   - `current_weight` — mutated by receive_from_processing (VA delta) + update_processing_log
-   - `remaining_weight` — mutated by send/receive processing + lot creation
-   - **CHECK:** Is `remaining_weight` ever negative? Is `current_weight` ever inconsistent?
-   - **CHECK:** Race condition: two concurrent send_for_processing on same roll — both read same remaining_weight, both deduct → negative remaining
-
-2. **Roll Status Transitions**
-   - Valid: `in_stock` → `sent_for_processing` (when remaining=0) → `in_stock` (when received back)
-   - Valid: `in_stock` → `in_cutting` (when lot consumes all remaining)
-   - **CHECK:** Can a roll in `sent_for_processing` be added to a lot? (Should NOT)
-   - **CHECK:** Can a roll in `in_cutting` be sent for processing? (Should NOT)
-
-3. **Lot Status Forward-Only**
-   - `open` → `cutting` (first batch created) → `distributed` (distribute_lot)
-   - **CHECK:** Can status go backwards? Any code path that resets to `open`?
-
-4. **Batch 7-State Machine**
-   - created → assigned → in_progress → submitted → checked → packing → packed
-   - Full reject: checked → in_progress (rework)
-   - **CHECK:** Every transition has status guard? No skip possible?
-   - **CHECK:** VA guard (can't submit/pack if pending VA) — enforced consistently?
-
-5. **Atomicity**
-   - Job Challan: create challan + send all rolls in single flush ✅
-   - Batch Challan: create challan + create BatchProcessing records in single flush ✅
-   - Bulk stock-in: all-or-nothing ✅
-   - Lot distribute: all batches + status change in single flush ✅
-   - **CHECK:** Are there any multi-step operations that could leave partial state on error?
-
-6. **Concurrent Access (CRITICAL)**
-   - No SELECT FOR UPDATE on roll.remaining_weight before deduction
-   - Two users sending same roll for VA simultaneously → race condition
-   - Two users creating lots with same roll → race condition on remaining_weight
-   - **This is the biggest risk** — needs investigation
-
-**Priority 2: Phase 4 — Production Readiness**
-- `database.py` — connection pool config, isolation level
-- `main.py` — error handling, CORS, middleware
-- `.env` — secrets management
-
-**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md`
-
----
-
-## Previous State (Session 61 — 2026-03-06)
-
-### S61: Phase 1 DB Fix + Deploy + Phase 2 Query Audit
-- Fixed all 26 Phase 1 DB findings: 11 model files, 1 Alembic migration, deployed to production
-- Phase 2 audit complete: 14 findings (2 CRITICAL, 5 HIGH, 5 MEDIUM, 2 LOW)
-- Commit: `7d54969`
-
----
-
-## Previous State (Session 60 — 2026-03-06)
-
-### S60: Backend Invoice Layer + Database Architecture Audit
-
-**P2: Bulk Stock-In + Supplier Invoices (2 new endpoints)**
-- `POST /rolls/bulk-stock-in` — atomic bulk create (all-or-nothing, single transaction). Replaces frontend loop of 30 individual POSTs. Tested: 3 rolls created, validation (weight=0, empty rolls), cleanup.
-- `GET /rolls/supplier-invoices` — server-side grouping by `(supplier_invoice_no, supplier_id)` with search (invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code) + pagination. Replaces client-side fetch-all-and-group. Tested: 8 groups, search, pagination.
-- Backend: `BulkStockIn`/`SupplierInvoiceParams` schemas, `bulk_stock_in()`/`get_supplier_invoices()` service methods, 2 routes before `/{roll_id}` (no UUID conflict)
-- Frontend: `stockInBulk()` real path → single POST, `getInvoices()` real path → single GET
-- API_REFERENCE.md updated with both endpoint shapes
-
-**P1: Mock vs Real Audit — ALL 17 API FILES VERIFIED**
-- Read every frontend API file + every backend Pydantic schema
-- Field-by-field comparison: mock payload vs backend schema
-- Result: **Zero mismatches found**. All schemas match. Only issues were the 2 fixed in P2.
-
-**Phase 1: Database Structure Audit — 26 findings**
-- Reviewed all 24 models in `backend/app/models/`
-- 4 CRITICAL: Roll table missing indexes on `status`, `supplier_invoice_no`, `supplier_id` + no weight CHECK constraint
-- 7 HIGH: Missing CHECK constraints on status fields (roll/batch/lot) + missing FK cascade rules (supplier, lot_roll, batch)
-- 11 MEDIUM: Missing FK indexes on join tables + quantity checks
-- 4 LOW: Minor FK indexes + roll_code String length
-- Full findings documented in `Guardian/BACKEND_AUDIT_PLAN.md`
-
-#### Files Changed
-- `backend/app/schemas/roll.py` — +BulkRollEntry, +BulkStockIn, +SupplierInvoiceParams
-- `backend/app/services/roll_service.py` — +bulk_stock_in(), +get_supplier_invoices()
-- `backend/app/api/rolls.py` — +2 routes (bulk-stock-in, supplier-invoices)
-- `frontend/src/api/rolls.js` — stockInBulk real→atomic, getInvoices real→server-side
-- `Guardian/API_REFERENCE.md` — +2 endpoint docs
-- `Guardian/BACKEND_AUDIT_PLAN.md` — NEW: audit plan + Phase 1 findings
-
----
-
-### NEXT SESSION: S61 — Fix Phase 1 Findings + Phase 2 Audit
-
-**Priority 1: Fix all 26 Phase 1 DB findings via Alembic migration**
-- Add indexes: Roll.status, Roll.supplier_invoice_no, Roll.supplier_id, Roll.sr_no, RollProcessing.roll_id, RollProcessing.job_challan_id, BatchAssignment.batch_id/tailor_id, BatchRollConsumption.batch_id/roll_id, Order.source, OrderItem.order_id/sku_id, Invoice.order_id, InvoiceItem.invoice_id, InventoryEvent.roll_id
-- Add CHECK constraints: Roll.total_weight > 0, Roll.status IN (...), Batch.status IN (...), Lot.status IN (...), Batch.quantity > 0, BatchProcessing.pieces_sent > 0
-- Add ondelete rules: Roll.supplier_id RESTRICT, LotRoll.lot_id CASCADE, LotRoll.roll_id RESTRICT, Batch.lot_id RESTRICT
-- Single Alembic migration for all changes
-- Deploy to AWS RDS
-
-**Priority 2: Phase 2 — Query Efficiency Audit**
-- Review all 16 services for N+1 queries, fetch-all-then-filter, missing selectinload, redundant queries
-- Focus on: roll_service (hottest), lot_service (complex joins), batch_service (7-state), dashboard_service (aggregations)
-- Document findings same format as Phase 1
-
-**Priority 3: Phase 3+4 if tokens allow**
-- Phase 3: Data flow integrity (weight transitions, state machine atomicity, race conditions)
-- Phase 4: Production readiness (logging, error handling, security)
-
-**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md` for full findings table
-
----
-
-## Previous State (Session 59 — 2026-03-06)
-
-### S59: Stock-In Bug Blitz + Compact ERP UI
-
-**Critical production bugs found and fixed in the Rolls stock-in flow.**
-
-#### Bugs Fixed (7 total)
-1. **`getInvoices` page_size override** (ROOT CAUSE) — caller's `page_size:20` overrode internal `page_size:500` via JS spread. Only 20 of 30 rolls loaded. First colors gone, roll counts wrong. Fix: strip caller pagination, fetch ALL rolls via paginated loop, no hard ceiling
-2. **NaN weight passthrough in edit mode** — `parseFloat('') = NaN`, `NaN <= 0` is false → empty weights sent to backend → 422. Fix: `if (!(wt > 0))` catches NaN/zero/negative
-3. **rIdx misalignment** — separate counter `rIdx` vs weight index caused wrong rollId mapping. Fix: use `wI` (weight array index) directly for `rollIds[wI]` lookup
-4. **`[object Object]` error messages** — FastAPI 422 returns `detail` as array of objects, not string. Fix: `stringifyDetail()` helper in both `stockInBulk` and edit error handlers
-5. **Ctrl+S stale state** — focused input's onChange not fired before save. Fix: `blur()` + `setTimeout(50ms)` before `handleStockIn`
-6. **Color reordering on re-edit** — backend returns rolls `created_at DESC`, colors appeared in reverse entry order. Fix: sort rolls `created_at ASC` in both `getInvoices` and `openEditInvoice`
-7. **`removeWeight` orphan rolls** — deleting a weight cell in edit mode didn't track the rollId for deletion. Fix: push to `removedRollIds` before removing (mirrors `removeColorRow` pattern)
-
-#### Data Integrity Fixes
-- **Invoice search** — was broken on real backend (`search` param ignored). Now full client-side search: invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
-- **Invoice grouping collision** — two suppliers with same invoice no. merged. Key changed: `invoice_no` → `invoice_no__supplier_id`
-- **Quick Master color picker** — `QuickMasterModal` now shows native color picker + hex text input for color creation (was saving black hex by default)
-- **Color numbers** — updated all 26 colors in production DB with `color_no` 1-26
-
-#### UI Compact (ERP-style)
-- Labels: 11px uppercase semibold, inputs: py-1 px-2, cards: px-3 py-2
-- Section gaps: space-y-2, grid gaps: gap-2, weight inputs: 80px
-- ~40% less vertical space — proper wholesale data entry density
-
-#### Commits
-- `33bffbb` — NaN/rIdx/error/Ctrl+S/color-order fixes
-- `57e4049` — Quick Master color picker
-- `9ee30eb` — Compact ERP UI
-- `3f38dab` — page_size override fix (the big one)
-- `221798e` — removeWeight orphan + search + grouping collision
-
----
-
-### NEXT SESSION: Backend Hardening (S60)
-
-**Priority 1: Mock vs Real Path Audit**
-Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock paths are well-tested, real paths have mismatches. Audit ALL:
-- `rolls.js` — partially fixed S59, needs bulk endpoint
-- `batches.js` — 7-state machine flow (assign→submit→check→pack), VA send/receive
-- `lots.js` — create lot → distribute → batch creation
-- `orders.js`, `invoices.js` — CRUD + pagination
-- Check: pagination leaks, search mapping, response shapes, error handling
-
-**Priority 2: Backend Invoice Layer**
-- `POST /invoices/stock-in` — bulk atomic endpoint (single transaction, all-or-nothing). Replaces `stockInBulk` loop of 30 individual POSTs. No more partial saves, no duplicates on retry
-- `GET /invoices` — server-side grouping with SQL `GROUP BY supplier_invoice_no, supplier_id`. Paginated, searchable. Replaces client-side fetch-all-and-group
-
-**Priority 3: Full E2E Flow Test on Real Backend**
-- Stock-in 30+ rolls → verify all saved → edit → verify order preserved
-- Create lot from invoice → distribute → verify batches created
-- Batch assign → tailor submit → checker QC → packing → verify state transitions
-- VA send/receive (both roll and batch) → verify weight/pieces tracking
-- Each step: compare mock behavior vs real backend behavior
+- **S63:** Phase 3 Data Flow — 9 fixes (FOR UPDATE race protection, remaining_weight CHECK, lot state machine, code generator locking)
+- **S62:** Phase 2 Query Optimization — 14 fixes (N+1 elimination, GROUP BY, batch fetches, ~50% fewer DB round-trips)
+- **S61:** Phase 1 DB Structure — 26 fixes (indexes, CHECK constraints, ondelete rules) + deployed to prod
+- **S60:** Bulk stock-in + supplier invoices endpoints + mock vs real audit (zero mismatches) + Phase 1 audit
+- **S59:** Stock-in bug blitz — 7 bugs fixed (page_size override root cause, NaN weight, orphan rolls) + compact ERP UI
 
 ---
 
@@ -463,7 +210,7 @@ Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock pa
 - Dual layout: Tailor/Checker → `MobileLayout` (bottom tabs), Admin/Supervisor/Billing → `Layout` (sidebar)
 - BottomNav: 3 tabs — Scan / My Work (or QC Queue) / Profile
 - Offline queue: `useOfflineQueue` hook, localStorage-persisted, auto-syncs on reconnect
-- CORS dev tunnels: `allow_origin_regex=r"https://.*\.trycloudflare\.com"` — **remove for production**
+- Production CORS: `https://inventory.drsblouse.com` only
 
 ### UI Patterns
 - **Print:** `react-to-print` + `useReactToPrint({ contentRef })` + fixed overlay `z-50`, A4 inline styles
@@ -521,9 +268,10 @@ Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock pa
 | S60 | Backend Invoice Layer + DB Audit | Bulk stock-in + supplier invoices endpoints. Mock vs real audit (zero mismatches). Phase 1 DB audit: 26 findings |
 | S61 | Phase 1 DB Fix + Phase 2 Audit | Fixed all 26 DB findings (indexes, checks, ondelete). Deployed to prod. Phase 2 query audit: 14 findings |
 | S62 | Phase 2 Query Fixes | All 14 query findings fixed. Zero logic changes. ~50% fewer DB round-trips across dashboard, rolls, batches, lots, orders, inventory |
-| S63 | Phase 3 Data Flow Integrity | 9 findings fixed: race condition protection (FOR UPDATE), remaining_weight >= 0 CHECK, lot state machine hardening, code generator locking, roll edit guard, status preservation |
+| S63 | Phase 3 Data Flow Integrity | 9 fixes: FOR UPDATE race protection, remaining_weight CHECK, lot state machine, code generator locking |
+| S64 | Phase 4 Production Readiness | 9 fixes: Swagger disabled, strong JWT, CORS hardened, Nginx headers, structured logging, pool_pre_ping |
 
-**Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
+**Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
 
 ---
 
