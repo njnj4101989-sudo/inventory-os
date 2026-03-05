@@ -1,7 +1,7 @@
 # Backend Architecture Audit Plan
 
-> **Created:** S60 (2026-03-06) | **Goal:** Production-grade backend before real data goes live
-> **Rule:** Audit only — NO code changes until findings discussed and approved
+> **Created:** S60 (2026-03-06) | **Updated:** S61 (2026-03-06)
+> **Goal:** Production-grade backend before real data goes live
 
 ---
 
@@ -107,11 +107,18 @@ Each finding will be:
 
 ---
 
-## Phase 1 Findings: Database Structure (COMPLETE — S60)
+## Phase 1: Database Structure — AUDITED (S60) + FIXED (S61)
 
-All 24 models in `backend/app/models/` reviewed. 26 issues found.
+All 24 models reviewed (S60). All 26 issues fixed and deployed to production (S61).
 
-### CRITICAL (4) — Fix before real data entry
+**Fix details:** 11 model files edited, 1 Alembic migration created (`s61_db_hardening`).
+**Deploy:** Tables dropped + recreated + re-seeded on PostgreSQL (production had only master data).
+**Commit:** `7d54969` — pushed to GitHub, pulled on EC2, FastAPI restarted.
+**Verified:** `pg_indexes` and `pg_constraint` queries confirm all indexes/constraints present.
+
+All 26 issues found:
+
+### CRITICAL (4) — ✅ ALL FIXED
 
 | # | File:Line | Issue | Fix |
 |---|-----------|-------|-----|
@@ -120,7 +127,7 @@ All 24 models in `backend/app/models/` reviewed. 26 issues found.
 | 3 | `roll.py:32` | `supplier_id` FK — NO index. Supplier filter scans entire rolls table. | Add `index=True` |
 | 4 | `roll.py:19` | `total_weight` Numeric — NO check constraint. Zero/negative weight can be inserted via bug or direct DB. Corrupted data is unfixable. | Add `CheckConstraint('total_weight > 0', name='ck_rolls_positive_weight')` |
 
-### HIGH (7) — Fix within first week
+### HIGH (7) — ✅ ALL FIXED
 
 | # | File:Line | Issue | Fix |
 |---|-----------|-------|-----|
@@ -132,7 +139,7 @@ All 24 models in `backend/app/models/` reviewed. 26 issues found.
 | 10 | `lot.py:46-47` | `LotRoll.lot_id` / `LotRoll.roll_id` — NO `ondelete`. Lot delete → orphan lot_rolls. Roll delete while in lot → orphan. | Add `ondelete="CASCADE"` on lot_id, `ondelete="RESTRICT"` on roll_id |
 | 11 | `batch.py:16` | `Batch.lot_id` — NO `ondelete`. Lot delete → orphan batches. | Add `ondelete="RESTRICT"` |
 
-### MEDIUM (11) — Fix when convenient
+### MEDIUM (11) — ✅ ALL FIXED
 
 | # | File:Line | Issue | Fix |
 |---|-----------|-------|-----|
@@ -148,7 +155,7 @@ All 24 models in `backend/app/models/` reviewed. 26 issues found.
 | 21 | `batch.py:19` | `quantity` — NO check > 0. | Add `CheckConstraint('quantity > 0')` |
 | 22 | `batch_processing.py:31` | `pieces_sent` — NO check > 0. | Add `CheckConstraint('pieces_sent > 0')` |
 
-### LOW (4) — Defer
+### LOW (4) — ✅ ALL FIXED
 
 | # | File:Line | Issue | Fix |
 |---|-----------|-------|-----|
@@ -170,18 +177,88 @@ All 24 models in `backend/app/models/` reviewed. 26 issues found.
 
 ---
 
+## Phase 2 Findings: Query Efficiency — AUDITED (S61) + FIXED (S62)
+
+All 17 services reviewed (S61). All 14 issues fixed (S62).
+
+**Fix details:** 7 service files edited. Zero logic changes — only internal query patterns optimized.
+**Key wins:**
+- `get_supplier_invoices()`: fetch ALL rolls → 2-phase SQL (GROUP BY + paginated roll fetch)
+- `get_summary()`: ~15 queries → ~8 (GROUP BY, CASE WHEN aggregations)
+- `get_tailor_performance()`: N+1 (20 tailors × 1 query) → 2 queries total
+- `get_inventory_movement()`: N+1 per SKU → single GROUP BY
+- `get_financial_report()`: day-by-day loop → single GROUP BY DATE
+- `get_production_report()`: N+1 lot_rolls → selectinload
+- `get_batches()` location filter: fetch ALL → SQL subquery
+- `create_lot()`: per-roll fetch → batch IN()
+- `distribute_lot()`: re-query loop → use objects after flush()
+- `reconcile()`: per-SKU event query → single GROUP BY
+- `create_order()`: per-item SKU+inv fetch → batch IN()
+- `expire_stale_reservations()`: per-reservation inv lookup → batch fetch
+
+### CRITICAL (2) — ✅ ALL FIXED
+
+| # | File:Line | Issue | Fix | Status |
+|---|-----------|-------|-----|--------|
+| P2-1 | `roll_service.py` | `get_supplier_invoices()` fetches ALL rolls | 2-phase: SQL GROUP BY + fetch rolls for visible page only | ✅ FIXED |
+| P2-2 | `dashboard_service.py` | 7 separate COUNT queries for batch statuses | Single `GROUP BY status` query | ✅ FIXED |
+
+### HIGH (5) — ✅ ALL FIXED
+
+| # | File:Line | Issue | Fix | Status |
+|---|-----------|-------|-----|--------|
+| P2-3 | `dashboard_service.py` | ~15 individual COUNT/SUM queries | CASE WHEN aggregations per table | ✅ FIXED |
+| P2-4 | `dashboard_service.py` | N+1 on lots→lot_rolls in production report | Added `selectinload(Lot.lot_rolls)` | ✅ FIXED |
+| P2-5 | `dashboard_service.py` | revenue_by_period day-by-day loop (30 queries) | Single `GROUP BY DATE(paid_at)` + fill gaps | ✅ FIXED |
+| P2-6 | `batch_service.py` | location filter fetches ALL batches | SQL subquery for out_house batch IDs | ✅ FIXED |
+| P2-7 | `dashboard_service.py` | N+1 per tailor performance | Single batch query + Python grouping | ✅ FIXED |
+
+### MEDIUM (5) — ✅ ALL FIXED
+
+| # | File:Line | Issue | Fix | Status |
+|---|-----------|-------|-----|--------|
+| P2-8 | `lot_service.py` | create_lot per-roll fetch (20 queries) | Batch `WHERE id IN (...)` | ✅ FIXED |
+| P2-9 | `lot_service.py` | distribute_lot re-queries batches by code | Use batch objects directly after flush() | ✅ FIXED |
+| P2-10 | `inventory_service.py` | reconcile per-SKU event query (500 queries) | Single `GROUP BY sku_id, event_type` | ✅ FIXED |
+| P2-11 | `order_service.py` | create_order per-item SKU+inv fetch | Batch `WHERE id IN (...)` for both | ✅ FIXED |
+| P2-12 | `job_challan_service.py` | Deep 4-level eager load chain | Reviewed — chain IS needed for enhanced_roll_code. Added comment. | ✅ REVIEWED |
+
+### LOW (2) — ✅ ALL FIXED
+
+| # | File:Line | Issue | Fix | Status |
+|---|-----------|-------|-----|--------|
+| P2-13 | `reservation_service.py` | expire_stale per-reservation inv lookup | Batch fetch all inv states at once | ✅ FIXED |
+| P2-14 | `dashboard_service.py` | inventory_movement per-SKU loop | Single `GROUP BY sku_id, event_type` + batch inv fetch | ✅ FIXED |
+
+### Already Good (notable patterns)
+
+- `roll_service.get_rolls()` — proper SQL pagination, count, sort, eager loads. Well-structured.
+- `roll_service.get_roll()` — single query with selectinload. Clean.
+- `batch_service._get_or_404()` — comprehensive eager loading prevents lazy load errors.
+- `job_challan_service.create_challan()` — batch validates rolls with `IN()` query. Good.
+- `batch_challan_service` — proper eager loading, `.unique()` on list queries.
+- `auth_service` / `user_service` / `master_service` — simple queries, no issues.
+- `inventory_service.get_inventory()` — proper join + pagination + subquery for count.
+- All services use `selectinload` consistently (no lazy load crashes in async).
+- All list endpoints have SQL `COUNT`, `OFFSET`, `LIMIT` (except the flagged ones).
+
+---
+
 ## Session Plan
 
-- **S60 (done):** P2 backend invoice layer (FIXED) + Phase 1 audit (COMPLETE)
-- **S61 (next):** Fix all Phase 1 findings (CRITICAL→LOW) via Alembic migration, then Phase 2 (query efficiency audit)
-- **S62:** Phase 3 (data flow integrity) + Phase 4 (production readiness)
-- **S63:** Apply Phase 2-4 fixes
+| Session | Phase | Status |
+|---------|-------|--------|
+| S60 | Phase 1: DB Structure Audit (26 findings) | ✅ COMPLETE |
+| S61 | Phase 1: Fix all 26 findings + deploy | ✅ COMPLETE |
+| S61 | Phase 2: Query Efficiency Audit (14 findings) | ✅ COMPLETE |
+| S62 | Phase 2: Fix all 14 findings | ✅ COMPLETE |
+| S62+ | Phase 3: Data Flow Integrity | NEXT |
+| S63 | Phase 4: Production Readiness | PENDING |
 
 ---
 
 ## Rules
-1. NO code changes during audit — findings only
-2. Every finding has file, line, severity, and proposed fix
-3. Ask user before proceeding to next phase
-4. Save findings to this document as we go
-5. Update CLAUDE.md at session end
+1. Every finding has file, line, severity, and proposed fix
+2. Ask user before proceeding to next phase
+3. Save findings to this document as we go
+4. Update CLAUDE.md at session end

@@ -73,8 +73,17 @@ class BatchService:
         if params.size:
             conditions.append(Batch.size == params.size)
 
-        # Location filter (in_house / out_house) handled post-query
-        # because it depends on processing_logs relationship
+        # Location filter: SQL subquery instead of fetch-all-then-filter
+        if params.location and params.location in ("in_house", "out_house"):
+            out_house_ids = (
+                select(BatchProcessing.batch_id)
+                .where(BatchProcessing.status == "sent")
+                .distinct()
+            )
+            if params.location == "out_house":
+                conditions.append(Batch.id.in_(out_house_ids))
+            else:
+                conditions.append(~Batch.id.in_(out_house_ids))
 
         count_stmt = select(func.count()).select_from(Batch)
         if conditions:
@@ -102,25 +111,9 @@ class BatchService:
         if conditions:
             stmt = stmt.where(*conditions)
 
-        # If location filter, we need all matching batches to filter post-query
-        if params.location and params.location in ("in_house", "out_house"):
-            # Fetch all, then filter by location, then paginate
-            all_result = await self.db.execute(stmt)
-            all_batches = all_result.scalars().unique().all()
-
-            if params.location == "out_house":
-                filtered = [b for b in all_batches if self._pending_va_count(b) > 0]
-            else:
-                filtered = [b for b in all_batches if self._pending_va_count(b) == 0]
-
-            total = len(filtered)
-            pages = max(1, math.ceil(total / params.page_size))
-            start = (params.page - 1) * params.page_size
-            batches = filtered[start : start + params.page_size]
-        else:
-            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
-            result = await self.db.execute(stmt)
-            batches = result.scalars().unique().all()
+        stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
+        result = await self.db.execute(stmt)
+        batches = result.scalars().unique().all()
 
         return {
             "data": [self._to_response(b) for b in batches],

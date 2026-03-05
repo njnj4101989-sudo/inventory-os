@@ -29,7 +29,123 @@
 
 ---
 
-## Current State (Session 59 — 2026-03-06)
+## Current State (Session 62 — 2026-03-06)
+
+### S62: Phase 2 Query Fixes — ALL 14 Findings Fixed
+
+**Zero logic changes. Pure query optimization. Same response shapes.**
+
+| Fix | Service | Before | After |
+|-----|---------|--------|-------|
+| P2-1 (CRITICAL) | roll_service | Fetch ALL rolls, group/search/paginate in Python | SQL GROUP BY + fetch rolls for visible page only |
+| P2-2 (CRITICAL) | dashboard_service | 7 separate batch COUNT queries in loop | Single `GROUP BY status` |
+| P2-3 (HIGH) | dashboard_service | ~15 individual queries (rolls, lots, orders, revenue) | ~8 queries with CASE WHEN aggregation |
+| P2-4 (HIGH) | dashboard_service | N+1: query lot_rolls per lot (100 lots = 100 queries) | `selectinload(Lot.lot_rolls)` |
+| P2-5 (HIGH) | dashboard_service | Day-by-day revenue loop (30 queries) | Single `GROUP BY DATE(paid_at)` |
+| P2-6 (HIGH) | batch_service | Location filter fetches ALL batches | SQL subquery for out_house IDs |
+| P2-7 (HIGH) | dashboard_service | Per-tailor batch query (20 tailors = 20 queries) | Single batch query + Python grouping |
+| P2-8 (MEDIUM) | lot_service | Per-roll fetch in create_lot (20 queries) | Batch `WHERE id IN (...)` |
+| P2-9 (MEDIUM) | lot_service | Re-query batches by code after flush | Use batch objects directly |
+| P2-10 (MEDIUM) | inventory_service | Per-SKU event query in reconcile | Single `GROUP BY sku_id, event_type` |
+| P2-11 (MEDIUM) | order_service | Per-item SKU+inv fetch (2N queries) | Batch `WHERE id IN (...)` |
+| P2-12 (MEDIUM) | job_challan_service | Deep 4-level eager load | Reviewed — chain IS needed for enhanced_roll_code |
+| P2-13 (LOW) | reservation_service | Per-reservation inv state lookup | Batch fetch all states at once |
+| P2-14 (LOW) | dashboard_service | Per-SKU event+inv queries | Single GROUP BY + batch inv fetch |
+
+#### Files Changed (7 service files)
+- `backend/app/services/dashboard_service.py` — P2-2,3,4,5,7,14
+- `backend/app/services/roll_service.py` — P2-1 (biggest win)
+- `backend/app/services/batch_service.py` — P2-6
+- `backend/app/services/lot_service.py` — P2-8,9
+- `backend/app/services/inventory_service.py` — P2-10
+- `backend/app/services/order_service.py` — P2-11
+- `backend/app/services/reservation_service.py` — P2-13
+- `Guardian/BACKEND_AUDIT_PLAN.md` — Phase 2 marked FIXED
+
+---
+
+### NEXT SESSION: S63 — Phase 3 Data Flow Integrity + Phase 4 Production Readiness
+
+**Priority 1: Phase 3 — Data Flow Integrity Audit**
+- Trace roll lifecycle: stock-in → VA → lot → batch → pack
+- Weight mutation correctness, state machine guards, race conditions
+- Job Challan + Batch Challan atomicity
+- Concurrent access protection (remaining_weight race conditions)
+
+**Priority 2: Phase 4 — Production Readiness Audit**
+- Connection pooling config, error handling, logging
+- Transaction isolation, request size limits
+
+**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md`
+
+---
+
+## Previous State (Session 61 — 2026-03-06)
+
+### S61: Phase 1 DB Fix + Deploy + Phase 2 Query Audit
+- Fixed all 26 Phase 1 DB findings: 11 model files, 1 Alembic migration, deployed to production
+- Phase 2 audit complete: 14 findings (2 CRITICAL, 5 HIGH, 5 MEDIUM, 2 LOW)
+- Commit: `7d54969`
+
+---
+
+## Previous State (Session 60 — 2026-03-06)
+
+### S60: Backend Invoice Layer + Database Architecture Audit
+
+**P2: Bulk Stock-In + Supplier Invoices (2 new endpoints)**
+- `POST /rolls/bulk-stock-in` — atomic bulk create (all-or-nothing, single transaction). Replaces frontend loop of 30 individual POSTs. Tested: 3 rolls created, validation (weight=0, empty rolls), cleanup.
+- `GET /rolls/supplier-invoices` — server-side grouping by `(supplier_invoice_no, supplier_id)` with search (invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code) + pagination. Replaces client-side fetch-all-and-group. Tested: 8 groups, search, pagination.
+- Backend: `BulkStockIn`/`SupplierInvoiceParams` schemas, `bulk_stock_in()`/`get_supplier_invoices()` service methods, 2 routes before `/{roll_id}` (no UUID conflict)
+- Frontend: `stockInBulk()` real path → single POST, `getInvoices()` real path → single GET
+- API_REFERENCE.md updated with both endpoint shapes
+
+**P1: Mock vs Real Audit — ALL 17 API FILES VERIFIED**
+- Read every frontend API file + every backend Pydantic schema
+- Field-by-field comparison: mock payload vs backend schema
+- Result: **Zero mismatches found**. All schemas match. Only issues were the 2 fixed in P2.
+
+**Phase 1: Database Structure Audit — 26 findings**
+- Reviewed all 24 models in `backend/app/models/`
+- 4 CRITICAL: Roll table missing indexes on `status`, `supplier_invoice_no`, `supplier_id` + no weight CHECK constraint
+- 7 HIGH: Missing CHECK constraints on status fields (roll/batch/lot) + missing FK cascade rules (supplier, lot_roll, batch)
+- 11 MEDIUM: Missing FK indexes on join tables + quantity checks
+- 4 LOW: Minor FK indexes + roll_code String length
+- Full findings documented in `Guardian/BACKEND_AUDIT_PLAN.md`
+
+#### Files Changed
+- `backend/app/schemas/roll.py` — +BulkRollEntry, +BulkStockIn, +SupplierInvoiceParams
+- `backend/app/services/roll_service.py` — +bulk_stock_in(), +get_supplier_invoices()
+- `backend/app/api/rolls.py` — +2 routes (bulk-stock-in, supplier-invoices)
+- `frontend/src/api/rolls.js` — stockInBulk real→atomic, getInvoices real→server-side
+- `Guardian/API_REFERENCE.md` — +2 endpoint docs
+- `Guardian/BACKEND_AUDIT_PLAN.md` — NEW: audit plan + Phase 1 findings
+
+---
+
+### NEXT SESSION: S61 — Fix Phase 1 Findings + Phase 2 Audit
+
+**Priority 1: Fix all 26 Phase 1 DB findings via Alembic migration**
+- Add indexes: Roll.status, Roll.supplier_invoice_no, Roll.supplier_id, Roll.sr_no, RollProcessing.roll_id, RollProcessing.job_challan_id, BatchAssignment.batch_id/tailor_id, BatchRollConsumption.batch_id/roll_id, Order.source, OrderItem.order_id/sku_id, Invoice.order_id, InvoiceItem.invoice_id, InventoryEvent.roll_id
+- Add CHECK constraints: Roll.total_weight > 0, Roll.status IN (...), Batch.status IN (...), Lot.status IN (...), Batch.quantity > 0, BatchProcessing.pieces_sent > 0
+- Add ondelete rules: Roll.supplier_id RESTRICT, LotRoll.lot_id CASCADE, LotRoll.roll_id RESTRICT, Batch.lot_id RESTRICT
+- Single Alembic migration for all changes
+- Deploy to AWS RDS
+
+**Priority 2: Phase 2 — Query Efficiency Audit**
+- Review all 16 services for N+1 queries, fetch-all-then-filter, missing selectinload, redundant queries
+- Focus on: roll_service (hottest), lot_service (complex joins), batch_service (7-state), dashboard_service (aggregations)
+- Document findings same format as Phase 1
+
+**Priority 3: Phase 3+4 if tokens allow**
+- Phase 3: Data flow integrity (weight transitions, state machine atomicity, race conditions)
+- Phase 4: Production readiness (logging, error handling, security)
+
+**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md` for full findings table
+
+---
+
+## Previous State (Session 59 — 2026-03-06)
 
 ### S59: Stock-In Bug Blitz + Compact ERP UI
 
@@ -291,6 +407,9 @@ Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock pa
 | S57 | Roll Delete + Stock-In Edit + SSE Refresh | DELETE /rolls/{id}, partial stockInBulk, SSE token auto-refresh, batch eager loading |
 | S58 | Quick Master (Shift+M) | Inline create from any form dropdown — useQuickMaster hook + QuickMasterModal + Protocol 8 |
 | S59 | Stock-In Bug Blitz | 7 bugs fixed: page_size override (root cause), NaN weight, rIdx, [object Object], Ctrl+S, color reorder, orphan rolls. Invoice search + grouping collision. Compact ERP UI. Next: mock vs real audit + backend invoice layer |
+| S60 | Backend Invoice Layer + DB Audit | Bulk stock-in + supplier invoices endpoints. Mock vs real audit (zero mismatches). Phase 1 DB audit: 26 findings |
+| S61 | Phase 1 DB Fix + Phase 2 Audit | Fixed all 26 DB findings (indexes, checks, ondelete). Deployed to prod. Phase 2 query audit: 14 findings |
+| S62 | Phase 2 Query Fixes | All 14 query findings fixed. Zero logic changes. ~50% fewer DB round-trips across dashboard, rolls, batches, lots, orders, inventory |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 

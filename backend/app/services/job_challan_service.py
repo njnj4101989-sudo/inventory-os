@@ -158,6 +158,8 @@ class JobChallanService:
                     .selectinload(RollProcessing.roll)
                     .selectinload(Roll.processing_logs)
                     .selectinload(RollProcessing.value_addition),
+                # Note: 4-level chain IS needed — enhanced_roll_code requires all
+                # processing_logs + value_addition.short_code for the roll.
             )
             .order_by(JobChallan.created_at.desc())
             .offset((params.page - 1) * params.page_size)

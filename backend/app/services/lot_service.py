@@ -83,11 +83,14 @@ class LotService:
         total_weight = 0.0
         lot_rolls = []
 
+        # Batch-fetch all rolls in one query instead of N individual queries
+        roll_ids = [ri.roll_id for ri in req.rolls]
+        roll_stmt = select(Roll).where(Roll.id.in_(roll_ids))
+        roll_result = await self.db.execute(roll_stmt)
+        roll_map = {r.id: r for r in roll_result.scalars().all()}
+
         for roll_input in req.rolls:
-            # Validate roll exists and has remaining weight
-            roll_stmt = select(Roll).where(Roll.id == roll_input.roll_id)
-            roll_result = await self.db.execute(roll_stmt)
-            roll = roll_result.scalar_one_or_none()
+            roll = roll_map.get(roll_input.roll_id)
 
             if not roll:
                 raise NotFoundError(f"Roll {roll_input.roll_id} not found")
@@ -276,7 +279,7 @@ class LotService:
         result = await self.db.execute(sa_select(func.max(Batch.batch_code)))
         current_max = _extract_number(result.scalar(), "BATCH-")
 
-        batches_created = []
+        batch_objects = []
         seq = current_max
 
         for size_name, count in size_pattern.items():
@@ -298,34 +301,24 @@ class LotService:
                     created_by=created_by,
                 )
                 self.db.add(batch)
-                batches_created.append({
-                    "batch_code": batch_code,
-                    "size": size_name,
-                    "piece_count": lot.total_pallas or 0,
-                    "color_breakdown": color_breakdown,
-                    "qr_code_data": qr_url,
-                })
+                batch_objects.append(batch)
 
         # Set lot status to distributed
         lot.status = "distributed"
         await self.db.flush()
 
-        # Collect IDs for response
-        batch_responses = []
-        for bc in batches_created:
-            # Query the batch we just created for its ID
-            stmt = select(Batch).where(Batch.batch_code == bc["batch_code"])
-            result = await self.db.execute(stmt)
-            b = result.scalar_one_or_none()
-            if b:
-                batch_responses.append({
-                    "id": str(b.id),
-                    "batch_code": b.batch_code,
-                    "size": b.size,
-                    "piece_count": b.piece_count,
-                    "color_breakdown": b.color_breakdown,
-                    "qr_code_data": b.qr_code_data,
-                })
+        # Use batch objects directly — IDs are available after flush(), no re-query needed
+        batch_responses = [
+            {
+                "id": str(b.id),
+                "batch_code": b.batch_code,
+                "size": b.size,
+                "piece_count": b.piece_count,
+                "color_breakdown": b.color_breakdown,
+                "qr_code_data": b.qr_code_data,
+            }
+            for b in batch_objects
+        ]
 
         from app.core.event_bus import event_bus
         await event_bus.emit("lot_distributed", {

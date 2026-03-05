@@ -195,15 +195,18 @@ class ReservationService:
         if not stale:
             return 0
 
+        # Batch-fetch all inventory states at once instead of per-reservation
+        sku_ids = list({res.sku_id for res in stale})
+        inv_result = await self.db.execute(
+            select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
+        )
+        inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
+
         for res in stale:
             res.status = "expired"
             res.released_at = now
 
-            inv_stmt = select(InventoryState).where(
-                InventoryState.sku_id == res.sku_id
-            )
-            inv_result = await self.db.execute(inv_stmt)
-            inv = inv_result.scalar_one_or_none()
+            inv = inv_map.get(res.sku_id)
             if inv:
                 inv.reserved_qty = max(0, inv.reserved_qty - res.quantity)
                 inv.available_qty = inv.total_qty - inv.reserved_qty

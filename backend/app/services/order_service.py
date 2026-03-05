@@ -79,18 +79,22 @@ class OrderService:
 
         from app.models.inventory_state import InventoryState
 
+        # Batch-fetch all SKUs and inventory states in 2 queries instead of 2N
+        sku_ids = [item.sku_id for item in req.items]
+        sku_result = await self.db.execute(select(SKU).where(SKU.id.in_(sku_ids)))
+        sku_map = {s.id: s for s in sku_result.scalars().all()}
+
+        inv_result = await self.db.execute(
+            select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
+        )
+        inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
+
         for item in req.items:
-            # Verify SKU exists
-            sku_stmt = select(SKU).where(SKU.id == item.sku_id)
-            sku_result = await self.db.execute(sku_stmt)
-            sku = sku_result.scalar_one_or_none()
+            sku = sku_map.get(item.sku_id)
             if not sku:
                 raise NotFoundError(f"SKU {item.sku_id} not found")
 
-            # Stock check
-            inv_stmt = select(InventoryState).where(InventoryState.sku_id == item.sku_id)
-            inv_result = await self.db.execute(inv_stmt)
-            inv_state = inv_result.scalar_one_or_none()
+            inv_state = inv_map.get(item.sku_id)
             available = inv_state.available_qty if inv_state else 0
             if available < item.quantity:
                 raise InsufficientStockError(

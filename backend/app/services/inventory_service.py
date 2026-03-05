@@ -205,26 +205,38 @@ class InventoryService:
         }
 
     async def reconcile(self) -> dict:
-        # Get all SKU IDs with inventory states
+        from collections import defaultdict
+
+        # Get all inventory states
         stmt = select(InventoryState)
         result = await self.db.execute(stmt)
         states = result.scalars().all()
 
         skus_checked = len(states)
+        if skus_checked == 0:
+            return {"skus_checked": 0, "mismatches_found": 0, "mismatches_fixed": 0}
+
+        # Single GROUP BY query for ALL SKUs instead of N individual queries
+        evt_stmt = (
+            select(
+                InventoryEvent.sku_id,
+                InventoryEvent.event_type,
+                func.sum(InventoryEvent.quantity).label("total"),
+            )
+            .group_by(InventoryEvent.sku_id, InventoryEvent.event_type)
+        )
+        evt_rows = (await self.db.execute(evt_stmt)).all()
+
+        # Build lookup: {sku_id: {event_type: total}}
+        evt_map = defaultdict(dict)
+        for row in evt_rows:
+            evt_map[row.sku_id][row.event_type] = row.total
+
         mismatches_found = 0
         mismatches_fixed = 0
 
         for state in states:
-            # Recompute from events
-            evt_stmt = select(
-                InventoryEvent.event_type,
-                func.sum(InventoryEvent.quantity).label("total"),
-            ).where(
-                InventoryEvent.sku_id == state.sku_id
-            ).group_by(InventoryEvent.event_type)
-            evt_result = await self.db.execute(evt_stmt)
-            totals = {row.event_type: row.total for row in evt_result}
-
+            totals = evt_map.get(state.sku_id, {})
             computed_total = (
                 (totals.get("stock_in", 0) or 0)
                 + (totals.get("return", 0) or 0)
