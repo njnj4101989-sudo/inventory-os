@@ -764,13 +764,21 @@ export default function RollsPage() {
   const addWeight = (gIdx, cIdx) => updateGroup(gIdx, (g) => ({
     ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: [...r.weights, ''] } : r),
   }))
-  const removeWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
-    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? {
-      ...r,
-      weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights,
-      rollIds: r.rollIds ? (r.weights.length > 1 ? r.rollIds.filter((_, k) => k !== wIdx) : r.rollIds) : undefined,
-    } : r),
-  }))
+  const removeWeight = (gIdx, cIdx, wIdx) => {
+    // Track removed rollId for edit mode (so we can delete it on save)
+    if (editingInvoice) {
+      const row = designGroups[gIdx]?.colorRows?.[cIdx]
+      const rollId = row?.rollIds?.[wIdx]
+      if (rollId) setRemovedRollIds((prev) => [...prev, rollId])
+    }
+    updateGroup(gIdx, (g) => ({
+      ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? {
+        ...r,
+        weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights,
+        rollIds: r.rollIds ? (r.weights.length > 1 ? r.rollIds.filter((_, k) => k !== wIdx) : r.rollIds) : undefined,
+      } : r),
+    }))
+  }
   const addColorRow = (gIdx) => updateGroup(gIdx, (g) => ({
     ...g, colorRows: [...g.colorRows, { color: '', weights: [''] }],
   }))

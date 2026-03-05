@@ -146,7 +146,7 @@ export async function getInvoices(params = {}) {
   if (USE_MOCK) {
     const grouped = {}
     for (const r of rolls) {
-      const key = r.supplier_invoice_no || `NO-INV-${r.id}`
+      const key = r.supplier_invoice_no ? `${r.supplier_invoice_no}__${r.supplier?.id || 'none'}` : `NO-INV-${r.id}`
       if (!grouped[key]) {
         grouped[key] = {
           invoice_no: r.supplier_invoice_no || null,
@@ -185,7 +185,9 @@ export async function getInvoices(params = {}) {
     return mockPaginated(invoices, params.page, params.page_size)
   }
   // Real API — fetch ALL rolls (no limit), then group client-side into invoices
-  const { page, page_size, ...filterParams } = params
+  const { page, page_size, search, ...filterParams } = params
+  // Don't pass search to backend — we search client-side after grouping into invoices
+  // This way we match invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
   let allRolls = []
   let fetchPage = 1
   while (true) {
@@ -197,7 +199,7 @@ export async function getInvoices(params = {}) {
   }
   const grouped = {}
   for (const r of allRolls) {
-    const key = r.supplier_invoice_no || `NO-INV-${r.id}`
+    const key = r.supplier_invoice_no ? `${r.supplier_invoice_no}__${r.supplier?.id || 'none'}` : `NO-INV-${r.id}`
     if (!grouped[key]) {
       grouped[key] = {
         invoice_no: r.supplier_invoice_no || null,
@@ -220,10 +222,21 @@ export async function getInvoices(params = {}) {
     if (r.total_length) inv.total_length += parseFloat(r.total_length)
     inv.total_value += (parseFloat(r.total_weight) || 0) * (parseFloat(r.cost_per_unit) || 0)
   }
-  const invoices = Object.values(grouped).sort((a, b) => b.received_at.localeCompare(a.received_at))
+  let invoices = Object.values(grouped).sort((a, b) => b.received_at.localeCompare(a.received_at))
   // Sort rolls within each invoice by created_at ASC to preserve original entry order
   for (const inv of invoices) {
     inv.rolls.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+  }
+  // Client-side search — matches invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
+  if (search) {
+    const q = search.toLowerCase()
+    invoices = invoices.filter((inv) =>
+      (inv.invoice_no || '').toLowerCase().includes(q) ||
+      (inv.challan_no || '').toLowerCase().includes(q) ||
+      (inv.sr_no || '').toLowerCase().includes(q) ||
+      (inv.supplier?.name || '').toLowerCase().includes(q) ||
+      inv.rolls.some((r) => r.fabric_type.toLowerCase().includes(q) || r.color.toLowerCase().includes(q) || r.roll_code.toLowerCase().includes(q))
+    )
   }
   // Client-side pagination for invoice list
   const pg = page || 1
