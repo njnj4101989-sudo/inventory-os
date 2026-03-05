@@ -3,7 +3,9 @@
 Each function queries the current MAX code from the database, extracts the
 numeric suffix, increments it, and returns the next padded code.
 
-SQLite-safe: no SELECT FOR UPDATE (uniqueness enforced by DB unique constraint).
+PostgreSQL: uses ORDER BY DESC LIMIT 1 FOR UPDATE to lock the latest row
+and prevent concurrent code collisions.
+SQLite: uses MAX() aggregate (no row locking needed — single-writer).
 """
 
 import re
@@ -25,6 +27,27 @@ def _extract_number(code: str | None, prefix: str) -> int:
         return 0
     match = re.search(rf"{re.escape(prefix)}(\d+)", code)
     return int(match.group(1)) if match else 0
+
+
+async def _max_code(db: AsyncSession, col, pattern: str | None = None) -> str | None:
+    """Get current max code, with row-level locking on PostgreSQL.
+
+    On PostgreSQL: SELECT col FROM table [WHERE ...] ORDER BY col DESC LIMIT 1 FOR UPDATE
+    On SQLite: SELECT MAX(col) FROM table [WHERE ...]
+    """
+    from app.database import is_postgresql
+
+    if is_postgresql():
+        stmt = select(col).order_by(col.desc()).limit(1).with_for_update()
+        if pattern:
+            stmt = select(col).where(col.like(pattern)).order_by(col.desc()).limit(1).with_for_update()
+    else:
+        stmt = select(func.max(col))
+        if pattern:
+            stmt = stmt.where(col.like(pattern))
+
+    result = await db.execute(stmt)
+    return result.scalar()
 
 
 def _shorten_fabric(text: str) -> str:
@@ -85,13 +108,8 @@ async def next_roll_code(
         color_short = f"{color_short}/{color_no:02d}"
     prefix = f"{challan}-{fabric_short}-{color_short}-"
 
-    # Find max sequence for this prefix
-    result = await db.execute(
-        select(func.max(Roll.roll_code)).where(Roll.roll_code.like(f"{prefix}%"))
-    )
-    max_code = result.scalar()
+    max_code = await _max_code(db, Roll.roll_code, f"{prefix}%")
     if max_code:
-        # Extract last segment as number
         last_part = max_code.rsplit("-", 1)[-1]
         seq = int(last_part) if last_part.isdigit() else 0
     else:
@@ -101,34 +119,29 @@ async def next_roll_code(
 
 async def next_lot_code(db: AsyncSession) -> str:
     """Generate next LOT-XXXX code."""
-    result = await db.execute(select(func.max(Lot.lot_code)))
-    current = _extract_number(result.scalar(), "LOT-")
+    current = _extract_number(await _max_code(db, Lot.lot_code), "LOT-")
     return f"LOT-{current + 1:04d}"
 
 
 async def next_batch_code(db: AsyncSession) -> str:
     """Generate next BATCH-XXXX code."""
-    result = await db.execute(select(func.max(Batch.batch_code)))
-    current = _extract_number(result.scalar(), "BATCH-")
+    current = _extract_number(await _max_code(db, Batch.batch_code), "BATCH-")
     return f"BATCH-{current + 1:04d}"
 
 
 async def next_order_number(db: AsyncSession) -> str:
     """Generate next ORD-XXXX code."""
-    result = await db.execute(select(func.max(Order.order_number)))
-    current = _extract_number(result.scalar(), "ORD-")
+    current = _extract_number(await _max_code(db, Order.order_number), "ORD-")
     return f"ORD-{current + 1:04d}"
 
 
 async def next_invoice_number(db: AsyncSession) -> str:
     """Generate next INV-XXXX code."""
-    result = await db.execute(select(func.max(Invoice.invoice_number)))
-    current = _extract_number(result.scalar(), "INV-")
+    current = _extract_number(await _max_code(db, Invoice.invoice_number), "INV-")
     return f"INV-{current + 1:04d}"
 
 
 async def next_reservation_code(db: AsyncSession) -> str:
     """Generate next RES-XXXX code."""
-    result = await db.execute(select(func.max(Reservation.reservation_code)))
-    current = _extract_number(result.scalar(), "RES-")
+    current = _extract_number(await _max_code(db, Reservation.reservation_code), "RES-")
     return f"RES-{current + 1:04d}"

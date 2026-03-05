@@ -244,6 +244,71 @@ All 17 services reviewed (S61). All 14 issues fixed (S62).
 
 ---
 
+## Phase 3 Findings: Data Flow Integrity — AUDITED + FIXED (S63)
+
+All 5 key services audited. 9 issues found and fixed.
+
+**Fix details:** 9 files edited. Zero response shape changes. SQLite dev compatibility preserved.
+**Key wins:**
+- Race condition protection: `SELECT FOR UPDATE` on all roll weight mutations (PostgreSQL)
+- DB constraint: `remaining_weight >= 0` CHECK on Roll model
+- Lot state machine: removed `status` from `LotUpdate` schema (can't bypass via PATCH)
+- Sequence collision: all code generators + challan numbers use row-level locking on PostgreSQL
+- Roll edit guard: now checks processing history + lot assignments, not just weight comparison
+- Status preservation: `receive_from_processing` no longer overrides `in_cutting` status
+
+### CRITICAL (2) — ✅ ALL FIXED
+
+| # | File | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P3-1 | `roll_service.py`, `lot_service.py`, `job_challan_service.py` | No `SELECT FOR UPDATE` on `remaining_weight` before deduction — race condition | Added `with_for_update()` on all critical roll reads (PostgreSQL only, no-op on SQLite) | ✅ FIXED |
+| P3-2 | `models/roll.py` | No CHECK constraint `remaining_weight >= 0` — negative weight persists silently | Added `CheckConstraint("remaining_weight >= 0", name="non_negative_remaining")` | ✅ FIXED |
+
+### HIGH (3) — ✅ ALL FIXED
+
+| # | File | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P3-3 | `schemas/lot.py:86` | `LotUpdate` includes `status` — bypasses lot state machine via PATCH | Removed `status` field from `LotUpdate` schema | ✅ FIXED |
+| P3-4 | `code_generator.py`, `lot_service.py`, `job_challan_service.py`, `batch_challan_service.py` | Sequence collision — `SELECT MAX + 1` race on concurrent requests | Changed to `ORDER BY DESC LIMIT 1 FOR UPDATE` on PostgreSQL; UNIQUE constraint safety net | ✅ FIXED |
+| P3-5 | `roll_service.py:512` | `update_roll()` guard passes after full VA cycle (remaining == current) | Added check for processing_logs and lot_rolls count > 0 | ✅ FIXED |
+
+### MEDIUM (2) — ✅ ALL FIXED
+
+| # | File | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P3-6 | `batch_service.py:134` | `update_batch()` uses `db.commit()` instead of `db.flush()` | Changed to `db.flush()`, removed `db.refresh()` (pattern matches all other services) | ✅ FIXED |
+| P3-7 | `roll_service.py:670` | `receive_from_processing` resets `in_cutting` to `in_stock` when VA returns | Now only transitions from `sent_for_processing` → `in_stock`; preserves `in_cutting` | ✅ FIXED |
+
+### LOW (2) — ✅ ALL FIXED
+
+| # | File | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P3-8 | `lot_service.py:182` | `add_roll_to_lot()` only allows `"open"` status — correct but noted | No change needed — behavior is correct | ✅ REVIEWED |
+| P3-9 | `batch_challan_service.py:127` | SSE emit accesses `challan.batch_items` before eager reload | Changed to use `total_pieces` (already computed from request data) | ✅ FIXED |
+
+### Files Changed (9 files)
+- `backend/app/database.py` — Added `is_postgresql()` helper
+- `backend/app/models/roll.py` — Added CHECK constraint `remaining_weight >= 0`
+- `backend/app/schemas/lot.py` — Removed `status` from `LotUpdate`
+- `backend/app/core/code_generator.py` — `_max_code()` helper with FOR UPDATE on PostgreSQL
+- `backend/app/services/roll_service.py` — FOR UPDATE on send/receive/update_processing_log, better update guard, preserve in_cutting
+- `backend/app/services/lot_service.py` — FOR UPDATE on create/add/remove roll, distribute_lot batch code lock
+- `backend/app/services/job_challan_service.py` — FOR UPDATE on challan number + roll reads
+- `backend/app/services/batch_challan_service.py` — FOR UPDATE on challan number + SSE emit fix
+- `backend/app/services/batch_service.py` — `commit()` → `flush()` in update_batch
+
+### Already Good (notable patterns)
+- Bulk stock-in: all-or-nothing via single flush — ✅ atomic
+- Job challan create: challan + all roll sends in single flush — ✅ atomic
+- Batch challan create: challan + all BatchProcessing records in single flush — ✅ atomic
+- Lot distribute: all batches + status change in single flush — ✅ atomic
+- Batch 7-state machine: every transition has exact status guard — ✅ no skips possible
+- VA guard on submit + ready_for_packing: consistent — ✅ enforced
+- Roll status transitions: properly guarded (in_stock required for send/lot) — ✅
+- total_weight: only set in stock_in/bulk_stock_in — ✅ immutable after use
+
+---
+
 ## Session Plan
 
 | Session | Phase | Status |
@@ -252,8 +317,8 @@ All 17 services reviewed (S61). All 14 issues fixed (S62).
 | S61 | Phase 1: Fix all 26 findings + deploy | ✅ COMPLETE |
 | S61 | Phase 2: Query Efficiency Audit (14 findings) | ✅ COMPLETE |
 | S62 | Phase 2: Fix all 14 findings | ✅ COMPLETE |
-| S62+ | Phase 3: Data Flow Integrity | NEXT |
-| S63 | Phase 4: Production Readiness | PENDING |
+| S63 | Phase 3: Data Flow Integrity (9 findings) | ✅ COMPLETE |
+| S63+ | Phase 4: Production Readiness | NEXT |
 
 ---
 

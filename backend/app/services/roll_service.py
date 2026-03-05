@@ -8,6 +8,7 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.database import is_postgresql
 from app.models.supplier import Supplier
 
 from app.models.roll import Roll, RollProcessing
@@ -508,10 +509,21 @@ class RollService:
         if not roll:
             raise NotFoundError(f"Roll {roll_id} not found")
 
-        # Guard: only unused rolls can be edited
+        # Guard: only unused rolls can be edited (check weight AND history)
         if roll.remaining_weight < roll.current_weight:
             raise BusinessRuleViolationError(
                 "Cannot edit a roll that has been partially or fully consumed"
+            )
+        # Also block if roll has any processing history or lot assignments
+        history_count = (await self.db.execute(
+            select(func.count()).select_from(RollProcessing).where(RollProcessing.roll_id == roll_id)
+        )).scalar() or 0
+        lot_count = (await self.db.execute(
+            select(func.count()).select_from(LotRoll).where(LotRoll.roll_id == roll_id)
+        )).scalar() or 0
+        if history_count > 0 or lot_count > 0:
+            raise BusinessRuleViolationError(
+                "Cannot edit a roll that has processing history or lot assignments"
             )
 
         updates = req.model_dump(exclude_unset=True)
@@ -573,6 +585,8 @@ class RollService:
 
     async def send_for_processing(self, roll_id: UUID, req: SendForProcessing) -> dict:
         stmt = select(Roll).where(Roll.id == roll_id)
+        if is_postgresql():
+            stmt = stmt.with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:
@@ -627,6 +641,8 @@ class RollService:
         self, roll_id: UUID, processing_id: UUID, req: ReceiveFromProcessing
     ) -> dict:
         stmt = select(Roll).where(Roll.id == roll_id)
+        if is_postgresql():
+            stmt = stmt.with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:
@@ -668,9 +684,11 @@ class RollService:
             RollProcessing.id != processing_id,  # exclude the one we just received
         )
         remaining_sent = (await self.db.execute(sent_logs_stmt)).scalar() or 0
-        if remaining_sent == 0:
+        if remaining_sent == 0 and roll.status == "sent_for_processing":
+            # Only transition back to in_stock from sent_for_processing.
+            # If roll is in_cutting (lot consumed it), preserve that status.
             roll.status = "in_stock"
-        # else keep current status (still has material out)
+        # else keep current status (still has material out, or in_cutting)
 
         await self.db.flush()
 
@@ -697,6 +715,8 @@ class RollService:
     ) -> dict:
         """Update editable fields on a processing log (cost, vendor, dates, notes, etc.)."""
         stmt = select(Roll).where(Roll.id == roll_id)
+        if is_postgresql():
+            stmt = stmt.with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:

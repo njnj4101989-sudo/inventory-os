@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.database import is_postgresql
 from app.models.job_challan import JobChallan
 from app.models.roll import Roll, RollProcessing
 from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams
@@ -19,10 +20,19 @@ class JobChallanService:
 
     async def _next_challan_no(self) -> str:
         """Generate next sequential challan number: JC-001, JC-002, etc."""
-        stmt = (
-            select(func.max(JobChallan.challan_no))
-            .where(JobChallan.challan_no.like("JC-%"))
-        )
+        if is_postgresql():
+            stmt = (
+                select(JobChallan.challan_no)
+                .where(JobChallan.challan_no.like("JC-%"))
+                .order_by(JobChallan.challan_no.desc())
+                .limit(1)
+                .with_for_update()
+            )
+        else:
+            stmt = (
+                select(func.max(JobChallan.challan_no))
+                .where(JobChallan.challan_no.like("JC-%"))
+            )
         result = await self.db.execute(stmt)
         last = result.scalar_one_or_none()
         if last:
@@ -41,7 +51,7 @@ class JobChallanService:
         roll_ids = [entry.roll_id for entry in req.rolls]
         weight_map = {entry.roll_id: entry.weight_to_send for entry in req.rolls}
 
-        # Validate all rolls exist and are in_stock
+        # Validate all rolls exist and are in_stock (lock rows to prevent concurrent weight mutation)
         stmt = (
             select(Roll)
             .where(Roll.id.in_(roll_ids))
@@ -50,6 +60,8 @@ class JobChallanService:
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
             )
         )
+        if is_postgresql():
+            stmt = stmt.with_for_update(of=Roll)
         result = await self.db.execute(stmt)
         rolls = result.scalars().all()
 

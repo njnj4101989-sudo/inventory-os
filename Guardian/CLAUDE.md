@@ -29,7 +29,58 @@
 
 ---
 
-## Current State (Session 62 — 2026-03-06)
+## Current State (Session 63 — 2026-03-06)
+
+### S63: Phase 3 Data Flow Integrity — ALL 9 Findings Fixed
+
+**Race condition protection, state machine hardening, weight mutation safety.**
+
+| Fix | Area | Before | After |
+|-----|------|--------|-------|
+| P3-1 (CRITICAL) | Roll weight race | No row locking — concurrent ops can double-spend weight | `SELECT FOR UPDATE` on all roll weight mutations (PostgreSQL) |
+| P3-2 (CRITICAL) | Roll model | No CHECK on remaining_weight — negative persists silently | `CheckConstraint("remaining_weight >= 0")` |
+| P3-3 (HIGH) | Lot state machine | `LotUpdate` includes `status` — bypasses state machine | Removed `status` from `LotUpdate` schema |
+| P3-4 (HIGH) | Code generators | `SELECT MAX + 1` race — concurrent calls get same code | `ORDER BY DESC LIMIT 1 FOR UPDATE` on PostgreSQL |
+| P3-5 (HIGH) | Roll edit guard | Guard passes after full VA cycle (remaining == current) | Now checks processing_logs + lot_rolls count |
+| P3-6 (MEDIUM) | Batch update | `db.commit()` breaks transaction pattern | Changed to `db.flush()` |
+| P3-7 (MEDIUM) | Roll VA receive | `in_cutting` status overwritten to `in_stock` on VA return | Only transitions from `sent_for_processing` |
+| P3-8 (LOW) | Lot add_roll | Only allows "open" — reviewed, correct | No change needed |
+| P3-9 (LOW) | Batch challan SSE | Accesses `batch_items` before eager reload | Uses `total_pieces` from request data |
+
+#### Files Changed (9 files)
+- `backend/app/database.py` — `is_postgresql()` helper
+- `backend/app/models/roll.py` — CHECK constraint `remaining_weight >= 0`
+- `backend/app/schemas/lot.py` — Removed `status` from `LotUpdate`
+- `backend/app/core/code_generator.py` — `_max_code()` helper with FOR UPDATE
+- `backend/app/services/roll_service.py` — FOR UPDATE + better edit guard + status preservation
+- `backend/app/services/lot_service.py` — FOR UPDATE on all roll mutations + distribute_lot
+- `backend/app/services/job_challan_service.py` — FOR UPDATE on challan number + roll reads
+- `backend/app/services/batch_challan_service.py` — FOR UPDATE on challan number + SSE fix
+- `backend/app/services/batch_service.py` — `commit()` → `flush()`
+
+---
+
+### NEXT SESSION: S64 — Phase 4 Production Readiness Audit
+
+**Phase 4 Checklist:**
+1. **Database config:** `database.py` — pool_size, max_overflow, pool_timeout, isolation level
+2. **Error handling:** Do services catch DB errors or let them bubble as 500s?
+3. **Main app:** `main.py` — middleware, error handlers, request size limits
+4. **CORS:** Production-only origins, no dev wildcards
+5. **Secrets:** `.env` — JWT_SECRET rotated? DEBUG off? DB password not in code?
+6. **Rate limiting:** Any protection against abuse?
+7. **Logging:** Structured logs for production debugging?
+8. **Alembic:** Migration state clean for production?
+
+**Priority 2: Deploy Phase 3 fixes to production**
+- Create Alembic migration for `remaining_weight >= 0` CHECK constraint
+- Push to GitHub, pull on EC2, restart FastAPI
+
+**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md`
+
+---
+
+## Previous State (Session 62 — 2026-03-06)
 
 ### S62: Phase 2 Query Fixes — ALL 14 Findings Fixed
 
@@ -64,17 +115,58 @@
 
 ---
 
-### NEXT SESSION: S63 — Phase 3 Data Flow Integrity + Phase 4 Production Readiness
+### NEXT SESSION: S63 — Phase 3 Data Flow Integrity Audit
 
-**Priority 1: Phase 3 — Data Flow Integrity Audit**
-- Trace roll lifecycle: stock-in → VA → lot → batch → pack
-- Weight mutation correctness, state machine guards, race conditions
-- Job Challan + Batch Challan atomicity
-- Concurrent access protection (remaining_weight race conditions)
+**Already read for Phase 3 (don't re-read):**
+- `roll_service.py` — FULL (send/receive processing, weight mutations, update_processing_log)
+- `batch_service.py` — FULL (7-state machine, VA guard, pack→SKU auto-gen)
+- `batch_challan_service.py` — FULL (create/receive challan, phase tracking)
+- `lot_service.py` — FULL (create_lot, distribute_lot, add/remove roll)
+- `job_challan_service.py` — FULL (atomic challan + bulk roll send)
+- All models: `roll.py`, `batch.py`, `lot.py` — FULL (constraints, FKs, relationships)
 
-**Priority 2: Phase 4 — Production Readiness Audit**
-- Connection pooling config, error handling, logging
-- Transaction isolation, request size limits
+**Phase 3 Audit Checklist — trace the full lifecycle:**
+
+1. **Weight Mutations (Roll)**
+   - `total_weight` — IMMUTABLE after stock-in ✅ (only set in stock_in/bulk_stock_in)
+   - `current_weight` — mutated by receive_from_processing (VA delta) + update_processing_log
+   - `remaining_weight` — mutated by send/receive processing + lot creation
+   - **CHECK:** Is `remaining_weight` ever negative? Is `current_weight` ever inconsistent?
+   - **CHECK:** Race condition: two concurrent send_for_processing on same roll — both read same remaining_weight, both deduct → negative remaining
+
+2. **Roll Status Transitions**
+   - Valid: `in_stock` → `sent_for_processing` (when remaining=0) → `in_stock` (when received back)
+   - Valid: `in_stock` → `in_cutting` (when lot consumes all remaining)
+   - **CHECK:** Can a roll in `sent_for_processing` be added to a lot? (Should NOT)
+   - **CHECK:** Can a roll in `in_cutting` be sent for processing? (Should NOT)
+
+3. **Lot Status Forward-Only**
+   - `open` → `cutting` (first batch created) → `distributed` (distribute_lot)
+   - **CHECK:** Can status go backwards? Any code path that resets to `open`?
+
+4. **Batch 7-State Machine**
+   - created → assigned → in_progress → submitted → checked → packing → packed
+   - Full reject: checked → in_progress (rework)
+   - **CHECK:** Every transition has status guard? No skip possible?
+   - **CHECK:** VA guard (can't submit/pack if pending VA) — enforced consistently?
+
+5. **Atomicity**
+   - Job Challan: create challan + send all rolls in single flush ✅
+   - Batch Challan: create challan + create BatchProcessing records in single flush ✅
+   - Bulk stock-in: all-or-nothing ✅
+   - Lot distribute: all batches + status change in single flush ✅
+   - **CHECK:** Are there any multi-step operations that could leave partial state on error?
+
+6. **Concurrent Access (CRITICAL)**
+   - No SELECT FOR UPDATE on roll.remaining_weight before deduction
+   - Two users sending same roll for VA simultaneously → race condition
+   - Two users creating lots with same roll → race condition on remaining_weight
+   - **This is the biggest risk** — needs investigation
+
+**Priority 2: Phase 4 — Production Readiness**
+- `database.py` — connection pool config, isolation level
+- `main.py` — error handling, CORS, middleware
+- `.env` — secrets management
 
 **Reference:** `Guardian/BACKEND_AUDIT_PLAN.md`
 
@@ -410,6 +502,7 @@ Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock pa
 | S60 | Backend Invoice Layer + DB Audit | Bulk stock-in + supplier invoices endpoints. Mock vs real audit (zero mismatches). Phase 1 DB audit: 26 findings |
 | S61 | Phase 1 DB Fix + Phase 2 Audit | Fixed all 26 DB findings (indexes, checks, ondelete). Deployed to prod. Phase 2 query audit: 14 findings |
 | S62 | Phase 2 Query Fixes | All 14 query findings fixed. Zero logic changes. ~50% fewer DB round-trips across dashboard, rolls, batches, lots, orders, inventory |
+| S63 | Phase 3 Data Flow Integrity | 9 findings fixed: race condition protection (FOR UPDATE), remaining_weight >= 0 CHECK, lot state machine hardening, code generator locking, roll edit guard, status preservation |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 

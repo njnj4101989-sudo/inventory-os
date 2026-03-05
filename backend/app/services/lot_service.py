@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.database import is_postgresql
 from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll
 from app.models.batch import Batch
@@ -86,6 +87,8 @@ class LotService:
         # Batch-fetch all rolls in one query instead of N individual queries
         roll_ids = [ri.roll_id for ri in req.rolls]
         roll_stmt = select(Roll).where(Roll.id.in_(roll_ids))
+        if is_postgresql():
+            roll_stmt = roll_stmt.with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll_map = {r.id: r for r in roll_result.scalars().all()}
 
@@ -183,6 +186,8 @@ class LotService:
             raise InvalidStateTransitionError("Can only add rolls to lots in 'open' status")
 
         roll_stmt = select(Roll).where(Roll.id == roll_id)
+        if is_postgresql():
+            roll_stmt = roll_stmt.with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll = roll_result.scalar_one_or_none()
         if not roll:
@@ -240,6 +245,8 @@ class LotService:
 
         # Restore roll weight
         roll_stmt = select(Roll).where(Roll.id == lot_roll.roll_id)
+        if is_postgresql():
+            roll_stmt = roll_stmt.with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll = roll_result.scalar_one_or_none()
         if roll:
@@ -276,7 +283,12 @@ class LotService:
 
         # Get current max batch code once, generate all sequentially
         from sqlalchemy import func, select as sa_select
-        result = await self.db.execute(sa_select(func.max(Batch.batch_code)))
+        if is_postgresql():
+            result = await self.db.execute(
+                sa_select(Batch.batch_code).order_by(Batch.batch_code.desc()).limit(1).with_for_update()
+            )
+        else:
+            result = await self.db.execute(sa_select(func.max(Batch.batch_code)))
         current_max = _extract_number(result.scalar(), "BATCH-")
 
         batch_objects = []

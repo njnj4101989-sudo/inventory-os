@@ -77,13 +77,12 @@ class LotCreate(BaseModel):
 
 
 class LotUpdate(BaseModel):
-    """PATCH /lots/{id} — update lot metadata."""
+    """PATCH /lots/{id} — update lot metadata. Status changes via state machine only."""
 
     design_no: str | None = None
     standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
     default_size_pattern: dict | None = None
-    status: str | None = None
     notes: str | None = None
 
 

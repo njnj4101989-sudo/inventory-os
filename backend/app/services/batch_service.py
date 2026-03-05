@@ -131,8 +131,7 @@ class BatchService:
         batch = await self._get_or_404(batch_id)
         if req.notes is not None:
             batch.notes = req.notes
-        await self.db.commit()
-        await self.db.refresh(batch)
+        await self.db.flush()
         return self._to_response(batch)
 
     async def create_batch(self, req: BatchCreate, created_by: UUID) -> dict:

@@ -51,6 +51,11 @@ class Base(DeclarativeBase):
     )
 
 
+def is_postgresql() -> bool:
+    """Check if current database is PostgreSQL (supports FOR UPDATE, etc.)."""
+    return not settings.DATABASE_URL.startswith("sqlite")
+
+
 async def get_db():
     async with async_session_factory() as session:
         try:
