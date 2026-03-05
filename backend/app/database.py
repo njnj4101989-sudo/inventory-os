@@ -18,6 +18,8 @@ else:
     # PostgreSQL: connection pool tuning
     _engine_kwargs["pool_size"] = 10
     _engine_kwargs["max_overflow"] = 20
+    _engine_kwargs["pool_pre_ping"] = True       # detect stale connections before use
+    _engine_kwargs["pool_recycle"] = 1800         # recycle connections every 30 min
 
 engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs)
 

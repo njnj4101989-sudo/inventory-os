@@ -3,6 +3,7 @@
 Run with: uvicorn app.main:app --reload
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,6 +23,13 @@ from app.tasks import (
 
 settings = get_settings()
 
+# --- P4-8: Structured logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -35,14 +43,17 @@ async def lifespan(_app: FastAPI):
     await engine.dispose()
 
 
+# --- P4-3: Disable Swagger UI in production ---
+_is_prod = settings.APP_ENV == "production"
+
 app = FastAPI(
     title="Inventory-OS",
     version="0.1.0",
     description="Textile Inventory Management System",
     lifespan=lifespan,
-    docs_url="/api/v1/docs",
-    redoc_url="/api/v1/redoc",
-    openapi_url="/api/v1/openapi.json",
+    docs_url=None if _is_prod else "/api/v1/docs",
+    redoc_url=None if _is_prod else "/api/v1/redoc",
+    openapi_url=None if _is_prod else "/api/v1/openapi.json",
 )
 
 # CORS — explicit origins for dev + production

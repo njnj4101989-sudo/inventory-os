@@ -47,7 +47,7 @@ def start_reservation_expiry() -> None:
     """Spawn the reservation expiry background task."""
     global _task
     if _task is None or _task.done():
-        _task = asyncio.get_event_loop().create_task(_run_expiry_loop())
+        _task = asyncio.get_running_loop().create_task(_run_expiry_loop())
         logger.info("Reservation expiry task started (every %ds)", INTERVAL_SECONDS)
 
 

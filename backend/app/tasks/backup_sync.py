@@ -56,7 +56,7 @@ def start_backup_sync() -> None:
     """Spawn the backup sync background task."""
     global _task
     if _task is None or _task.done():
-        _task = asyncio.get_event_loop().create_task(_run_backup_loop())
+        _task = asyncio.get_running_loop().create_task(_run_backup_loop())
         logger.info("Backup sync task started (every %ds)", INTERVAL_SECONDS)
 
 

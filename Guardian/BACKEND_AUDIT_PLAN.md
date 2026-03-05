@@ -318,7 +318,53 @@ All 5 key services audited. 9 issues found and fixed.
 | S61 | Phase 2: Query Efficiency Audit (14 findings) | ✅ COMPLETE |
 | S62 | Phase 2: Fix all 14 findings | ✅ COMPLETE |
 | S63 | Phase 3: Data Flow Integrity (9 findings) | ✅ COMPLETE |
-| S63+ | Phase 4: Production Readiness | NEXT |
+| S63 | Phase 4: Production Readiness Audit (10 findings) | ✅ AUDITED |
+| S64 | Phase 4: Fix all 10 findings + deploy | NEXT |
+
+---
+
+## Phase 4 Findings: Production Readiness — AUDITED (S63), PARTIALLY FIXED
+
+**Files read:** `main.py`, `database.py`, `config.py`, `security.py`, `permissions.py`, `event_bus.py`, `error_handlers.py`, `exceptions.py`, `dependencies.py`, `reservation_expiry.py`, `backup_sync.py`, EC2 `.env`, Nginx config, systemd service.
+
+**P4-4 pool_pre_ping FIXED in S63** (committed but not yet pushed/deployed).
+
+### HIGH (3)
+
+| # | Area | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P4-1 | EC2 `.env` | JWT_SECRET is predictable (`drs-inventory-prod-jwt-secret-2026-change-this`) | Generate random 64-char secret, update .env on EC2 | PENDING |
+| P4-2 | `CLAUDE.md` | DB password + RDS endpoint exposed in public repo docs | Replace with `[see EC2 .env]` placeholder | PENDING |
+| P4-3 | `main.py` | Swagger UI publicly accessible at `/api/v1/docs` in production | Disable docs_url/redoc_url when APP_ENV=production | PENDING |
+
+### MEDIUM (4)
+
+| # | Area | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P4-4 | `database.py` | Missing `pool_pre_ping=True` — stale connections after idle | Added `pool_pre_ping=True` + `pool_recycle=1800` | ✅ FIXED (not deployed) |
+| P4-5 | EC2 `.env` CORS | localhost origins in production ALLOWED_ORIGINS | Remove localhost, keep only `https://inventory.drsblouse.com` | PENDING |
+| P4-6 | Nginx | No security headers (HSTS, X-Content-Type-Options, X-Frame-Options) | Add headers to Nginx server block | PENDING |
+| P4-7 | Nginx | No explicit `client_max_body_size` | Set `client_max_body_size 5m;` | PENDING |
+
+### LOW (3)
+
+| # | Area | Issue | Fix | Status |
+|---|------|-------|-----|--------|
+| P4-8 | Logging | No structured log format for production | Add basicConfig with timestamp+level+name format | PENDING |
+| P4-9 | Auth | No rate limiting on login endpoint | Future: add `slowapi` middleware | DEFERRED |
+| P4-10 | Tasks | `asyncio.get_event_loop()` deprecated in 3.10+ | Change to `asyncio.create_task()` in lifespan | PENDING |
+
+### Already Good
+- Exception hierarchy: 400/401/403/404/409/410/422 + generic 500 handler ✅
+- Pool: size=10, overflow=20 (correct for t3.micro) ✅
+- `echo=False` in production ✅
+- `.env` in `.gitignore` ✅
+- Gunicorn: 2 UvicornWorkers, 120s timeout, auto-restart ✅
+- SSL enforced, HTTP→HTTPS, Let's Encrypt ✅
+- SSE: proxy_buffering off, 86400s read timeout ✅
+- JWT: HS256, 1h access / 7d refresh ✅
+- Password hashing: bcrypt via passlib ✅
+- Auth: Bearer token, DB user lookup, role+permission in JWT ✅
 
 ---
 

@@ -60,23 +60,42 @@
 
 ---
 
-### NEXT SESSION: S64 — Phase 4 Production Readiness Audit
+### S63 also: Phase 4 Production Readiness — AUDITED (10 findings, 1 fixed)
 
-**Phase 4 Checklist:**
-1. **Database config:** `database.py` — pool_size, max_overflow, pool_timeout, isolation level
-2. **Error handling:** Do services catch DB errors or let them bubble as 500s?
-3. **Main app:** `main.py` — middleware, error handlers, request size limits
-4. **CORS:** Production-only origins, no dev wildcards
-5. **Secrets:** `.env` — JWT_SECRET rotated? DEBUG off? DB password not in code?
-6. **Rate limiting:** Any protection against abuse?
-7. **Logging:** Structured logs for production debugging?
-8. **Alembic:** Migration state clean for production?
+**Audit complete.** Read all production files: main.py, database.py, config.py, security.py, permissions.py, event_bus.py, error_handlers.py, exceptions.py, dependencies.py, both background tasks, EC2 .env, Nginx config, systemd service.
 
-**Priority 2: Deploy Phase 3 fixes to production**
-- Create Alembic migration for `remaining_weight >= 0` CHECK constraint
-- Push to GitHub, pull on EC2, restart FastAPI
+**P4-4 FIXED** (pool_pre_ping + pool_recycle added to database.py — committed but not yet pushed).
 
-**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md`
+| # | Severity | Issue | Status |
+|---|----------|-------|--------|
+| P4-1 | HIGH | JWT_SECRET is predictable | PENDING |
+| P4-2 | HIGH | DB password in CLAUDE.md (public repo) | PENDING |
+| P4-3 | HIGH | Swagger docs exposed in production | PENDING |
+| P4-4 | MEDIUM | Missing pool_pre_ping | ✅ FIXED |
+| P4-5 | MEDIUM | localhost origins in prod CORS | PENDING |
+| P4-6 | MEDIUM | No Nginx security headers | PENDING |
+| P4-7 | MEDIUM | No client_max_body_size in Nginx | PENDING |
+| P4-8 | LOW | No structured logging | PENDING |
+| P4-9 | LOW | No rate limiting on login | DEFERRED |
+| P4-10 | LOW | Deprecated asyncio API in tasks | PENDING |
+
+### NEXT SESSION: S64 — Fix Phase 4 Findings + Deploy
+
+**All findings documented in `Guardian/BACKEND_AUDIT_PLAN.md`.**
+
+**Fix order (S64):**
+1. `main.py` — disable Swagger in production (P4-3)
+2. `CLAUDE.md` — remove DB password from docs (P4-2)
+3. `main.py` or tasks — structured logging (P4-8), fix deprecated asyncio (P4-10)
+4. Commit + push all code changes
+5. EC2: generate strong JWT_SECRET (P4-1), remove localhost from CORS (P4-5)
+6. EC2 Nginx: add security headers (P4-6) + client_max_body_size (P4-7)
+7. Restart Nginx + FastAPI
+8. Smoke test
+
+**Reference:** `Guardian/BACKEND_AUDIT_PLAN.md` — Phase 4 section
+
+**Note:** P4-4 (pool_pre_ping) is already fixed in local code but NOT yet pushed/deployed. Push in S64 with other fixes.
 
 ---
 
@@ -319,8 +338,8 @@ Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock pa
   - Nginx: reverse proxy + SSE support (`proxy_buffering off`)
   - SSL: Let's Encrypt, auto-renews, expires 2026-06-01
 - **C4 RDS:** `db.t3.micro` PostgreSQL 16.6, encrypted, EC2-only access
-  - Endpoint: `drs-inventory-db.crmiy8k00t4k.ap-south-1.rds.amazonaws.com`
-  - DB: `drs_inventory`, User: `postgres`, Pass: `DrsInventory2026Secure`
+  - Endpoint: `[see EC2 .env]`
+  - DB: `drs_inventory`, User: `postgres`, Pass: `[see EC2 .env]`
   - 24 tables, seeded: 5 roles, 5 users, 5 product types, 30 colors, 10 VAs
 - **Fix:** `Base.created_at` → `DateTime(timezone=True)` for asyncpg compatibility
 - **Fix:** Mobile login failure — password `autoCapitalize="off"` on LoginPage
