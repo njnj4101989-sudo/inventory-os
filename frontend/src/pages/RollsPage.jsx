@@ -723,8 +723,12 @@ export default function RollsPage() {
       sr_no: selectedInvoice.sr_no || '',
     })
     // Group rolls by fabric_type → design groups, then by color within each
+    // Sort rolls by created_at (or received_at) to preserve original entry order
+    const sortedRolls = [...selectedInvoice.rolls].sort((a, b) =>
+      (a.created_at || a.received_at || '').localeCompare(b.created_at || b.received_at || '')
+    )
     const fabricMap = {}
-    for (const r of selectedInvoice.rolls) {
+    for (const r of sortedRolls) {
       const ft = r.fabric_type || 'Unknown'
       if (!fabricMap[ft]) fabricMap[ft] = { fabric_type: ft, cost_per_unit: r.cost_per_unit != null ? String(r.cost_per_unit) : '', unit: r.unit || 'kg', panna: r.panna != null ? String(r.panna) : '', gsm: r.gsm != null ? String(r.gsm) : '', notes: '', colors: {} }
       const c = r.color || 'Unknown'
@@ -845,15 +849,15 @@ export default function RollsPage() {
       if (editingInvoice) {
         const newRolls = []
         const updateErrors = []
+        const stringifyDetail = (d) => typeof d === 'string' ? d : d ? JSON.stringify(d) : null
         for (const grp of designGroups) {
           const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
           for (const row of grp.colorRows) {
             const colorMatch = masterColors.find((c) => c.name === row.color)
-            let rIdx = 0
-            for (const w of row.weights) {
-              const wt = parseFloat(w)
-              if (wt <= 0) continue
-              const existingId = row.rollIds?.[rIdx]
+            for (let wI = 0; wI < row.weights.length; wI++) {
+              const wt = parseFloat(row.weights[wI])
+              if (!(wt > 0)) continue // skip empty, NaN, zero, negative
+              const existingId = row.rollIds?.[wI]
               if (existingId) {
                 try {
                   await updateRoll(existingId, {
@@ -870,7 +874,7 @@ export default function RollsPage() {
                     notes: grp.notes || null,
                   })
                 } catch (err) {
-                  updateErrors.push(`${row.color} (${wt} kg): ${err.response?.data?.detail || 'Update failed'}`)
+                  updateErrors.push(`${row.color} (${wt} kg): ${stringifyDetail(err.response?.data?.detail) || 'Update failed'}`)
                 }
               } else {
                 newRolls.push({
@@ -887,7 +891,6 @@ export default function RollsPage() {
                   color_no: colorMatch?.color_no || null,
                 })
               }
-              rIdx++
             }
           }
         }
@@ -899,7 +902,7 @@ export default function RollsPage() {
             try {
               await deleteRoll(rid)
             } catch (err) {
-              updateErrors.push(`Could not delete removed roll: ${err.response?.data?.detail || 'Delete failed'}`)
+              updateErrors.push(`Could not delete removed roll: ${stringifyDetail(err.response?.data?.detail) || 'Delete failed'}`)
             }
           }
         }
@@ -961,7 +964,12 @@ export default function RollsPage() {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && stockInOpen && !saving) {
         e.preventDefault()
-        handleStockIn()
+        // Blur active input first so its onChange fires and state is committed
+        if (document.activeElement && document.activeElement.tagName !== 'BODY') {
+          document.activeElement.blur()
+        }
+        // Let React process the blur/onChange before saving
+        setTimeout(() => handleStockIn(), 50)
       }
     }
     window.addEventListener('keydown', handler)

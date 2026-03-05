@@ -120,7 +120,9 @@ export async function stockInBulk(header, rollEntries) {
       const res = await stockIn(payload)
       results.push(res)
     } catch (err) {
-      failed.push({ index: i + 1, color: entry.color, fabric: entry.fabric_type, error: err.response?.data?.detail || err.message || 'Unknown error' })
+      const detail = err.response?.data?.detail
+      const errorMsg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : (err.message || 'Unknown error')
+      failed.push({ index: i + 1, color: entry.color, fabric: entry.fabric_type, error: errorMsg })
     }
   }
   if (failed.length > 0) {
@@ -211,6 +213,10 @@ export async function getInvoices(params = {}) {
     inv.total_value += (parseFloat(r.total_weight) || 0) * (parseFloat(r.cost_per_unit) || 0)
   }
   const invoices = Object.values(grouped).sort((a, b) => b.received_at.localeCompare(a.received_at))
+  // Sort rolls within each invoice by created_at ASC to preserve original entry order
+  for (const inv of invoices) {
+    inv.rolls.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+  }
   return { data: { data: invoices, total: invoices.length, page: 1, pages: 1 } }
 }
 
