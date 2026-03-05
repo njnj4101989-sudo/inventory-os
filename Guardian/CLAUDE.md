@@ -29,22 +29,71 @@
 
 ---
 
-## Current State (Session 58 — 2026-03-05)
+## Current State (Session 59 — 2026-03-06)
+
+### S59: Stock-In Bug Blitz + Compact ERP UI
+
+**Critical production bugs found and fixed in the Rolls stock-in flow.**
+
+#### Bugs Fixed (7 total)
+1. **`getInvoices` page_size override** (ROOT CAUSE) — caller's `page_size:20` overrode internal `page_size:500` via JS spread. Only 20 of 30 rolls loaded. First colors gone, roll counts wrong. Fix: strip caller pagination, fetch ALL rolls via paginated loop, no hard ceiling
+2. **NaN weight passthrough in edit mode** — `parseFloat('') = NaN`, `NaN <= 0` is false → empty weights sent to backend → 422. Fix: `if (!(wt > 0))` catches NaN/zero/negative
+3. **rIdx misalignment** — separate counter `rIdx` vs weight index caused wrong rollId mapping. Fix: use `wI` (weight array index) directly for `rollIds[wI]` lookup
+4. **`[object Object]` error messages** — FastAPI 422 returns `detail` as array of objects, not string. Fix: `stringifyDetail()` helper in both `stockInBulk` and edit error handlers
+5. **Ctrl+S stale state** — focused input's onChange not fired before save. Fix: `blur()` + `setTimeout(50ms)` before `handleStockIn`
+6. **Color reordering on re-edit** — backend returns rolls `created_at DESC`, colors appeared in reverse entry order. Fix: sort rolls `created_at ASC` in both `getInvoices` and `openEditInvoice`
+7. **`removeWeight` orphan rolls** — deleting a weight cell in edit mode didn't track the rollId for deletion. Fix: push to `removedRollIds` before removing (mirrors `removeColorRow` pattern)
+
+#### Data Integrity Fixes
+- **Invoice search** — was broken on real backend (`search` param ignored). Now full client-side search: invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
+- **Invoice grouping collision** — two suppliers with same invoice no. merged. Key changed: `invoice_no` → `invoice_no__supplier_id`
+- **Quick Master color picker** — `QuickMasterModal` now shows native color picker + hex text input for color creation (was saving black hex by default)
+- **Color numbers** — updated all 26 colors in production DB with `color_no` 1-26
+
+#### UI Compact (ERP-style)
+- Labels: 11px uppercase semibold, inputs: py-1 px-2, cards: px-3 py-2
+- Section gaps: space-y-2, grid gaps: gap-2, weight inputs: 80px
+- ~40% less vertical space — proper wholesale data entry density
+
+#### Commits
+- `33bffbb` — NaN/rIdx/error/Ctrl+S/color-order fixes
+- `57e4049` — Quick Master color picker
+- `9ee30eb` — Compact ERP UI
+- `3f38dab` — page_size override fix (the big one)
+- `221798e` — removeWeight orphan + search + grouping collision
+
+---
+
+### NEXT SESSION: Backend Hardening (S60)
+
+**Priority 1: Mock vs Real Path Audit**
+Every `frontend/src/api/*.js` file has dual paths (`USE_MOCK` branches). Mock paths are well-tested, real paths have mismatches. Audit ALL:
+- `rolls.js` — partially fixed S59, needs bulk endpoint
+- `batches.js` — 7-state machine flow (assign→submit→check→pack), VA send/receive
+- `lots.js` — create lot → distribute → batch creation
+- `orders.js`, `invoices.js` — CRUD + pagination
+- Check: pagination leaks, search mapping, response shapes, error handling
+
+**Priority 2: Backend Invoice Layer**
+- `POST /invoices/stock-in` — bulk atomic endpoint (single transaction, all-or-nothing). Replaces `stockInBulk` loop of 30 individual POSTs. No more partial saves, no duplicates on retry
+- `GET /invoices` — server-side grouping with SQL `GROUP BY supplier_invoice_no, supplier_id`. Paginated, searchable. Replaces client-side fetch-all-and-group
+
+**Priority 3: Full E2E Flow Test on Real Backend**
+- Stock-in 30+ rolls → verify all saved → edit → verify order preserved
+- Create lot from invoice → distribute → verify batches created
+- Batch assign → tailor submit → checker QC → packing → verify state transitions
+- VA send/receive (both roll and batch) → verify weight/pieces tracking
+- Each step: compare mock behavior vs real backend behavior
+
+---
+
+## Previous State (Session 58 — 2026-03-05)
 
 ### S58: Quick Master (Shift+M) — Inline Master Create from Any Form
 
-**Zero-navigation master data creation mid-workflow.**
-
-- **`useQuickMaster` hook** (`hooks/useQuickMaster.js`): Global `Shift+M` listener, reads `data-master` from focused element, silent no-op if absent
-- **`QuickMasterModal` component** (`components/common/QuickMasterModal.jsx`): Config-driven form for 5 master types, calls existing create APIs, auto-selects new item
-- **RollsPage:** `data-master` on supplier, fabric, color, value_addition (x3) selects + hint text
-- **LotsPage:** Product type now dynamic from API (was hardcoded BLS/KRT/SAR/DRS/OTH) + `data-master` on select
-- **SendForVAModal:** `data-master` on VA select + hook integration
-- **S57 commit pushed:** Roll delete, stock-in edit improvements, SSE token refresh, batch eager loading — verified deployed on EC2 (`e39de6e`)
-- **Protocol 8** added to `guardian.md` — Quick Master rules and integration map
-- **Files created:** 2 (`useQuickMaster.js`, `QuickMasterModal.jsx`)
-- **Files modified:** 3 (`RollsPage.jsx`, `LotsPage.jsx`, `SendForVAModal.jsx`) + docs
-- **Build: 0 errors**
+- `useQuickMaster` hook + `QuickMasterModal` component
+- Integrated in: RollsPage, LotsPage, SendForVAModal
+- Protocol 8 added to guardian.md
 
 ---
 
@@ -241,6 +290,7 @@
 | S56 | AWS Backend Deploy + Mobile Fixes | C4+C7: EC2+RDS+Nginx+SSL+CORS. 3 fixes: DateTime(tz), password autoCapitalize, SW 5s timeout. Full stack LIVE |
 | S57 | Roll Delete + Stock-In Edit + SSE Refresh | DELETE /rolls/{id}, partial stockInBulk, SSE token auto-refresh, batch eager loading |
 | S58 | Quick Master (Shift+M) | Inline create from any form dropdown — useQuickMaster hook + QuickMasterModal + Protocol 8 |
+| S59 | Stock-In Bug Blitz | 7 bugs fixed: page_size override (root cause), NaN weight, rIdx, [object Object], Ctrl+S, color reorder, orphan rolls. Invoice search + grouping collision. Compact ERP UI. Next: mock vs real audit + backend invoice layer |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
