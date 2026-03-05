@@ -12,7 +12,7 @@ from app.database import Base
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
 
-    invoice_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("invoices.id"))
+    invoice_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("invoices.id"), index=True)
     sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"))
     batch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("batches.id"))
     quantity: Mapped[int] = mapped_column(Integer)

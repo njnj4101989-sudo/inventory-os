@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -11,9 +11,18 @@ from app.database import Base
 
 class Batch(Base):
     __tablename__ = "batches"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="positive_quantity"),
+        CheckConstraint(
+            "status IN ('created', 'assigned', 'in_progress', 'submitted', 'checked', 'packing', 'packed')",
+            name="valid_status",
+        ),
+    )
 
     batch_code: Mapped[str] = mapped_column(String(50), unique=True)
-    lot_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lots.id"), index=True)
+    lot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("lots.id", ondelete="RESTRICT"), index=True
+    )
     sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
     size: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer)

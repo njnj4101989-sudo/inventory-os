@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 13 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-02 (Session 42 — Batch VA + Packing)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-06 (Session 60 — Bulk Stock-In + Supplier Invoices)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -347,22 +347,84 @@ Same as `GET /rolls` with status filter pre-applied.
 ```
 **Response:** Updated roll object (full roll with all processing_logs)
 
-### Invoice Grouping (Frontend-Only)
-`getInvoices()` fetches all rolls and groups by `supplier_invoice_no`:
+### POST `/rolls/bulk-stock-in` (Bulk Stock In — atomic)
+**Auth:** `stock_in` permission required
+**Purpose:** Stock-in multiple rolls in a SINGLE atomic transaction. All-or-nothing — if any roll fails, entire batch rolls back. Replaces frontend loop of individual `POST /rolls` calls.
+
+**Request:**
+```json
+{
+  "supplier_id": "uuid | null",
+  "supplier_invoice_no": "KT-2026-0451",
+  "supplier_challan_no": "CH-451",
+  "supplier_invoice_date": "2026-02-06",
+  "sr_no": "1",
+  "rolls": [
+    {
+      "fabric_type": "Cotton",
+      "color": "Green",
+      "total_weight": 18.800,
+      "unit": "kg",
+      "cost_per_unit": 120.0,
+      "total_length": null,
+      "panna": 44,
+      "gsm": 180,
+      "notes": null,
+      "fabric_code": "COT",
+      "color_code": "GREEN",
+      "color_no": 1
+    }
+  ]
+}
+```
+- `rolls[]` — 1 to 200 entries. Each entry = one roll to create.
+- Header fields (`supplier_id`, `supplier_invoice_no`, etc.) apply to ALL rolls.
+- Roll codes auto-generated per existing `next_roll_code()` logic.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "rolls": [ ...roll objects (same shape as GET /rolls items) ],
+    "count": 30
+  },
+  "message": "30 rolls stocked in"
+}
+```
+
+**Errors:**
+- `422` — validation error (weight <= 0, missing required fields)
+- `400` — business rule violation
+- On ANY error, entire transaction rolls back (no partial saves)
+
+### GET `/rolls/supplier-invoices` (Supplier Invoice Grouping — server-side)
+**Auth:** `stock_in` permission required
+**Purpose:** Returns rolls grouped by `(supplier_invoice_no, supplier_id)` with aggregates. Replaces client-side fetch-all-and-group.
+
+**Query:** `search`, `page` (default 1), `page_size` (default 20)
+- `search` — matches against `supplier_invoice_no`, `supplier_challan_no`, `sr_no`, supplier name, fabric_type, color, roll_code
+
+**Response:** Paginated array of:
 ```json
 {
   "invoice_no": "KT-2026-0451",
   "challan_no": "CH-451",
+  "invoice_date": "2026-02-06",
   "sr_no": "1",
-  "supplier": "Krishna Textiles",
-  "date": "2026-02-06",
-  "rolls": [ ...roll objects ],
-  "total_rolls": 2,
-  "total_weight": 55.720,
-  "total_value": 6686.40
+  "supplier": { "id": "uuid", "name": "Krishna Textiles" },
+  "rolls": [ ...full roll objects (same shape as GET /rolls items) ],
+  "roll_count": 5,
+  "total_weight": 92.500,
+  "total_length": null,
+  "total_value": 11100.00,
+  "received_at": "2026-02-07T09:00:00Z"
 }
 ```
-This is computed client-side from roll data — no dedicated backend endpoint needed.
+- Rolls within each group sorted by `created_at ASC` (preserves original entry order)
+- Groups sorted by `received_at DESC` (newest first)
+- `total_value` = sum of `total_weight * cost_per_unit` per roll
+- Rolls without `supplier_invoice_no` get unique key `NO-INV-{roll_id}` (shown as standalone)
 
 ---
 

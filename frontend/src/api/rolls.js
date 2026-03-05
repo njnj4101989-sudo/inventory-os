@@ -89,53 +89,80 @@ export async function stockIn(data) {
 
 /**
  * Bulk stock-in: shared invoice header + array of rolls.
- * Backend currently accepts one roll at a time, so we loop.
- * Returns array of results.
+ * Mock: loops individual stockIn() calls.
+ * Real: single atomic POST /rolls/bulk-stock-in (all-or-nothing).
  */
 export async function stockInBulk(header, rollEntries) {
-  const results = []
-  const failed = []
-  for (let i = 0; i < rollEntries.length; i++) {
-    const entry = rollEntries[i]
-    const payload = {
+  if (USE_MOCK) {
+    // Mock path — loop individual calls (preserves existing mock behavior)
+    const results = []
+    const failed = []
+    for (let i = 0; i < rollEntries.length; i++) {
+      const entry = rollEntries[i]
+      const payload = {
+        fabric_type: entry.fabric_type,
+        color: entry.color,
+        total_weight: parseFloat(entry.quantity),
+        unit: entry.unit,
+        cost_per_unit: entry.cost_per_unit ? parseFloat(entry.cost_per_unit) : null,
+        total_length: entry.length ? parseFloat(entry.length) : null,
+        supplier_id: header.supplier_id || null,
+        supplier_invoice_no: header.supplier_invoice_no || null,
+        supplier_challan_no: header.supplier_challan_no || null,
+        supplier_invoice_date: header.supplier_invoice_date || null,
+        sr_no: header.sr_no || null,
+        panna: entry.panna ? parseFloat(entry.panna) : null,
+        gsm: entry.gsm ? parseFloat(entry.gsm) : null,
+        notes: entry.notes || null,
+        fabric_code: entry.fabric_code || null,
+        color_code: entry.color_code || null,
+        color_no: entry.color_no || null,
+      }
+      try {
+        const res = await stockIn(payload)
+        results.push(res)
+      } catch (err) {
+        const detail = err.response?.data?.detail
+        const errorMsg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : (err.message || 'Unknown error')
+        failed.push({ index: i + 1, color: entry.color, fabric: entry.fabric_type, error: errorMsg })
+      }
+    }
+    if (failed.length > 0) {
+      const savedCount = results.length
+      const failedDesc = failed.map(f => `Roll #${f.index} (${f.color}): ${f.error}`).join('\n')
+      const error = new Error(
+        `${savedCount} of ${rollEntries.length} rolls saved successfully.\n${failed.length} roll(s) failed:\n${failedDesc}`
+      )
+      error.partialResults = results
+      error.failedRolls = failed
+      throw error
+    }
+    return results
+  }
+
+  // Real path — single atomic request
+  const payload = {
+    supplier_id: header.supplier_id || null,
+    supplier_invoice_no: header.supplier_invoice_no || null,
+    supplier_challan_no: header.supplier_challan_no || null,
+    supplier_invoice_date: header.supplier_invoice_date || null,
+    sr_no: header.sr_no || null,
+    rolls: rollEntries.map(entry => ({
       fabric_type: entry.fabric_type,
       color: entry.color,
       total_weight: parseFloat(entry.quantity),
-      unit: entry.unit,
+      unit: entry.unit || 'kg',
       cost_per_unit: entry.cost_per_unit ? parseFloat(entry.cost_per_unit) : null,
       total_length: entry.length ? parseFloat(entry.length) : null,
-      supplier_id: header.supplier_id || null,
-      supplier_invoice_no: header.supplier_invoice_no || null,
-      supplier_challan_no: header.supplier_challan_no || null,
-      supplier_invoice_date: header.supplier_invoice_date || null,
-      sr_no: header.sr_no || null,
       panna: entry.panna ? parseFloat(entry.panna) : null,
       gsm: entry.gsm ? parseFloat(entry.gsm) : null,
       notes: entry.notes || null,
       fabric_code: entry.fabric_code || null,
       color_code: entry.color_code || null,
       color_no: entry.color_no || null,
-    }
-    try {
-      const res = await stockIn(payload)
-      results.push(res)
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      const errorMsg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : (err.message || 'Unknown error')
-      failed.push({ index: i + 1, color: entry.color, fabric: entry.fabric_type, error: errorMsg })
-    }
+    })),
   }
-  if (failed.length > 0) {
-    const savedCount = results.length
-    const failedDesc = failed.map(f => `Roll #${f.index} (${f.color}): ${f.error}`).join('\n')
-    const error = new Error(
-      `${savedCount} of ${rollEntries.length} rolls saved successfully.\n${failed.length} roll(s) failed:\n${failedDesc}`
-    )
-    error.partialResults = results
-    error.failedRolls = failed
-    throw error
-  }
-  return results
+  return await client.post('/rolls/bulk-stock-in', payload)
 }
 
 /**
@@ -184,68 +211,9 @@ export async function getInvoices(params = {}) {
     }
     return mockPaginated(invoices, params.page, params.page_size)
   }
-  // Real API — fetch ALL rolls (no limit), then group client-side into invoices
-  const { page, page_size, search, ...filterParams } = params
-  // Don't pass search to backend — we search client-side after grouping into invoices
-  // This way we match invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
-  let allRolls = []
-  let fetchPage = 1
-  while (true) {
-    const res = await client.get('/rolls', { params: { ...filterParams, page_size: 200, page: fetchPage } })
-    const batch = res.data.data || []
-    allRolls = allRolls.concat(batch)
-    if (fetchPage >= (res.data.pages || 1)) break
-    fetchPage++
-  }
-  const grouped = {}
-  for (const r of allRolls) {
-    const key = r.supplier_invoice_no ? `${r.supplier_invoice_no}__${r.supplier?.id || 'none'}` : `NO-INV-${r.id}`
-    if (!grouped[key]) {
-      grouped[key] = {
-        invoice_no: r.supplier_invoice_no || null,
-        challan_no: r.supplier_challan_no || null,
-        invoice_date: r.supplier_invoice_date || null,
-        sr_no: r.sr_no || null,
-        supplier: r.supplier,
-        rolls: [],
-        roll_count: 0,
-        total_weight: 0,
-        total_length: 0,
-        total_value: 0,
-        received_at: r.received_at,
-      }
-    }
-    const inv = grouped[key]
-    inv.rolls.push(r)
-    inv.roll_count++
-    inv.total_weight += parseFloat(r.total_weight) || 0
-    if (r.total_length) inv.total_length += parseFloat(r.total_length)
-    inv.total_value += (parseFloat(r.total_weight) || 0) * (parseFloat(r.cost_per_unit) || 0)
-  }
-  let invoices = Object.values(grouped).sort((a, b) => b.received_at.localeCompare(a.received_at))
-  // Sort rolls within each invoice by created_at ASC to preserve original entry order
-  for (const inv of invoices) {
-    inv.rolls.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
-  }
-  // Client-side search — matches invoice_no, challan_no, sr_no, supplier name, fabric, color, roll_code
-  if (search) {
-    const q = search.toLowerCase()
-    invoices = invoices.filter((inv) =>
-      (inv.invoice_no || '').toLowerCase().includes(q) ||
-      (inv.challan_no || '').toLowerCase().includes(q) ||
-      (inv.sr_no || '').toLowerCase().includes(q) ||
-      (inv.supplier?.name || '').toLowerCase().includes(q) ||
-      inv.rolls.some((r) => r.fabric_type.toLowerCase().includes(q) || r.color.toLowerCase().includes(q) || r.roll_code.toLowerCase().includes(q))
-    )
-  }
-  // Client-side pagination for invoice list
-  const pg = page || 1
-  const ps = page_size || 20
-  const total = invoices.length
-  const pages = Math.max(1, Math.ceil(total / ps))
-  const start = (pg - 1) * ps
-  const paginated = invoices.slice(start, start + ps)
-  return { data: { data: paginated, total, page: pg, pages } }
+  // Real API — server-side grouping via dedicated endpoint
+  const res = await client.get('/rolls/supplier-invoices', { params })
+  return res
 }
 
 /**

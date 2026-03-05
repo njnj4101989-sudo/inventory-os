@@ -20,7 +20,7 @@ class InventoryEvent(Base):
     sku_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("skus.id"), index=True
     )
-    roll_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rolls.id"))
+    roll_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rolls.id"), index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     unit: Mapped[str | None] = mapped_column(String(20))
     reason: Mapped[str | None] = mapped_column(Text)

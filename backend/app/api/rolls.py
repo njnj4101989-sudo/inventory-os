@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas.roll import RollCreate, RollUpdate, RollFilterParams, SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog
+from app.schemas.roll import (
+    RollCreate, RollUpdate, RollFilterParams,
+    SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
+    BulkStockIn, SupplierInvoiceParams,
+)
 from app.services.roll_service import RollService
 
 router = APIRouter(prefix="/rolls", tags=["Rolls"])
@@ -35,6 +39,30 @@ async def stock_in(
     svc = RollService(db)
     result = await svc.stock_in(req, current_user.id)
     return {"success": True, "data": result}
+
+
+@router.post("/bulk-stock-in", response_model=None, status_code=201)
+async def bulk_stock_in(
+    req: BulkStockIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Atomic bulk stock-in: all rolls in a single transaction. All-or-nothing."""
+    svc = RollService(db)
+    result = await svc.bulk_stock_in(req, current_user.id)
+    return {"success": True, "data": result, "message": f"{result['count']} rolls stocked in"}
+
+
+@router.get("/supplier-invoices", response_model=None)
+async def list_supplier_invoices(
+    params: SupplierInvoiceParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Server-side grouping of rolls by supplier invoice. Search + pagination."""
+    svc = RollService(db)
+    result = await svc.get_supplier_invoices(params)
+    return {"success": True, **result}
 
 
 @router.patch("/{roll_id}", response_model=None)

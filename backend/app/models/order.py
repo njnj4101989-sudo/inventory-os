@@ -14,7 +14,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
-    source: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(20), index=True)
     external_order_ref: Mapped[str | None] = mapped_column(String(100))
     customer_name: Mapped[str | None] = mapped_column(String(200))
     customer_phone: Mapped[str | None] = mapped_column(String(20))

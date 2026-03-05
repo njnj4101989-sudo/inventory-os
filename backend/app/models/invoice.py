@@ -14,7 +14,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     invoice_number: Mapped[str] = mapped_column(String(50), unique=True)
-    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), index=True)
     qr_code_data: Mapped[str] = mapped_column(Text)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     tax_amount: Mapped[Decimal] = mapped_column(

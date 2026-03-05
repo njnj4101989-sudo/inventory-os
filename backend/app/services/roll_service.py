@@ -17,6 +17,7 @@ from app.models.batch_assignment import BatchAssignment
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams, RollResponse, RollDetail,
     SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
+    BulkStockIn, SupplierInvoiceParams,
 )
 from app.core.code_generator import next_roll_code
 from app.core.exceptions import NotFoundError, BusinessRuleViolationError
@@ -224,6 +225,191 @@ class RollService:
             "effective_sku": effective_sku,
         })
         return passport
+
+    async def bulk_stock_in(self, req: BulkStockIn, received_by: UUID) -> dict:
+        """Atomic bulk stock-in: create all rolls in a single transaction.
+
+        All-or-nothing — if any roll fails validation, entire batch rolls back.
+        """
+        if not req.rolls:
+            raise BusinessRuleViolationError("At least one roll entry is required")
+        if len(req.rolls) > 200:
+            raise BusinessRuleViolationError("Maximum 200 rolls per bulk stock-in")
+
+        created_rolls = []
+        now = datetime.now(timezone.utc)
+
+        for entry in req.rolls:
+            if entry.total_weight <= 0:
+                raise BusinessRuleViolationError(
+                    f"Weight must be > 0 for {entry.color} {entry.fabric_type}"
+                )
+
+            roll_code = await next_roll_code(
+                self.db,
+                challan_no=req.sr_no or "STOCK",
+                fabric_type=entry.fabric_type,
+                color=entry.color,
+                fabric_code=entry.fabric_code,
+                color_code=entry.color_code,
+                color_no=entry.color_no,
+            )
+
+            roll = Roll(
+                roll_code=roll_code,
+                fabric_type=entry.fabric_type,
+                color=entry.color,
+                total_weight=entry.total_weight,
+                remaining_weight=entry.total_weight,
+                current_weight=entry.total_weight,
+                unit=entry.unit or "kg",
+                cost_per_unit=entry.cost_per_unit,
+                total_length=entry.total_length,
+                supplier_id=req.supplier_id,
+                supplier_invoice_no=req.supplier_invoice_no,
+                supplier_challan_no=req.supplier_challan_no,
+                supplier_invoice_date=req.supplier_invoice_date,
+                sr_no=req.sr_no,
+                panna=entry.panna,
+                gsm=entry.gsm,
+                received_by=received_by,
+                received_at=now,
+                status="in_stock",
+                notes=entry.notes,
+            )
+            self.db.add(roll)
+            created_rolls.append(roll)
+
+        await self.db.flush()
+
+        # Reload all with relationships
+        roll_ids = [r.id for r in created_rolls]
+        stmt = (
+            select(Roll)
+            .where(Roll.id.in_(roll_ids))
+            .options(
+                selectinload(Roll.supplier),
+                selectinload(Roll.received_by_user),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+            )
+            .order_by(Roll.created_at.asc())
+        )
+        result = await self.db.execute(stmt)
+        rolls = result.scalars().all()
+
+        # Emit SSE event
+        from app.core.event_bus import event_bus
+        await event_bus.emit("bulk_stock_in", {
+            "count": len(rolls),
+            "sr_no": req.sr_no,
+            "supplier_invoice_no": req.supplier_invoice_no,
+        }, str(received_by))
+
+        return {
+            "rolls": [self._to_response(r) for r in rolls],
+            "count": len(rolls),
+        }
+
+    async def get_supplier_invoices(self, params: SupplierInvoiceParams) -> dict:
+        """Server-side grouping of rolls by (supplier_invoice_no, supplier_id).
+
+        Returns paginated list of supplier invoice groups with aggregates.
+        Fetch all rolls, group in Python, search across all fields including supplier name.
+        """
+        stmt = (
+            select(Roll)
+            .options(
+                selectinload(Roll.supplier),
+                selectinload(Roll.received_by_user),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+            )
+            .order_by(Roll.created_at.asc())
+        )
+        result = await self.db.execute(stmt)
+        all_rolls = result.scalars().all()
+
+        # Group by (supplier_invoice_no, supplier_id)
+        grouped: dict[str, dict] = {}
+        for r in all_rolls:
+            key = (
+                f"{r.supplier_invoice_no}__{r.supplier_id}"
+                if r.supplier_invoice_no
+                else f"NO-INV-{r.id}"
+            )
+            if key not in grouped:
+                grouped[key] = {
+                    "invoice_no": r.supplier_invoice_no,
+                    "challan_no": r.supplier_challan_no,
+                    "invoice_date": r.supplier_invoice_date.isoformat() if r.supplier_invoice_date else None,
+                    "sr_no": r.sr_no,
+                    "supplier": {
+                        "id": str(r.supplier.id),
+                        "name": r.supplier.name,
+                    } if r.supplier else None,
+                    "rolls": [],
+                    "roll_count": 0,
+                    "total_weight": 0.0,
+                    "total_length": 0.0,
+                    "total_value": 0.0,
+                    "received_at": r.received_at.isoformat() if r.received_at else None,
+                }
+            inv = grouped[key]
+            inv["rolls"].append(self._to_response(r))
+            inv["roll_count"] += 1
+            inv["total_weight"] += float(r.total_weight) if r.total_weight else 0
+            if r.total_length:
+                inv["total_length"] += float(r.total_length)
+            inv["total_value"] += (
+                (float(r.total_weight) if r.total_weight else 0)
+                * (float(r.cost_per_unit) if r.cost_per_unit else 0)
+            )
+            # Use earliest received_at
+            r_at = r.received_at.isoformat() if r.received_at else None
+            if r_at and (inv["received_at"] is None or r_at < inv["received_at"]):
+                inv["received_at"] = r_at
+
+        # Search filter — applied to grouped invoices (matches across all fields)
+        all_invoices = list(grouped.values())
+        if params.search:
+            q = params.search.lower()
+            filtered = []
+            for inv in all_invoices:
+                if (
+                    (inv["invoice_no"] or "").lower().find(q) >= 0
+                    or (inv["challan_no"] or "").lower().find(q) >= 0
+                    or (inv["sr_no"] or "").lower().find(q) >= 0
+                    or (inv["supplier"] and inv["supplier"]["name"].lower().find(q) >= 0)
+                    or any(
+                        r["fabric_type"].lower().find(q) >= 0
+                        or r["color"].lower().find(q) >= 0
+                        or r["roll_code"].lower().find(q) >= 0
+                        for r in inv["rolls"]
+                    )
+                ):
+                    filtered.append(inv)
+            all_invoices = filtered
+
+        # Sort groups by received_at DESC (newest first)
+        invoices = sorted(
+            all_invoices,
+            key=lambda x: x["received_at"] or "",
+            reverse=True,
+        )
+
+        # Paginate
+        total = len(invoices)
+        page = params.page
+        page_size = params.page_size
+        pages = max(1, math.ceil(total / page_size))
+        start = (page - 1) * page_size
+        paginated = invoices[start : start + page_size]
+
+        return {
+            "data": paginated,
+            "total": total,
+            "page": page,
+            "pages": pages,
+        }
 
     async def stock_in(self, req: RollCreate, received_by: UUID) -> dict:
         roll_code = await next_roll_code(

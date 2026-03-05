@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,6 +12,12 @@ from app.database import Base
 
 class Lot(Base):
     __tablename__ = "lots"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'cutting', 'distributed')",
+            name="valid_status",
+        ),
+    )
 
     lot_code: Mapped[str] = mapped_column(String(50), unique=True)
     sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
@@ -43,8 +49,12 @@ class Lot(Base):
 class LotRoll(Base):
     __tablename__ = "lot_rolls"
 
-    lot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lots.id"), index=True)
-    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"), index=True)
+    lot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("lots.id", ondelete="CASCADE"), index=True
+    )
+    roll_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rolls.id", ondelete="RESTRICT"), index=True
+    )
     palla_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     num_pallas: Mapped[int] = mapped_column(Integer)
     weight_used: Mapped[Decimal] = mapped_column(Numeric(10, 3))

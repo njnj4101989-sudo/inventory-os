@@ -52,6 +52,40 @@ class RollCreate(BaseModel):
     color_no: int | None = None     # Numeric color identifier for roll code gen
 
 
+class BulkRollEntry(BaseModel):
+    """Single roll entry within a bulk stock-in request."""
+
+    fabric_type: str
+    color: str
+    total_weight: Decimal
+    unit: str = "kg"
+    cost_per_unit: Decimal | None = None
+    total_length: Decimal | None = None
+    panna: Decimal | None = None
+    gsm: Decimal | None = None
+    notes: str | None = None
+    fabric_code: str | None = None
+    color_code: str | None = None
+    color_no: int | None = None
+
+
+class BulkStockIn(BaseModel):
+    """POST /rolls/bulk-stock-in — atomic bulk stock-in."""
+
+    supplier_id: UUID | None = None
+    supplier_invoice_no: str | None = None
+    supplier_challan_no: str | None = None
+    supplier_invoice_date: date | None = None
+    sr_no: str | None = None
+    rolls: list[BulkRollEntry]
+
+
+class SupplierInvoiceParams(PaginatedParams):
+    """GET /rolls/supplier-invoices query parameters."""
+
+    search: str | None = None
+
+
 class RollUpdate(BaseModel):
     """PATCH /rolls/{id} — update an unused roll."""
 

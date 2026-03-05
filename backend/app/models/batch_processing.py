@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,6 +18,9 @@ from app.database import Base
 
 class BatchProcessing(Base):
     __tablename__ = "batch_processing"
+    __table_args__ = (
+        CheckConstraint("pieces_sent > 0", name="positive_pieces_sent"),
+    )
 
     batch_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("batches.id"), index=True

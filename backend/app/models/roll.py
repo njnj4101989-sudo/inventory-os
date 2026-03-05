@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,8 +12,15 @@ from app.database import Base
 
 class Roll(Base):
     __tablename__ = "rolls"
+    __table_args__ = (
+        CheckConstraint("total_weight > 0", name="positive_weight"),
+        CheckConstraint(
+            "status IN ('in_stock', 'sent_for_processing', 'in_cutting')",
+            name="valid_status",
+        ),
+    )
 
-    roll_code: Mapped[str] = mapped_column(String(50), unique=True)
+    roll_code: Mapped[str] = mapped_column(String(80), unique=True)
     fabric_type: Mapped[str] = mapped_column(String(100))
     color: Mapped[str] = mapped_column(String(50))
     total_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
@@ -22,14 +29,16 @@ class Roll(Base):
     unit: Mapped[str] = mapped_column(String(20), default="kg", server_default="'kg'")
     cost_per_unit: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     total_length: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    status: Mapped[str] = mapped_column(String(30), default="in_stock", server_default="'in_stock'")
-    supplier_invoice_no: Mapped[str | None] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(30), default="in_stock", server_default="'in_stock'", index=True)
+    supplier_invoice_no: Mapped[str | None] = mapped_column(String(50), index=True)
     supplier_challan_no: Mapped[str | None] = mapped_column(String(50))
     supplier_invoice_date: Mapped[datetime | None] = mapped_column(Date)
-    sr_no: Mapped[str | None] = mapped_column(String(20))
+    sr_no: Mapped[str | None] = mapped_column(String(20), index=True)
     panna: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     gsm: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    supplier_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="RESTRICT"), index=True
+    )
     received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -49,7 +58,7 @@ class Roll(Base):
 class RollProcessing(Base):
     __tablename__ = "roll_processing"
 
-    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"))
+    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"), index=True)
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("value_additions.id")
     )
@@ -65,7 +74,7 @@ class RollProcessing(Base):
     status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'")
     notes: Mapped[str | None] = mapped_column(Text)
     job_challan_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("job_challans.id"), nullable=True
+        ForeignKey("job_challans.id"), nullable=True, index=True
     )
 
     # Relationships

@@ -12,8 +12,8 @@ from app.database import Base
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
-    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"))
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), index=True)
+    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"), index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))

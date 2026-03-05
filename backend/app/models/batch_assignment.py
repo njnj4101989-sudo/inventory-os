@@ -12,8 +12,8 @@ from app.database import Base
 class BatchAssignment(Base):
     __tablename__ = "batch_assignments"
 
-    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id"))
-    tailor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id"), index=True)
+    tailor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     checker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     assigned_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     assigned_at: Mapped[datetime] = mapped_column(
