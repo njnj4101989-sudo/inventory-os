@@ -94,33 +94,36 @@
 
 Don't touch existing `www` and `api` records.
 
-### Step 7: CI/CD (GitHub Actions)
-- **Frontend:** On push to `main` (paths: `frontend/**`) → Vercel auto-deploys (built-in)
-- **Backend:** On push to `main` (paths: `backend/**`) → SSH to EC2, git pull, pip install, restart fastapi
+### Step 7: CI/CD (GitHub Actions) — ✅ COMPLETE
 
-```yaml
-# .github/workflows/deploy-backend.yml
-name: Deploy Backend
-on:
-  push:
-    branches: [main]
-    paths: ['backend/**']
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/inventory-os/backend
-            git pull origin main
-            source venv/bin/activate
-            pip install -r requirements.txt
-            sudo systemctl restart fastapi
-```
+- **Frontend:** On push to `main` (paths: `frontend/**`) → Vercel auto-deploys (built-in, zero config)
+- **Backend:** On push to `main` (paths: `backend/**`) → GitHub Actions SSHes to EC2, pulls, installs, migrates, restarts
+
+**Workflow file:** `.github/workflows/deploy-backend.yml`
+
+**Pipeline steps:**
+1. SSH into EC2 via `appleboy/ssh-action@v1`
+2. `git pull origin main` (from `/home/ubuntu/inventory-os`)
+3. Activate venv (`/home/ubuntu/inventory-os/backend/venv`)
+4. `pip install -r requirements.txt`
+5. `alembic upgrade head` (auto-run migrations)
+6. `sudo systemctl restart fastapi`
+7. Health check: `curl localhost:8000/api/v1/health`
+
+**Required GitHub Secrets** (Settings → Secrets → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `EC2_HOST` | `43.204.66.254` |
+| `EC2_SSH_KEY` | Full contents of `C:\Users\HP\drs-inventory-key.pem` (copy-paste including `-----BEGIN/END-----` lines) |
+
+**How to add secrets:**
+1. Go to `https://github.com/njnj4101989-sudo/inventory-os/settings/secrets/actions`
+2. Click "New repository secret"
+3. Name: `EC2_HOST`, Value: `43.204.66.254` → Add
+4. Name: `EC2_SSH_KEY`, Value: open `.pem` file in Notepad, copy ALL text, paste → Add
+
+**Testing:** After secrets are added, any push to `main` that changes `backend/**` will trigger auto-deploy.
 
 ---
 

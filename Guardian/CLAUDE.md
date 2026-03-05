@@ -5,7 +5,7 @@
 ### Start Here
 1. `uvicorn app.main:app --reload --port 8000`
 2. `cd frontend && npm run dev` → http://localhost:5173
-3. **Production:** `https://inventory.drsblouse.com` (Vercel ✅ LIVE) + `https://api-inventory.drsblouse.com` (AWS EC2 — pending C4)
+3. **Production:** `https://inventory.drsblouse.com` (Vercel ✅) + `https://api-inventory.drsblouse.com` (AWS EC2 ✅)
 4. Login: `admin` → `/dashboard` | `tailor1` → `/my-work` | `checker1` → `/qc-queue`
 
 ---
@@ -29,7 +29,33 @@
 
 ---
 
-## Current State (Session 55 — 2026-03-04)
+## Current State (Session 56 — 2026-03-04)
+
+### S56: C4+C7 — AWS Backend LIVE + Production CORS
+
+**Full stack now in production.**
+
+- **C7 CORS:** Removed `trycloudflare.com` regex (security), added `https://inventory.drsblouse.com`
+- **C4 EC2:** `t3.micro` (free tier), Ubuntu 22.04, Elastic IP `43.204.66.254`
+  - SSH: `ssh -i drs-inventory-key.pem ubuntu@43.204.66.254`
+  - Key file: `C:\Users\HP\drs-inventory-key.pem`
+  - Gunicorn: 2 UvicornWorkers, systemd managed (`sudo systemctl restart fastapi`)
+  - Nginx: reverse proxy + SSE support (`proxy_buffering off`)
+  - SSL: Let's Encrypt, auto-renews, expires 2026-06-01
+- **C4 RDS:** `db.t3.micro` PostgreSQL 16.6, encrypted, EC2-only access
+  - Endpoint: `drs-inventory-db.crmiy8k00t4k.ap-south-1.rds.amazonaws.com`
+  - DB: `drs_inventory`, User: `postgres`, Pass: `DrsInventory2026Secure`
+  - 24 tables, seeded: 5 roles, 5 users, 5 product types, 30 colors, 10 VAs
+- **Fix:** `Base.created_at` → `DateTime(timezone=True)` for asyncpg compatibility
+- **Fix:** Mobile login failure — password `autoCapitalize="off"` on LoginPage
+- **Fix:** Service worker 5s timeout → changed `/api/` from `NetworkFirst(5s)` to `NetworkOnly`
+- **DNS:** GoDaddy A record `api-inventory` → `43.204.66.254` (propagated)
+- **IAM:** User `Nitish` with EC2/RDS/VPC FullAccess + Vercel policy
+- **Repo:** Made public for EC2 git clone
+
+---
+
+## Previous State (Session 55 — 2026-03-04)
 
 ### S55: C5 Vercel Frontend Deploy — LIVE
 
@@ -89,10 +115,10 @@
 | C1 | SQLite → PostgreSQL migration code | ✅ S53 |
 | C2 | SSE backend — EventBus + streaming endpoint | ✅ S53 |
 | C3 | SSE frontend — Toast + Bell + Notifications | ✅ S53 |
-| C4 | AWS EC2 + RDS setup | `AWS_DEPLOYMENT.md` Steps 1-3 |
+| C4 | AWS EC2 + RDS setup | ✅ S56 — `api-inventory.drsblouse.com` LIVE |
 | C5 | Vercel frontend deploy + GoDaddy DNS | ✅ S55 — `inventory.drsblouse.com` LIVE |
-| C6 | CI/CD GitHub Actions | `AWS_DEPLOYMENT.md` Step 7 |
-| C7 | CORS production config | Remove `trycloudflare.com`, add fixed domain |
+| C6 | CI/CD GitHub Actions | ✅ S57 — backend auto-deploy on push, Vercel handles frontend |
+| C7 | CORS production config | ✅ S56 — removed trycloudflare, added production origin |
 
 **NICE-TO-HAVE (post-deploy):** Free size support | Feriwala (waste) | Reports enrichment | Thermal ZPL templates
 
@@ -193,6 +219,7 @@
 | S53 | PostgreSQL + SSE Notifications | C1: PG migration code, C2: EventBus + SSE endpoint, C3: Toast + Bell + NotificationContext |
 | S54 | Batch VA Tracking | Out for VA tab, BatchChallan print, next-number preview, onPrintChallan prop |
 | S55 | Vercel Frontend Deploy | CLAUDE.md optimized (44K→12K), Vercel project + env vars + GoDaddy CNAME, `inventory.drsblouse.com` LIVE |
+| S56 | AWS Backend Deploy + Mobile Fixes | C4+C7: EC2+RDS+Nginx+SSL+CORS. 3 fixes: DateTime(tz), password autoCapitalize, SW 5s timeout. Full stack LIVE |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 
