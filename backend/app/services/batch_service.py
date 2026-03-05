@@ -92,7 +92,10 @@ class BatchService:
                 selectinload(Batch.sku),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
+                selectinload(Batch.checked_by_user),
+                selectinload(Batch.packed_by_user),
                 selectinload(Batch.processing_logs).selectinload(BatchProcessing.value_addition),
+                selectinload(Batch.processing_logs).selectinload(BatchProcessing.batch_challan),
             )
             .order_by(order)
         )
@@ -470,8 +473,8 @@ class BatchService:
             .options(
                 selectinload(Batch.sku),
                 selectinload(Batch.lot),
-                selectinload(Batch.assignments),
-                selectinload(Batch.processing_logs),
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                selectinload(Batch.processing_logs).selectinload(BatchProcessing.value_addition),
             )
         )
         result = await self.db.execute(stmt)

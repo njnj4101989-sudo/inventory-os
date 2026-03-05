@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { getBaseUrl } from '../api/client'
 
 const NotificationContext = createContext(null)
@@ -90,25 +91,65 @@ export function NotificationProvider({ children }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
-  // SSE connection
+  // SSE connection with automatic token refresh
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
+    let stopped = false
 
-    const connect = () => {
+    const decodeExp = (token) => {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        return payload.exp ? payload.exp * 1000 : Infinity
+      } catch { return 0 }
+    }
+
+    // Read fresh token from localStorage, refresh if expired
+    const getValidToken = async () => {
+      const token = localStorage.getItem('access_token')
+      if (!token) return null
+
+      if (decodeExp(token) > Date.now()) return token
+
+      // Token expired — try refresh
+      const refreshToken = localStorage.getItem('refresh_token')
+      if (!refreshToken) return null
+
+      try {
+        const baseUrl = getBaseUrl()
+        const { data } = await axios.post(`${baseUrl}/auth/refresh`, {
+          refresh_token: refreshToken,
+        })
+        const newToken = data.data?.access_token || data.access_token
+        if (!newToken) return null
+        localStorage.setItem('access_token', newToken)
+        return newToken
+      } catch {
+        // Refresh failed — session is dead, clean up
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user')
+        return null
+      }
+    }
+
+    const connect = async () => {
+      if (stopped) return
+
+      const token = await getValidToken()
+      if (!token || stopped) return // logged out or session expired
+
       const baseUrl = getBaseUrl()
       const url = `${baseUrl}/events/stream?token=${encodeURIComponent(token)}`
       const es = new EventSource(url)
       eventSourceRef.current = es
 
       es.onopen = () => {
-        backoffRef.current = 1000 // reset on successful connect
+        backoffRef.current = 1000
       }
 
       es.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data)
-          if (event.error) return // auth error
+          if (event.error) return
           addNotification(event)
         } catch {
           // heartbeat or malformed — ignore
@@ -118,16 +159,20 @@ export function NotificationProvider({ children }) {
       es.onerror = () => {
         es.close()
         eventSourceRef.current = null
-        // Reconnect with exponential backoff
+        if (stopped) return
         const delay = Math.min(backoffRef.current, 30000)
         backoffRef.current = delay * 2
         reconnectTimeoutRef.current = setTimeout(connect, delay)
       }
     }
 
-    connect()
+    // Only start if we have a token
+    if (localStorage.getItem('access_token')) {
+      connect()
+    }
 
     return () => {
+      stopped = true
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null

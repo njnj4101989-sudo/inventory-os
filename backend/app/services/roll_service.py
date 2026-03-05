@@ -323,6 +323,17 @@ class RollService:
 
         return self._to_response(roll)
 
+    async def delete_roll(self, roll_id: UUID) -> None:
+        stmt = select(Roll).where(Roll.id == roll_id)
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+        if roll.remaining_weight != roll.total_weight:
+            raise BusinessRuleViolationError("Cannot delete a roll that has been used in lots or processing")
+        await self.db.delete(roll)
+        await self.db.flush()
+
     async def get_consumption_history(self, roll_id: UUID) -> list:
         stmt = (
             select(BatchRollConsumption)

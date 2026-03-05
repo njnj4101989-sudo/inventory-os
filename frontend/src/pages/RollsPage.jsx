@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
@@ -654,10 +654,12 @@ export default function RollsPage() {
 
   // Track if we're editing an existing invoice (vs creating new)
   const [editingInvoice, setEditingInvoice] = useState(null)
+  const [removedRollIds, setRemovedRollIds] = useState([])
 
   // ── Stock In — Challan-style with design groups ──
   const openStockIn = () => {
     setEditingInvoice(null)
+    setRemovedRollIds([])
     // Auto-generate next Sr. No. (our internal filing serial)
     const existingSrNos = invoices.map((inv) => parseInt(inv.sr_no, 10)).filter((n) => !isNaN(n))
     const nextSr = existingSrNos.length > 0 ? Math.max(...existingSrNos) + 1 : 1
@@ -697,6 +699,7 @@ export default function RollsPage() {
       fabric_type: g.fabric_type, cost_per_unit: g.cost_per_unit, unit: g.unit, panna: g.panna, gsm: g.gsm, notes: g.notes,
       colorRows: Object.values(g.colors),
     })))
+    setRemovedRollIds([])
     setFormError(null)
     setSelectedInvoice(null)
     setStockInOpen(true)
@@ -720,17 +723,35 @@ export default function RollsPage() {
     ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: [...r.weights, ''] } : r),
   }))
   const removeWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
-    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights } : r),
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? {
+      ...r,
+      weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights,
+      rollIds: r.rollIds ? (r.weights.length > 1 ? r.rollIds.filter((_, k) => k !== wIdx) : r.rollIds) : undefined,
+    } : r),
   }))
   const addColorRow = (gIdx) => updateGroup(gIdx, (g) => ({
     ...g, colorRows: [...g.colorRows, { color: '', weights: [''] }],
   }))
-  const removeColorRow = (gIdx, cIdx) => updateGroup(gIdx, (g) => ({
-    ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
-  }))
+  const removeColorRow = (gIdx, cIdx) => {
+    // Track removed rollIds for edit mode (so we can delete them on save)
+    if (editingInvoice) {
+      const grp = designGroups[gIdx]
+      const row = grp?.colorRows?.[cIdx]
+      if (row?.rollIds?.length) {
+        setRemovedRollIds((prev) => [...prev, ...row.rollIds])
+      }
+    }
+    updateGroup(gIdx, (g) => ({
+      ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
+    }))
+  }
   // Remove empty trailing weight from a color row (used by smart Enter)
   const trimEmptyWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
-    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx && r.weights.length > 1 ? { ...r, weights: r.weights.filter((_, k) => k !== wIdx) } : r),
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx && r.weights.length > 1 ? {
+      ...r,
+      weights: r.weights.filter((_, k) => k !== wIdx),
+      rollIds: r.rollIds ? r.rollIds.filter((_, k) => k !== wIdx) : undefined,
+    } : r),
   }))
 
   const validateStockIn = () => {
@@ -785,6 +806,7 @@ export default function RollsPage() {
 
       if (editingInvoice) {
         const newRolls = []
+        const updateErrors = []
         for (const grp of designGroups) {
           const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
           for (const row of grp.colorRows) {
@@ -795,19 +817,23 @@ export default function RollsPage() {
               if (wt <= 0) continue
               const existingId = row.rollIds?.[rIdx]
               if (existingId) {
-                await updateRoll(existingId, {
-                  fabric_type: grp.fabric_type.trim(),
-                  color: row.color.trim(),
-                  total_weight: wt,
-                  unit: grp.unit,
-                  cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : null,
-                  supplier_id: invoiceHeader.supplier_id || null,
-                  supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
-                  supplier_challan_no: invoiceHeader.supplier_challan_no || null,
-                  supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
-                  sr_no: invoiceHeader.sr_no || null,
-                  notes: grp.notes || null,
-                })
+                try {
+                  await updateRoll(existingId, {
+                    fabric_type: grp.fabric_type.trim(),
+                    color: row.color.trim(),
+                    total_weight: wt,
+                    unit: grp.unit,
+                    cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : null,
+                    supplier_id: invoiceHeader.supplier_id || null,
+                    supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
+                    supplier_challan_no: invoiceHeader.supplier_challan_no || null,
+                    supplier_invoice_date: invoiceHeader.supplier_invoice_date || null,
+                    sr_no: invoiceHeader.sr_no || null,
+                    notes: grp.notes || null,
+                  })
+                } catch (err) {
+                  updateErrors.push(`${row.color} (${wt} kg): ${err.response?.data?.detail || 'Update failed'}`)
+                }
               } else {
                 newRolls.push({
                   fabric_type: grp.fabric_type.trim(),
@@ -828,27 +854,65 @@ export default function RollsPage() {
           }
         }
         if (newRolls.length > 0) await stockInBulk(invoiceHeader, newRolls)
+
+        // Delete rolls that were removed from the invoice during edit
+        if (removedRollIds.length > 0) {
+          for (const rid of removedRollIds) {
+            try {
+              await deleteRoll(rid)
+            } catch (err) {
+              updateErrors.push(`Could not delete removed roll: ${err.response?.data?.detail || 'Delete failed'}`)
+            }
+          }
+        }
+
+        if (updateErrors.length > 0) {
+          setFormError(`Some rolls could not be updated:\n${updateErrors.join('\n')}`)
+          setSaving(false)
+          return
+        }
       } else {
         await stockInBulk(invoiceHeader, flatRolls)
       }
 
+      const wasEditing = !!editingInvoice
       setStockInOpen(false)
       setEditingInvoice(null)
+      setRemovedRollIds([])
       await refreshAll()
 
-      // Fetch fresh rolls from DB by sr_no — gives real roll_codes from backend
-      try {
-        const filterParams = { page: 1, page_size: 100 }
-        if (invoiceHeader.sr_no) filterParams.sr_no = invoiceHeader.sr_no
-        const freshResp = await getRolls(filterParams)
-        const freshRolls = freshResp?.data?.data || []   // GET /rolls → res.data = { success, data: [...] }
-        if (freshRolls.length > 0) {
-          setLastSavedRolls(freshRolls)
-        }
-      } catch (_) { /* non-fatal — labels still available from state */ }
-      setShowLabelSheet(true)
+      // Show label sheet only for new stock-in, not edits
+      if (!wasEditing) {
+        try {
+          const filterParams = { page: 1, page_size: 100 }
+          if (invoiceHeader.sr_no) filterParams.sr_no = invoiceHeader.sr_no
+          const freshResp = await getRolls(filterParams)
+          const freshRolls = freshResp?.data?.data || []
+          if (freshRolls.length > 0) {
+            setLastSavedRolls(freshRolls)
+          }
+        } catch (_) { /* non-fatal — labels still available from state */ }
+        setShowLabelSheet(true)
+      }
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to save')
+      if (err.partialResults) {
+        // Partial success from stockInBulk — some rolls saved, some failed
+        setFormError(err.message)
+        await refreshAll()
+      } else {
+        const detail = err.response?.data?.detail
+        if (err.response?.status === 422) {
+          setFormError('Validation error — please check all fields are filled correctly')
+        } else if (err.response?.status === 409) {
+          setFormError('Duplicate entry detected — a roll with this data may already exist')
+        } else if (err.response?.status >= 500) {
+          setFormError('Server error — please try again. If this persists, contact support')
+        } else if (!navigator.onLine) {
+          setFormError('No internet connection — please check your network and try again')
+        } else {
+          setFormError(detail || err.message || 'Failed to save rolls. Please try again')
+        }
+      }
     } finally {
       setSaving(false)
     }

@@ -114,7 +114,7 @@ export async function createBatch(data) {
       quantity: data.piece_count,
       piece_count: data.piece_count,
       color_breakdown: data.color_breakdown || null,
-      status: 'CREATED',
+      status: 'created',
       qr_code_data: `https://inv.local/batch/${crypto.randomUUID()}`,
       created_by_user: { id: '00000000-0000-4000-a000-000000000002', full_name: 'Ravi Kumar' },
       assignment: null,
@@ -135,7 +135,7 @@ export async function assignBatch(id, tailorId) {
   if (USE_MOCK) {
     const batch = batches.find((b) => b.id === id)
     if (batch) {
-      batch.status = 'ASSIGNED'
+      batch.status = 'assigned'
       batch.assigned_at = new Date().toISOString()
       batch.assignment = {
         tailor: { id: tailorId, full_name: 'Amit Singh' },
@@ -189,7 +189,7 @@ export async function checkBatch(id, data) {
     batch.rejection_reason = data.rejection_reason || null
     batch.checked_at = new Date().toISOString()
     if (data.rejected_qty > 0 && data.approved_qty === 0) {
-      batch.status = 'assigned'
+      batch.status = 'in_progress'
       batch.started_at = null
       batch.submitted_at = null
     } else {

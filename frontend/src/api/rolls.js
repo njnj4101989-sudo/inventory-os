@@ -94,7 +94,9 @@ export async function stockIn(data) {
  */
 export async function stockInBulk(header, rollEntries) {
   const results = []
-  for (const entry of rollEntries) {
+  const failed = []
+  for (let i = 0; i < rollEntries.length; i++) {
+    const entry = rollEntries[i]
     const payload = {
       fabric_type: entry.fabric_type,
       color: entry.color,
@@ -114,8 +116,22 @@ export async function stockInBulk(header, rollEntries) {
       color_code: entry.color_code || null,
       color_no: entry.color_no || null,
     }
-    const res = await stockIn(payload)
-    results.push(res)
+    try {
+      const res = await stockIn(payload)
+      results.push(res)
+    } catch (err) {
+      failed.push({ index: i + 1, color: entry.color, fabric: entry.fabric_type, error: err.response?.data?.detail || err.message || 'Unknown error' })
+    }
+  }
+  if (failed.length > 0) {
+    const savedCount = results.length
+    const failedDesc = failed.map(f => `Roll #${f.index} (${f.color}): ${f.error}`).join('\n')
+    const error = new Error(
+      `${savedCount} of ${rollEntries.length} rolls saved successfully.\n${failed.length} roll(s) failed:\n${failedDesc}`
+    )
+    error.partialResults = results
+    error.failedRolls = failed
+    throw error
   }
   return results
 }
@@ -248,6 +264,16 @@ export async function updateRoll(id, data) {
     return mockResponse(roll, 'Roll updated')
   }
   return client.patch(`/rolls/${id}`, data)
+}
+
+export async function deleteRoll(id) {
+  if (USE_MOCK) {
+    const idx = rolls.findIndex((r) => r.id === id)
+    if (idx === -1) throw { response: { data: { detail: 'Roll not found' } } }
+    rolls.splice(idx, 1)
+    return mockResponse(null, 'Roll deleted')
+  }
+  return client.delete(`/rolls/${id}`)
 }
 
 // ── Processing ──

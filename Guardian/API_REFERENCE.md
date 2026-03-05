@@ -284,6 +284,11 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 **Request:** `{ fabric_type?, color?, total_weight?, cost_per_unit?, panna?, gsm?, supplier_id?, supplier_invoice_no?, supplier_challan_no?, supplier_invoice_date?, sr_no?, notes? }`
 **Response:** Updated roll object
 
+### DELETE `/rolls/{id}`
+**Auth:** `stock_in` permission required
+**Guard:** Only deletes if `remaining_weight == total_weight` (unused roll). Returns 400 if roll has been used in lots or processing.
+**Response:** `{ "success": true, "message": "Roll deleted" }`
+
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
 Same as `GET /rolls` with status filter pre-applied.
 

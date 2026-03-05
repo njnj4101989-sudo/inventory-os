@@ -50,6 +50,18 @@ async def update_roll(
     return {"success": True, "data": result}
 
 
+@router.delete("/{roll_id}", response_model=None)
+async def delete_roll(
+    roll_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Delete an unused roll. Only rolls with full remaining weight and no lot/batch usage can be deleted."""
+    svc = RollService(db)
+    await svc.delete_roll(roll_id)
+    return {"success": True, "message": "Roll deleted"}
+
+
 @router.get("/{roll_code}/passport", response_model=None)
 async def get_roll_passport(
     roll_code: str,
