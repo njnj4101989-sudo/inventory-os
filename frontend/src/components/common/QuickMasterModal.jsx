@@ -13,6 +13,7 @@ const MASTER_CONFIG = {
       { key: 'name', label: 'Color Name', required: true, placeholder: 'e.g. Watermelon', autoFocus: true },
       { key: 'code', label: 'Code (max 5)', required: true, placeholder: 'e.g. WTMLN', maxLength: 5, uppercase: true },
       { key: 'color_no', label: 'Color No.', type: 'number', placeholder: 'e.g. 31' },
+      { key: 'hex_code', label: 'Color', type: 'color', placeholder: '#FFB800' },
     ],
     create: createColor,
   },
@@ -163,6 +164,24 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+            ) : f.type === 'color' ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={formData[f.key] || '#000000'}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  className="h-9 w-12 cursor-pointer rounded border border-gray-300 p-0.5"
+                />
+                <input
+                  type="text"
+                  value={formData[f.key] || ''}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  maxLength={7}
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <div className="h-9 w-9 rounded-full border border-gray-200 shadow-inner" style={{ backgroundColor: formData[f.key] || '#000000' }} />
+              </div>
             ) : (
               <input
                 ref={f.autoFocus ? firstInputRef : undefined}
