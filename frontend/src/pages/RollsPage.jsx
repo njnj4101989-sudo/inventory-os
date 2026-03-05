@@ -13,6 +13,8 @@ import Pagination from '../components/common/Pagination'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
 import RollForm from '../components/forms/RollForm'
+import useQuickMaster from '../hooks/useQuickMaster'
+import QuickMasterModal from '../components/common/QuickMasterModal'
 
 const INPUT_CLS = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL_CLS = 'block text-sm font-medium text-gray-700 mb-1'
@@ -515,6 +517,47 @@ export default function RollsPage() {
 
   const isEditable = detailRoll && detailRoll.remaining_weight >= (detailRoll.current_weight || detailRoll.total_weight) && detailRoll.status === 'in_stock'
 
+  // ── Shift+M Quick Master ──
+  const refreshMasters = useCallback(() => {
+    getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch(() => {})
+    getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
+    getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
+    getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch(() => {})
+  }, [])
+
+  const handleQuickMasterCreated = useCallback((masterType, newItem, triggerEl) => {
+    refreshMasters()
+    // Auto-select the new item in the triggering select
+    if (triggerEl && triggerEl.tagName === 'SELECT') {
+      const selectName = triggerEl.getAttribute('data-master')
+      setTimeout(() => {
+        if (selectName === 'supplier' && newItem?.id) {
+          setHeader('supplier_id', newItem.id)
+        } else if (selectName === 'fabric' && newItem?.name) {
+          // Find which design group this select belongs to
+          const gIdx = triggerEl.closest('[data-design-group]')?.getAttribute('data-design-group')
+          if (gIdx != null) setGroupField(parseInt(gIdx), 'fabric_type', newItem.name)
+        } else if (selectName === 'color' && newItem?.name) {
+          // Find group + color row
+          const gIdx = triggerEl.closest('[data-design-group]')?.getAttribute('data-design-group')
+          const cIdx = triggerEl.getAttribute('data-color-idx')
+          if (gIdx != null && cIdx != null) {
+            updateGroup(parseInt(gIdx), (g) => ({
+              ...g, colorRows: g.colorRows.map((r, j) => j === parseInt(cIdx) ? { ...r, color: newItem.name } : r),
+            }))
+          }
+        } else if (selectName === 'value_addition' && newItem?.id) {
+          // Could be single send or bulk send — check which form is open
+          if (sendProcOpen) setSendProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
+          else if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
+          else if (editProcOpen) setEditProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
+        }
+      }, 200) // Wait for master list refresh
+    }
+  }, [refreshMasters, sendProcOpen, bulkSendOpen, editProcOpen])
+
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
+
   // ── Data fetching ──
   const fetchInvoices = useCallback(async () => {
     setInvLoading(true)
@@ -585,12 +628,7 @@ export default function RollsPage() {
   useEffect(() => { if (tab === 'invoices') fetchInvoices() }, [tab, fetchInvoices])
   useEffect(() => { if (tab === 'rolls') fetchRolls() }, [tab, fetchRolls])
   useEffect(() => { if (tab === 'processing') fetchProcessing() }, [tab, fetchProcessing])
-  useEffect(() => {
-    getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch(() => {})
-    getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
-    getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
-    getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch(() => {})
-  }, [])
+  useEffect(() => { refreshMasters() }, [refreshMasters])
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
 
@@ -2192,11 +2230,14 @@ export default function RollsPage() {
 
               {/* ── Invoice Header ── */}
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-sm font-semibold text-gray-700 mb-4">Invoice / Challan Details</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-gray-700">Invoice / Challan Details</h2>
+                  <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-300 rounded text-[9px]">Shift+M</kbd> on any dropdown to quick-add master</span>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="col-span-2 md:col-span-1">
                     <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
-                    <select data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
+                    <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
                       <option value="">Select supplier</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -2264,7 +2305,7 @@ export default function RollsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                         <div>
                           <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
-                          <select data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
+                          <select data-master="fabric" data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
                             <option value="">Select fabric</option>
                             {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
                           </select>
@@ -2327,6 +2368,7 @@ export default function RollsPage() {
                                 {/* Color name */}
                                 <div className="flex items-center gap-1.5">
                                   <select
+                                    data-master="color" data-color-idx={cIdx}
                                     data-color-input="true"
                                     value={row.color}
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
@@ -2924,7 +2966,7 @@ export default function RollsPage() {
           </div>
           <div>
             <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
-            <select value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+            <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
               <option value="">Select value addition</option>
               {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
             </select>
@@ -3053,7 +3095,7 @@ export default function RollsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={LABEL_CLS}>Value Addition</label>
-              <select value={editProcForm.value_addition_id} onChange={(e) => setEditProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+              <select data-master="value_addition" value={editProcForm.value_addition_id} onChange={(e) => setEditProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
                 <option value="">Select value addition</option>
                 {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
               </select>
@@ -3218,7 +3260,7 @@ export default function RollsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
-                      <select value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+                      <select data-master="value_addition" value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
                         <option value="">Select value addition</option>
                         {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
                       </select>
@@ -3249,6 +3291,9 @@ export default function RollsPage() {
           </div>
         )
       })()}
+
+      {/* Shift+M Quick Master Create */}
+      <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
     </div>
   )
 }

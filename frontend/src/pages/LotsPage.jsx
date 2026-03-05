@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getLots, getLot, createLot, updateLot } from '../api/lots'
 import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
+import { getAllProductTypes } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -11,6 +12,8 @@ import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import CuttingSheet from '../components/common/CuttingSheet'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import useQuickMaster from '../hooks/useQuickMaster'
+import QuickMasterModal from '../components/common/QuickMasterModal'
 
 const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
@@ -130,6 +133,21 @@ export default function LotsPage() {
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
   const designRef = useRef(null)
   const saveRef = useRef(null)
+  const [masterProductTypes, setMasterProductTypes] = useState([])
+
+  // ── Shift+M Quick Master ──
+  const refreshProductTypes = useCallback(() => {
+    getAllProductTypes().then((res) => setMasterProductTypes(res.data.data)).catch(() => {})
+  }, [])
+
+  const handleQuickMasterCreated = useCallback((masterType, newItem) => {
+    if (masterType === 'product_type' && newItem?.code) {
+      refreshProductTypes()
+      setTimeout(() => setField('product_type', newItem.code), 200)
+    }
+  }, [refreshProductTypes])
+
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
 
   // ══════════════════════════════════════
   // DATA FETCHING
@@ -147,7 +165,7 @@ export default function LotsPage() {
     } finally { setLoading(false) }
   }, [page, statusFilter])
 
-  useEffect(() => { loadColorMap() }, [])
+  useEffect(() => { loadColorMap(); refreshProductTypes() }, [refreshProductTypes])
   useEffect(() => { fetchData() }, [fetchData])
 
   const fetchRolls = useCallback(async () => {
@@ -464,13 +482,9 @@ export default function LotsPage() {
                 </div>
                 <div className="w-20">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Type</label>
-                  <select value={form.product_type} onChange={e => setField('product_type', e.target.value)}
+                  <select data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                    <option value="BLS">BLS</option>
-                    <option value="KRT">KRT</option>
-                    <option value="SAR">SAR</option>
-                    <option value="DRS">DRS</option>
-                    <option value="OTH">OTH</option>
+                    {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
                   </select>
                 </div>
                 <div className="w-24">
@@ -1076,6 +1090,9 @@ export default function LotsPage() {
         <DataTable columns={COLUMNS} data={lots} loading={loading} onRowClick={openDetail} emptyText="No lots found." />
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
+
+      {/* Shift+M Quick Master Create */}
+      <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
     </div>
   )
 }

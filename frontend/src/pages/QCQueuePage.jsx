@@ -135,16 +135,24 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
       {/* Header — tap to expand */}
       <button onClick={onToggle} className="w-full px-4 py-3.5 flex items-center justify-between text-left">
         <div className="min-w-0 flex-1">
-          <div className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</span>
             {batch.size && (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5">
                 {batch.size}
               </span>
             )}
             <span className="text-xs text-gray-500">{total} pcs</span>
-            {batch.assignment?.tailor && (
-              <span className="text-xs text-gray-500">&middot; {batch.assignment.tailor.full_name}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            {batch.tailor && (
+              <span className="text-xs font-medium text-primary-700">
+                <svg className="w-3 h-3 inline mr-0.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                {batch.tailor.full_name}
+              </span>
+            )}
+            {batch.lot && (
+              <span className="text-xs text-gray-400">Lot {batch.lot.lot_code} &middot; Design {batch.lot.design_no}</span>
             )}
           </div>
         </div>

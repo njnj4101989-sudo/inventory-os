@@ -29,7 +29,26 @@
 
 ---
 
-## Current State (Session 56 — 2026-03-04)
+## Current State (Session 58 — 2026-03-05)
+
+### S58: Quick Master (Shift+M) — Inline Master Create from Any Form
+
+**Zero-navigation master data creation mid-workflow.**
+
+- **`useQuickMaster` hook** (`hooks/useQuickMaster.js`): Global `Shift+M` listener, reads `data-master` from focused element, silent no-op if absent
+- **`QuickMasterModal` component** (`components/common/QuickMasterModal.jsx`): Config-driven form for 5 master types, calls existing create APIs, auto-selects new item
+- **RollsPage:** `data-master` on supplier, fabric, color, value_addition (x3) selects + hint text
+- **LotsPage:** Product type now dynamic from API (was hardcoded BLS/KRT/SAR/DRS/OTH) + `data-master` on select
+- **SendForVAModal:** `data-master` on VA select + hook integration
+- **S57 commit pushed:** Roll delete, stock-in edit improvements, SSE token refresh, batch eager loading — verified deployed on EC2 (`e39de6e`)
+- **Protocol 8** added to `guardian.md` — Quick Master rules and integration map
+- **Files created:** 2 (`useQuickMaster.js`, `QuickMasterModal.jsx`)
+- **Files modified:** 3 (`RollsPage.jsx`, `LotsPage.jsx`, `SendForVAModal.jsx`) + docs
+- **Build: 0 errors**
+
+---
+
+## Previous State (Session 56 — 2026-03-04)
 
 ### S56: C4+C7 — AWS Backend LIVE + Production CORS
 
@@ -220,6 +239,8 @@
 | S54 | Batch VA Tracking | Out for VA tab, BatchChallan print, next-number preview, onPrintChallan prop |
 | S55 | Vercel Frontend Deploy | CLAUDE.md optimized (44K→12K), Vercel project + env vars + GoDaddy CNAME, `inventory.drsblouse.com` LIVE |
 | S56 | AWS Backend Deploy + Mobile Fixes | C4+C7: EC2+RDS+Nginx+SSL+CORS. 3 fixes: DateTime(tz), password autoCapitalize, SW 5s timeout. Full stack LIVE |
+| S57 | Roll Delete + Stock-In Edit + SSE Refresh | DELETE /rolls/{id}, partial stockInBulk, SSE token auto-refresh, batch eager loading |
+| S58 | Quick Master (Shift+M) | Inline create from any form dropdown — useQuickMaster hook + QuickMasterModal + Protocol 8 |
 
 **Real backend active:** `VITE_USE_MOCK=false` — all data from SQLite via FastAPI
 

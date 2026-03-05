@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getBatches } from '../api/batches'
 import { getBatchChallans, getBatchChallan } from '../api/batchChallans'
+import { useNotifications } from '../context/NotificationContext'
 import SearchInput from '../components/common/SearchInput'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
 import BatchChallan from '../components/common/BatchChallan'
@@ -154,7 +155,7 @@ function TailorSummary({ batches }) {
   )
 }
 
-function BatchDetailTable({ batches, onRowClick }) {
+function BatchDetailTable({ batches, onRowClick, highlightBatch }) {
   return (
     <div className="border-t border-gray-100">
       <table className="w-full text-xs">
@@ -173,7 +174,9 @@ function BatchDetailTable({ batches, onRowClick }) {
             <tr
               key={b.id}
               onClick={() => onRowClick(b)}
-              className="border-t border-gray-50 hover:bg-emerald-50/40 cursor-pointer transition-colors"
+              className={`border-t border-gray-50 cursor-pointer transition-all duration-500 ${
+                highlightBatch === b.id ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-emerald-50/40'
+              }`}
             >
               <td className="py-1.5 pl-4 pr-2 font-mono font-semibold text-gray-800">{b.batch_code}</td>
               <td className="py-1.5 px-2">
@@ -198,7 +201,7 @@ function BatchDetailTable({ batches, onRowClick }) {
   )
 }
 
-function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick }) {
+function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, highlightBatch }) {
   const firstBatch = batches[0]
   const lot = firstBatch?.lot
   const lotCode = lot?.lot_code || '—'
@@ -217,7 +220,7 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick }) 
   }
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${stateColors[workflowState]} overflow-hidden transition-shadow hover:shadow-md`}>
+    <div id={`lot-${lotId}`} className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${stateColors[workflowState]} overflow-hidden transition-shadow hover:shadow-md`}>
       {/* Header row */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
@@ -265,7 +268,7 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick }) 
       </div>
 
       {/* Expanded: batch detail table */}
-      {expanded && <BatchDetailTable batches={batches} onRowClick={onBatchClick} />}
+      {expanded && <BatchDetailTable batches={batches} onRowClick={onBatchClick} highlightBatch={highlightBatch} />}
     </div>
   )
 }
@@ -293,12 +296,16 @@ function SkeletonCard() {
 // ─── Main Page Component ─────────────────────────────────────────
 export default function BatchesPage() {
   const navigate = useNavigate()
+  const { lastEvent } = useNotifications()
   const [allBatches, setAllBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('batches_tab') || 'all')
   const [search, setSearch] = useState('')
-  const [expandedLots, setExpandedLots] = useState(new Set())
+  const [expandedLots, setExpandedLots] = useState(() => {
+    try { const s = sessionStorage.getItem('batches_expanded'); return s ? new Set(JSON.parse(s)) : new Set() }
+    catch { return new Set() }
+  })
 
   // VA modals
   const [showSendVA, setShowSendVA] = useState(false)
@@ -310,6 +317,31 @@ export default function BatchesPage() {
   const isAdminOrSuper = ['admin', 'supervisor'].includes(currentUser.role)
   const canSendVA = !!perms.batch_send_va || isAdminOrSuper
   const canReceiveVA = !!perms.batch_receive_va || isAdminOrSuper
+
+  const [highlightBatch, setHighlightBatch] = useState(null)
+
+  // Persist tab + expanded lots to sessionStorage so back-navigation restores state
+  useEffect(() => { sessionStorage.setItem('batches_tab', activeTab) }, [activeTab])
+  useEffect(() => { sessionStorage.setItem('batches_expanded', JSON.stringify([...expandedLots])) }, [expandedLots])
+
+  // Scroll to last-viewed lot + highlight batch after data loads
+  useEffect(() => {
+    if (loading) return
+    const lotId = sessionStorage.getItem('batches_scroll_lot')
+    const batchId = sessionStorage.getItem('batches_highlight_batch')
+    if (!lotId && !batchId) return
+    sessionStorage.removeItem('batches_scroll_lot')
+    sessionStorage.removeItem('batches_highlight_batch')
+    if (batchId) setHighlightBatch(batchId)
+    // Wait for DOM to render lot cards
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`lot-${lotId}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+    // Clear highlight after 3s
+    const fade = setTimeout(() => setHighlightBatch(null), 3000)
+    return () => { clearTimeout(timer); clearTimeout(fade) }
+  }, [loading])
 
   // Label sheet
   const [labelBatches, setLabelBatches] = useState(null)
@@ -341,6 +373,15 @@ export default function BatchesPage() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Auto-refresh on relevant SSE events (batch pipeline + VA)
+  useEffect(() => {
+    if (!lastEvent) return
+    const batchEvents = ['batch_claimed', 'batch_submitted', 'batch_checked', 'batch_packed', 'va_sent', 'va_received', 'lot_distributed']
+    if (batchEvents.includes(lastEvent.type)) {
+      fetchData()
+    }
+  }, [lastEvent, fetchData])
 
   // Fetch batch challans for VA tab
   const fetchBatchChallans = useCallback(async () => {
@@ -518,6 +559,10 @@ export default function BatchesPage() {
   }
 
   const handleBatchClick = (batch) => {
+    // Save which lot + batch so we scroll back and highlight
+    const lotId = batch.lot?.id || batch.lot_id || ''
+    if (lotId) sessionStorage.setItem('batches_scroll_lot', lotId)
+    sessionStorage.setItem('batches_highlight_batch', batch.id)
     navigate(`/batches/${batch.id}`)
   }
 
@@ -788,6 +833,7 @@ export default function BatchesPage() {
                 onToggle={() => toggleExpand(lotId)}
                 onPrint={() => handlePrint(lotId)}
                 onBatchClick={handleBatchClick}
+                highlightBatch={highlightBatch}
               />
             ))
           )}

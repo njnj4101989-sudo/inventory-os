@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_user, require_permission
 from app.models.user import User
-from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchPack, BatchFilterParams
+from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchPack, BatchUpdate, BatchFilterParams
 from app.services.batch_service import BatchService
 
 router = APIRouter(prefix="/batches", tags=["Batches"])
@@ -71,6 +71,19 @@ async def get_batch(
     """Get single batch by ID."""
     svc = BatchService(db)
     result = await svc.get_batch(batch_id)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{batch_id}", response_model=None)
+async def update_batch(
+    batch_id: UUID,
+    req: BatchUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Update editable batch fields (notes)."""
+    svc = BatchService(db)
+    result = await svc.update_batch(batch_id, req)
     return {"success": True, "data": result}
 
 

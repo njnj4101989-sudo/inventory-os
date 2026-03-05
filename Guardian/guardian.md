@@ -285,6 +285,49 @@ Roll: 1-COT-PINK/07-01
 | DB (prod) | PostgreSQL + asyncpg (future) |
 | CORS origins | `http://localhost:3000`, `http://localhost:5173` (in backend `.env`) |
 | Favicon | Inline SVG emoji in `index.html` (no file needed) |
+| Quick Master | `Shift+M` on any `<select data-master="...">` opens inline create modal |
+
+---
+
+## Protocol 8: Quick Master (Shift+M)
+
+> **Read this before ANY work on: master data dropdowns, stock-in forms, lot create, VA send modals**
+
+### How It Works
+- User focuses a `<select>` with `data-master` attribute
+- Presses `Shift+M` -> `useQuickMaster` hook reads the attribute
+- `QuickMasterModal` opens with the right form fields
+- On save: calls existing create API, refreshes master list, auto-selects new item
+- Focus returns to the original field
+- If no `data-master` on focused element -> silent no-op
+
+### Files
+| File | Purpose |
+|------|---------|
+| `hooks/useQuickMaster.js` | Hook: keydown listener, reads `data-master`, manages modal state |
+| `components/common/QuickMasterModal.jsx` | Config-driven modal, calls existing create APIs |
+
+### Supported Master Types
+| `data-master` value | Create API | Required Fields |
+|---------------------|-----------|-----------------|
+| `color` | `createColor()` | name, code (max 5) |
+| `fabric` | `createFabric()` | name, code (max 3) |
+| `supplier` | `createSupplier()` | name (+ optional phone, city) |
+| `product_type` | `createProductType()` | name, code (3 chars) |
+| `value_addition` | `createValueAddition()` | name, short_code (3-4), applicable_to |
+
+### Where It's Integrated
+| Page | Fields with `data-master` |
+|------|--------------------------|
+| `RollsPage.jsx` | supplier, fabric, color, value_addition (x3: single send, edit, bulk send) |
+| `LotsPage.jsx` | product_type |
+| `SendForVAModal.jsx` | value_addition |
+
+### Rules
+1. Only add `data-master` to CREATE/EDIT form selects, NOT filter dropdowns
+2. After create: refresh master list + auto-select new item + re-focus field
+3. No `data-master` = silent no-op (no error, no toast)
+4. QuickMasterModal shares API functions with MastersPage (single source of truth)
 
 
 

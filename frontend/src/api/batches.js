@@ -225,3 +225,13 @@ export async function packBatch(id, data = {}) {
   }
   return client.post(`/batches/${id}/pack`, data)
 }
+
+export async function updateBatch(id, data) {
+  if (USE_MOCK) {
+    const batch = batches.find((b) => b.id === id)
+    if (!batch) throw { response: { data: { detail: 'Batch not found' } } }
+    if (data.notes !== undefined) batch.notes = data.notes
+    return mockResponse(batch, 'Batch updated')
+  }
+  return client.patch(`/batches/${id}`, data)
+}

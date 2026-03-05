@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { getSummary } from '../api/dashboard'
+import { useNotifications } from '../context/NotificationContext'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
@@ -78,13 +79,22 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const { lastEvent } = useNotifications()
 
-  useEffect(() => {
+  const fetchDashboard = useCallback(() => {
     getSummary()
       .then((res) => setSummary(res.data.data))
       .catch((err) => setError(err.response?.data?.detail || 'Failed to load dashboard'))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { fetchDashboard() }, [fetchDashboard])
+
+  // Auto-refresh dashboard on any SSE event
+  useEffect(() => {
+    if (!lastEvent) return
+    fetchDashboard()
+  }, [lastEvent, fetchDashboard])
 
   if (loading) return <LoadingSpinner text="Loading dashboard..." />
   if (error) return <ErrorAlert message={error} />

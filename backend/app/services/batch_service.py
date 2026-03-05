@@ -133,6 +133,15 @@ class BatchService:
         batch = await self._get_or_404(batch_id)
         return self._to_response(batch)
 
+    async def update_batch(self, batch_id: UUID, req) -> dict:
+        """Update editable fields (notes) on a batch."""
+        batch = await self._get_or_404(batch_id)
+        if req.notes is not None:
+            batch.notes = req.notes
+        await self.db.commit()
+        await self.db.refresh(batch)
+        return self._to_response(batch)
+
     async def create_batch(self, req: BatchCreate, created_by: UUID) -> dict:
         batch_code = await next_batch_code(self.db)
 
@@ -529,6 +538,7 @@ class BatchService:
             .where(Batch.status == "submitted")
             .options(
                 selectinload(Batch.sku),
+                selectinload(Batch.lot),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
             )
         )
@@ -538,6 +548,10 @@ class BatchService:
             {
                 "id": str(b.id),
                 "batch_code": b.batch_code,
+                "size": b.size,
+                "piece_count": b.quantity,
+                "quantity": b.quantity,
+                "status": b.status,
                 "sku": {
                     "id": str(b.sku.id),
                     "sku_code": b.sku.sku_code,
@@ -545,8 +559,12 @@ class BatchService:
                 }
                 if b.sku
                 else None,
-                "quantity": b.quantity,
-                "status": b.status,
+                "lot": {
+                    "lot_code": b.lot.lot_code,
+                    "design_no": b.lot.design_no,
+                }
+                if b.lot
+                else None,
                 "tailor": {
                     "id": str(b.assignments[0].tailor.id),
                     "full_name": b.assignments[0].tailor.full_name,

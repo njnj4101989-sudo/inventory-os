@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Modal from '../common/Modal'
 import ErrorAlert from '../common/ErrorAlert'
+import QuickMasterModal from '../common/QuickMasterModal'
+import useQuickMaster from '../../hooks/useQuickMaster'
 import { getValueAdditions } from '../../api/masters'
 import { createBatchChallan, getNextBCNumber } from '../../api/batchChallans'
 
@@ -14,17 +16,31 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   const [error, setError] = useState(null)
   const [nextChallanNo, setNextChallanNo] = useState('')
 
+  // ── Shift+M Quick Master ──
+  const refreshVAList = useCallback(() => {
+    getValueAdditions()
+      .then((res) => {
+        const all = res.data.data || res.data || []
+        setVaList(all.filter((va) => va.is_active && (va.applicable_to || 'both') !== 'roll'))
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleQuickMasterCreated = useCallback((masterType, newItem) => {
+    if (masterType === 'value_addition' && newItem?.id) {
+      refreshVAList()
+      setTimeout(() => setSelectedVA(newItem.id), 200)
+    }
+  }, [refreshVAList])
+
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
+
   // Eligible batches: in_progress (stitching VA) or checked (post-QC VA)
   const eligible = (batches || []).filter((b) => b.status === 'in_progress' || b.status === 'checked')
 
   useEffect(() => {
     if (open) {
-      getValueAdditions()
-        .then((res) => {
-          const all = res.data.data || res.data || []
-          setVaList(all.filter((va) => va.is_active && (va.applicable_to || 'both') !== 'roll'))
-        })
-        .catch(() => {})
+      refreshVAList()
       getNextBCNumber()
         .then((res) => setNextChallanNo(res.data?.data?.next_challan_no || res.data?.next_challan_no || ''))
         .catch(() => setNextChallanNo(''))
@@ -106,6 +122,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -136,7 +153,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">VA Type <span className="text-red-500">*</span></label>
-            <select value={selectedVA} onChange={(e) => setSelectedVA(e.target.value)} className={INPUT}>
+            <select data-master="value_addition" value={selectedVA} onChange={(e) => setSelectedVA(e.target.value)} className={INPUT}>
               <option value="">Select value addition...</option>
               {vaList.map((va) => (
                 <option key={va.id} value={va.id}>{va.name} (+{va.short_code})</option>
@@ -192,5 +209,9 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         </div>
       </div>
     </Modal>
+
+    {/* Shift+M Quick Master Create */}
+    <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+    </>
   )
 }

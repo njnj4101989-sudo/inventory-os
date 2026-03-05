@@ -44,6 +44,7 @@ const EVENT_ROUTES = {
 export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([])
   const [toasts, setToasts] = useState([])
+  const [lastEvent, setLastEvent] = useState(null)
   const eventSourceRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const backoffRef = useRef(1000)
@@ -63,6 +64,7 @@ export function NotificationProvider({ children }) {
     }
 
     setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS))
+    setLastEvent({ type: event.type, payload: event.payload, ts: Date.now() })
 
     // Add toast (auto-dismiss 5s)
     setToasts((prev) => [...prev, notification].slice(-3))
@@ -189,6 +191,7 @@ export function NotificationProvider({ children }) {
         notifications,
         toasts,
         unreadCount,
+        lastEvent,
         addNotification,
         markRead,
         markAllRead,

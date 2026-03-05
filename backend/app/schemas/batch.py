@@ -84,6 +84,12 @@ class BatchCheck(BaseModel):
     color_qc: dict | None = None  # {color: {expected, approved, rejected, reason}, ...}
 
 
+class BatchUpdate(BaseModel):
+    """PATCH /batches/{id} — update editable batch fields."""
+
+    notes: str | None = None
+
+
 class BatchPack(BaseModel):
     """POST /batches/{id}/pack — packing confirmation."""
 
