@@ -56,6 +56,9 @@ class RollService:
         if params.fully_consumed:
             conditions.append(Roll.remaining_weight <= 0)
 
+        if params.max_remaining_weight is not None:
+            conditions.append(Roll.remaining_weight <= params.max_remaining_weight)
+
         if params.supplier_id:
             conditions.append(Roll.supplier_id == params.supplier_id)
 

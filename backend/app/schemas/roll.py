@@ -22,6 +22,7 @@ class RollFilterParams(PaginatedParams):
     fabric_filter: str | None = None  # exact fabric type match
     has_remaining: bool | None = None
     fully_consumed: bool | None = None
+    max_remaining_weight: float | None = None
     supplier_id: UUID | None = None
     value_addition_id: UUID | None = None
     sr_no: str | None = None

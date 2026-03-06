@@ -443,6 +443,7 @@ export default function RollsPage() {
   const [rollSupplierFilter, setRollSupplierFilter] = useState('')
   const [rollFabricFilter, setRollFabricFilter] = useState('')
   const [rollProcessFilter, setRollProcessFilter] = useState('')
+  const [remnantMaxWeight, setRemnantMaxWeight] = useState('5')
   const [expandedRows, setExpandedRows] = useState(new Set())
 
   // Processing tab state
@@ -592,6 +593,11 @@ export default function RollsPage() {
       if (rollSearch) params.fabric_type = rollSearch
       if (rollStatusFilter === 'in_stock_fresh' || rollStatusFilter === 'in_stock_processed') {
         params.status = 'in_stock'
+      } else if (rollStatusFilter === 'remnant') {
+        // Remnant = rolls with low remaining weight (below threshold)
+        params.has_remaining = true
+        const maxWt = parseFloat(remnantMaxWeight)
+        if (maxWt > 0) params.max_remaining_weight = maxWt
       } else if (rollStatusFilter !== 'all') {
         params.status = rollStatusFilter
       }
@@ -620,7 +626,7 @@ export default function RollsPage() {
     } finally {
       setRollLoading(false)
     }
-  }, [rollPage, rollSearch, rollStatusFilter, rollAvailFilter, rollSupplierFilter, rollFabricFilter, rollProcessFilter])
+  }, [rollPage, rollSearch, rollStatusFilter, rollAvailFilter, rollSupplierFilter, rollFabricFilter, rollProcessFilter, remnantMaxWeight])
 
   const fetchProcessing = useCallback(async () => {
     setProcLoading(true)
@@ -1538,6 +1544,16 @@ export default function RollsPage() {
                       }`}
                     >{p.label}</button>
                   ))}
+                  {rollStatusFilter === 'remnant' && (
+                    <div className="flex items-center gap-1 ml-1">
+                      <span className="text-[10px] text-amber-700">Max wt:</span>
+                      <input type="number" step="0.5" min="0.5" value={remnantMaxWeight}
+                        onChange={e => { setRemnantMaxWeight(e.target.value); setRollPage(1) }}
+                        className="w-16 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                      />
+                      <span className="text-[10px] text-amber-600">kg</span>
+                    </div>
+                  )}
                 </div>
                 <div className="h-5 w-px bg-gray-200" />
                 <div className="flex items-center gap-1.5">
