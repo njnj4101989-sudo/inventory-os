@@ -151,17 +151,17 @@ export default function BatchDetailPage() {
 
   // VA logs grouped by phase
   const vaByPhase = {}
-  logs.forEach((l) => { const p = l.phase || 'in_progress'; (vaByPhase[p] = vaByPhase[p] || []).push(l) })
+  logs.forEach((l) => { const p = l.phase || 'stitching'; (vaByPhase[p] = vaByPhase[p] || []).push(l) })
 
   // Build timeline nodes: interleave STEPS with VA diamonds
   const timelineNodes = []
   STEPS.forEach((step, i) => {
     timelineNodes.push({ type: 'step', step, stepIndex: i })
-    if (step.key === 'started_at' && vaByPhase['in_progress']?.length) {
-      vaByPhase['in_progress'].forEach((log) => timelineNodes.push({ type: 'va', log }))
+    if (step.key === 'started_at' && vaByPhase['stitching']?.length) {
+      vaByPhase['stitching'].forEach((log) => timelineNodes.push({ type: 'va', log }))
     }
     if (step.key === 'checked_at') {
-      ;[...(vaByPhase['checked'] || []), ...(vaByPhase['post_qc'] || [])].forEach((log) => timelineNodes.push({ type: 'va', log }))
+      ;[...(vaByPhase['post_qc'] || [])].forEach((log) => timelineNodes.push({ type: 'va', log }))
     }
   })
   const gridCols = { gridTemplateColumns: `repeat(${timelineNodes.length}, minmax(0, 1fr))` }
