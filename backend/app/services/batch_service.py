@@ -563,6 +563,7 @@ class BatchService:
                 }
                 if b.assignments and b.assignments[0].tailor
                 else None,
+                "color_breakdown": b.color_breakdown,
                 "submitted_at": b.submitted_at.isoformat()
                 if b.submitted_at
                 else None,

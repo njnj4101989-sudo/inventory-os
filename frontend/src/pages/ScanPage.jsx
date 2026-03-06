@@ -26,7 +26,8 @@ export default function ScanPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionSuccess, setActionSuccess] = useState(null)
   const [checkForm, setCheckForm] = useState({ approved: '', rejected: '', reason: '' })
-  const [colorQC, setColorQC] = useState({}) // {color: {expected, approved, rejected, reason}}
+  const [rejects, setRejects] = useState([]) // [{color, qty, reason}]
+  const [showRejectMode, setShowRejectMode] = useState(false)
   const [packRef, setPackRef] = useState('')
   const passportPrintRef = useRef(null)
 
@@ -75,17 +76,8 @@ export default function ScanPage() {
       const res = await getBatchPassport(code)
       const data = res?.data?.data || res?.data || res
       setBatchPassport(data)
-      // Initialize per-color QC state from color_breakdown
-      if (data.color_breakdown && Object.keys(data.color_breakdown).length > 0) {
-        const total = data.piece_count || data.quantity || 0
-        const totalPallas = Object.values(data.color_breakdown).reduce((s, v) => s + v, 0)
-        const init = {}
-        for (const [color, pallas] of Object.entries(data.color_breakdown)) {
-          const expected = totalPallas > 0 ? Math.round(total * pallas / totalPallas) : 0
-          init[color] = { expected, approved: String(expected), rejected: '0', reason: '' }
-        }
-        setColorQC(init)
-      }
+      setRejects([])
+      setShowRejectMode(false)
     } catch (err) {
       setError(err?.response?.data?.detail || `Batch "${code}" not found`)
     } finally { setLoading(false) }
@@ -128,39 +120,75 @@ export default function ScanPage() {
     } finally { setActionLoading(false) }
   }
 
-  async function handleCheckBatch() {
+  function scanExpectedForColor(color) {
+    if (!batchPassport?.color_breakdown) return 0
+    const colors = batchPassport.color_breakdown
+    const total = batchPassport.piece_count || batchPassport.quantity || 0
+    const totalPallas = Object.values(colors).reduce((s, v) => s + v, 0)
+    if (!totalPallas || !colors[color]) return 0
+    return Math.round(total * colors[color] / totalPallas)
+  }
+
+  function scanBuildColorQC(allPass) {
+    const colors = batchPassport.color_breakdown || {}
+    const colorQC = {}
+    for (const color of Object.keys(colors)) {
+      const expected = scanExpectedForColor(color)
+      colorQC[color] = { approved: expected, rejected: 0 }
+    }
+    if (!allPass) {
+      for (const r of rejects) {
+        const rej = parseInt(r.qty) || 0
+        if (rej > 0 && colorQC[r.color]) {
+          const exp = colorQC[r.color].approved + colorQC[r.color].rejected
+          const actualRej = Math.min(rej, exp)
+          colorQC[r.color].rejected = actualRej
+          colorQC[r.color].approved = exp - actualRej
+          if (r.reason.trim()) colorQC[r.color].reason = r.reason.trim()
+        }
+      }
+    }
+    return colorQC
+  }
+
+  async function handleAllPassBatch() {
+    if (!batchPassport) return
+    const hasColors = batchPassport.color_breakdown && Object.keys(batchPassport.color_breakdown).length > 0
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      if (hasColors) {
+        await checkBatch(batchPassport.id, { color_qc: scanBuildColorQC(true) })
+      } else {
+        const total = batchPassport.piece_count || batchPassport.quantity || 0
+        await checkBatch(batchPassport.id, { approved_qty: total, rejected_qty: 0, rejection_reason: null })
+      }
+      setActionSuccess('Batch approved!')
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to check batch')
+    } finally { setActionLoading(false) }
+  }
+
+  async function handleSubmitRejectsBatch() {
     if (!batchPassport) return
     const total = batchPassport.piece_count || batchPassport.quantity || 0
     const hasColors = batchPassport.color_breakdown && Object.keys(batchPassport.color_breakdown).length > 0
 
     if (hasColors) {
-      // Per-color mode
-      const entries = Object.entries(colorQC)
-      if (entries.length === 0) { setError('Enter QC data for at least one color'); return }
-      const totalApproved = entries.reduce((s, [, c]) => s + (parseInt(c.approved) || 0), 0)
-      const totalRejected = entries.reduce((s, [, c]) => s + (parseInt(c.rejected) || 0), 0)
-      if (totalApproved + totalRejected !== total) {
-        setError(`Total approved (${totalApproved}) + rejected (${totalRejected}) must equal ${total}`)
-        return
-      }
-      // Build color_qc payload
-      const payload = {}
-      for (const [color, c] of entries) {
-        const a = parseInt(c.approved) || 0
-        const r = parseInt(c.rejected) || 0
-        if (a + r > 0) {
-          payload[color] = {
-            expected: parseInt(c.expected) || 0,
-            approved: a,
-            rejected: r,
-            reason: r > 0 ? (c.reason || '').trim() || null : null,
-          }
-        }
+      const rej = rejects.reduce((s, r) => s + (parseInt(r.qty) || 0), 0)
+      if (rej === 0) { setError('Add at least one reject or use All Pass'); return }
+      if (rej > total) { setError(`Total rejected (${rej}) exceeds batch quantity (${total})`); return }
+      for (const r of rejects) {
+        const rQty = parseInt(r.qty) || 0
+        if (rQty <= 0) { setError(`Enter rejected qty for ${r.color}`); return }
+        if (!r.reason.trim()) { setError(`Enter reason for ${r.color}`); return }
+        const exp = scanExpectedForColor(r.color)
+        if (rQty > exp) { setError(`${r.color}: rejected (${rQty}) exceeds expected (${exp})`); return }
       }
       setActionLoading(true); setActionSuccess(null)
       try {
-        await checkBatch(batchPassport.id, { color_qc: payload })
-        setActionSuccess(totalApproved > 0 ? 'Batch approved!' : 'Batch rejected — returned to tailor')
+        await checkBatch(batchPassport.id, { color_qc: scanBuildColorQC(false) })
+        setActionSuccess(`Checked: ${total - rej} pass, ${rej} reject`)
         await fetchBatchPassport(batchCode)
       } catch (err) {
         setError(err?.response?.data?.detail || 'Failed to check batch')
@@ -487,136 +515,144 @@ export default function ScanPage() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
 
-                  {batchPassport.color_breakdown && Object.keys(batchPassport.color_breakdown).length > 0 ? (
-                    /* Per-color QC table */
-                    <div className="space-y-3">
-                      <div className="overflow-x-auto -mx-2">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-gray-200">
-                              <th className="text-left py-1.5 px-2 font-medium text-gray-500">Color</th>
-                              <th className="text-center py-1.5 px-1 font-medium text-gray-500 w-14">Exp.</th>
-                              <th className="text-center py-1.5 px-1 font-medium text-green-600 w-16">OK</th>
-                              <th className="text-center py-1.5 px-1 font-medium text-red-600 w-16">Rej.</th>
-                              <th className="text-left py-1.5 px-1 font-medium text-gray-500">Reason</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Object.entries(colorQC).map(([color, qc]) => (
-                              <tr key={color} className="border-b border-gray-50">
-                                <td className="py-1.5 px-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
-                                    <span className="font-medium text-gray-800 truncate max-w-[80px]">{color}</span>
+                  {(() => {
+                    const scanColors = batchPassport.color_breakdown || {}
+                    const scanHasColors = Object.keys(scanColors).length > 0
+                    const scanTotal = batchPassport.piece_count || batchPassport.quantity || 0
+                    const scanTotalRej = rejects.reduce((s, r) => s + (parseInt(r.qty) || 0), 0)
+                    const scanAvailColors = Object.keys(scanColors).filter(c => !rejects.some(r => r.color === c))
+
+                    return (
+                      <>
+                        {/* All Pass button */}
+                        <button
+                          onClick={handleAllPassBatch}
+                          disabled={actionLoading || showRejectMode}
+                          className="w-full py-3 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors mb-3 flex items-center justify-center gap-2"
+                        >
+                          {actionLoading && !showRejectMode ? (
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                          )}
+                          All Pass ({scanTotal}/{scanTotal})
+                        </button>
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="flex-1 h-px bg-gray-200" />
+                          <button
+                            onClick={() => setShowRejectMode(!showRejectMode)}
+                            className="text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            {showRejectMode ? 'Cancel rejects' : 'Mark rejects'}
+                          </button>
+                          <div className="flex-1 h-px bg-gray-200" />
+                        </div>
+
+                        {showRejectMode && (
+                          <>
+                            {scanHasColors ? (
+                              <div className="space-y-2 mb-3">
+                                {/* Color chips showing breakdown */}
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {Object.entries(scanColors).map(([color, pallas]) => (
+                                    <span key={color} className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+                                      <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: colorHex(color) }} />
+                                      {color} <span className="text-gray-400">x{pallas}</span>
+                                    </span>
+                                  ))}
+                                </div>
+
+                                {rejects.map((r, idx) => (
+                                  <div key={idx} className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-2.5">
+                                    <div className="flex-1 space-y-2">
+                                      <div className="flex gap-2">
+                                        <select
+                                          value={r.color}
+                                          onChange={(e) => setRejects(prev => prev.map((x, i) => i === idx ? { ...x, color: e.target.value } : x))}
+                                          className="flex-1 rounded-lg border border-red-200 px-2 py-1.5 text-sm bg-white focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                                        >
+                                          <option value={r.color}>{r.color} (x{scanColors[r.color] || 0})</option>
+                                          {scanAvailColors.filter(c => c !== r.color).map(c => (
+                                            <option key={c} value={c}>{c} (x{scanColors[c]})</option>
+                                          ))}
+                                        </select>
+                                        <div className="w-16">
+                                          <input type="number" min="1" max={scanExpectedForColor(r.color)}
+                                            value={r.qty}
+                                            onChange={(e) => setRejects(prev => prev.map((x, i) => i === idx ? { ...x, qty: e.target.value } : x))}
+                                            className="w-full rounded-lg border border-red-200 px-2 py-1.5 text-sm text-center focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                                            placeholder="qty" />
+                                        </div>
+                                        <button onClick={() => setRejects(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-1">
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                      </div>
+                                      <input type="text" value={r.reason}
+                                        onChange={(e) => setRejects(prev => prev.map((x, i) => i === idx ? { ...x, reason: e.target.value } : x))}
+                                        className="w-full rounded-lg border border-red-200 px-2 py-1.5 text-xs bg-white focus:border-red-400 focus:ring-1 focus:ring-red-400"
+                                        placeholder="Reason (e.g. stitching defect)" />
+                                    </div>
                                   </div>
-                                </td>
-                                <td className="text-center py-1.5 px-1 text-gray-500 font-medium">{qc.expected}</td>
-                                <td className="py-1.5 px-1">
-                                  <input
-                                    type="number" min="0" max={qc.expected}
-                                    value={qc.approved}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      const a = parseInt(v) || 0
-                                      const exp = parseInt(qc.expected) || 0
-                                      setColorQC(prev => ({
-                                        ...prev,
-                                        [color]: { ...prev[color], approved: v, rejected: String(Math.max(0, exp - a)) },
-                                      }))
-                                    }}
-                                    className="w-full rounded border border-gray-300 px-1.5 py-1 text-center text-xs focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                                  />
-                                </td>
-                                <td className="py-1.5 px-1">
-                                  <input
-                                    type="number" min="0" max={qc.expected}
-                                    value={qc.rejected}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      const r = parseInt(v) || 0
-                                      const exp = parseInt(qc.expected) || 0
-                                      setColorQC(prev => ({
-                                        ...prev,
-                                        [color]: { ...prev[color], rejected: v, approved: String(Math.max(0, exp - r)) },
-                                      }))
-                                    }}
-                                    className="w-full rounded border border-gray-300 px-1.5 py-1 text-center text-xs focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                  />
-                                </td>
-                                <td className="py-1.5 px-1">
-                                  {parseInt(qc.rejected) > 0 && (
-                                    <input
-                                      type="text" value={qc.reason}
-                                      onChange={(e) => setColorQC(prev => ({
-                                        ...prev,
-                                        [color]: { ...prev[color], reason: e.target.value },
-                                      }))}
-                                      className="w-full rounded border border-gray-300 px-1.5 py-1 text-xs"
-                                      placeholder="Reason"
-                                    />
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t-2 border-gray-200 font-semibold text-xs">
-                              <td className="py-1.5 px-2 text-gray-700">Total</td>
-                              <td className="text-center py-1.5 px-1 text-gray-500">
-                                {Object.values(colorQC).reduce((s, c) => s + (parseInt(c.expected) || 0), 0)}
-                              </td>
-                              <td className="text-center py-1.5 px-1 text-green-700">
-                                {Object.values(colorQC).reduce((s, c) => s + (parseInt(c.approved) || 0), 0)}
-                              </td>
-                              <td className="text-center py-1.5 px-1 text-red-700">
-                                {Object.values(colorQC).reduce((s, c) => s + (parseInt(c.rejected) || 0), 0)}
-                              </td>
-                              <td />
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                      <button onClick={handleCheckBatch} disabled={actionLoading}
-                        className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
-                        {actionLoading ? 'Checking...' : 'Submit Check'}
-                      </button>
-                    </div>
-                  ) : (
-                    /* Legacy flat QC form (no color breakdown) */
-                    <>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
-                          <input type="number" min="0" value={checkForm.approved}
-                            onChange={(e) => {
-                              const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
-                              setCheckForm((f) => ({ ...f, approved: v, rejected: String(Math.max(0, total - (parseInt(v) || 0))) }))
-                            }}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
-                          <input type="number" min="0" value={checkForm.rejected}
-                            onChange={(e) => {
-                              const v = e.target.value; const total = batchPassport.piece_count || batchPassport.quantity || 0
-                              setCheckForm((f) => ({ ...f, rejected: v, approved: String(Math.max(0, total - (parseInt(v) || 0))) }))
-                            }}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
-                        </div>
-                      </div>
-                      {parseInt(checkForm.rejected) > 0 && (
-                        <div className="mb-3">
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
-                          <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm((f) => ({ ...f, reason: e.target.value }))}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
-                        </div>
-                      )}
-                      <button onClick={handleCheckBatch} disabled={actionLoading}
-                        className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
-                        {actionLoading ? 'Checking...' : 'Submit Check'}
-                      </button>
-                    </>
-                  )}
+                                ))}
+
+                                {scanAvailColors.length > 0 && (
+                                  <button
+                                    onClick={() => setRejects(prev => [...prev, { color: scanAvailColors[0], qty: '1', reason: '' }])}
+                                    className="w-full py-2 border-2 border-dashed border-red-200 text-red-500 text-xs font-semibold rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors"
+                                  >
+                                    + Add rejected color
+                                  </button>
+                                )}
+
+                                {rejects.length > 0 && (
+                                  <div className="flex justify-between text-xs font-medium px-1 pt-1">
+                                    <span className="text-green-700">Approved: {scanTotal - scanTotalRej}</span>
+                                    <span className="text-red-600">Rejected: {scanTotalRej}</span>
+                                  </div>
+                                )}
+
+                                <button onClick={handleSubmitRejectsBatch} disabled={actionLoading || rejects.length === 0}
+                                  className="w-full py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
+                                  {actionLoading ? 'Checking...' : `Submit (${scanTotal - scanTotalRej} pass, ${scanTotalRej} reject)`}
+                                </button>
+                              </div>
+                            ) : (
+                              /* Legacy flat QC form (no color breakdown) */
+                              <div className="space-y-3 mb-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
+                                    <input type="number" min="0" value={checkForm.approved}
+                                      onChange={(e) => { const v = e.target.value; setCheckForm(f => ({ ...f, approved: v, rejected: String(Math.max(0, scanTotal - (parseInt(v) || 0))) })) }}
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
+                                    <input type="number" min="0" value={checkForm.rejected}
+                                      onChange={(e) => { const v = e.target.value; setCheckForm(f => ({ ...f, rejected: v, approved: String(Math.max(0, scanTotal - (parseInt(v) || 0))) })) }}
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
+                                  </div>
+                                </div>
+                                {parseInt(checkForm.rejected) > 0 && (
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
+                                    <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm(f => ({ ...f, reason: e.target.value }))}
+                                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
+                                  </div>
+                                )}
+                                <button onClick={handleSubmitRejectsBatch} disabled={actionLoading}
+                                  className="w-full py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
+                                  {actionLoading ? 'Checking...' : 'Submit Check'}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               )}
 
