@@ -442,6 +442,9 @@ class BatchService:
                 selectinload(Batch.processing_logs).selectinload(
                     BatchProcessing.value_addition
                 ),
+                selectinload(Batch.processing_logs).selectinload(
+                    BatchProcessing.batch_challan
+                ),
             )
         )
         result = await self.db.execute(stmt)
@@ -482,7 +485,9 @@ class BatchService:
                         "name": p.value_addition.name
                         if p.value_addition
                         else "VA",
-                        "processor_name": p.processor_name,
+                        "processor_name": p.batch_challan.processor_name
+                        if p.batch_challan
+                        else None,
                     }
                     for p in (b.processing_logs or [])
                     if p.status == "sent"
