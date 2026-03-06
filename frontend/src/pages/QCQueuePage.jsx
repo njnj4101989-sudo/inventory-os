@@ -1,21 +1,48 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getPendingChecks } from '../api/mobile'
 import { checkBatch } from '../api/batches'
-import StatusBadge from '../components/common/StatusBadge'
+import { colorHex, loadColorMap } from '../utils/colorUtils'
 import { useOfflineQueue } from '../hooks/useOfflineQueue'
 
 async function executeOfflineAction(type, payload) {
   if (type === 'check_batch') return checkBatch(payload.id, payload.data)
 }
 
+function timeAgo(iso) {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(ms / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function stitchDuration(startedAt, submittedAt) {
+  if (!startedAt || !submittedAt) return null
+  const ms = new Date(submittedAt) - new Date(startedAt)
+  if (ms < 0) return null
+  const m = Math.floor(ms / 60000)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${m % 60}m`
+  return `${Math.floor(h / 24)}d ${h % 24}h`
+}
+
 export default function QCQueuePage() {
+  const navigate = useNavigate()
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(null)
   const [actionLoading, setActionLoading] = useState(null)
+  const [checkedToday, setCheckedToday] = useState(0)
   const { enqueue, pendingCount, isOnline } = useOfflineQueue(executeOfflineAction)
 
-  useEffect(() => { fetchQueue() }, [])
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
+
+  useEffect(() => { loadColorMap(); fetchQueue() }, [])
 
   async function fetchQueue() {
     setLoading(true)
@@ -30,20 +57,23 @@ export default function QCQueuePage() {
   async function handleCheck(id, data) {
     if (!isOnline) {
       enqueue('check_batch', { id, data })
-      // Optimistic remove from queue
       setBatches((prev) => prev.filter((b) => b.id !== id))
       setExpanded(null)
+      setCheckedToday((c) => c + 1)
       return
     }
     setActionLoading(id)
     try {
       await checkBatch(id, data)
       setExpanded(null)
+      setCheckedToday((c) => c + 1)
       await fetchQueue()
     } catch (err) {
       alert(err?.response?.data?.detail || 'Failed to check batch')
     } finally { setActionLoading(null) }
   }
+
+  const totalPieces = batches.reduce((s, b) => s + (b.piece_count || b.quantity || 0), 0)
 
   if (loading) {
     return (
@@ -55,28 +85,82 @@ export default function QCQueuePage() {
 
   return (
     <div className="px-4 py-5 pb-24">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-lg font-bold text-gray-900">QC Queue</h1>
-        {pendingCount > 0 && (
-          <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-            {pendingCount} queued
-          </span>
-        )}
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">
+            Hi, {currentUser.full_name?.split(' ')[0] || 'Checker'}
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+              {pendingCount} queued
+            </span>
+          )}
+          <button
+            onClick={fetchQueue}
+            className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200 transition-colors"
+            aria-label="Refresh"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <p className="text-sm text-gray-500 mb-5">
-        {batches.length} batch{batches.length !== 1 ? 'es' : ''} awaiting check
-      </p>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-3 gap-2.5 mb-5">
+        <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100/60 px-3 py-3 text-center border border-indigo-100">
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span className="text-2xl font-bold tabular-nums text-indigo-700">{batches.length}</span>
+          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-indigo-500 mt-0.5">Pending</div>
+        </div>
+        <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/60 px-3 py-3 text-center border border-emerald-100">
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-2xl font-bold tabular-nums text-emerald-700">{checkedToday}</span>
+          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500 mt-0.5">Checked</div>
+        </div>
+        <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/60 px-3 py-3 text-center border border-gray-100">
+          <div className="flex items-center justify-center gap-1.5">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            <span className="text-2xl font-bold tabular-nums text-gray-700">{totalPieces}</span>
+          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-0.5">Pieces</div>
+        </div>
+      </div>
 
       {batches.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="font-medium">All caught up!</p>
-          <p className="text-sm mt-1">No batches awaiting quality check</p>
+        <div className="text-center py-16">
+          <div className="w-16 h-16 mx-auto mb-4 bg-emerald-50 rounded-2xl flex items-center justify-center">
+            <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="font-semibold text-gray-700">All caught up!</p>
+          <p className="text-sm text-gray-400 mt-1">No batches awaiting quality check</p>
+          {checkedToday > 0 && (
+            <p className="text-xs text-emerald-600 font-medium mt-3">
+              You checked {checkedToday} batch{checkedToday !== 1 ? 'es' : ''} today
+            </p>
+          )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {batches.map((batch) => (
             <QCCard
               key={batch.id}
@@ -85,6 +169,7 @@ export default function QCQueuePage() {
               onToggle={() => setExpanded(expanded === batch.id ? null : batch.id)}
               onCheck={handleCheck}
               isLoading={actionLoading === batch.id}
+              onTap={() => navigate(`/scan/batch/${encodeURIComponent(batch.batch_code)}`)}
             />
           ))}
         </div>
@@ -93,21 +178,20 @@ export default function QCQueuePage() {
   )
 }
 
-function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
+function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
   const total = batch.piece_count || batch.quantity || 0
   const colors = batch.color_breakdown || {}
   const hasColors = Object.keys(colors).length > 0
   const totalPallas = Object.values(colors).reduce((s, v) => s + v, 0)
+  const submitted = timeAgo(batch.submitted_at)
+  const stitchTime = stitchDuration(batch.started_at, batch.submitted_at)
 
-  // Reject-only state: [{color, qty, reason}]
   const [rejects, setRejects] = useState([])
   const [showRejectMode, setShowRejectMode] = useState(false)
-  // Legacy flat state (no color_breakdown)
   const [flatApproved, setFlatApproved] = useState('')
   const [flatRejected, setFlatRejected] = useState('')
   const [flatReason, setFlatReason] = useState('')
 
-  // Colors available to reject (not already in rejects list)
   const availableColors = Object.keys(colors).filter(
     (c) => !rejects.some((r) => r.color === c)
   )
@@ -135,14 +219,12 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
   }
 
   function buildColorQC(allPass) {
-    // Build color_qc dict from color_breakdown
     const colorQC = {}
-    for (const [color, pallas] of Object.entries(colors)) {
+    for (const [color] of Object.entries(colors)) {
       const expected = expectedForColor(color)
       colorQC[color] = { approved: expected, rejected: 0, reason: '' }
     }
     if (!allPass) {
-      // Apply rejects
       for (const r of rejects) {
         const rej = parseInt(r.qty) || 0
         if (rej > 0 && colorQC[r.color]) {
@@ -159,7 +241,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
 
   function handleAllPass() {
     if (!hasColors) {
-      // Legacy flat — all approved
       onCheck(batch.id, { approved_qty: total, rejected_qty: 0, rejection_reason: null })
       return
     }
@@ -168,7 +249,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
 
   function handleSubmitRejects() {
     if (!hasColors) {
-      // Legacy flat
       const a = parseInt(flatApproved) || 0
       const r = parseInt(flatRejected) || 0
       if (a + r !== total) { alert(`Approved + Rejected must equal ${total}`); return }
@@ -176,7 +256,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
       onCheck(batch.id, { approved_qty: a, rejected_qty: r, rejection_reason: r > 0 ? flatReason.trim() : null })
       return
     }
-    // Validate rejects
     const rej = totalRejected()
     if (rej === 0) { alert('Add at least one reject or use All Pass'); return }
     if (rej > total) { alert(`Total rejected (${rej}) exceeds batch quantity (${total})`); return }
@@ -193,7 +272,7 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Header — tap to expand */}
-      <button onClick={onToggle} className="w-full px-4 py-3.5 flex items-center justify-between text-left">
+      <button onClick={onToggle} className="w-full px-4 py-3 flex items-start justify-between text-left">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</span>
@@ -202,32 +281,59 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
                 {batch.size}
               </span>
             )}
-            <span className="text-xs text-gray-500">{total} pcs</span>
+            <span className="text-sm font-semibold text-gray-800">{total} pcs</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
             {batch.tailor && (
-              <span className="text-xs font-medium text-primary-700">
+              <span className="text-xs text-primary-700 font-medium">
                 <svg className="w-3 h-3 inline mr-0.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                 {batch.tailor.full_name}
               </span>
             )}
             {batch.lot && (
-              <span className="text-xs text-gray-400">Lot {batch.lot.lot_code} &middot; Design {batch.lot.design_no}</span>
+              <span className="text-xs text-gray-400">{batch.lot.lot_code} &middot; Design {batch.lot.design_no}</span>
             )}
           </div>
+          {/* Meta: submitted time + stitch duration */}
+          <div className="flex items-center gap-3 mt-1.5">
+            {submitted && (
+              <span className="text-[10px] text-gray-400">
+                Submitted {submitted}
+              </span>
+            )}
+            {stitchTime && (
+              <span className="text-[10px] text-gray-400 bg-gray-50 border border-gray-100 rounded px-1.5 py-px">
+                Stitched in {stitchTime}
+              </span>
+            )}
+          </div>
+          {/* Color chips */}
           {hasColors && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
+            <div className="flex flex-wrap gap-1 mt-2">
               {Object.entries(colors).map(([color, pallas]) => (
-                <span key={color} className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+                <span key={color} className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: colorHex(color) }} />
                   {color} <span className="text-gray-400">x{pallas}</span>
                 </span>
               ))}
             </div>
           )}
         </div>
-        <svg className={`w-5 h-5 text-gray-400 transition-transform shrink-0 ml-2 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {/* Quick view button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onTap() }}
+            className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="View batch"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+          <svg className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
       </button>
 
       {/* Expanded check form */}
@@ -262,7 +368,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
           {showRejectMode && (
             <>
               {hasColors ? (
-                /* Per-color reject mode */
                 <div className="space-y-2 mb-3">
                   {rejects.map((r, idx) => (
                     <div key={idx} className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg p-2.5">
@@ -273,7 +378,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
                             onChange={(e) => updateReject(idx, 'color', e.target.value)}
                             className="flex-1 rounded-lg border border-red-200 px-2 py-1.5 text-sm bg-white focus:border-red-400 focus:ring-1 focus:ring-red-400"
                           >
-                            {/* Current color + available colors */}
                             <option value={r.color}>{r.color} (x{colors[r.color] || 0})</option>
                             {availableColors.filter((c) => c !== r.color).map((c) => (
                               <option key={c} value={c}>{c} (x{colors[c]})</option>
@@ -330,7 +434,6 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading }) {
                   </button>
                 </div>
               ) : (
-                /* Legacy flat mode — no color_breakdown */
                 <div className="space-y-3 mb-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>

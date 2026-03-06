@@ -436,14 +436,27 @@ class BatchService:
                 BatchAssignment.tailor_id == tailor_id,
                 Batch.status.in_(["assigned", "in_progress", "submitted"]),
             )
-            .options(selectinload(Batch.sku), selectinload(Batch.lot))
+            .options(
+                selectinload(Batch.sku),
+                selectinload(Batch.lot),
+                selectinload(Batch.processing_logs).selectinload(
+                    BatchProcessing.value_addition
+                ),
+            )
         )
         result = await self.db.execute(stmt)
-        batches = result.scalars().all()
+        batches = result.scalars().unique().all()
         return [
             {
                 "id": str(b.id),
                 "batch_code": b.batch_code,
+                "size": b.size,
+                "piece_count": b.piece_count or b.quantity,
+                "quantity": b.quantity,
+                "status": b.status,
+                "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
+                "started_at": b.started_at.isoformat() if b.started_at else None,
+                "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
                 "sku": {
                     "id": str(b.sku.id),
                     "sku_code": b.sku.sku_code,
@@ -451,9 +464,29 @@ class BatchService:
                 }
                 if b.sku
                 else None,
-                "quantity": b.quantity,
-                "status": b.status,
-                "assigned_at": b.assigned_at.isoformat() if b.assigned_at else None,
+                "lot": {
+                    "lot_code": b.lot.lot_code,
+                    "design_no": b.lot.design_no,
+                }
+                if b.lot
+                else None,
+                "color_breakdown": b.color_breakdown,
+                "has_pending_va": any(
+                    p.status == "sent" for p in (b.processing_logs or [])
+                ),
+                "pending_va": [
+                    {
+                        "short_code": p.value_addition.short_code
+                        if p.value_addition
+                        else "?",
+                        "name": p.value_addition.name
+                        if p.value_addition
+                        else "VA",
+                        "processor_name": p.processor_name,
+                    }
+                    for p in (b.processing_logs or [])
+                    if p.status == "sent"
+                ],
             }
             for b in batches
         ]
@@ -566,6 +599,9 @@ class BatchService:
                 "color_breakdown": b.color_breakdown,
                 "submitted_at": b.submitted_at.isoformat()
                 if b.submitted_at
+                else None,
+                "started_at": b.started_at.isoformat()
+                if b.started_at
                 else None,
             }
             for b in batches

@@ -153,6 +153,19 @@ export default function BatchDetailPage() {
   const vaByPhase = {}
   logs.forEach((l) => { const p = l.phase || 'in_progress'; (vaByPhase[p] = vaByPhase[p] || []).push(l) })
 
+  // Build timeline nodes: interleave STEPS with VA diamonds
+  const timelineNodes = []
+  STEPS.forEach((step, i) => {
+    timelineNodes.push({ type: 'step', step, stepIndex: i })
+    if (step.key === 'started_at' && vaByPhase['in_progress']?.length) {
+      vaByPhase['in_progress'].forEach((log) => timelineNodes.push({ type: 'va', log }))
+    }
+    if (step.key === 'checked_at') {
+      ;[...(vaByPhase['checked'] || []), ...(vaByPhase['post_qc'] || [])].forEach((log) => timelineNodes.push({ type: 'va', log }))
+    }
+  })
+  const gridCols = { gridTemplateColumns: `repeat(${timelineNodes.length}, minmax(0, 1fr))` }
+
   const stepDone = (step) => {
     if (step.statusMatch) return batch.status === 'packing' || !!batch.packed_at
     return !!batch[step.key]
@@ -302,12 +315,65 @@ export default function BatchDetailPage() {
           <h2 className="typo-section-title">Batch Journey</h2>
         </div>
         <div className="px-4 py-4">
-          {/* Horizontal dots + connecting lines */}
-          <div className="grid grid-cols-7 items-center">
-            {STEPS.map((step, i) => {
-              const done = stepDone(step)
-              const active = stepActive(step, i)
-              const isLast = i === STEPS.length - 1
+          {/* Horizontal dots + connecting lines (dynamic: steps + VA diamonds) */}
+          <div className="grid items-center" style={gridCols}>
+            {timelineNodes.map((node, i) => {
+              const done = node.type === 'va' ? node.log.status === 'received' : stepDone(node.step)
+              const active = node.type === 'va' ? node.log.status === 'sent' : stepActive(node.step, node.stepIndex)
+              const isLast = i === timelineNodes.length - 1
+              const nextNode = timelineNodes[i + 1]
+              const nextDone = nextNode ? (nextNode.type === 'va' ? nextNode.log.status === 'received' : stepDone(nextNode.step)) : false
+              const lineColor = done && nextDone ? 'bg-primary-400' : done ? 'bg-gradient-to-r from-primary-400 to-gray-200' : 'bg-gray-200'
+
+              if (node.type === 'va') {
+                const log = node.log
+                const received = log.status === 'received'
+                return (
+                  <div key={`va-${log.id}`} className="flex items-center justify-center relative group">
+                    <div className={`w-5 h-5 rotate-45 rounded-[3px] flex items-center justify-center border-2 transition-all shrink-0 z-10 ${
+                      received ? 'border-green-400 bg-green-500' :
+                      'border-amber-400 bg-amber-50 shadow-[0_0_0_3px_rgba(251,191,36,0.15)]'
+                    }`}>
+                      {received ? (
+                        <svg className="w-2.5 h-2.5 text-white -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <span className="relative flex h-1.5 w-1.5 -rotate-45">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+                        </span>
+                      )}
+                    </div>
+                    {!isLast && (
+                      <div className={`absolute top-1/2 h-0.5 -translate-y-1/2 ${lineColor}`} style={{ left: '50%', width: '100%' }} />
+                    )}
+                    {/* Hover tooltip */}
+                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 z-30 pointer-events-none">
+                      <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-3 py-2.5 w-48 text-left">
+                        <p className="text-xs font-bold text-gray-900">{log.value_addition?.name || '—'}</p>
+                        <div className="h-px bg-gray-100 my-1.5" />
+                        <div className="space-y-1 text-[11px]">
+                          {log.processor_name && <p className="text-gray-600"><span className="text-gray-400">Processor: </span>{log.processor_name}</p>}
+                          {log.challan_no && <p className="text-gray-600"><span className="text-gray-400">Challan: </span>{log.challan_no}</p>}
+                          <p className="text-gray-600"><span className="text-gray-400">Pieces: </span>{log.pieces_sent} sent{log.pieces_received != null ? `, ${log.pieces_received} back` : ''}</p>
+                          {log.sent_date && <p className="text-gray-600"><span className="text-gray-400">Sent: </span>{fmtDate(log.sent_date)}</p>}
+                          {log.received_date && <p className="text-gray-600"><span className="text-gray-400">Back: </span>{fmtDate(log.received_date)}</p>}
+                          {log.cost != null && <p className="text-gray-600"><span className="text-gray-400">Cost: </span>{parseFloat(log.cost).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</p>}
+                        </div>
+                        <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          received ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${received ? 'bg-green-500' : 'bg-amber-500'}`} />
+                          {received ? 'Returned' : 'Sent — Pending'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              const step = node.step
               return (
                 <div key={step.key} className="flex items-center justify-center relative">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all shrink-0 z-10 ${
@@ -329,12 +395,8 @@ export default function BatchDetailPage() {
                       </svg>
                     )}
                   </div>
-                  {/* Connecting line — extends from center of this dot to center of next */}
                   {!isLast && (
-                    <div className={`absolute top-1/2 left-1/2 right-0 h-0.5 -translate-y-1/2 ${
-                      done && stepDone(STEPS[i + 1]) ? 'bg-primary-400' :
-                      done ? 'bg-gradient-to-r from-primary-400 to-gray-200' : 'bg-gray-200'
-                    }`} style={{ left: 'calc(50% + 16px)', width: 'calc(100% - 32px)' }} />
+                    <div className={`absolute top-1/2 h-0.5 -translate-y-1/2 ${lineColor}`} style={{ left: '50%', width: '100%' }} />
                   )}
                 </div>
               )
@@ -342,30 +404,42 @@ export default function BatchDetailPage() {
           </div>
 
           {/* Labels row */}
-          <div className="grid grid-cols-7 mt-1.5">
-            {STEPS.map((step, i) => {
-              const done = stepDone(step)
-              const active = stepActive(step, i)
+          <div className="grid mt-1.5" style={gridCols}>
+            {timelineNodes.map((node) => {
+              if (node.type === 'va') {
+                const sc = node.log.value_addition?.short_code || '?'
+                const received = node.log.status === 'received'
+                return (
+                  <div key={`va-lbl-${node.log.id}`} className="text-center">
+                    <span className={`text-[9px] font-bold ${received ? 'text-green-600' : 'text-amber-600'}`}>{sc}</span>
+                  </div>
+                )
+              }
+              const done = stepDone(node.step)
+              const active = stepActive(node.step, node.stepIndex)
               return (
-                <div key={step.key} className="text-center">
+                <div key={node.step.key} className="text-center">
                   <span className={`text-[10px] font-semibold uppercase tracking-wide ${
                     active ? 'text-amber-700' : done ? 'text-gray-700' : 'text-gray-400'
-                  }`}>{step.label}</span>
+                  }`}>{node.step.label}</span>
                 </div>
               )
             })}
           </div>
 
-          {/* Detail boxes row — fixed grid, equal columns */}
-          <div className="grid grid-cols-7 gap-1 mt-2">
-            {STEPS.map((step, i) => {
+          {/* Detail boxes row */}
+          <div className="grid gap-1 mt-2" style={gridCols}>
+            {timelineNodes.map((node) => {
+              if (node.type === 'va') return <div key={`va-box-${node.log.id}`} />
+
+              const step = node.step
+              const i = node.stepIndex
               const done = stepDone(step)
               const active = stepActive(step, i)
               const ts = step.statusMatch ? null : batch[step.key]
               const prevTs = i > 0 ? batch[STEPS[i - 1].key] : null
               const elapsed = ts && prevTs ? dur(prevTs, ts) : null
 
-              // Context
               let ctx = ''
               if (step.key === 'created_at' && batch.created_by_user) ctx = batch.created_by_user.full_name
               if (step.key === 'assigned_at' && tailor) ctx = tailor
@@ -377,10 +451,6 @@ export default function BatchDetailPage() {
                 ctx = batch.packed_by.full_name
                 if (batch.pack_reference) ctx += ` · ${batch.pack_reference}`
               }
-
-              // VA logs for this step
-              const phase = step.key === 'submitted_at' ? 'in_progress' : step.key === 'checked_at' ? 'checked' : null
-              const vas = phase ? (vaByPhase[phase] || []) : []
 
               return (
                 <div key={step.key}
@@ -394,20 +464,9 @@ export default function BatchDetailPage() {
                         {ts ? fmtDate(ts) : active ? 'In progress...' : ''}
                       </p>
                       {ctx && <p className="text-[11px] text-gray-700 font-medium leading-snug truncate mt-0.5">{ctx}</p>}
-                      <div className="flex items-center gap-1 mt-1">
-                        {elapsed && (
-                          <span className="typo-code text-[10px] text-gray-500 bg-white rounded px-1.5 py-px border border-gray-100 shrink-0">{elapsed}</span>
-                        )}
-                        {vas.map((log) => {
-                          const st = VA_ST[log.status] || VA_ST.sent
-                          return (
-                            <span key={log.id} className={`inline-flex items-center gap-0.5 rounded ${st.bg} px-1.5 py-px text-[10px] shrink-0`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                              <span className={`font-bold ${st.text}`}>{log.value_addition?.short_code}</span>
-                            </span>
-                          )
-                        })}
-                      </div>
+                      {elapsed && (
+                        <span className="inline-block typo-code text-[10px] text-gray-500 bg-white rounded px-1.5 py-px border border-gray-100 mt-1">{elapsed}</span>
+                      )}
                     </>
                   )}
                 </div>
