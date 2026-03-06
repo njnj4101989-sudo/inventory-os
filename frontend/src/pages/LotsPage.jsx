@@ -674,7 +674,7 @@ export default function LotsPage() {
                             <div className="flex flex-wrap gap-1.5 px-3 py-2">
                               {grp.rolls.map(r => (
                                 <button key={r.id} onClick={() => addRoll(r.id)}
-                                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-purple-300 bg-purple-50/30' : 'border-gray-200 bg-white'}`}>
+                                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-2 border-purple-400 bg-purple-50/40' : 'border border-gray-200 bg-white'}`}>
                                   <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
                                   <span className="text-[11px] text-gray-600 truncate max-w-[60px]">{r.color || '—'}</span>
                                   <span className="text-[11px] font-semibold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
