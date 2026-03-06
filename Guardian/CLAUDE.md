@@ -29,25 +29,25 @@
 
 ---
 
-## Current State (Session 64 — 2026-03-06)
+## Current State (Session 65 — 2026-03-06)
+
+### S65: Login UX — Password Eye Toggle + CapsLock Warning
+
+- Password show/hide eye icon (SVG toggle, `tabIndex={-1}`)
+- CapsLock detection via `getModifierState` — amber "CapsLock is ON" warning
+- Deprecated `apple-mobile-web-app-capable` → `mobile-web-app-capable` meta tag
+- Fix: eye icon invisible — `h-4.5` not valid Tailwind, changed to `h-5 w-5`
+
+**Commits:** `06d7743`, `4bff892` | Pushed → Vercel auto-deploy
+
+---
+
+## Previous State (Session 64 — 2026-03-06)
 
 ### S64: Phase 4 Production Readiness — ALL 9 Fixes Deployed
 
 **Backend audit COMPLETE.** 4 phases, 59 findings, 58 fixed, 1 deferred (rate limiting).
 Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
-
-- P4-1: Strong 64-char JWT_SECRET on EC2
-- P4-2: DB credentials redacted from public repo → stored in local `credentials.md`
-- P4-3: Swagger/ReDoc/OpenAPI disabled in production (`APP_ENV=production`)
-- P4-4: `pool_pre_ping=True` + `pool_recycle=1800` on PostgreSQL
-- P4-5: CORS — only `https://inventory.drsblouse.com` (removed localhost)
-- P4-6: Nginx security headers (HSTS, nosniff, DENY, XSS)
-- P4-7: Nginx `client_max_body_size 5m`
-- P4-8: Structured logging with timestamp format
-- P4-9: Rate limiting — DEFERRED (future: `slowapi`)
-- P4-10: `asyncio.get_running_loop()` replaces deprecated `get_event_loop()`
-
-**Commit:** `cd42ae5` | Deployed + smoke tested
 
 ---
 
@@ -270,6 +270,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S62 | Phase 2 Query Fixes | All 14 query findings fixed. Zero logic changes. ~50% fewer DB round-trips across dashboard, rolls, batches, lots, orders, inventory |
 | S63 | Phase 3 Data Flow Integrity | 9 fixes: FOR UPDATE race protection, remaining_weight CHECK, lot state machine, code generator locking |
 | S64 | Phase 4 Production Readiness | 9 fixes: Swagger disabled, strong JWT, CORS hardened, Nginx headers, structured logging, pool_pre_ping |
+| S65 | Login UX | Password eye toggle, CapsLock warning, meta tag fix |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
 

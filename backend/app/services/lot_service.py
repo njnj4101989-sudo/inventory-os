@@ -25,6 +25,9 @@ from app.core.exceptions import (
 )
 
 
+LOT_STATUS_FLOW = ("open", "cutting", "distributed")
+
+
 class LotService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -174,6 +177,17 @@ class LotService:
         lot = await self._get_or_404(lot_id)
 
         update_data = req.model_dump(exclude_unset=True)
+
+        # Validate forward-only status transition (open → cutting → distributed)
+        if "status" in update_data:
+            new_status = update_data["status"]
+            cur_idx = LOT_STATUS_FLOW.index(lot.status) if lot.status in LOT_STATUS_FLOW else -1
+            new_idx = LOT_STATUS_FLOW.index(new_status) if new_status in LOT_STATUS_FLOW else -1
+            if new_idx <= cur_idx:
+                raise InvalidStateTransitionError(
+                    f"Cannot move lot from '{lot.status}' to '{new_status}'"
+                )
+
         for field, value in update_data.items():
             setattr(lot, field, value)
 

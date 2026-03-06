@@ -4,6 +4,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from app.schemas import BaseSchema, PaginatedParams
@@ -77,8 +79,9 @@ class LotCreate(BaseModel):
 
 
 class LotUpdate(BaseModel):
-    """PATCH /lots/{id} — update lot metadata. Status changes via state machine only."""
+    """PATCH /lots/{id} — update lot metadata and/or status (forward-only)."""
 
+    status: Literal["open", "cutting", "distributed"] | None = None
     design_no: str | None = None
     standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
