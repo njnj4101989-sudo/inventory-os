@@ -262,20 +262,31 @@ export default function LotsPage() {
   const addableRolls = useMemo(() => {
     const used = new Set(form.rolls.map(r => r.roll_id))
     let list = availableRolls.filter(r => !used.has(r.id))
+    const pallaWt = parseFloat(form.standard_palla_weight) || 0
 
     // Status filter
-    if (rollFilterStatus === 'fresh') {
-      list = list.filter(r => !hasVA(r))
-    } else if (rollFilterStatus === 'processed') {
-      list = list.filter(r => hasVA(r))
-      // VA type sub-filter
-      if (rollFilterVA) {
-        list = list.filter(r =>
-          (r.processing_logs || []).some(l => l.status === 'received' && l.value_addition?.short_code === rollFilterVA)
-        )
+    if (rollFilterStatus === 'remnant') {
+      // Show only rolls whose weight is below palla weight (true remnants for this lot)
+      if (pallaWt > 0) {
+        list = list.filter(r => parseFloat(r.remaining_weight) < pallaWt)
+      } else {
+        list = list.filter(r => r.status === 'remnant')
       }
-    } else if (rollFilterStatus === 'remnant') {
-      list = list.filter(r => r.status === 'remnant')
+    } else {
+      // All / Fresh / Processed — hide rolls below palla weight (unusable for this lot)
+      if (pallaWt > 0) {
+        list = list.filter(r => parseFloat(r.remaining_weight) >= pallaWt)
+      }
+      if (rollFilterStatus === 'fresh') {
+        list = list.filter(r => !hasVA(r))
+      } else if (rollFilterStatus === 'processed') {
+        list = list.filter(r => hasVA(r))
+        if (rollFilterVA) {
+          list = list.filter(r =>
+            (r.processing_logs || []).some(l => l.status === 'received' && l.value_addition?.short_code === rollFilterVA)
+          )
+        }
+      }
     }
 
     // Fabric filter
@@ -298,7 +309,7 @@ export default function LotsPage() {
       )
     }
     return list
-  }, [availableRolls, form.rolls, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterVA])
+  }, [availableRolls, form.rolls, form.standard_palla_weight, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterVA])
 
   // ══════════════════════════════════════
   // CREATE OVERLAY — Actions
