@@ -16,7 +16,7 @@ class Roll(Base):
         CheckConstraint("total_weight > 0", name="positive_weight"),
         CheckConstraint("remaining_weight >= 0", name="non_negative_remaining"),
         CheckConstraint(
-            "status IN ('in_stock', 'sent_for_processing', 'in_cutting')",
+            "status IN ('in_stock', 'sent_for_processing', 'in_cutting', 'remnant')",
             name="valid_status",
         ),
     )

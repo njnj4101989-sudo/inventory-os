@@ -38,6 +38,7 @@ const COLORS = {
   in_stock:             'bg-green-100 text-green-700',
   sent_for_processing:  'bg-orange-100 text-orange-700',
   in_cutting:           'bg-blue-100 text-blue-700',
+  remnant:              'bg-amber-100 text-amber-700',
 
   // Processing log statuses
   sent:     'bg-orange-100 text-orange-700',

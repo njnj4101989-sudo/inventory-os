@@ -100,8 +100,8 @@ class LotService:
 
             if not roll:
                 raise NotFoundError(f"Roll {roll_input.roll_id} not found")
-            if roll.status != "in_stock":
-                raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not in stock (status: {roll.status})")
+            if roll.status not in ("in_stock", "remnant"):
+                raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not available (status: {roll.status})")
 
             palla_weight = float(roll_input.palla_weight or req.standard_palla_weight or 0)
             if not palla_weight or palla_weight <= 0:
@@ -139,6 +139,8 @@ class LotService:
             roll.remaining_weight = waste_weight
             if waste_weight <= 0:
                 roll.status = "in_cutting"
+            elif waste_weight < palla_weight:
+                roll.status = "remnant"
 
             total_pallas += num_pallas
             total_pieces += pieces_from_roll
@@ -206,8 +208,8 @@ class LotService:
         roll = roll_result.scalar_one_or_none()
         if not roll:
             raise NotFoundError(f"Roll {roll_id} not found")
-        if roll.status != "in_stock":
-            raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not in stock")
+        if roll.status not in ("in_stock", "remnant"):
+            raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not available (status: {roll.status})")
 
         remaining = float(roll.remaining_weight or 0)
         if remaining <= 0:
@@ -237,6 +239,8 @@ class LotService:
         roll.remaining_weight = waste_weight
         if waste_weight <= 0:
             roll.status = "in_cutting"
+        elif waste_weight < palla_weight:
+            roll.status = "remnant"
 
         # Update lot totals
         lot.total_pallas = (lot.total_pallas or 0) + num_pallas
@@ -265,7 +269,7 @@ class LotService:
         roll = roll_result.scalar_one_or_none()
         if roll:
             roll.remaining_weight = float(roll.remaining_weight or 0) + float(lot_roll.weight_used or 0)
-            if roll.status == "in_cutting":
+            if roll.status in ("in_cutting", "remnant"):
                 roll.status = "in_stock"
 
         # Update lot totals

@@ -170,9 +170,15 @@ export default function LotsPage() {
 
   const fetchRolls = useCallback(async () => {
     try {
-      const res = await getRolls({ status: 'in_stock', page_size: 500 })
-      const arr = Array.isArray(res.data.data) ? res.data.data : []
-      setAvailableRolls(arr.filter(r => parseFloat(r.remaining_weight) > 0))
+      // Fetch both in_stock and remnant rolls for the picker
+      const [stockRes, remnantRes] = await Promise.all([
+        getRolls({ status: 'in_stock', page_size: 500 }),
+        getRolls({ status: 'remnant', page_size: 500 }),
+      ])
+      const stockArr = Array.isArray(stockRes.data.data) ? stockRes.data.data : []
+      const remnantArr = Array.isArray(remnantRes.data.data) ? remnantRes.data.data : []
+      const combined = [...stockArr, ...remnantArr]
+      setAvailableRolls(combined.filter(r => parseFloat(r.remaining_weight) > 0))
     } catch { /* silent */ }
   }, [])
 
@@ -268,6 +274,8 @@ export default function LotsPage() {
           (r.processing_logs || []).some(l => l.status === 'received' && l.value_addition?.short_code === rollFilterVA)
         )
       }
+    } else if (rollFilterStatus === 'remnant') {
+      list = list.filter(r => r.status === 'remnant')
     }
 
     // Fabric filter
@@ -557,6 +565,7 @@ export default function LotsPage() {
                   { key: 'all', label: 'All' },
                   { key: 'fresh', label: 'Fresh' },
                   { key: 'processed', label: 'Processed' },
+                  { key: 'remnant', label: 'Remnant' },
                 ].map(p => (
                   <button key={p.key} onClick={() => { setRollFilterStatus(p.key); if (p.key !== 'processed') setRollFilterVA('') }}
                     className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
@@ -658,6 +667,7 @@ export default function LotsPage() {
                                   <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
                                   <span className="text-[11px] text-gray-600 truncate max-w-[60px]">{r.color || '—'}</span>
                                   <span className="text-[11px] font-semibold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
+                                  {r.status === 'remnant' && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 rounded px-1">REM</span>}
                                 </button>
                               ))}
                             </div>

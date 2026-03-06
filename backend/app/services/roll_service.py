@@ -598,8 +598,8 @@ class RollService:
         roll = result.scalar_one_or_none()
         if not roll:
             raise NotFoundError(f"Roll {roll_id} not found")
-        if roll.status != "in_stock":
-            raise BusinessRuleViolationError("Roll must be in_stock to send for processing")
+        if roll.status not in ("in_stock", "remnant"):
+            raise BusinessRuleViolationError("Roll must be in_stock or remnant to send for processing")
         if roll.remaining_weight <= 0:
             raise BusinessRuleViolationError("Roll has no remaining weight to send")
 
@@ -693,10 +693,9 @@ class RollService:
         )
         remaining_sent = (await self.db.execute(sent_logs_stmt)).scalar() or 0
         if remaining_sent == 0 and roll.status == "sent_for_processing":
-            # Only transition back to in_stock from sent_for_processing.
-            # If roll is in_cutting (lot consumed it), preserve that status.
+            # Transition back — if roll was used in a lot (has remaining < some threshold), stay remnant-aware
             roll.status = "in_stock"
-        # else keep current status (still has material out, or in_cutting)
+        # else keep current status (still has material out, or in_cutting/remnant)
 
         await self.db.flush()
 

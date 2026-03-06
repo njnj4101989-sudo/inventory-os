@@ -70,10 +70,10 @@ class JobChallanService:
         if missing:
             raise NotFoundError(f"Rolls not found: {', '.join(missing)}")
 
-        not_in_stock = [r.roll_code for r in rolls if r.status != "in_stock"]
-        if not_in_stock:
+        not_available = [r.roll_code for r in rolls if r.status not in ("in_stock", "remnant")]
+        if not_available:
             raise BusinessRuleViolationError(
-                f"Rolls must be in_stock: {', '.join(not_in_stock)}"
+                f"Rolls must be in_stock or remnant: {', '.join(not_available)}"
             )
 
         # Validate weights

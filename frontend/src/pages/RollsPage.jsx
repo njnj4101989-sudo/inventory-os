@@ -31,6 +31,7 @@ const ROLL_STATUS_LABELS = {
   in_stock: 'In Stock',
   sent_for_processing: 'Processing',
   in_cutting: 'In Cutting',
+  remnant: 'Remnant',
 }
 
 // ── Invoice tab columns ──
@@ -1511,6 +1512,7 @@ export default function RollsPage() {
           { key: 'in_stock_processed', label: 'Processed & Returned', active: 'bg-purple-100 text-purple-700 ring-1 ring-purple-300' },
           { key: 'sent_for_processing', label: 'In Processing', active: 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' },
           { key: 'in_cutting', label: 'In Cutting', active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300' },
+          { key: 'remnant', label: 'Remnant', active: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300' },
         ]
         const AVAIL_PILLS = [
           { key: 'all', label: 'All', active: 'bg-gray-200 text-gray-800 ring-1 ring-gray-300' },
@@ -1584,7 +1586,7 @@ export default function RollsPage() {
             {/* ── Table ── */}
             {(() => {
               const isSelectableView = rollStatusFilter !== 'in_stock_processed'
-              const sendableRolls = rolls.filter((r) => r.status === 'in_stock' && (r.remaining_weight || 0) > 0)
+              const sendableRolls = rolls.filter((r) => (r.status === 'in_stock' || r.status === 'remnant') && (r.remaining_weight || 0) > 0)
               const allSelected = sendableRolls.length > 0 && sendableRolls.every((r) => selectedRolls.has(r.id))
               const CHECKBOX_COL = {
                 key: '__select',
@@ -1597,7 +1599,7 @@ export default function RollsPage() {
                     className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
                 ),
                 sortable: false,
-                render: (_, row) => (row.status !== 'in_stock' || (row.remaining_weight || 0) <= 0) ? <span className="w-4" /> : (
+                render: (_, row) => ((row.status !== 'in_stock' && row.status !== 'remnant') || (row.remaining_weight || 0) <= 0) ? <span className="w-4" /> : (
                   <input type="checkbox" checked={selectedRolls.has(row.id)}
                     onChange={(e) => { e.stopPropagation(); setSelectedRolls((prev) => { const next = new Set(prev); next.has(row.id) ? next.delete(row.id) : next.add(row.id); return next }) }}
                     onClick={(e) => e.stopPropagation()}
@@ -1950,7 +1952,7 @@ export default function RollsPage() {
                 </button>
               )}
               {(() => {
-                const selectable = selectedInvoice?.rolls?.filter(r => r.status === 'in_stock' && parseFloat(r.remaining_weight) > 0) || []
+                const selectable = selectedInvoice?.rolls?.filter(r => (r.status === 'in_stock' || r.status === 'remnant') && parseFloat(r.remaining_weight) > 0) || []
                 if (selectable.length === 0) return null
                 return (
                   <button onClick={() => {
@@ -2008,7 +2010,7 @@ export default function RollsPage() {
           // Unique colors across all groups
           const allColors = new Set(selectedInvoice.rolls.map((r) => r.color || 'Unknown'))
           // Selectable rolls: in_stock with remaining weight
-          const selectableInvRolls = selectedInvoice.rolls.filter(r => r.status === 'in_stock' && parseFloat(r.remaining_weight) > 0)
+          const selectableInvRolls = selectedInvoice.rolls.filter(r => (r.status === 'in_stock' || r.status === 'remnant') && parseFloat(r.remaining_weight) > 0)
           const selectableInvIds = new Set(selectableInvRolls.map(r => r.id))
 
           return (
