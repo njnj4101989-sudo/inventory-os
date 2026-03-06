@@ -472,6 +472,7 @@ export default function RollsPage() {
   const [selectedRolls, setSelectedRolls] = useState(new Set())
   const [showBulkLabels, setShowBulkLabels] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
+  const [bulkSendRolls, setBulkSendRolls] = useState([])
   const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
   const [bulkSendWeights, setBulkSendWeights] = useState({})
   const [bulkSendSaving, setBulkSendSaving] = useState(false)
@@ -641,10 +642,9 @@ export default function RollsPage() {
     if (!bulkSendForm.value_addition_id) { setBulkSendError('Value Addition is required'); return }
     if (!bulkSendForm.vendor_name.trim()) { setBulkSendError('Vendor name is required'); return }
     if (!bulkSendForm.sent_date) { setBulkSendError('Sent date is required'); return }
-    const selectedRollObjects = getSelectedRollObjects()
-    if (selectedRollObjects.length === 0) { setBulkSendError('No rolls selected'); return }
+    if (bulkSendRolls.length === 0) { setBulkSendError('No rolls selected'); return }
     // Validate weights
-    for (const r of selectedRollObjects) {
+    for (const r of bulkSendRolls) {
       const wt = parseFloat(bulkSendWeights[r.id])
       const maxWt = r.remaining_weight || r.current_weight || r.total_weight
       if (!wt || wt <= 0) { setBulkSendError(`Weight must be > 0 for ${r.roll_code}`); return }
@@ -653,7 +653,7 @@ export default function RollsPage() {
     setBulkSendSaving(true)
     setBulkSendError(null)
     try {
-      const rollEntries = selectedRollObjects.map((r) => ({
+      const rollEntries = bulkSendRolls.map((r) => ({
         roll_id: r.id,
         weight_to_send: parseFloat(bulkSendWeights[r.id]),
       }))
@@ -664,14 +664,14 @@ export default function RollsPage() {
         sent_date: bulkSendForm.sent_date,
         notes: bulkSendForm.notes.trim() || null,
         rolls: rollEntries,
-        _rolls: selectedRollObjects, // for mock
+        _rolls: bulkSendRolls, // for mock
         _vaObj: masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id) || null,
       })
       const challan = res.data?.data || res.data
       const vaObj = masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id)
       setJobChallanData({
         challanNo: challan.challan_no,
-        rolls: challan.rolls || selectedRollObjects,
+        rolls: challan.rolls || bulkSendRolls,
         vaName: challan.value_addition?.name || vaObj?.name || '—',
         vaShortCode: challan.value_addition?.short_code || vaObj?.short_code || '—',
         vendorName: challan.vendor_name || bulkSendForm.vendor_name.trim(),
@@ -680,6 +680,7 @@ export default function RollsPage() {
         notes: challan.notes || bulkSendForm.notes.trim() || '',
       })
       setBulkSendOpen(false)
+      setBulkSendRolls([])
       setSelectedRolls(new Set())
       setShowJobChallan(true)
       refreshAll()
@@ -1591,8 +1592,10 @@ export default function RollsPage() {
                           Create Lot ({selectedRolls.size})
                         </button>
                         <button onClick={() => {
+                            const rollObjs = getSelectedRollObjects()
+                            setBulkSendRolls(rollObjs)
                             setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
-                            const wts = {}; getSelectedRollObjects().forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
+                            const wts = {}; rollObjs.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                             setBulkSendError(null)
                             fetchNextJCNo()
                             setBulkSendOpen(true)
@@ -2134,6 +2137,7 @@ export default function RollsPage() {
                     </button>
                     <button onClick={() => {
                         const invRollObjects = selectedInvoice.rolls.filter(r => selectedInvRolls.has(r.id))
+                        setBulkSendRolls(invRollObjects)
                         setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                         const wts = {}; invRollObjects.forEach(r => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                         setBulkSendError(null)
@@ -3179,14 +3183,13 @@ export default function RollsPage() {
           BULK SEND FOR PROCESSING — Full-page overlay
          ════════════════════════════════════════════════════════ */}
       {bulkSendOpen && (() => {
-        const bulkRolls = getSelectedRollObjects()
-        const totalSendWt = bulkRolls.reduce((s, r) => s + (parseFloat(bulkSendWeights[r.id]) || 0), 0)
+        const totalSendWt = bulkSendRolls.reduce((s, r) => s + (parseFloat(bulkSendWeights[r.id]) || 0), 0)
         return (
           <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
             {/* ── Top bar ── */}
             <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Send {bulkRolls.length} Roll{bulkRolls.length > 1 ? 's' : ''} for Processing</h2>
+                <h2 className="text-lg font-bold text-gray-900">Send {bulkSendRolls.length} Roll{bulkSendRolls.length > 1 ? 's' : ''} for Processing</h2>
                 <p className="text-sm text-gray-500">Total send weight: {totalSendWt.toFixed(3)} kg</p>
               </div>
               <div className="flex items-center gap-3">
@@ -3219,7 +3222,7 @@ export default function RollsPage() {
                 <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                   <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-700">Selected Rolls</h3>
-                    <button type="button" onClick={() => { const wts = {}; bulkRolls.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts) }}
+                    <button type="button" onClick={() => { const wts = {}; bulkSendRolls.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts) }}
                       className="text-xs text-blue-600 hover:text-blue-800">Reset All to Full</button>
                   </div>
                   <table className="w-full text-sm">
@@ -3235,7 +3238,7 @@ export default function RollsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bulkRolls.map((r, i) => {
+                      {bulkSendRolls.map((r, i) => {
                         const maxWt = r.remaining_weight || r.current_weight || r.total_weight
                         return (
                         <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
@@ -3251,7 +3254,7 @@ export default function RollsPage() {
                               className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
                           </td>
                           <td className="px-4 py-2 text-center">
-                            <button onClick={() => { setSelectedRolls((prev) => { const next = new Set(prev); next.delete(r.id); if (next.size === 0) setBulkSendOpen(false); return next }); setBulkSendWeights((prev) => { const next = { ...prev }; delete next[r.id]; return next }) }}
+                            <button onClick={() => { setBulkSendRolls((prev) => { const next = prev.filter(x => x.id !== r.id); if (next.length === 0) setBulkSendOpen(false); return next }); setBulkSendWeights((prev) => { const next = { ...prev }; delete next[r.id]; return next }) }}
                               className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
@@ -3262,7 +3265,7 @@ export default function RollsPage() {
                     </tbody>
                     <tfoot>
                       <tr className="bg-gray-50 font-semibold text-sm">
-                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">Total: {bulkRolls.length} roll{bulkRolls.length > 1 ? 's' : ''}</td>
+                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">Total: {bulkSendRolls.length} roll{bulkSendRolls.length > 1 ? 's' : ''}</td>
                         <td className="px-4 py-2 text-right">{totalSendWt.toFixed(3)} kg</td>
                         <td></td>
                       </tr>
