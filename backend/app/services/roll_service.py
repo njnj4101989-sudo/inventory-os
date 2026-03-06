@@ -87,6 +87,7 @@ class RollService:
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -113,6 +114,7 @@ class RollService:
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
         )
         result = await self.db.execute(stmt)
@@ -135,6 +137,7 @@ class RollService:
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
                 selectinload(Roll.lot_rolls)
                     .selectinload(LotRoll.lot)
                     .selectinload(Lot.batches)
@@ -294,6 +297,7 @@ class RollService:
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(Roll.created_at.asc())
         )
@@ -404,6 +408,7 @@ class RollService:
                 selectinload(Roll.supplier),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(Roll.created_at.asc())
         )
@@ -484,6 +489,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
@@ -546,6 +552,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one()
@@ -633,6 +640,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
         return self._to_response(roll)
@@ -697,6 +705,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
 
@@ -763,6 +772,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
         return self._to_response(roll)
@@ -790,6 +800,7 @@ class RollService:
             "status": p.status,
             "notes": p.notes,
             "job_challan_id": str(p.job_challan_id) if p.job_challan_id else None,
+            "challan_no": p.job_challan.challan_no if p.job_challan else None,
         }
 
     @staticmethod

@@ -508,6 +508,14 @@ export default function RollsPage() {
   const [recvProcSaving, setRecvProcSaving] = useState(false)
   const [recvProcError, setRecvProcError] = useState(null)
 
+  // Bulk Receive from Processing (challan-based)
+  const [bulkRecvOpen, setBulkRecvOpen] = useState(false)
+  const [bulkRecvChallan, setBulkRecvChallan] = useState(null) // {challanNo, vendorName, vaName, vaShortCode, rolls:[{roll, log}]}
+  const [bulkRecvDate, setBulkRecvDate] = useState('')
+  const [bulkRecvRows, setBulkRecvRows] = useState({}) // {logId: {checked, weight_after, processing_cost}}
+  const [bulkRecvSaving, setBulkRecvSaving] = useState(false)
+  const [bulkRecvError, setBulkRecvError] = useState(null)
+
   // Edit Processing Log modal
   const [editProcOpen, setEditProcOpen] = useState(false)
   const [editProcRollId, setEditProcRollId] = useState(null)
@@ -1337,6 +1345,56 @@ export default function RollsPage() {
     }
   }
 
+  // ── Bulk Receive (challan-based) ──
+  const openBulkReceive = (group) => {
+    const today = new Date().toISOString().split('T')[0]
+    const rows = {}
+    for (const item of group.rolls) {
+      const log = item.log
+      rows[log.id] = {
+        checked: true,
+        weight_after: String(log.weight_before || ''),
+        processing_cost: '',
+      }
+    }
+    setBulkRecvChallan(group)
+    setBulkRecvDate(today)
+    setBulkRecvRows(rows)
+    setBulkRecvError(null)
+    setBulkRecvOpen(true)
+  }
+
+  const handleBulkReceive = async () => {
+    if (!bulkRecvDate) { setBulkRecvError('Received date is required'); return }
+    const toReceive = bulkRecvChallan.rolls.filter(item => bulkRecvRows[item.log.id]?.checked)
+    if (toReceive.length === 0) { setBulkRecvError('Select at least one roll to receive'); return }
+    for (const item of toReceive) {
+      const row = bulkRecvRows[item.log.id]
+      const wt = parseFloat(row.weight_after)
+      if (!wt || wt <= 0) { setBulkRecvError(`Weight required for ${item.roll.roll_code}`); return }
+    }
+    setBulkRecvSaving(true)
+    setBulkRecvError(null)
+    try {
+      for (const item of toReceive) {
+        const row = bulkRecvRows[item.log.id]
+        await receiveFromProcessing(item.roll.id, item.log.id, {
+          received_date: bulkRecvDate,
+          weight_after: parseFloat(row.weight_after),
+          processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
+          notes: null,
+        })
+      }
+      setBulkRecvOpen(false)
+      setBulkRecvChallan(null)
+      refreshAll()
+    } catch (err) {
+      setBulkRecvError(err.response?.data?.detail || 'Failed to receive — check individual rolls')
+    } finally {
+      setBulkRecvSaving(false)
+    }
+  }
+
   // ── Stock-in totals (across all design groups) ──
   const challanTotals = designGroups.reduce((acc, grp) => {
     const rate = parseFloat(grp.cost_per_unit) || 0
@@ -1729,43 +1787,76 @@ export default function RollsPage() {
               </div>
             )}
 
-            {/* ── Vendor × VA grouped challan cards ── */}
+            {/* ── Job Challan grouped cards ── */}
             {!procLoading && filtered.length > 0 && (() => {
               const groups = {}
               for (const r of filtered) {
                 const log = getLatestLog(r)
                 if (!log) continue
-                const key = `${log.vendor_name || '?'}|||${log.value_addition?.id || '?'}`
-                if (!groups[key]) groups[key] = { vendorName: log.vendor_name || '—', vendorPhone: log.vendor_phone || '', va: log.value_addition, sentDate: log.sent_date, rolls: [] }
-                groups[key].rolls.push(r)
+                const key = log.job_challan_id || `no-challan-${log.vendor_name || '?'}|||${log.value_addition?.id || '?'}`
+                if (!groups[key]) groups[key] = {
+                  challanId: log.job_challan_id,
+                  challanNo: log.challan_no || null,
+                  vendorName: log.vendor_name || '—',
+                  vendorPhone: log.vendor_phone || '',
+                  va: log.value_addition,
+                  sentDate: log.sent_date,
+                  rolls: [],
+                }
+                groups[key].rolls.push({ roll: r, log })
               }
-              const groupList = Object.values(groups)
+              const groupList = Object.values(groups).sort((a, b) => (b.challanNo || '').localeCompare(a.challanNo || ''))
               if (groupList.length === 0) return null
               return (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {groupList.map((g, gi) => {
                     const vaColor = g.va ? getVAColor(g.va.short_code) : DEFAULT_VA_COLOR
-                    const totalWt = g.rolls.reduce((s, r) => s + (parseFloat(r.current_weight || r.total_weight) || 0), 0)
+                    const totalWt = g.rolls.reduce((s, item) => s + (parseFloat(item.log.weight_before) || 0), 0)
+                    const daysOut = g.sentDate ? Math.floor((Date.now() - new Date(g.sentDate).getTime()) / (1000 * 60 * 60 * 24)) : 0
                     return (
-                      <div key={gi} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-semibold text-gray-800 text-sm">{g.vendorName}</div>
-                            <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vaColor.bg} ${vaColor.text}`}>
-                              {g.va?.name || '—'} ({g.va?.short_code || '?'})
-                            </span>
+                      <div key={gi} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                        <div className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              {g.challanNo && (
+                                <div className="font-mono text-xs font-bold text-orange-700 mb-0.5">{g.challanNo}</div>
+                              )}
+                              <div className="font-semibold text-gray-800 text-sm">{g.vendorName}</div>
+                              <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vaColor.bg} ${vaColor.text}`}>
+                                {g.va?.name || '—'} ({g.va?.short_code || '?'})
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              {daysOut > 14 ? (
+                                <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">{daysOut}d overdue</span>
+                              ) : daysOut > 7 ? (
+                                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">{daysOut}d</span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5">{daysOut}d</span>
+                              )}
+                            </div>
                           </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {g.rolls.map(item => (
+                              <span key={item.roll.id} className="text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5">
+                                {item.roll.roll_code} <span className="text-gray-400">{parseFloat(item.log.weight_before || 0).toFixed(1)}kg</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
+                            <span>{g.rolls.length} roll{g.rolls.length > 1 ? 's' : ''}</span>
+                            <span>{totalWt.toFixed(3)} kg</span>
+                          </div>
+                        </div>
+                        <div className="flex border-t border-gray-100 divide-x divide-gray-100">
                           <button onClick={async () => {
-                              // Try to fetch from DB if any log has a job_challan_id
-                              const firstLog = getLatestLog(g.rolls[0])
-                              const challanId = firstLog?.job_challan_id
-                              if (challanId) {
+                              if (g.challanId) {
                                 try {
-                                  const res = await getJobChallan(challanId)
+                                  const res = await getJobChallan(g.challanId)
                                   const c = res.data?.data || res.data
                                   setJobChallanData({
                                     challanNo: c.challan_no,
-                                    rolls: c.rolls || g.rolls,
+                                    rolls: c.rolls || g.rolls.map(item => item.roll),
                                     vaName: c.value_addition?.name || g.va?.name || '—',
                                     vaShortCode: c.value_addition?.short_code || g.va?.short_code || '—',
                                     vendorName: c.vendor_name || g.vendorName,
@@ -1775,10 +1866,10 @@ export default function RollsPage() {
                                   })
                                   setShowJobChallan(true)
                                   return
-                                } catch { /* fallback to client-side data */ }
+                                } catch { /* fallback */ }
                               }
                               setJobChallanData({
-                                rolls: g.rolls,
+                                rolls: g.rolls.map(item => item.roll),
                                 vaName: g.va?.name || '—',
                                 vaShortCode: g.va?.short_code || '—',
                                 vendorName: g.vendorName,
@@ -1788,16 +1879,19 @@ export default function RollsPage() {
                               })
                               setShowJobChallan(true)
                             }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 transition-colors">
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-orange-700 hover:bg-orange-50 transition-colors">
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                             </svg>
-                            Print Challan
+                            Print
                           </button>
-                        </div>
-                        <div className="mt-2 flex items-center gap-4 text-xs text-gray-500">
-                          <span>{g.rolls.length} roll{g.rolls.length > 1 ? 's' : ''}</span>
-                          <span>{totalWt.toFixed(3)} kg</span>
+                          <button onClick={() => openBulkReceive(g)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Receive All
+                          </button>
                         </div>
                       </div>
                     )
@@ -3304,6 +3398,131 @@ export default function RollsPage() {
                     <textarea value={bulkSendForm.notes} onChange={(e) => setBulkSendForm((f) => ({ ...f, notes: e.target.value }))}
                       rows={2} placeholder="Instructions for the vendor..." className={INPUT_CLS} />
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ════════════════════════════════════════════════════════
+          BULK RECEIVE FROM PROCESSING — Full-page overlay
+         ════════════════════════════════════════════════════════ */}
+      {bulkRecvOpen && bulkRecvChallan && (() => {
+        const items = bulkRecvChallan.rolls
+        const checkedItems = items.filter(item => bulkRecvRows[item.log.id]?.checked)
+        const totalRecvWt = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.weight_after) || 0), 0)
+        const totalCost = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.processing_cost) || 0), 0)
+        return (
+          <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Receive {checkedItems.length} Roll{checkedItems.length !== 1 ? 's' : ''}
+                  {bulkRecvChallan.challanNo && <span className="ml-2 font-mono text-orange-600">{bulkRecvChallan.challanNo}</span>}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {bulkRecvChallan.vendorName} — {bulkRecvChallan.va?.name || '—'} ({bulkRecvChallan.va?.short_code || '?'})
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setBulkRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleBulkReceive} disabled={bulkRecvSaving || checkedItems.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  {bulkRecvSaving ? 'Receiving...' : `Receive ${checkedItems.length} Roll${checkedItems.length !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mx-auto max-w-4xl space-y-6">
+                {bulkRecvError && <ErrorAlert message={bulkRecvError} onDismiss={() => setBulkRecvError(null)} />}
+
+                {/* Received Date */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Received Date</label>
+                    <input type="date" value={bulkRecvDate} onChange={(e) => setBulkRecvDate(e.target.value)}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" />
+                  </div>
+                </div>
+
+                {/* Rolls Table */}
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700">Rolls</h3>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => {
+                        const rows = { ...bulkRecvRows }
+                        for (const item of items) { rows[item.log.id] = { ...rows[item.log.id], weight_after: String(item.log.weight_before || '') } }
+                        setBulkRecvRows(rows)
+                      }} className="text-xs text-blue-600 hover:text-blue-800">Reset Weights to Sent</button>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" checked={checkedItems.length === items.length}
+                          onChange={(e) => {
+                            const rows = { ...bulkRecvRows }
+                            for (const item of items) { rows[item.log.id] = { ...rows[item.log.id], checked: e.target.checked } }
+                            setBulkRecvRows(rows)
+                          }}
+                          className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
+                        All
+                      </label>
+                    </div>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                        <th className="px-4 py-2.5 text-center w-10"></th>
+                        <th className="px-4 py-2.5 text-center w-10">#</th>
+                        <th className="px-4 py-2.5 text-left">Roll Code</th>
+                        <th className="px-4 py-2.5 text-left">Color</th>
+                        <th className="px-4 py-2.5 text-right">Sent Wt</th>
+                        <th className="px-4 py-2.5 text-right">Received Wt</th>
+                        <th className="px-4 py-2.5 text-right">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, i) => {
+                        const row = bulkRecvRows[item.log.id] || {}
+                        return (
+                          <tr key={item.log.id} className={`border-b border-gray-50 ${!row.checked ? 'opacity-40' : ''} hover:bg-gray-50/50`}>
+                            <td className="px-4 py-2 text-center">
+                              <input type="checkbox" checked={!!row.checked}
+                                onChange={(e) => setBulkRecvRows(prev => ({ ...prev, [item.log.id]: { ...prev[item.log.id], checked: e.target.checked } }))}
+                                className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
+                            </td>
+                            <td className="px-4 py-2 text-center text-gray-400 font-medium">{i + 1}</td>
+                            <td className="px-4 py-2 font-semibold text-gray-800">{item.roll.enhanced_roll_code || item.roll.roll_code}</td>
+                            <td className="px-4 py-2 text-gray-600">{item.roll.color}</td>
+                            <td className="px-4 py-2 text-right text-gray-500">{parseFloat(item.log.weight_before || 0).toFixed(3)} kg</td>
+                            <td className="px-4 py-2 text-right">
+                              <input type="number" step="0.001" min="0.001"
+                                value={row.weight_after || ''}
+                                onChange={(e) => setBulkRecvRows(prev => ({ ...prev, [item.log.id]: { ...prev[item.log.id], weight_after: e.target.value } }))}
+                                disabled={!row.checked}
+                                className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:bg-gray-100" />
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <input type="number" step="1" min="0"
+                                value={row.processing_cost || ''}
+                                onChange={(e) => setBulkRecvRows(prev => ({ ...prev, [item.log.id]: { ...prev[item.log.id], processing_cost: e.target.value } }))}
+                                disabled={!row.checked}
+                                className="w-20 rounded border border-gray-300 px-2 py-1 text-right text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:bg-gray-100"
+                                placeholder="0" />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50 font-semibold text-sm">
+                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">{checkedItems.length} of {items.length} rolls</td>
+                        <td className="px-4 py-2 text-right">{totalRecvWt.toFixed(3)} kg</td>
+                        <td className="px-4 py-2 text-right text-gray-600">{totalCost > 0 ? `₹${totalCost.toLocaleString()}` : '—'}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               </div>
             </div>
