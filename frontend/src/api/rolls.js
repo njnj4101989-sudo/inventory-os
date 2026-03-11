@@ -147,6 +147,7 @@ export async function stockInBulk(header, rollEntries) {
     supplier_challan_no: header.supplier_challan_no || null,
     supplier_invoice_date: header.supplier_invoice_date || null,
     sr_no: header.sr_no || null,
+    gst_percent: header.gst_percent ? parseFloat(header.gst_percent) : 0,
     rolls: rollEntries.map(entry => ({
       fabric_type: entry.fabric_type,
       color: entry.color,
@@ -214,6 +215,13 @@ export async function getInvoices(params = {}) {
   // Real API — server-side grouping via dedicated endpoint
   const res = await client.get('/rolls/supplier-invoices', { params })
   return res
+}
+
+/**
+ * Update a SupplierInvoice record (e.g. gst_percent).
+ */
+export async function updateSupplierInvoice(invoiceId, updates) {
+  return await client.patch(`/rolls/supplier-invoices/${invoiceId}`, updates)
 }
 
 /**

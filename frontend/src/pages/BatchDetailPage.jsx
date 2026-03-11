@@ -329,7 +329,7 @@ export default function BatchDetailPage() {
                 const log = node.log
                 const received = log.status === 'received'
                 return (
-                  <div key={`va-${log.id}`} className="flex items-center justify-center relative group">
+                  <div key={`va-${log.id}`} className="flex items-center justify-center relative group cursor-pointer">
                     <div className={`w-5 h-5 rotate-45 rounded-[3px] flex items-center justify-center border-2 transition-all shrink-0 z-10 ${
                       received ? 'border-green-400 bg-green-500' :
                       'border-amber-400 bg-amber-50 shadow-[0_0_0_3px_rgba(251,191,36,0.15)]'
@@ -375,7 +375,7 @@ export default function BatchDetailPage() {
 
               const step = node.step
               return (
-                <div key={step.key} className="flex items-center justify-center relative">
+                <div key={step.key} className="flex items-center justify-center relative cursor-pointer group">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all shrink-0 z-10 ${
                     active ? 'border-amber-400 bg-amber-50 shadow-[0_0_0_4px_rgba(251,191,36,0.15)]' :
                     done ? 'border-primary-500 bg-primary-600' : 'border-gray-200 bg-white'
@@ -398,6 +398,21 @@ export default function BatchDetailPage() {
                   {!isLast && (
                     <div className={`absolute top-1/2 h-0.5 -translate-y-1/2 ${lineColor}`} style={{ left: '50%', width: '100%' }} />
                   )}
+                  {/* Step hover tooltip */}
+                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 z-30 pointer-events-none">
+                    <div className="bg-white rounded-lg shadow-lg border border-gray-200 px-3 py-2 w-36 text-center">
+                      <p className="text-xs font-bold text-gray-900">{step.label}</p>
+                      {batch[step.key] && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">{fmtDate(batch[step.key])}</p>
+                      )}
+                      {!batch[step.key] && !step.statusMatch && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">Pending</p>
+                      )}
+                      {step.statusMatch && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">{batch.status === 'packing' ? 'In progress' : batch.packed_at ? 'Done' : 'Pending'}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )
             })}

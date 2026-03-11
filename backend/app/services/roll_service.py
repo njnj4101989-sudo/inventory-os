@@ -12,6 +12,7 @@ from app.database import is_postgresql
 from app.models.supplier import Supplier
 
 from app.models.roll import Roll, RollProcessing
+from app.models.supplier_invoice import SupplierInvoice
 from app.models.inventory_event import InventoryEvent
 from app.models.batch_roll_consumption import BatchRollConsumption
 from app.models.lot import Lot, LotRoll
@@ -88,6 +89,7 @@ class RollService:
             select(Roll)
             .options(
                 selectinload(Roll.supplier),
+                selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -115,6 +117,7 @@ class RollService:
             .where(Roll.id == roll_id)
             .options(
                 selectinload(Roll.supplier),
+                selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -138,6 +141,7 @@ class RollService:
             .where(Roll.roll_code == roll_code)
             .options(
                 selectinload(Roll.supplier),
+                selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -248,6 +252,20 @@ class RollService:
         created_rolls = []
         now = datetime.now(timezone.utc)
 
+        # Create SupplierInvoice record first — invoice-level data lives here
+        supplier_inv = SupplierInvoice(
+            supplier_id=req.supplier_id,
+            invoice_no=req.supplier_invoice_no,
+            challan_no=req.supplier_challan_no,
+            invoice_date=req.supplier_invoice_date,
+            sr_no=req.sr_no,
+            gst_percent=req.gst_percent,
+            received_by=received_by,
+            received_at=now,
+        )
+        self.db.add(supplier_inv)
+        await self.db.flush()  # get supplier_inv.id
+
         for entry in req.rolls:
             if entry.total_weight <= 0:
                 raise BusinessRuleViolationError(
@@ -279,6 +297,7 @@ class RollService:
                 supplier_challan_no=req.supplier_challan_no,
                 supplier_invoice_date=req.supplier_invoice_date,
                 sr_no=req.sr_no,
+                supplier_invoice_id=supplier_inv.id,
                 panna=entry.panna,
                 gsm=entry.gsm,
                 received_by=received_by,
@@ -298,6 +317,7 @@ class RollService:
             .where(Roll.id.in_(roll_ids))
             .options(
                 selectinload(Roll.supplier),
+                selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -409,6 +429,7 @@ class RollService:
             .where(or_(*group_conditions))
             .options(
                 selectinload(Roll.supplier),
+                selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -435,17 +456,27 @@ class RollService:
                 s = group_rolls[0].supplier
                 supplier = {"id": str(s.id), "name": s.name}
 
+            # GST from SupplierInvoice (new rolls) or 0 (legacy rolls)
+            si = next((r.supplier_invoice for r in group_rolls if r.supplier_invoice), None)
+            gst_pct = float(si.gst_percent) if si and si.gst_percent else 0.0
+            total_val = float(g.total_value) if g.total_value else 0.0
+            gst_amount = round(total_val * gst_pct / 100, 2)
+
             data.append({
                 "invoice_no": g.supplier_invoice_no,
                 "challan_no": g.challan_no,
                 "invoice_date": g.invoice_date.isoformat() if g.invoice_date else None,
                 "sr_no": g.sr_no,
                 "supplier": supplier,
+                "supplier_invoice_id": str(si.id) if si else None,
+                "gst_percent": gst_pct,
+                "gst_amount": gst_amount,
+                "total_with_gst": round(total_val + gst_amount, 2),
                 "rolls": [self._to_response(r) for r in group_rolls],
                 "roll_count": int(g.roll_count),
                 "total_weight": float(g.total_weight) if g.total_weight else 0.0,
                 "total_length": float(g.total_length) if g.total_length else 0.0,
-                "total_value": float(g.total_value) if g.total_value else 0.0,
+                "total_value": total_val,
                 "received_at": g.received_at.isoformat() if g.received_at else None,
             })
 
@@ -507,11 +538,39 @@ class RollService:
 
         return self._to_response(roll)
 
+    async def update_supplier_invoice(self, invoice_id: UUID, updates: dict) -> dict:
+        """Update a SupplierInvoice record (e.g. gst_percent, invoice_no, etc.)."""
+        stmt = (
+            select(SupplierInvoice)
+            .where(SupplierInvoice.id == invoice_id)
+            .options(selectinload(SupplierInvoice.supplier))
+        )
+        result = await self.db.execute(stmt)
+        si = result.scalar_one_or_none()
+        if not si:
+            raise NotFoundError(f"Supplier invoice {invoice_id} not found")
+
+        allowed = {"gst_percent", "invoice_no", "challan_no", "invoice_date", "sr_no", "notes"}
+        for field, value in updates.items():
+            if field in allowed:
+                setattr(si, field, value)
+
+        await self.db.flush()
+        return {
+            "id": str(si.id),
+            "supplier_id": str(si.supplier_id) if si.supplier_id else None,
+            "invoice_no": si.invoice_no,
+            "challan_no": si.challan_no,
+            "invoice_date": si.invoice_date.isoformat() if si.invoice_date else None,
+            "sr_no": si.sr_no,
+            "gst_percent": float(si.gst_percent) if si.gst_percent else 0,
+        }
+
     async def update_roll(self, roll_id: UUID, req: RollUpdate) -> dict:
         stmt = (
             select(Roll)
             .where(Roll.id == roll_id)
-            .options(selectinload(Roll.supplier))
+            .options(selectinload(Roll.supplier), selectinload(Roll.supplier_invoice))
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
@@ -839,6 +898,8 @@ class RollService:
             "supplier_challan_no": r.supplier_challan_no,
             "supplier_invoice_date": r.supplier_invoice_date.isoformat() if r.supplier_invoice_date else None,
             "sr_no": r.sr_no,
+            "gst_percent": float(r.supplier_invoice.gst_percent) if r.supplier_invoice and r.supplier_invoice.gst_percent else 0,
+            "supplier_invoice_id": str(r.supplier_invoice_id) if r.supplier_invoice_id else None,
             "panna": float(r.panna) if r.panna else None,
             "gsm": float(r.gsm) if r.gsm else None,
             "received_by_user": {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
@@ -84,7 +84,19 @@ const INVOICE_COLUMNS = [
   {
     key: 'total_value',
     label: 'Value',
-    render: (val) => val > 0 ? `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—',
+    render: (val, row) => {
+      if (!val || val <= 0) return '—'
+      const base = `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+      if (row.gst_percent > 0) {
+        return (
+          <div className="leading-tight">
+            <span>{base}</span>
+            <div className="text-[10px] text-amber-600">+{row.gst_percent}% GST</div>
+          </div>
+        )
+      }
+      return base
+    },
   },
 ]
 
@@ -463,8 +475,9 @@ export default function RollsPage() {
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', colorRows: [{ color: '', weights: [''] }] }
   const [stockInOpen, setStockInOpen] = useState(false)
-  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '' })
+  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '', gst_percent: '' })
   const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
+  const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // { gIdx, cIdx } — Delete key confirmation
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [lastSavedRolls, setLastSavedRolls] = useState([])   // for Print Labels
@@ -714,11 +727,12 @@ export default function RollsPage() {
   const openStockIn = () => {
     setEditingInvoice(null)
     setRemovedRollIds([])
+    setPendingDeleteRow(null)
     // Auto-generate next Sr. No. (our internal filing serial)
     const existingSrNos = invoices.map((inv) => parseInt(inv.sr_no, 10)).filter((n) => !isNaN(n))
     const nextSr = existingSrNos.length > 0 ? Math.max(...existingSrNos) + 1 : 1
     const today = new Date().toISOString().split('T')[0]
-    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: today, sr_no: String(nextSr) })
+    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: today, sr_no: String(nextSr), gst_percent: '' })
     setDesignGroups([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
     setFormError(null)
     setStockInOpen(true)
@@ -737,6 +751,7 @@ export default function RollsPage() {
       supplier_challan_no: selectedInvoice.challan_no || '',
       supplier_invoice_date: selectedInvoice.invoice_date || '',
       sr_no: selectedInvoice.sr_no || '',
+      gst_percent: selectedInvoice.gst_percent ? String(selectedInvoice.gst_percent) : '',
     })
     // Group rolls by fabric_type → design groups, then by color within each
     // Sort rolls by created_at (or received_at) to preserve original entry order
@@ -758,6 +773,7 @@ export default function RollsPage() {
       colorRows: Object.values(g.colors),
     })))
     setRemovedRollIds([])
+    setPendingDeleteRow(null)
     setFormError(null)
     setSelectedInvoice(null)
     setStockInOpen(true)
@@ -781,44 +797,54 @@ export default function RollsPage() {
     ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: [...r.weights, ''] } : r),
   }))
   const removeWeight = (gIdx, cIdx, wIdx) => {
-    // Track removed rollId for edit mode (so we can delete it on save)
-    if (editingInvoice) {
-      const row = designGroups[gIdx]?.colorRows?.[cIdx]
-      const rollId = row?.rollIds?.[wIdx]
-      if (rollId) setRemovedRollIds((prev) => [...prev, rollId])
-    }
-    updateGroup(gIdx, (g) => ({
-      ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? {
-        ...r,
-        weights: r.weights.length > 1 ? r.weights.filter((_, k) => k !== wIdx) : r.weights,
-        rollIds: r.rollIds ? (r.weights.length > 1 ? r.rollIds.filter((_, k) => k !== wIdx) : r.rollIds) : undefined,
-      } : r),
-    }))
+    // Read rollId from fresh state inside updater to avoid stale closure
+    updateGroup(gIdx, (g) => {
+      const r = g.colorRows[cIdx]
+      if (!r) return g
+      // Track removed rollId for edit mode (so we can delete it on save)
+      if (editingInvoice && r.rollIds?.[wIdx]) {
+        setRemovedRollIds((prev) => [...prev, r.rollIds[wIdx]])
+      }
+      return {
+        ...g, colorRows: g.colorRows.map((row, j) => j === cIdx ? {
+          ...row,
+          weights: row.weights.length > 1 ? row.weights.filter((_, k) => k !== wIdx) : row.weights,
+          rollIds: row.rollIds ? (row.weights.length > 1 ? row.rollIds.filter((_, k) => k !== wIdx) : row.rollIds) : undefined,
+        } : row),
+      }
+    })
   }
   const addColorRow = (gIdx) => updateGroup(gIdx, (g) => ({
     ...g, colorRows: [...g.colorRows, { color: '', weights: [''] }],
   }))
   const removeColorRow = (gIdx, cIdx) => {
-    // Track removed rollIds for edit mode (so we can delete them on save)
-    if (editingInvoice) {
-      const grp = designGroups[gIdx]
-      const row = grp?.colorRows?.[cIdx]
-      if (row?.rollIds?.length) {
+    // Read rollIds from fresh state inside updater to avoid stale closure
+    updateGroup(gIdx, (g) => {
+      const row = g.colorRows[cIdx]
+      if (editingInvoice && row?.rollIds?.length) {
         setRemovedRollIds((prev) => [...prev, ...row.rollIds])
       }
-    }
-    updateGroup(gIdx, (g) => ({
-      ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
-    }))
+      return {
+        ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
+      }
+    })
   }
   // Remove empty trailing weight from a color row (used by smart Enter)
-  const trimEmptyWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => ({
-    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx && r.weights.length > 1 ? {
-      ...r,
-      weights: r.weights.filter((_, k) => k !== wIdx),
-      rollIds: r.rollIds ? r.rollIds.filter((_, k) => k !== wIdx) : undefined,
-    } : r),
-  }))
+  const trimEmptyWeight = (gIdx, cIdx, wIdx) => updateGroup(gIdx, (g) => {
+    const r = g.colorRows[cIdx]
+    if (!r || r.weights.length <= 1) return g
+    // Track removed rollId in edit mode
+    if (editingInvoice && r.rollIds?.[wIdx]) {
+      setRemovedRollIds((prev) => [...prev, r.rollIds[wIdx]])
+    }
+    return {
+      ...g, colorRows: g.colorRows.map((row, j) => j === cIdx ? {
+        ...row,
+        weights: row.weights.filter((_, k) => k !== wIdx),
+        rollIds: row.rollIds ? row.rollIds.filter((_, k) => k !== wIdx) : undefined,
+      } : row),
+    }
+  })
 
   const validateStockIn = () => {
     if (!invoiceHeader.supplier_id) return 'Please select a supplier'
@@ -931,6 +957,21 @@ export default function RollsPage() {
           }
         }
 
+        // Update SupplierInvoice GST (if invoice has a linked record)
+        if (editingInvoice.supplier_invoice_id) {
+          try {
+            await updateSupplierInvoice(editingInvoice.supplier_invoice_id, {
+              gst_percent: invoiceHeader.gst_percent ? parseFloat(invoiceHeader.gst_percent) : 0,
+              invoice_no: invoiceHeader.supplier_invoice_no || null,
+              challan_no: invoiceHeader.supplier_challan_no || null,
+              invoice_date: invoiceHeader.supplier_invoice_date || null,
+              sr_no: invoiceHeader.sr_no || null,
+            })
+          } catch (err) {
+            updateErrors.push(`GST update failed: ${stringifyDetail(err.response?.data?.detail) || 'Unknown error'}`)
+          }
+        }
+
         if (updateErrors.length > 0) {
           setFormError(`Some rolls could not be updated:\n${updateErrors.join('\n')}`)
           setSaving(false)
@@ -986,7 +1027,7 @@ export default function RollsPage() {
   // ── Ctrl+S to save stock-in form ──
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's' && stockInOpen && !saving) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && stockInOpen && !saving) {
         e.preventDefault()
         // Blur active input first so its onChange fires and state is committed
         if (document.activeElement && document.activeElement.tagName !== 'BODY') {
@@ -1403,17 +1444,24 @@ export default function RollsPage() {
   }
 
   // ── Stock-in totals (across all design groups) ──
-  const challanTotals = designGroups.reduce((acc, grp) => {
-    const rate = parseFloat(grp.cost_per_unit) || 0
-    grp.colorRows.forEach((row) => {
-      row.weights.forEach((w) => {
-        const wt = parseFloat(w) || 0
-        if (wt > 0) { acc.count++; acc.weight += wt; acc.value += wt * rate }
+  const challanTotals = (() => {
+    const base = designGroups.reduce((acc, grp) => {
+      const rate = parseFloat(grp.cost_per_unit) || 0
+      grp.colorRows.forEach((row) => {
+        row.weights.forEach((w) => {
+          const wt = parseFloat(w) || 0
+          if (wt > 0) { acc.count++; acc.weight += wt; acc.value += wt * rate }
+        })
+        if (row.color.trim()) acc.colors++
       })
-      if (row.color.trim()) acc.colors++
-    })
-    return acc
-  }, { count: 0, weight: 0, value: 0, colors: 0 })
+      return acc
+    }, { count: 0, weight: 0, value: 0, colors: 0 })
+    const gstPct = parseFloat(invoiceHeader.gst_percent) || 0
+    base.gstPercent = gstPct
+    base.gstAmount = Math.round(base.value * gstPct / 100 * 100) / 100
+    base.totalWithGst = Math.round((base.value + base.gstAmount) * 100) / 100
+    return base
+  })()
 
   return (
     <div>
@@ -2053,6 +2101,12 @@ export default function RollsPage() {
                     {selectedInvoice.received_at ? new Date(selectedInvoice.received_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   </span>
                 </div>
+                {selectedInvoice.gst_percent > 0 && (
+                  <div>
+                    <span className="text-gray-400">GST:</span>{' '}
+                    <span className="font-semibold text-amber-700">{selectedInvoice.gst_percent}%</span>
+                  </div>
+                )}
               </div>
 
               {/* ── KPI Summary Pills (matching entry top-bar style) ── */}
@@ -2071,6 +2125,9 @@ export default function RollsPage() {
                 </span>
                 <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
                   ₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  {selectedInvoice.gst_percent > 0 && (
+                    <span className="text-amber-500 ml-1">+{selectedInvoice.gst_percent}% GST = ₹{selectedInvoice.total_with_gst?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  )}
                 </span>
               </div>
 
@@ -2341,6 +2398,9 @@ export default function RollsPage() {
                     {challanTotals.value > 0 && (
                       <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
                         ₹{challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {challanTotals.gstAmount > 0 && (
+                          <span className="text-amber-500 ml-1">+{challanTotals.gstPercent}% = ₹{challanTotals.totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -2366,7 +2426,15 @@ export default function RollsPage() {
                   <h2 className="text-xs font-semibold text-gray-600">Invoice / Challan Details</h2>
                   <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-300 rounded text-[9px]">Shift+M</kbd> on any dropdown to quick-add master</span>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+                  <div>
+                    <label className={LABEL_CLS}>Sr. No.</label>
+                    <div className="relative">
+                      <input type="text" tabIndex={-1} value={invoiceHeader.sr_no} onChange={(e) => setHeader('sr_no', e.target.value)}
+                        className={`${INPUT_CLS} font-bold text-primary-700 bg-primary-50`} />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Filing</span>
+                    </div>
+                  </div>
                   <div className="col-span-2 md:col-span-1">
                     <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
                     <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
@@ -2390,12 +2458,14 @@ export default function RollsPage() {
                       className={INPUT_CLS} />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Sr. No.</label>
-                    <div className="relative">
-                      <input type="text" value={invoiceHeader.sr_no} onChange={(e) => setHeader('sr_no', e.target.value)}
-                        className={`${INPUT_CLS} font-bold text-primary-700 bg-primary-50`} />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Filing</span>
-                    </div>
+                    <label className={LABEL_CLS}>GST %</label>
+                    <select value={invoiceHeader.gst_percent} onChange={(e) => setHeader('gst_percent', e.target.value)} className={INPUT_CLS}>
+                      <option value="">0%</option>
+                      <option value="5">5%</option>
+                      <option value="12">12%</option>
+                      <option value="18">18%</option>
+                      <option value="28">28%</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -2495,10 +2565,25 @@ export default function RollsPage() {
                           {grp.colorRows.map((row, cIdx) => {
                             const validCount = row.weights.filter((w) => parseFloat(w) > 0).length
                             const rowWeight = row.weights.reduce((s, w) => s + (parseFloat(w) || 0), 0)
+                            const hasData = row.color !== '' || row.weights.some((w) => w !== '')
+                            const isDeletePending = pendingDeleteRow?.gIdx === gIdx && pendingDeleteRow?.cIdx === cIdx
                             return (
-                              <div key={cIdx} className="px-3 py-1 grid grid-cols-[160px_1fr_50px] gap-2 items-center group hover:bg-gray-50/50">
+                              <div key={cIdx} className={`px-3 py-1 grid grid-cols-[160px_1fr_50px] gap-2 items-center group ${isDeletePending ? 'bg-red-50' : 'hover:bg-gray-50/50'}`}>
                                 {/* Color name */}
                                 <div className="flex items-center gap-1.5">
+                                  {isDeletePending ? (
+                                    <div className="w-full flex items-center gap-1.5 text-xs">
+                                      <span className="text-red-600 font-medium">Delete {row.color || 'row'}?</span>
+                                      <button onClick={() => { removeColorRow(gIdx, cIdx); setPendingDeleteRow(null) }}
+                                        className="rounded bg-red-600 px-1.5 py-0.5 text-white font-medium hover:bg-red-700"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Escape') { e.preventDefault(); setPendingDeleteRow(null) }
+                                        }}
+                                        autoFocus>Yes</button>
+                                      <button onClick={() => setPendingDeleteRow(null)}
+                                        className="rounded bg-gray-200 px-1.5 py-0.5 text-gray-700 font-medium hover:bg-gray-300">Esc</button>
+                                    </div>
+                                  ) : (
                                   <select
                                     data-master="color" data-color-idx={cIdx}
                                     data-color-input="true"
@@ -2506,31 +2591,42 @@ export default function RollsPage() {
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
                                     className="w-full rounded border border-gray-300 px-1.5 py-1 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                     onKeyDown={(e) => {
-                                      const hasData = row.weights.some((w) => w !== '')
-                                      if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                      // Shift+G → new design group (from any color select)
+                                      if (e.key.toLowerCase() === 'g' && e.shiftKey && !e.ctrlKey && !e.altKey) {
                                         e.preventDefault()
-                                        // Empty color + no weights → new design group
-                                        if (row.color === '' && !hasData) {
-                                          if (grp.colorRows.length > 1) removeColorRow(gIdx, cIdx)
-                                          addDesignGroup()
-                                          setTimeout(() => {
-                                            const allGroups = document.querySelectorAll('[data-design-group]')
-                                            const lastGroup = allGroups[allGroups.length - 1]?.closest('.rounded-xl')
-                                            const fabricInput = lastGroup?.querySelector('[data-fabric-input]')
-                                            fabricInput?.focus()
-                                            fabricInput?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                                          }, 60)
-                                          return
+                                        if (!hasData && grp.colorRows.length > 1) removeColorRow(gIdx, cIdx)
+                                        addDesignGroup()
+                                        setTimeout(() => {
+                                          const allGroups = document.querySelectorAll('[data-design-group]')
+                                          const lastGroup = allGroups[allGroups.length - 1]?.closest('.rounded-xl')
+                                          const fabricInput = lastGroup?.querySelector('[data-fabric-input]')
+                                          fabricInput?.focus()
+                                          fabricInput?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                        }, 60)
+                                        return
+                                      }
+                                      // Delete key → confirm before removing color row
+                                      if (e.key === 'Delete' && grp.colorRows.length > 1) {
+                                        e.preventDefault()
+                                        if (!hasData) {
+                                          removeColorRow(gIdx, cIdx) // empty row — no confirmation needed
+                                        } else {
+                                          setPendingDeleteRow({ gIdx, cIdx })
                                         }
-                                        // Has color → focus first weight
+                                        return
+                                      }
+                                      // Tab → focus first weight (if color selected)
+                                      if (e.key === 'Tab' && !e.shiftKey) {
                                         if (row.color) {
+                                          e.preventDefault()
                                           const gridRow = e.target.closest('.group')
                                           const firstWeight = gridRow?.querySelector('input[data-weight]')
                                           firstWeight?.focus()
                                         }
                                       }
+                                      // Enter → let browser open the dropdown naturally (no override)
                                       // Backspace or Shift+Tab on empty color → delete row, jump back to previous row's last weight
-                                      if ((e.key === 'Backspace' || (e.key === 'Tab' && e.shiftKey)) && row.color === '' && !hasData && cIdx > 0) {
+                                      if ((e.key === 'Backspace' || (e.key === 'Tab' && e.shiftKey)) && !hasData && cIdx > 0) {
                                         e.preventDefault()
                                         removeColorRow(gIdx, cIdx)
                                         setTimeout(() => {
@@ -2545,8 +2641,12 @@ export default function RollsPage() {
                                     <option value="">{cIdx === 0 ? 'Select color' : 'Color'}</option>
                                     {masterColors.map((c) => <option key={c.id} value={c.name}>{c.name}{c.color_no ? ` (${String(c.color_no).padStart(2, '0')})` : ''}</option>)}
                                   </select>
-                                  {grp.colorRows.length > 1 && (
-                                    <button onClick={() => removeColorRow(gIdx, cIdx)} title="Remove color"
+                                  )}
+                                  {grp.colorRows.length > 1 && !isDeletePending && (
+                                    <button onClick={() => {
+                                        if (!hasData) { removeColorRow(gIdx, cIdx) }
+                                        else { setPendingDeleteRow({ gIdx, cIdx }) }
+                                      }} title="Remove color (Delete)"
                                       className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-gray-300 hover:text-red-500 transition-opacity flex-shrink-0">
                                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                     </button>
@@ -2679,9 +2779,23 @@ export default function RollsPage() {
                       <>
                         <div className="h-7 w-px bg-gray-200" />
                         <div>
-                          <span className="text-gray-400">Value</span>
+                          <span className="text-gray-400">Subtotal</span>
                           <div className="text-sm font-bold text-green-700">₹{challanTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                         </div>
+                        {challanTotals.gstAmount > 0 && (
+                          <>
+                            <div className="h-7 w-px bg-gray-200" />
+                            <div>
+                              <span className="text-gray-400">GST {challanTotals.gstPercent}%</span>
+                              <div className="text-sm font-bold text-amber-600">₹{challanTotals.gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className="h-7 w-px bg-gray-200" />
+                            <div>
+                              <span className="text-gray-400">Total</span>
+                              <div className="text-sm font-bold text-green-800">₹{challanTotals.totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                   </div>
@@ -2691,8 +2805,12 @@ export default function RollsPage() {
               {/* Keyboard hints */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 pb-2">
                 <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> Next weight</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty weight = New color row</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd> on empty = New color</span>
                 <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Backspace</kbd> on empty = Go back</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Shift+G</kbd> New design group</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Shift+M</kbd> Quick create master</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Delete</kbd> Remove color row</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
               </div>
             </div>
           </div>

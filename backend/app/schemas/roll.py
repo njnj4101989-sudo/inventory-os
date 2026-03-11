@@ -78,6 +78,7 @@ class BulkStockIn(BaseModel):
     supplier_challan_no: str | None = None
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
+    gst_percent: Decimal = Decimal("0")
     rolls: list[BulkRollEntry]
 
 

@@ -29,16 +29,116 @@
 
 ---
 
-## Current State (Session 65 — 2026-03-06)
+## Current State (Session 68 — 2026-03-12)
+
+### S68: Stock-In UX Fixes + SupplierInvoice Table + GST
+
+**Keyboard Fixes (CapsLock-safe):**
+- `useQuickMaster.js`: Shift+M now case-insensitive (`e.key.toLowerCase() === 'm'`)
+- `RollsPage.jsx`: Ctrl+S save now case-insensitive
+- Color select: Enter opens dropdown naturally (was hijacked for new design group)
+- New shortcut: `Shift+G` on color select → new design group
+- New shortcut: `Delete` on color select → remove row (with confirmation if has data)
+
+**Delete Flow Fix (stale closure bug):**
+- `removeWeight()`: rollId lookup moved inside updater function (was reading stale `designGroups`)
+- `removeColorRow()`: same fix — reads from fresh updater state `(g) => {...}`
+- `trimEmptyWeight()`: now tracks `removedRollIds` in edit mode (was silently dropping)
+- `pendingDeleteRow` state: red highlight → Yes/Esc confirmation for rows with data
+
+**SupplierInvoice Table (new — 25th model):**
+- `backend/app/models/supplier_invoice.py`: id, supplier_id, invoice_no, challan_no, invoice_date, sr_no, gst_percent, received_by, received_at, notes
+- `Roll.supplier_invoice_id` FK (nullable) — old rolls keep working
+- `stock_in_bulk()`: creates SupplierInvoice first, links rolls via FK
+- `get_supplier_invoices()`: response now includes `gst_percent`, `gst_amount`, `total_with_gst`, `supplier_invoice_id`
+- `_to_response()`: includes `gst_percent`, `supplier_invoice_id` from linked SupplierInvoice
+- All `selectinload(Roll.supplier_invoice)` added to every Roll query
+- Alembic migration: `63ca51d7966a` (batch_alter_table for SQLite compat)
+
+**Frontend GST:**
+- GST% `<select>` dropdown (0/5/12/18/28%) inline in header row (7-col grid)
+- Sr. No. moved to first column (tabIndex=-1, auto-focus stays on Supplier)
+- `challanTotals`: computes `gstAmount`, `totalWithGst`
+- Sticky bar + bottom summary: Subtotal / GST / Total
+- Invoice detail modal: GST in header line + KPI badge + list table
+- Edit mode: `updateSupplierInvoice()` PATCH saves GST on SupplierInvoice record
+- `PATCH /rolls/supplier-invoices/{id}` — new endpoint for invoice-level updates
+- Keyboard hints bar: Enter/Backspace/Shift+G/Shift+M/Delete/Ctrl+S
+
+**NOT deployed yet.** Migration `63ca51d7966a` applied locally only.
+
+**TODO (next session):**
+- [ ] Data migration script (backfill existing rolls → SupplierInvoice records)
+- [ ] Update `API_REFERENCE.md` + `mock.js`
+- [ ] Test full CRUD cycle (create/edit/delete with GST)
+- [ ] Deploy to prod (migration + restart)
+
+---
+
+## Previous State (Session 67 — 2026-03-06)
+
+### S67: VA Diamond Timeline + Mobile UX Glow-up + Notification Fix
+
+**Desktop BatchDetailPage — VA Diamond Timeline:**
+- `timelineNodes[]` interleaves 7 STEPS with VA processing logs (in_progress + post_qc phases)
+- VA diamonds (w-5 h-5 rotate-45) between steps: amber pulsing (sent), green check (received)
+- Hover tooltip: VA name, processor, challan, pieces, dates, cost, status
+- Dynamic grid columns, center-to-center connecting lines
+
+**Mobile MyWorkPage (Tailor) — Glow-up:**
+- Backend: enriched `get_batches_for_tailor` with size, lot, color_breakdown, pending_va, timestamps
+- Frontend: personalized greeting, gradient KPI cards, grouped sections (Stitching/Ready/Awaiting QC), richer cards with color chips + VA alert pill + days-since badge, refresh button
+
+**Mobile QCQueuePage (Checker) — Glow-up:**
+- Backend: added `started_at` to pending checks
+- Frontend: personalized greeting, 3 KPI cards (Pending/Checked Today/Pieces), submitted-ago + stitch-duration badges, color dots, view-batch link, checked-today counter
+
+**NotificationBell — Mobile Clipping Fix:**
+- `fixed right-2 left-2 top-14` on mobile, `sm:absolute sm:right-0 sm:w-80` on desktop
+
+**Commits:** `36ebc27` | Pushed → Vercel + EC2 deployed
+
+---
+
+## Previous State (Session 66 — 2026-03-06)
+
+### S66: QC UX Overhaul + Remnant Roll Status + Bulk VA Receive + Invoice Tab Fix
+
+**QC UX (QCQueuePage + ScanPage):**
+- "All Pass" button: builds `color_qc` from `color_breakdown` with all approved
+- "Mark Rejects" mode: reject-only (mark damaged colors, rest auto-approved)
+- Legacy flat fallback for batches without color_breakdown
+- SKU auto-gen on pack now works (was broken — `color_qc` never sent before)
+
+**Bulk VA Receive by Job Challan (RollsPage):**
+- In Processing tab: grouped by `job_challan_id` with challan_no, roll chips, days-out badges
+- Bulk Receive overlay: shared date, per-roll weight/cost, checkbox for partial receive
+
+**Invoice Tab Fix (RollsPage):**
+- Bulk send from Invoice tab now works — dedicated `bulkSendRolls` state instead of reading from Rolls tab selection
+
+**Remnant Roll Status (full stack):**
+- Backend: `remnant` added to Roll CHECK constraint + Alembic migration (`s66_remnant_status`)
+- `lot_service.py`: auto-marks rolls as `remnant` when waste < palla weight after lot creation
+- `job_challan_service.py`: allows `remnant` rolls for VA send
+- `roll_service.py`: allows `remnant` for single VA send
+- Frontend StatusBadge/ScanPage: amber `remnant` style
+- **RollsPage Remnant pill**: weight-based threshold (default 5 kg, adjustable input) — uses `max_remaining_weight` backend param instead of `status=remnant`
+- **LotsPage roll picker**: hides rolls below palla weight from All/Fresh/Processed; Remnant tab shows only sub-palla-weight rolls with REM badge; purple border for VA-processed rolls
+
+**Production DB cleanup:** Deleted all transactional data, kept masters/users/roles/suppliers. Assigned `color_no` to all colors.
+
+**Commits:** `731eb82`, `ff4b6b2`, `8fca444`, `9e8707e` | Pushed → Vercel + EC2 deployed
+
+---
+
+## Previous State (Session 65 — 2026-03-06)
 
 ### S65: Login UX — Password Eye Toggle + CapsLock Warning
 
-- Password show/hide eye icon (SVG toggle, `tabIndex={-1}`)
-- CapsLock detection via `getModifierState` — amber "CapsLock is ON" warning
-- Deprecated `apple-mobile-web-app-capable` → `mobile-web-app-capable` meta tag
-- Fix: eye icon invisible — `h-4.5` not valid Tailwind, changed to `h-5 w-5`
+- Password show/hide eye icon, CapsLock warning, meta tag fix
 
-**Commits:** `06d7743`, `4bff892` | Pushed → Vercel auto-deploy
+**Commits:** `06d7743`, `4bff892`
 
 ---
 
@@ -271,6 +371,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S63 | Phase 3 Data Flow Integrity | 9 fixes: FOR UPDATE race protection, remaining_weight CHECK, lot state machine, code generator locking |
 | S64 | Phase 4 Production Readiness | 9 fixes: Swagger disabled, strong JWT, CORS hardened, Nginx headers, structured logging, pool_pre_ping |
 | S65 | Login UX | Password eye toggle, CapsLock warning, meta tag fix |
+| S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
 

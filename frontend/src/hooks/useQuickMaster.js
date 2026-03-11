@@ -21,7 +21,7 @@ export default function useQuickMaster(onCreated) {
 
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'M' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (e.key.toLowerCase() === 'm' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const el = document.activeElement
         if (!el) return
         const masterType = el.getAttribute('data-master')

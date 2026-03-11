@@ -65,6 +65,20 @@ async def list_supplier_invoices(
     return {"success": True, **result}
 
 
+@router.patch("/supplier-invoices/{invoice_id}", response_model=None)
+async def update_supplier_invoice(
+    invoice_id: UUID,
+    updates: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Update supplier invoice fields (e.g. gst_percent)."""
+    svc = RollService(db)
+    result = await svc.update_supplier_invoice(invoice_id, updates)
+    await db.commit()
+    return {"success": True, "data": result}
+
+
 @router.patch("/{roll_id}", response_model=None)
 async def update_roll(
     roll_id: UUID,

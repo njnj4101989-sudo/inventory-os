@@ -13,7 +13,7 @@ from alembic import op
 
 
 revision: str = "s66_remnant_status"
-down_revision: Union[str, None] = "75e151b92734"
+down_revision: Union[str, None] = "s61_db_hardening"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
