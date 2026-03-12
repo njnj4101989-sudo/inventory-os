@@ -315,6 +315,7 @@ Roll: 1-COT-PINK/07-01
 | `supplier` | `createSupplier()` | name (+ optional phone, city) |
 | `product_type` | `createProductType()` | name, code (3 chars) |
 | `value_addition` | `createValueAddition()` | name, short_code (3-4), applicable_to |
+| `va_party` | `createVAParty()` | name (+ optional phone, city) |
 
 ### Where It's Integrated
 | Page | Fields with `data-master` |

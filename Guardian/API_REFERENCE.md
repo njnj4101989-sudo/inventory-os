@@ -1395,6 +1395,36 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
 
 ---
 
+## 15b. VA Parties (`/api/v1/masters/va-parties`) — NEW S69
+
+> Value Addition party/vendor master. Stores external processors (embroidery houses, dye works, etc.)
+> Future: GST portal integration via `gst_no` + `hsn_code`
+
+### GET `/masters/va-parties`
+**Response:** Array of:
+```json
+{
+  "id": "uuid",
+  "name": "Pasupatti Trendz",
+  "phone": "9876543210",
+  "city": "Surat",
+  "gst_no": "24AABCT1332L1ZH",
+  "hsn_code": "5407",
+  "is_active": true
+}
+```
+
+### GET `/masters/va-parties/all`
+**Response:** Array (active only, for dropdowns)
+
+### POST `/masters/va-parties`
+**Request:** `{ name, phone?, city?, gst_no?, hsn_code? }`
+**Response:** Created VA Party
+
+### PATCH `/masters/va-parties/{id}`
+**Request:** `{ name?, phone?, city?, gst_no?, hsn_code?, is_active? }`
+**Response:** Updated VA Party
+
 ---
 
 ## §16. Job Challans

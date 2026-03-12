@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
-import { createColor } from '../../api/masters'
-import { createFabric } from '../../api/masters'
-import { createProductType } from '../../api/masters'
-import { createValueAddition } from '../../api/masters'
+import { createColor, createFabric, createProductType, createValueAddition, createVAParty } from '../../api/masters'
 import { createSupplier } from '../../api/suppliers'
 
 const MASTER_CONFIG = {
@@ -54,6 +51,15 @@ const MASTER_CONFIG = {
       ]},
     ],
     create: createValueAddition,
+  },
+  va_party: {
+    title: 'Add VA Party',
+    fields: [
+      { key: 'name', label: 'Party Name', required: true, placeholder: 'e.g. Pasupatti Trendz', autoFocus: true },
+      { key: 'phone', label: 'Phone', placeholder: 'e.g. 9876543210' },
+      { key: 'city', label: 'City', placeholder: 'e.g. Surat' },
+    ],
+    create: createVAParty,
   },
 }
 

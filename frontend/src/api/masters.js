@@ -1,5 +1,5 @@
 import client from './client'
-import { productTypes, colors, fabrics, valueAdditions, mockResponse } from './mock'
+import { productTypes, colors, fabrics, valueAdditions, vaParties, mockResponse } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -145,4 +145,40 @@ export async function updateValueAddition(id, data) {
     return mockResponse(obj, 'Value addition updated')
   }
   return client.patch(`/masters/value-additions/${id}`, data)
+}
+
+// ── VA Parties ────────────────────────────────────────
+
+export async function getVAParties() {
+  if (USE_MOCK) return mockResponse(vaParties)
+  return client.get('/masters/va-parties')
+}
+
+export async function getAllVAParties() {
+  if (USE_MOCK) return mockResponse(vaParties.filter((p) => p.is_active))
+  return client.get('/masters/va-parties/all')
+}
+
+export async function createVAParty(data) {
+  if (USE_MOCK) {
+    const obj = { id: crypto.randomUUID(), name: data.name, phone: data.phone || null, city: data.city || null, gst_no: data.gst_no || null, hsn_code: data.hsn_code || null, is_active: true }
+    vaParties.push(obj)
+    return mockResponse(obj, 'VA Party created')
+  }
+  return client.post('/masters/va-parties', data)
+}
+
+export async function updateVAParty(id, data) {
+  if (USE_MOCK) {
+    const obj = vaParties.find((p) => p.id === id)
+    if (!obj) throw { response: { data: { detail: 'VA Party not found' } } }
+    if (data.name != null) obj.name = data.name
+    if (data.phone != null) obj.phone = data.phone
+    if (data.city != null) obj.city = data.city
+    if (data.gst_no != null) obj.gst_no = data.gst_no
+    if (data.hsn_code != null) obj.hsn_code = data.hsn_code
+    if (data.is_active != null) obj.is_active = data.is_active
+    return mockResponse(obj, 'VA Party updated')
+  }
+  return client.patch(`/masters/va-parties/${id}`, data)
 }

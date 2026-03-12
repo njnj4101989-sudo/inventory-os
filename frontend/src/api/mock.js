@@ -635,6 +635,13 @@ export const valueAdditions = [
   { id: crypto.randomUUID(), name: 'Batik',         short_code: 'BTC', description: 'Batik dyeing technique', is_active: true },
 ]
 
+// ── VA Parties ─────────────────────────────────────────
+export const vaParties = [
+  { id: crypto.randomUUID(), name: 'PASUPATTI TRENDZ', phone: '9898681430', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
+  { id: crypto.randomUUID(), name: 'Shree Embroidery Works', phone: '9898123456', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
+  { id: crypto.randomUUID(), name: 'Raju Hand-stone Works', phone: '9876543210', city: 'Ahmedabad', gst_no: null, hsn_code: null, is_active: true },
+]
+
 // ── Mock Response Helper ───────────────────────────────
 export function mockResponse(data, message = 'OK') {
   return delay().then(() => ({

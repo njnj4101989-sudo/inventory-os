@@ -130,3 +130,39 @@ class ValueAdditionResponse(BaseSchema):
     applicable_to: str = "both"
     description: str | None = None
     is_active: bool = True
+
+
+# ── VA Party ───────────────────────────────────────────
+
+
+class VAPartyBrief(BaseSchema):
+    id: UUID
+    name: str
+    phone: str | None = None
+
+
+class VAPartyCreate(BaseModel):
+    name: str
+    phone: str | None = None
+    city: str | None = None
+    gst_no: str | None = None
+    hsn_code: str | None = None
+
+
+class VAPartyUpdate(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    city: str | None = None
+    gst_no: str | None = None
+    hsn_code: str | None = None
+    is_active: bool | None = None
+
+
+class VAPartyResponse(BaseSchema):
+    id: UUID
+    name: str
+    phone: str | None = None
+    city: str | None = None
+    gst_no: str | None = None
+    hsn_code: str | None = None
+    is_active: bool = True

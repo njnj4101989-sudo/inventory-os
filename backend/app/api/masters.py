@@ -12,6 +12,7 @@ from app.schemas.master import (
     ColorCreate, ColorUpdate, ColorResponse,
     FabricCreate, FabricUpdate, FabricResponse,
     ValueAdditionCreate, ValueAdditionUpdate, ValueAdditionResponse,
+    VAPartyCreate, VAPartyUpdate, VAPartyResponse,
 )
 from app.services.master_service import MasterService
 
@@ -184,3 +185,45 @@ async def update_value_addition(
 ):
     obj = await MasterService.update_value_addition(db, va_id, req)
     return {"success": True, "data": ValueAdditionResponse.model_validate(obj)}
+
+
+# ── VA Parties ─────────────────────────────────────────
+
+
+@router.get("/va-parties", response_model=None)
+async def list_va_parties(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_va_parties(db)
+    return {"success": True, "data": [VAPartyResponse.model_validate(i) for i in items]}
+
+
+@router.get("/va-parties/all", response_model=None)
+async def all_active_va_parties(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_active_va_parties(db)
+    return {"success": True, "data": [VAPartyResponse.model_validate(i) for i in items]}
+
+
+@router.post("/va-parties", response_model=None, status_code=201)
+async def create_va_party(
+    req: VAPartyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.create_va_party(db, req)
+    return {"success": True, "data": VAPartyResponse.model_validate(obj)}
+
+
+@router.patch("/va-parties/{party_id}", response_model=None)
+async def update_va_party(
+    party_id: UUID,
+    req: VAPartyUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.update_va_party(db, party_id, req)
+    return {"success": True, "data": VAPartyResponse.model_validate(obj)}

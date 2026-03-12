@@ -12,6 +12,7 @@ from app.models.product_type import ProductType
 from app.models.color import Color
 from app.models.fabric import Fabric
 from app.models.value_addition import ValueAddition
+from app.models.va_party import VAParty
 
 
 class MasterService:
@@ -211,6 +212,55 @@ class MasterService:
                 obj.short_code = new_code
         if data.description is not None:
             obj.description = data.description
+        if data.is_active is not None:
+            obj.is_active = data.is_active
+        await db.flush()
+        return obj
+
+    # ── VA Parties ─────────────────────────────────────────
+
+    @staticmethod
+    async def get_va_parties(db: AsyncSession):
+        stmt = select(VAParty).order_by(VAParty.name)
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_active_va_parties(db: AsyncSession):
+        stmt = (
+            select(VAParty)
+            .where(VAParty.is_active == True)  # noqa: E712
+            .order_by(VAParty.name)
+        )
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def create_va_party(db: AsyncSession, data) -> VAParty:
+        obj = VAParty(
+            name=data.name.strip(),
+            phone=data.phone.strip() if data.phone else None,
+            city=data.city.strip() if data.city else None,
+            gst_no=data.gst_no.strip() if data.gst_no else None,
+            hsn_code=data.hsn_code.strip() if data.hsn_code else None,
+        )
+        db.add(obj)
+        await db.flush()
+        return obj
+
+    @staticmethod
+    async def update_va_party(db: AsyncSession, party_id: UUID, data) -> VAParty:
+        obj = await MasterService._get(db, VAParty, party_id, "VA Party")
+        if data.name is not None:
+            obj.name = data.name.strip()
+        if data.phone is not None:
+            obj.phone = data.phone.strip() or None
+        if data.city is not None:
+            obj.city = data.city.strip() or None
+        if data.gst_no is not None:
+            obj.gst_no = data.gst_no.strip() or None
+        if data.hsn_code is not None:
+            obj.hsn_code = data.hsn_code.strip() or None
         if data.is_active is not None:
             obj.is_active = data.is_active
         await db.flush()
