@@ -2426,7 +2426,7 @@ export default function RollsPage() {
                   <h2 className="text-xs font-semibold text-gray-600">Invoice / Challan Details</h2>
                   <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-300 rounded text-[9px]">Shift+M</kbd> on any dropdown to quick-add master</span>
                 </div>
-                <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div>
                     <label className={LABEL_CLS}>Sr. No.</label>
                     <div className="relative">
