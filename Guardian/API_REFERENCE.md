@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 13 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-06 (Session 60 — Bulk Stock-In + Supplier Invoices)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-12 (Session 69 — SupplierInvoice model + GST)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -206,6 +206,8 @@ Paginated endpoints return:
   },
   "received_at": "2026-02-07T09:00:00Z",
   "notes": null,
+  "gst_percent": 12.0,
+  "supplier_invoice_id": "uuid | null",
   "processing_logs": [
     {
       "id": "uuid",
@@ -359,6 +361,7 @@ Same as `GET /rolls` with status filter pre-applied.
   "supplier_challan_no": "CH-451",
   "supplier_invoice_date": "2026-02-06",
   "sr_no": "1",
+  "gst_percent": 12,
   "rolls": [
     {
       "fabric_type": "Cotton",
@@ -413,6 +416,10 @@ Same as `GET /rolls` with status filter pre-applied.
   "invoice_date": "2026-02-06",
   "sr_no": "1",
   "supplier": { "id": "uuid", "name": "Krishna Textiles" },
+  "supplier_invoice_id": "uuid | null",
+  "gst_percent": 12.0,
+  "gst_amount": 1332.00,
+  "total_with_gst": 12432.00,
   "rolls": [ ...full roll objects (same shape as GET /rolls items) ],
   "roll_count": 5,
   "total_weight": 92.500,
@@ -424,7 +431,41 @@ Same as `GET /rolls` with status filter pre-applied.
 - Rolls within each group sorted by `created_at ASC` (preserves original entry order)
 - Groups sorted by `received_at DESC` (newest first)
 - `total_value` = sum of `total_weight * cost_per_unit` per roll
+- `gst_percent` — from linked `SupplierInvoice` record (0 if no link)
+- `gst_amount` = `total_value * gst_percent / 100` (2 decimal places)
+- `total_with_gst` = `total_value + gst_amount`
+- `supplier_invoice_id` — FK to `SupplierInvoice` record (null for legacy rolls)
 - Rolls without `supplier_invoice_no` get unique key `NO-INV-{roll_id}` (shown as standalone)
+
+### PATCH `/rolls/supplier-invoices/{id}` (Update Supplier Invoice)
+**Auth:** `stock_in` permission required
+**Purpose:** Update invoice-level fields (e.g., GST%) on the `SupplierInvoice` record.
+
+**Request:** (all fields optional)
+```json
+{
+  "gst_percent": 18,
+  "invoice_no": "KT-2026-0451",
+  "challan_no": "CH-451",
+  "invoice_date": "2026-02-06",
+  "sr_no": "1",
+  "notes": "Updated"
+}
+```
+**Allowed fields:** `gst_percent`, `invoice_no`, `challan_no`, `invoice_date`, `sr_no`, `notes`
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "supplier_id": "uuid | null",
+  "invoice_no": "KT-2026-0451",
+  "challan_no": "CH-451",
+  "invoice_date": "2026-02-06",
+  "sr_no": "1",
+  "gst_percent": 18.0
+}
+```
 
 ---
 

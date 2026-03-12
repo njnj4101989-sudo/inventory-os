@@ -182,6 +182,8 @@ export async function getInvoices(params = {}) {
           invoice_date: r.supplier_invoice_date || null,
           sr_no: r.sr_no || null,
           supplier: r.supplier,
+          supplier_invoice_id: r.supplier_invoice_id || null,
+          gst_percent: r.gst_percent || 0,
           rolls: [],
           roll_count: 0,
           total_weight: 0,
@@ -199,7 +201,10 @@ export async function getInvoices(params = {}) {
       // Use earliest received_at
       if (r.received_at < inv.received_at) inv.received_at = r.received_at
     }
-    let invoices = Object.values(grouped).sort((a, b) => b.received_at.localeCompare(a.received_at))
+    let invoices = Object.values(grouped).map((inv) => {
+      const gstAmt = Math.round(inv.total_value * inv.gst_percent / 100 * 100) / 100
+      return { ...inv, gst_amount: gstAmt, total_with_gst: Math.round((inv.total_value + gstAmt) * 100) / 100 }
+    }).sort((a, b) => b.received_at.localeCompare(a.received_at))
     if (params.search) {
       const q = params.search.toLowerCase()
       invoices = invoices.filter((inv) =>
