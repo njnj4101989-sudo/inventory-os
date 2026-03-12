@@ -18,6 +18,7 @@ from app.schemas.batch_challan import (
     BatchChallanCreate,
     BatchChallanFilterParams,
     BatchChallanReceive,
+    BatchChallanUpdate,
 )
 from app.services.batch_challan_service import BatchChallanService
 
@@ -57,6 +58,19 @@ async def list_batch_challans(
     svc = BatchChallanService(db)
     result = await svc.get_challans(params)
     return {"success": True, **result}
+
+
+@router.patch("/{challan_id}", response_model=None)
+async def update_batch_challan(
+    challan_id: UUID,
+    req: BatchChallanUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_send_va"),
+):
+    """Edit a batch challan (va_party, value_addition, notes)."""
+    svc = BatchChallanService(db)
+    result = await svc.update_challan(challan_id, req)
+    return {"success": True, "data": result}
 
 
 @router.get("/{challan_id}", response_model=None)

@@ -12,7 +12,7 @@ from app.schemas import BaseSchema, PaginatedParams
 # --- Query Params ---
 
 class JobChallanFilterParams(PaginatedParams):
-    vendor_name: str | None = None
+    va_party_id: UUID | None = None
     value_addition_id: UUID | None = None
 
 
@@ -24,11 +24,17 @@ class JobChallanRollEntry(BaseModel):
 
 class JobChallanCreate(BaseModel):
     value_addition_id: UUID
-    vendor_name: str
-    vendor_phone: str | None = None
+    va_party_id: UUID
     sent_date: date
     notes: str | None = None
     rolls: list[JobChallanRollEntry]
+
+
+class JobChallanUpdate(BaseModel):
+    va_party_id: UUID | None = None
+    value_addition_id: UUID | None = None
+    sent_date: date | None = None
+    notes: str | None = None
 
 
 # --- Responses ---
@@ -47,8 +53,7 @@ class JobChallanResponse(BaseSchema):
     id: UUID
     challan_no: str
     value_addition: dict | None = None
-    vendor_name: str
-    vendor_phone: str | None = None
+    va_party: dict | None = None
     sent_date: date
     notes: str | None = None
     created_by_user: dict | None = None

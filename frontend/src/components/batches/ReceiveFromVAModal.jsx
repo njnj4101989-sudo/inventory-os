@@ -131,7 +131,7 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                       <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Sent</span>
                     </div>
                     <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3">
-                      <span>{c.processor_name}</span>
+                      <span>{c.va_party?.name}</span>
                       <span>{c.total_pieces} pcs</span>
                       <span>{(c.batch_items || []).length} batches</span>
                       {c.sent_date && <span>Sent: {new Date(c.sent_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>}
@@ -147,7 +147,7 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
             <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
               <div>
                 <span className="font-mono font-semibold text-gray-800">{selectedChallan.challan_no}</span>
-                <span className="ml-2 text-sm text-gray-500">{selectedChallan.processor_name}</span>
+                <span className="ml-2 text-sm text-gray-500">{selectedChallan.va_party?.name}</span>
                 {selectedChallan.value_addition && (
                   <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">
                     +{selectedChallan.value_addition.short_code}

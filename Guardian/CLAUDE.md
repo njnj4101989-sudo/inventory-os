@@ -29,7 +29,42 @@
 
 ---
 
-## Current State (Session 68 — 2026-03-12)
+## Current State (Session 69 — 2026-03-12)
+
+### S69: VA Party Master + FK Wiring + Challan Edit + Migration Cleanup
+
+**VA Party Master (26th model — full stack):**
+- `backend/app/models/va_party.py`: name, phone, city, gst_no, hsn_code, is_active
+- Schema: Create/Update/Response in `master.py`
+- Service: CRUD in `master_service.py`
+- Routes: GET/GET-all/POST/PATCH in `masters.py`
+- Frontend: MastersPage "VA Parties" tab, QuickMasterModal config, `masters.js` API
+
+**VA Party FK — replaces free-text vendor_name/processor_name:**
+- Models: `job_challan.py`, `batch_challan.py`, `roll.py` (RollProcessing) — `va_party_id` FK + relationship
+- Schemas: All Create/Update/Response/Filter schemas updated
+- Services: `job_challan_service`, `batch_challan_service`, `roll_service`, `batch_service` — selectinload, nested `va_party` object in responses
+- Frontend (8 files): RollsPage, BatchesPage, BatchDetailPage, ScanPage, SendForVAModal, ReceiveFromVAModal, JobChallan print, BatchChallan print
+
+**Challan Edit (new):**
+- `PATCH /job-challans/{id}` — updates va_party_id, value_addition_id, sent_date, notes + cascades to linked processing logs
+- `PATCH /batch-challans/{id}` — updates va_party_id, value_addition_id, notes
+
+**Shift+M QuickMaster fix:**
+- `useQuickMaster.js`: Now searches parent modal/form container for `[data-master]` when focused element doesn't have it
+- Fixes "M" being typed in text inputs when pressing Shift+M
+
+**Tab rename:** "Value Additions" → "VA Types" (prevents users entering party names as VA types)
+
+**Migration cleanup:** Nuked 5 old migrations, created baseline `e86e3462e90c` + `9f88c9ee7c04` (va_party_id FK on challans)
+
+**Production:** VA test data deleted, wrong VA types cleaned, 11 proper VA types re-seeded
+
+**Deployed:** Yes — migration applied, backend restarted
+
+---
+
+## Previous State (Session 68 — 2026-03-12)
 
 ### S68: Stock-In UX Fixes + SupplierInvoice Table + GST
 
@@ -305,6 +340,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 - 10 seed VAs: EMB, DYE, DPT, HWK, SQN, BTC (roll/both) + HST, BTN, LCW, FIN (garment)
 - Color map: EMB=purple, DYE=amber, DPT=sky, HWK=rose, SQN=pink, BTC=teal
 - Job Challans: `POST /job-challans` atomic (creates challan + sends all rolls). Auto-sequential JC-001+
+- **VA Party (S69):** `VaParty` model (name, phone, city, gst_no, hsn_code). `va_party_id` FK on `JobChallan`, `BatchChallan`, `RollProcessing` — replaces free-text `vendor_name`/`processor_name`. All responses return nested `va_party` object via `selectinload`
 
 ### PWA + Mobile (S38)
 - Dual layout: Tailor/Checker → `MobileLayout` (bottom tabs), Admin/Supervisor/Billing → `Layout` (sidebar)
@@ -372,6 +408,9 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S64 | Phase 4 Production Readiness | 9 fixes: Swagger disabled, strong JWT, CORS hardened, Nginx headers, structured logging, pool_pre_ping |
 | S65 | Login UX | Password eye toggle, CapsLock warning, meta tag fix |
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
+| S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
+| S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S69 | VA Party Master + FK Wiring | 26th model, va_party_id FK replaces vendor_name/processor_name on 3 tables, PATCH challan endpoints, migration cleanup, Shift+M fix |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
 
@@ -388,7 +427,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 ```
 inventory-os/
 ├── Guardian/           ← Docs (CLAUDE.md, guardian.md, API_REFERENCE.md, STEP1-6, AWS_DEPLOYMENT.md)
-├── backend/app/        ← FastAPI (models/24, schemas/20, services/16, api/17, core/, tasks/)
+├── backend/app/        ← FastAPI (models/26, schemas/20, services/16, api/17, core/, tasks/)
 ├── frontend/src/       ← React+Tailwind (api/17, pages/14+Login, components/, context/, hooks/)
 └── mobile/             ← Phase 6C (future)
 ```

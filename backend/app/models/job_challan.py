@@ -16,13 +16,15 @@ class JobChallan(Base):
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("value_additions.id")
     )
-    vendor_name: Mapped[str] = mapped_column(String(200))
-    vendor_phone: Mapped[str | None] = mapped_column(String(20))
+    va_party_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("va_parties.id"), index=True
+    )
     sent_date: Mapped[datetime] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
 
     # Relationships
     value_addition = relationship("ValueAddition")
+    va_party = relationship("VAParty")
     created_by_user = relationship("User", foreign_keys=[created_by_id])
     processing_logs = relationship("RollProcessing", back_populates="job_challan")

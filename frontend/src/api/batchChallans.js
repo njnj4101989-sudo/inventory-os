@@ -1,5 +1,5 @@
 import client from './client'
-import { mockResponse, mockPaginated } from './mock'
+import { mockResponse, mockPaginated, vaParties } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -10,10 +10,11 @@ let mockSeq = 0
 export async function createBatchChallan(data) {
   if (USE_MOCK) {
     mockSeq++
+    const vaParty = vaParties.find((p) => p.id === data.va_party_id) || null
     const challan = {
       id: crypto.randomUUID(),
       challan_no: `BC-${String(mockSeq).padStart(3, '0')}`,
-      processor_name: data.processor_name,
+      va_party: vaParty ? { id: vaParty.id, name: vaParty.name, phone: vaParty.phone, city: vaParty.city } : null,
       value_addition: data._vaObj || null,
       total_pieces: (data.batches || []).reduce((s, b) => s + (b.pieces_to_send || 0), 0),
       total_cost: null,

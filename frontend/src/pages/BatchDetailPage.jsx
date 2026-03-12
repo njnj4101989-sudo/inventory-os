@@ -354,7 +354,7 @@ export default function BatchDetailPage() {
                         <p className="text-xs font-bold text-gray-900">{log.value_addition?.name || '—'}</p>
                         <div className="h-px bg-gray-100 my-1.5" />
                         <div className="space-y-1 text-[11px]">
-                          {log.processor_name && <p className="text-gray-600"><span className="text-gray-400">Processor: </span>{log.processor_name}</p>}
+                          {log.va_party?.name && <p className="text-gray-600"><span className="text-gray-400">VA Party: </span>{log.va_party?.name}</p>}
                           {log.challan_no && <p className="text-gray-600"><span className="text-gray-400">Challan: </span>{log.challan_no}</p>}
                           <p className="text-gray-600"><span className="text-gray-400">Pieces: </span>{log.pieces_sent} sent{log.pieces_received != null ? `, ${log.pieces_received} back` : ''}</p>
                           {log.sent_date && <p className="text-gray-600"><span className="text-gray-400">Sent: </span>{fmtDate(log.sent_date)}</p>}

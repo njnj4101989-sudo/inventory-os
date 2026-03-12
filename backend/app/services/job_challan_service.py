@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.database import is_postgresql
 from app.models.job_challan import JobChallan
 from app.models.roll import Roll, RollProcessing
-from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams
+from app.models.va_party import VAParty
+from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams, JobChallanUpdate
 from app.core.exceptions import NotFoundError, BusinessRuleViolationError
 
 
@@ -96,8 +97,7 @@ class JobChallanService:
         challan = JobChallan(
             challan_no=challan_no,
             value_addition_id=req.value_addition_id,
-            vendor_name=req.vendor_name,
-            vendor_phone=req.vendor_phone,
+            va_party_id=req.va_party_id,
             sent_date=req.sent_date,
             notes=req.notes,
             created_by_id=created_by,
@@ -117,8 +117,7 @@ class JobChallanService:
             log = RollProcessing(
                 roll_id=entry.roll_id,
                 value_addition_id=req.value_addition_id,
-                vendor_name=req.vendor_name,
-                vendor_phone=req.vendor_phone,
+                va_party_id=req.va_party_id,
                 sent_date=req.sent_date,
                 weight_before=wts,  # partial amount sent
                 length_before=roll.total_length,
@@ -137,9 +136,15 @@ class JobChallanService:
         await self.db.flush()
 
         from app.core.event_bus import event_bus
+        # Eagerly load va_party for event
+        if challan.va_party_id:
+            vp_res = await self.db.execute(select(VAParty).where(VAParty.id == challan.va_party_id))
+            vp = vp_res.scalar_one_or_none()
+        else:
+            vp = None
         await event_bus.emit("va_sent", {
             "challan_no": challan.challan_no,
-            "vendor": challan.vendor_name,
+            "vendor": vp.name if vp else "—",
             "roll_count": len(rolls),
             "type": "roll",
         }, str(created_by))
@@ -150,8 +155,8 @@ class JobChallanService:
     async def get_challans(self, params: JobChallanFilterParams) -> dict:
         """List challans with pagination and optional filters."""
         conditions = []
-        if params.vendor_name:
-            conditions.append(JobChallan.vendor_name.ilike(f"%{params.vendor_name}%"))
+        if params.va_party_id:
+            conditions.append(JobChallan.va_party_id == params.va_party_id)
         if params.value_addition_id:
             conditions.append(JobChallan.value_addition_id == params.value_addition_id)
 
@@ -165,6 +170,7 @@ class JobChallanService:
             select(JobChallan)
             .options(
                 selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
                 selectinload(JobChallan.created_by_user),
                 selectinload(JobChallan.processing_logs)
                     .selectinload(RollProcessing.roll)
@@ -197,6 +203,7 @@ class JobChallanService:
             .where(JobChallan.id == challan_id)
             .options(
                 selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
                 selectinload(JobChallan.created_by_user),
                 selectinload(JobChallan.processing_logs)
                     .selectinload(RollProcessing.roll)
@@ -217,6 +224,7 @@ class JobChallanService:
             .where(JobChallan.challan_no == challan_no)
             .options(
                 selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
                 selectinload(JobChallan.created_by_user),
                 selectinload(JobChallan.processing_logs)
                     .selectinload(RollProcessing.roll)
@@ -237,6 +245,7 @@ class JobChallanService:
             .where(JobChallan.id == challan_id)
             .options(
                 selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
                 selectinload(JobChallan.created_by_user),
             )
         )
@@ -244,6 +253,7 @@ class JobChallanService:
         challan = result.scalar_one()
 
         va = challan.value_addition
+        vp = challan.va_party
         user = challan.created_by_user
 
         from app.services.roll_service import RollService
@@ -271,8 +281,12 @@ class JobChallanService:
                 "name": va.name,
                 "short_code": va.short_code,
             } if va else None,
-            "vendor_name": challan.vendor_name,
-            "vendor_phone": challan.vendor_phone,
+            "va_party": {
+                "id": str(vp.id),
+                "name": vp.name,
+                "phone": vp.phone,
+                "city": vp.city,
+            } if vp else None,
             "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
             "notes": challan.notes,
             "created_by_user": {
@@ -285,8 +299,47 @@ class JobChallanService:
             "roll_count": len(roll_briefs),
         }
 
+    async def update_challan(self, challan_id: UUID, req: JobChallanUpdate) -> dict:
+        """Edit a job challan (va_party, value_addition, sent_date, notes)."""
+        stmt = (
+            select(JobChallan)
+            .where(JobChallan.id == challan_id)
+            .options(
+                selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
+                selectinload(JobChallan.created_by_user),
+                selectinload(JobChallan.processing_logs)
+                    .selectinload(RollProcessing.roll)
+                    .selectinload(Roll.processing_logs)
+                    .selectinload(RollProcessing.value_addition),
+            )
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Job challan {challan_id} not found")
+
+        if req.va_party_id is not None:
+            challan.va_party_id = req.va_party_id
+            for log in challan.processing_logs:
+                log.va_party_id = req.va_party_id
+        if req.value_addition_id is not None:
+            challan.value_addition_id = req.value_addition_id
+            for log in challan.processing_logs:
+                log.value_addition_id = req.value_addition_id
+        if req.sent_date is not None:
+            challan.sent_date = req.sent_date
+            for log in challan.processing_logs:
+                log.sent_date = req.sent_date
+        if req.notes is not None:
+            challan.notes = req.notes
+
+        await self.db.flush()
+        return self._to_response(challan)
+
     def _to_response(self, challan: JobChallan) -> dict:
         va = challan.value_addition
+        vp = challan.va_party
         user = challan.created_by_user
 
         from app.services.roll_service import RollService
@@ -316,8 +369,12 @@ class JobChallanService:
                 "name": va.name,
                 "short_code": va.short_code,
             } if va else None,
-            "vendor_name": challan.vendor_name,
-            "vendor_phone": challan.vendor_phone,
+            "va_party": {
+                "id": str(vp.id),
+                "name": vp.name,
+                "phone": vp.phone,
+                "city": vp.city,
+            } if vp else None,
             "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
             "notes": challan.notes,
             "created_by_user": {

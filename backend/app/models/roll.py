@@ -67,8 +67,9 @@ class RollProcessing(Base):
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("value_additions.id")
     )
-    vendor_name: Mapped[str] = mapped_column(String(200))
-    vendor_phone: Mapped[str | None] = mapped_column(String(20))
+    va_party_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("va_parties.id"), index=True
+    )
     sent_date: Mapped[datetime] = mapped_column(Date)
     received_date: Mapped[datetime | None] = mapped_column(Date)
     weight_before: Mapped[Decimal] = mapped_column(Numeric(10, 3))
@@ -85,4 +86,5 @@ class RollProcessing(Base):
     # Relationships
     roll: Mapped[Roll] = relationship(back_populates="processing_logs")
     value_addition = relationship("ValueAddition")
+    va_party = relationship("VAParty")
     job_challan = relationship("JobChallan", back_populates="processing_logs")

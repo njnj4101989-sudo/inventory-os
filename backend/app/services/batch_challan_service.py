@@ -17,10 +17,12 @@ from app.models.batch import Batch
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.value_addition import ValueAddition
+from app.models.va_party import VAParty
 from app.schemas.batch_challan import (
     BatchChallanCreate,
     BatchChallanFilterParams,
     BatchChallanReceive,
+    BatchChallanUpdate,
 )
 from app.core.exceptions import (
     BusinessRuleViolationError,
@@ -101,7 +103,7 @@ class BatchChallanService:
 
         challan = BatchChallan(
             challan_no=challan_no,
-            processor_name=req.processor_name,
+            va_party_id=req.va_party_id,
             value_addition_id=req.value_addition_id,
             total_pieces=total_pieces,
             status="sent",
@@ -131,9 +133,15 @@ class BatchChallanService:
         await self.db.flush()
 
         from app.core.event_bus import event_bus
+        # Eagerly load va_party for event
+        if challan.va_party_id:
+            vp_res = await self.db.execute(select(VAParty).where(VAParty.id == challan.va_party_id))
+            vp = vp_res.scalar_one_or_none()
+        else:
+            vp = None
         await event_bus.emit("va_sent", {
             "challan_no": challan.challan_no,
-            "vendor": challan.processor_name,
+            "vendor": vp.name if vp else "—",
             "piece_count": total_pieces,
             "type": "garment",
         }, str(created_by))
@@ -181,7 +189,7 @@ class BatchChallanService:
         from app.core.event_bus import event_bus
         await event_bus.emit("va_received", {
             "challan_no": challan.challan_no,
-            "vendor": challan.processor_name,
+            "vendor": challan.va_party.name if challan.va_party else "—",
             "piece_count": sum((bp.pieces_received or 0) for bp in challan.batch_items),
             "type": "garment",
         }, str(received_by))
@@ -191,8 +199,8 @@ class BatchChallanService:
     async def get_challans(self, params: BatchChallanFilterParams) -> dict:
         """List batch challans with pagination and optional filters."""
         conditions = []
-        if params.processor_name:
-            conditions.append(BatchChallan.processor_name.ilike(f"%{params.processor_name}%"))
+        if params.va_party_id:
+            conditions.append(BatchChallan.va_party_id == params.va_party_id)
         if params.value_addition_id:
             conditions.append(BatchChallan.value_addition_id == params.value_addition_id)
         if params.status:
@@ -208,6 +216,7 @@ class BatchChallanService:
             select(BatchChallan)
             .options(
                 selectinload(BatchChallan.value_addition),
+                selectinload(BatchChallan.va_party),
                 selectinload(BatchChallan.created_by_user),
                 selectinload(BatchChallan.batch_items).selectinload(BatchProcessing.batch),
             )
@@ -239,6 +248,7 @@ class BatchChallanService:
             .where(BatchChallan.id == challan_id)
             .options(
                 selectinload(BatchChallan.value_addition),
+                selectinload(BatchChallan.va_party),
                 selectinload(BatchChallan.created_by_user),
                 selectinload(BatchChallan.batch_items).selectinload(BatchProcessing.batch),
             )
@@ -251,6 +261,7 @@ class BatchChallanService:
 
     def _to_response(self, challan: BatchChallan) -> dict:
         va = challan.value_addition
+        vp = challan.va_party
         user = challan.created_by_user
 
         batch_items = []
@@ -273,7 +284,12 @@ class BatchChallanService:
         return {
             "id": str(challan.id),
             "challan_no": challan.challan_no,
-            "processor_name": challan.processor_name,
+            "va_party": {
+                "id": str(vp.id),
+                "name": vp.name,
+                "phone": vp.phone,
+                "city": vp.city,
+            } if vp else None,
             "value_addition": {
                 "id": str(va.id),
                 "name": va.name,
@@ -292,3 +308,17 @@ class BatchChallanService:
             "created_at": challan.created_at.isoformat() if challan.created_at else None,
             "batch_items": batch_items,
         }
+
+    async def update_challan(self, challan_id: UUID, req: BatchChallanUpdate) -> dict:
+        """Edit a batch challan (va_party, value_addition, notes)."""
+        challan = await self._get_or_404(challan_id)
+        if req.va_party_id is not None:
+            challan.va_party_id = req.va_party_id
+        if req.value_addition_id is not None:
+            challan.value_addition_id = req.value_addition_id
+            for bp in challan.batch_items:
+                bp.value_addition_id = req.value_addition_id
+        if req.notes is not None:
+            challan.notes = req.notes
+        await self.db.flush()
+        return self._to_response(challan)

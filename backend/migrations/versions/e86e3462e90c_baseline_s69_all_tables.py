@@ -1,8 +1,8 @@
-"""merge_s68_and_s63_heads
+"""baseline_s69_all_tables
 
-Revision ID: 028398385d86
-Revises: 63ca51d7966a, 75e151b92734
-Create Date: 2026-03-11 20:40:32.330149
+Revision ID: e86e3462e90c
+Revises: 
+Create Date: 2026-03-12 18:16:33.263345
 """
 from typing import Sequence, Union
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '028398385d86'
-down_revision: Union[str, None] = '63ca51d7966a'
+revision: str = 'e86e3462e90c'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
+from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.batch_roll_consumption import BatchRollConsumption
 from app.models.lot import Lot
@@ -104,7 +105,7 @@ class BatchService:
                 selectinload(Batch.checked_by_user),
                 selectinload(Batch.packed_by_user),
                 selectinload(Batch.processing_logs).selectinload(BatchProcessing.value_addition),
-                selectinload(Batch.processing_logs).selectinload(BatchProcessing.batch_challan),
+                selectinload(Batch.processing_logs).selectinload(BatchProcessing.batch_challan).selectinload(BatchChallan.va_party),
             )
             .order_by(order)
         )
@@ -485,8 +486,8 @@ class BatchService:
                         "name": p.value_addition.name
                         if p.value_addition
                         else "VA",
-                        "processor_name": p.batch_challan.processor_name
-                        if p.batch_challan
+                        "va_party_name": p.batch_challan.va_party.name
+                        if p.batch_challan and p.batch_challan.va_party
                         else None,
                     }
                     for p in (b.processing_logs or [])
@@ -731,7 +732,11 @@ class BatchService:
                     "name": va.name,
                     "short_code": va.short_code,
                 } if va else None,
-                "processor_name": challan.processor_name if challan else None,
+                "va_party": {
+                    "id": str(challan.va_party.id),
+                    "name": challan.va_party.name,
+                    "phone": challan.va_party.phone,
+                } if challan and challan.va_party else None,
                 "pieces_sent": bp.pieces_sent,
                 "pieces_received": bp.pieces_received,
                 "cost": float(bp.cost) if bp.cost else None,

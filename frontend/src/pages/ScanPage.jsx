@@ -417,7 +417,7 @@ export default function ScanPage() {
                   <p className="text-sm font-semibold text-amber-800">Out-House — VA Pending</p>
                   {(batchPassport.processing_logs || []).filter((l) => l.status === 'sent').map((log, i) => (
                     <p key={i} className="text-xs text-amber-600 mt-0.5">
-                      {log.pieces_sent} pcs at {log.processor_name || 'vendor'} ({log.value_addition?.short_code})
+                      {log.pieces_sent} pcs at {log.va_party?.name || 'vendor'} ({log.value_addition?.short_code})
                       {log.sent_date && ` since ${new Date(log.sent_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`}
                     </p>
                   ))}
@@ -449,7 +449,7 @@ export default function ScanPage() {
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>{log.processor_name}</span>
+                      <span>{log.va_party?.name}</span>
                       {log.challan_no && <span>{log.challan_no}</span>}
                       <span>{log.pieces_sent} pcs sent</span>
                       {log.pieces_received != null && <span>{log.pieces_received} pcs back</span>}
@@ -777,7 +777,7 @@ export default function ScanPage() {
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>{log.vendor_name}</span>
+                      <span>{log.va_party?.name}</span>
                       {log.sent_date && <span>Sent: {log.sent_date}</span>}
                       {log.received_date && <span>Returned: {log.received_date}</span>}
                       {log.processing_cost && <span>Cost: ₹{parseFloat(log.processing_cost).toLocaleString('en-IN')}</span>}
@@ -804,7 +804,7 @@ export default function ScanPage() {
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>{log.vendor_name}</span>
+                      <span>{log.va_party?.name}</span>
                       {log.sent_date && <span>Sent: {log.sent_date}</span>}
                       {log.received_date && <span>Returned: {log.received_date}</span>}
                       {log.processing_cost && <span>Cost: ₹{parseFloat(log.processing_cost).toLocaleString('en-IN')}</span>}

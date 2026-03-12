@@ -20,7 +20,9 @@ class BatchChallan(Base):
     __tablename__ = "batch_challans"
 
     challan_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
-    processor_name: Mapped[str] = mapped_column(String(200))
+    va_party_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("va_parties.id"), index=True
+    )
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("value_additions.id"), index=True
     )
@@ -36,6 +38,7 @@ class BatchChallan(Base):
 
     # Relationships
     value_addition = relationship("ValueAddition")
+    va_party = relationship("VAParty")
     created_by_user = relationship("User", foreign_keys=[created_by_id])
     batch_items: Mapped[list[BatchProcessing]] = relationship(
         back_populates="batch_challan"

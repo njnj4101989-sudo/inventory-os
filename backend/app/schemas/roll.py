@@ -124,7 +124,7 @@ class ProcessingBrief(BaseSchema):
 
     id: UUID
     value_addition_id: UUID
-    vendor_name: str
+    va_party: dict | None = None
     sent_date: date
     received_date: date | None = None
     weight_before: Decimal
@@ -172,8 +172,7 @@ class RollDetail(RollResponse):
 
 class SendForProcessing(BaseModel):
     value_addition_id: UUID
-    vendor_name: str
-    vendor_phone: str | None = None
+    va_party_id: UUID
     sent_date: date
     notes: str | None = None
     job_challan_id: UUID | None = None
@@ -192,8 +191,7 @@ class UpdateProcessingLog(BaseModel):
     """PATCH /rolls/{id}/processing/{pid}/edit — update any field on a processing log."""
 
     value_addition_id: UUID | None = None
-    vendor_name: str | None = None
-    vendor_phone: str | None = None
+    va_party_id: UUID | None = None
     sent_date: date | None = None
     received_date: date | None = None
     weight_after: Decimal | None = None
@@ -206,8 +204,7 @@ class ProcessingResponse(BaseSchema):
     id: UUID
     roll_id: UUID
     value_addition_id: UUID
-    vendor_name: str
-    vendor_phone: str | None = None
+    va_party: dict | None = None
     sent_date: date
     received_date: date | None = None
     weight_before: Decimal

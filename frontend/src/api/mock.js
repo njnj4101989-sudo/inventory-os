@@ -156,8 +156,8 @@ export const rolls = [
     processing_logs: [{
       id: crypto.randomUUID(), value_addition_id: 'va-emb-001',
       value_addition: { id: 'va-emb-001', name: 'Embroidery', short_code: 'EMB' },
-      vendor_name: 'Shree Embroidery Works',
-      vendor_phone: '9898123456', sent_date: '2026-02-09', received_date: null,
+      va_party: { id: 'vp-2', name: 'Shree Embroidery Works', phone: '9898123456', city: 'Surat' },
+      sent_date: '2026-02-09', received_date: null,
       weight_before: 23.120, weight_after: null, length_before: null, length_after: null,
       processing_cost: null, status: 'sent', notes: 'Chikan embroidery work',
     }],
@@ -264,7 +264,8 @@ export const batches = [
     processing_logs: [
       {
         id: uid('p1'), value_addition: { id: uid('va1'), name: 'Embroidery', short_code: 'EMB' },
-        status: 'received', phase: 'stitching', processor_name: 'Shree Embroidery Works',
+        status: 'received', phase: 'stitching',
+        va_party: { id: 'vp-2', name: 'Shree Embroidery Works', phone: '9898123456', city: 'Surat' },
         pieces_sent: 200, pieces_received: 198, cost: 4500,
         sent_date: '2026-02-08', received_date: '2026-02-10',
         challan_no: 'BC-001', notes: null,
@@ -637,9 +638,9 @@ export const valueAdditions = [
 
 // ── VA Parties ─────────────────────────────────────────
 export const vaParties = [
-  { id: crypto.randomUUID(), name: 'PASUPATTI TRENDZ', phone: '9898681430', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
-  { id: crypto.randomUUID(), name: 'Shree Embroidery Works', phone: '9898123456', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
-  { id: crypto.randomUUID(), name: 'Raju Hand-stone Works', phone: '9876543210', city: 'Ahmedabad', gst_no: null, hsn_code: null, is_active: true },
+  { id: 'vp-1', name: 'PASUPATTI TRENDZ', phone: '9898681430', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
+  { id: 'vp-2', name: 'Shree Embroidery Works', phone: '9898123456', city: 'Surat', gst_no: null, hsn_code: null, is_active: true },
+  { id: 'vp-3', name: 'Raju Hand-stone Works', phone: '9876543210', city: 'Ahmedabad', gst_no: null, hsn_code: null, is_active: true },
 ]
 
 // ── Mock Response Helper ───────────────────────────────

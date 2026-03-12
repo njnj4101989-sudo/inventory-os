@@ -3,13 +3,14 @@ import Modal from '../common/Modal'
 import ErrorAlert from '../common/ErrorAlert'
 import QuickMasterModal from '../common/QuickMasterModal'
 import useQuickMaster from '../../hooks/useQuickMaster'
-import { getValueAdditions } from '../../api/masters'
+import { getValueAdditions, getAllVAParties } from '../../api/masters'
 import { createBatchChallan, getNextBCNumber } from '../../api/batchChallans'
 
 export default function SendForVAModal({ open, onClose, batches, onSuccess, onPrintChallan }) {
   const [vaList, setVaList] = useState([])
   const [selectedVA, setSelectedVA] = useState('')
-  const [processorName, setProcessorName] = useState('')
+  const [vaPartyId, setVaPartyId] = useState('')
+  const [vaParties, setVaParties] = useState([])
   const [notes, setNotes] = useState('')
   const [selectedBatches, setSelectedBatches] = useState({})
   const [saving, setSaving] = useState(false)
@@ -31,6 +32,10 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
       refreshVAList()
       setTimeout(() => setSelectedVA(newItem.id), 200)
     }
+    if (masterType === 'va_party' && newItem?.id) {
+      getAllVAParties().then((res) => setVaParties(res.data.data || res.data || [])).catch(() => {})
+      setTimeout(() => setVaPartyId(newItem.id), 200)
+    }
   }, [refreshVAList])
 
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
@@ -41,12 +46,15 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   useEffect(() => {
     if (open) {
       refreshVAList()
+      getAllVAParties()
+        .then((res) => setVaParties(res.data.data || res.data || []))
+        .catch(() => {})
       getNextBCNumber()
         .then((res) => setNextChallanNo(res.data?.data?.next_challan_no || res.data?.next_challan_no || ''))
         .catch(() => setNextChallanNo(''))
       // Reset form
       setSelectedVA('')
-      setProcessorName('')
+      setVaPartyId('')
       setNotes('')
       setSelectedBatches({})
       setError(null)
@@ -74,7 +82,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
 
   const handleSubmit = async () => {
     if (!selectedVA) { setError('Select a value addition type'); return }
-    if (!processorName.trim()) { setError('Enter vendor/processor name'); return }
+    if (!vaPartyId) { setError('Select a VA party'); return }
     if (selectedCount === 0) { setError('Select at least one batch'); return }
     if (totalPieces === 0) { setError('Total pieces must be greater than 0'); return }
 
@@ -90,7 +98,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
     setError(null)
     try {
       const res = await createBatchChallan({
-        processor_name: processorName.trim(),
+        va_party_id: vaPartyId,
         value_addition_id: selectedVA,
         batches: Object.entries(selectedBatches).map(([batch_id, pieces_to_send]) => ({ batch_id, pieces_to_send })),
         notes: notes.trim() || null,
@@ -107,7 +115,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
           batchItems: challan.batch_items || [],
           vaName: vaObj?.name || '—',
           vaShortCode: vaObj?.short_code || '—',
-          processorName: processorName.trim(),
+          vaPartyName: vaParties.find(p => p.id === vaPartyId)?.name || '—',
           sentDate: challan.sent_date || new Date().toISOString(),
           notes: challan.notes || null,
         })
@@ -161,9 +169,13 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendor / Processor <span className="text-red-500">*</span></label>
-            <input type="text" value={processorName} onChange={(e) => setProcessorName(e.target.value)}
-              placeholder="e.g. Raju Hand-stone Works" className={INPUT} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">VA Party <span className="text-red-500">*</span></label>
+            <select data-master="va_party" value={vaPartyId} onChange={(e) => setVaPartyId(e.target.value)} className={INPUT}>
+              <option value="">Select VA party...</option>
+              {vaParties.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
+              ))}
+            </select>
           </div>
         </div>
 

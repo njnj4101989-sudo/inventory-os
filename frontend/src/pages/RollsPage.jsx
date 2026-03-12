@@ -5,7 +5,7 @@ import { createJobChallan, getJobChallan, getNextJCNumber } from '../api/jobChal
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
 import { getSuppliers } from '../api/suppliers'
-import { getAllFabrics, getAllColors, getAllValueAdditions } from '../api/masters'
+import { getAllFabrics, getAllColors, getAllValueAdditions, getAllVAParties } from '../api/masters'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import SearchInput from '../components/common/SearchInput'
@@ -265,8 +265,8 @@ const PROCESSING_COLUMNS = [
   },
   {
     key: 'processing_logs',
-    label: 'Vendor',
-    render: (val) => val?.[val.length - 1]?.vendor_name || '—',
+    label: 'VA Party',
+    render: (val) => val?.[val.length - 1]?.va_party?.name || '—',
   },
   {
     key: 'processing_logs',
@@ -471,6 +471,7 @@ export default function RollsPage() {
   const [masterFabrics, setMasterFabrics] = useState([])
   const [masterColors, setMasterColors] = useState([])
   const [masterValueAdditions, setMasterValueAdditions] = useState([])
+  const [vaParties, setVAParties] = useState([])
 
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', colorRows: [{ color: '', weights: [''] }] }
@@ -488,7 +489,7 @@ export default function RollsPage() {
   const [showBulkLabels, setShowBulkLabels] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
   const [bulkSendRolls, setBulkSendRolls] = useState([])
-  const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '' })
+  const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '' })
   const [bulkSendWeights, setBulkSendWeights] = useState({})
   const [bulkSendSaving, setBulkSendSaving] = useState(false)
   const [bulkSendError, setBulkSendError] = useState(null)
@@ -510,7 +511,7 @@ export default function RollsPage() {
   // Send for Processing modal
   const [sendProcOpen, setSendProcOpen] = useState(false)
   const [sendProcRoll, setSendProcRoll] = useState(null)
-  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: '', notes: '', weight_to_send: '' })
+  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '', weight_to_send: '' })
   const [sendProcSaving, setSendProcSaving] = useState(false)
   const [sendProcError, setSendProcError] = useState(null)
   const [nextJCNo, setNextJCNo] = useState('')
@@ -525,7 +526,7 @@ export default function RollsPage() {
 
   // Bulk Receive from Processing (challan-based)
   const [bulkRecvOpen, setBulkRecvOpen] = useState(false)
-  const [bulkRecvChallan, setBulkRecvChallan] = useState(null) // {challanNo, vendorName, vaName, vaShortCode, rolls:[{roll, log}]}
+  const [bulkRecvChallan, setBulkRecvChallan] = useState(null) // {challanNo, vaPartyName, vaName, vaShortCode, rolls:[{roll, log}]}
   const [bulkRecvDate, setBulkRecvDate] = useState('')
   const [bulkRecvRows, setBulkRecvRows] = useState({}) // {logId: {checked, weight_after, processing_cost}}
   const [bulkRecvSaving, setBulkRecvSaving] = useState(false)
@@ -547,6 +548,7 @@ export default function RollsPage() {
     getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
     getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
     getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch(() => {})
+    getAllVAParties().then((r) => setVAParties(r?.data?.data || r?.data || [])).catch(() => {})
   }, [])
 
   const handleQuickMasterCreated = useCallback((masterType, newItem, triggerEl) => {
@@ -575,6 +577,10 @@ export default function RollsPage() {
           if (sendProcOpen) setSendProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
           else if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
           else if (editProcOpen) setEditProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
+        } else if (selectName === 'va_party' && newItem?.id) {
+          if (sendProcOpen) setSendProcForm((f) => ({ ...f, va_party_id: newItem.id }))
+          else if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, va_party_id: newItem.id }))
+          else if (editProcOpen) setEditProcForm((f) => ({ ...f, va_party_id: newItem.id }))
         }
       }, 200) // Wait for master list refresh
     }
@@ -668,7 +674,7 @@ export default function RollsPage() {
 
   const handleBulkSendProcessing = async () => {
     if (!bulkSendForm.value_addition_id) { setBulkSendError('Value Addition is required'); return }
-    if (!bulkSendForm.vendor_name.trim()) { setBulkSendError('Vendor name is required'); return }
+    if (!bulkSendForm.va_party_id) { setBulkSendError('VA Party is required'); return }
     if (!bulkSendForm.sent_date) { setBulkSendError('Sent date is required'); return }
     if (bulkSendRolls.length === 0) { setBulkSendError('No rolls selected'); return }
     // Validate weights
@@ -687,8 +693,7 @@ export default function RollsPage() {
       }))
       const res = await createJobChallan({
         value_addition_id: bulkSendForm.value_addition_id,
-        vendor_name: bulkSendForm.vendor_name.trim(),
-        vendor_phone: bulkSendForm.vendor_phone.trim() || null,
+        va_party_id: bulkSendForm.va_party_id,
         sent_date: bulkSendForm.sent_date,
         notes: bulkSendForm.notes.trim() || null,
         rolls: rollEntries,
@@ -697,13 +702,14 @@ export default function RollsPage() {
       })
       const challan = res.data?.data || res.data
       const vaObj = masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id)
+      const party = vaParties.find(p => p.id === (challan.va_party?.id || bulkSendForm.va_party_id))
       setJobChallanData({
         challanNo: challan.challan_no,
         rolls: challan.rolls || bulkSendRolls,
         vaName: challan.value_addition?.name || vaObj?.name || '—',
         vaShortCode: challan.value_addition?.short_code || vaObj?.short_code || '—',
-        vendorName: challan.vendor_name || bulkSendForm.vendor_name.trim(),
-        vendorPhone: challan.vendor_phone || bulkSendForm.vendor_phone.trim() || '',
+        vaPartyName: party?.name || challan.va_party?.name || '—',
+        vaPartyPhone: party?.phone || challan.va_party?.phone || '',
         sentDate: challan.sent_date || bulkSendForm.sent_date,
         notes: challan.notes || bulkSendForm.notes.trim() || '',
       })
@@ -1137,8 +1143,8 @@ export default function RollsPage() {
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${c.bg} ${c.text}`}>
                         {va?.name || '—'}
                       </span>
-                      <span className="text-sm text-gray-600 font-medium">{log.vendor_name}</span>
-                      {log.vendor_phone && <span className="text-xs text-gray-400">{log.vendor_phone}</span>}
+                      <span className="text-sm text-gray-600 font-medium">{log.va_party?.name}</span>
+                      {log.va_party?.phone && <span className="text-xs text-gray-400">{log.va_party?.phone}</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       {isReceived ? (
@@ -1214,8 +1220,7 @@ export default function RollsPage() {
     setEditProcLog(log)
     setEditProcForm({
       value_addition_id: log.value_addition_id || log.value_addition?.id || '',
-      vendor_name: log.vendor_name || '',
-      vendor_phone: log.vendor_phone || '',
+      va_party_id: log.va_party?.id || '',
       sent_date: log.sent_date || '',
       received_date: log.received_date || '',
       weight_after: log.weight_after ?? '',
@@ -1236,8 +1241,7 @@ export default function RollsPage() {
       const payload = {}
       const origVaId = editProcLog.value_addition_id || editProcLog.value_addition?.id || ''
       if (editProcForm.value_addition_id && editProcForm.value_addition_id !== origVaId) payload.value_addition_id = editProcForm.value_addition_id
-      if (editProcForm.vendor_name && editProcForm.vendor_name !== editProcLog.vendor_name) payload.vendor_name = editProcForm.vendor_name
-      if (editProcForm.vendor_phone !== (editProcLog.vendor_phone || '')) payload.vendor_phone = editProcForm.vendor_phone || null
+      if (editProcForm.va_party_id && editProcForm.va_party_id !== editProcLog.va_party?.id) payload.va_party_id = editProcForm.va_party_id
       if (editProcForm.sent_date && editProcForm.sent_date !== editProcLog.sent_date) payload.sent_date = editProcForm.sent_date
       if (editProcForm.received_date && editProcForm.received_date !== (editProcLog.received_date || '')) payload.received_date = editProcForm.received_date
       if (editProcForm.weight_after !== '' && editProcForm.weight_after != editProcLog.weight_after) payload.weight_after = parseFloat(editProcForm.weight_after)
@@ -1324,7 +1328,7 @@ export default function RollsPage() {
 
   const openSendProcessing = (roll) => {
     setSendProcRoll(roll)
-    setSendProcForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
+    setSendProcForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
     setSendProcError(null)
     setDetailRoll(null) // close detail modal
     fetchNextJCNo()
@@ -1333,7 +1337,7 @@ export default function RollsPage() {
 
   const handleSendProcessing = async () => {
     if (!sendProcForm.value_addition_id) { setSendProcError('Value Addition is required'); return }
-    if (!sendProcForm.vendor_name.trim()) { setSendProcError('Vendor name is required'); return }
+    if (!sendProcForm.va_party_id) { setSendProcError('VA Party is required'); return }
     if (!sendProcForm.sent_date) { setSendProcError('Sent date is required'); return }
     const wts = parseFloat(sendProcForm.weight_to_send)
     if (!wts || wts <= 0) { setSendProcError('Weight to send must be > 0'); return }
@@ -1344,8 +1348,7 @@ export default function RollsPage() {
     try {
       await sendForProcessing(sendProcRoll.id, {
         value_addition_id: sendProcForm.value_addition_id,
-        vendor_name: sendProcForm.vendor_name.trim(),
-        vendor_phone: sendProcForm.vendor_phone.trim() || null,
+        va_party_id: sendProcForm.va_party_id,
         sent_date: sendProcForm.sent_date,
         notes: sendProcForm.notes.trim() || null,
         weight_to_send: wts,
@@ -1484,8 +1487,8 @@ export default function RollsPage() {
           rolls={jobChallanData.rolls}
           vaName={jobChallanData.vaName}
           vaShortCode={jobChallanData.vaShortCode}
-          vendorName={jobChallanData.vendorName}
-          vendorPhone={jobChallanData.vendorPhone}
+          vaPartyName={jobChallanData.vaPartyName}
+          vaPartyPhone={jobChallanData.vaPartyPhone}
           sentDate={jobChallanData.sentDate}
           notes={jobChallanData.notes}
           onClose={() => { setShowJobChallan(false); setJobChallanData(null) }}
@@ -1718,7 +1721,7 @@ export default function RollsPage() {
                         <button onClick={() => {
                             const rollObjs = getSelectedRollObjects()
                             setBulkSendRolls(rollObjs)
-                            setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                            setBulkSendForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                             const wts = {}; rollObjs.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                             setBulkSendError(null)
                             fetchNextJCNo()
@@ -1749,7 +1752,7 @@ export default function RollsPage() {
         const getDaysOut = (log) => log?.sent_date ? Math.floor((Date.now() - new Date(log.sent_date).getTime()) / (1000 * 60 * 60 * 24)) : 0
 
         // Extract unique vendors and process types from data
-        const uniqueVendors = [...new Set(procRolls.map((r) => getLatestLog(r)?.vendor_name).filter(Boolean))].sort()
+        const uniqueVendors = [...new Set(procRolls.map((r) => getLatestLog(r)?.va_party?.name).filter(Boolean))].sort()
         const uniqueVAs = []
         const seenVA = new Set()
         for (const r of procRolls) {
@@ -1760,7 +1763,7 @@ export default function RollsPage() {
         // Apply filters
         let filtered = [...procRolls]
         if (procProcessFilter) filtered = filtered.filter((r) => getLatestLog(r)?.value_addition?.id === procProcessFilter)
-        if (procVendorFilter) filtered = filtered.filter((r) => getLatestLog(r)?.vendor_name === procVendorFilter)
+        if (procVendorFilter) filtered = filtered.filter((r) => getLatestLog(r)?.va_party?.name === procVendorFilter)
         if (procDaysFilter === 'overdue') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) > 14)
         if (procDaysFilter === 'week') filtered = filtered.filter((r) => getDaysOut(getLatestLog(r)) <= 7)
         if (procDaysFilter === '7to14') filtered = filtered.filter((r) => { const d = getDaysOut(getLatestLog(r)); return d > 7 && d <= 14 })
@@ -1770,7 +1773,7 @@ export default function RollsPage() {
             r.roll_code.toLowerCase().includes(q) ||
             r.fabric_type?.toLowerCase().includes(q) ||
             r.color?.toLowerCase().includes(q) ||
-            (getLatestLog(r)?.vendor_name || '').toLowerCase().includes(q)
+            (getLatestLog(r)?.va_party?.name || '').toLowerCase().includes(q)
           )
         }
 
@@ -1859,12 +1862,12 @@ export default function RollsPage() {
               for (const r of filtered) {
                 const log = getLatestLog(r)
                 if (!log) continue
-                const key = log.job_challan_id || `no-challan-${log.vendor_name || '?'}|||${log.value_addition?.id || '?'}`
+                const key = log.job_challan_id || `no-challan-${log.va_party?.name || '?'}|||${log.value_addition?.id || '?'}`
                 if (!groups[key]) groups[key] = {
                   challanId: log.job_challan_id,
                   challanNo: log.challan_no || null,
-                  vendorName: log.vendor_name || '—',
-                  vendorPhone: log.vendor_phone || '',
+                  vaPartyName: log.va_party?.name || '—',
+                  vaPartyPhone: log.va_party?.phone || '',
                   va: log.value_addition,
                   sentDate: log.sent_date,
                   rolls: [],
@@ -1887,7 +1890,7 @@ export default function RollsPage() {
                               {g.challanNo && (
                                 <div className="font-mono text-xs font-bold text-orange-700 mb-0.5">{g.challanNo}</div>
                               )}
-                              <div className="font-semibold text-gray-800 text-sm">{g.vendorName}</div>
+                              <div className="font-semibold text-gray-800 text-sm">{g.vaPartyName}</div>
                               <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vaColor.bg} ${vaColor.text}`}>
                                 {g.va?.name || '—'} ({g.va?.short_code || '?'})
                               </span>
@@ -1925,8 +1928,8 @@ export default function RollsPage() {
                                     rolls: c.rolls || g.rolls.map(item => item.roll),
                                     vaName: c.value_addition?.name || g.va?.name || '—',
                                     vaShortCode: c.value_addition?.short_code || g.va?.short_code || '—',
-                                    vendorName: c.vendor_name || g.vendorName,
-                                    vendorPhone: c.vendor_phone || g.vendorPhone,
+                                    vaPartyName: c.va_party?.name || g.vaPartyName,
+                                    vaPartyPhone: c.va_party?.phone || g.vaPartyPhone,
                                     sentDate: c.sent_date || g.sentDate || '',
                                     notes: c.notes || '',
                                   })
@@ -1938,8 +1941,8 @@ export default function RollsPage() {
                                 rolls: g.rolls.map(item => item.roll),
                                 vaName: g.va?.name || '—',
                                 vaShortCode: g.va?.short_code || '—',
-                                vendorName: g.vendorName,
-                                vendorPhone: g.vendorPhone,
+                                vaPartyName: g.vaPartyName,
+                                vaPartyPhone: g.vaPartyPhone,
                                 sentDate: g.sentDate || '',
                                 notes: '',
                               })
@@ -2307,7 +2310,7 @@ export default function RollsPage() {
                     <button onClick={() => {
                         const invRollObjects = selectedInvoice.rolls.filter(r => selectedInvRolls.has(r.id))
                         setBulkSendRolls(invRollObjects)
-                        setBulkSendForm({ value_addition_id: '', vendor_name: '', vendor_phone: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                        setBulkSendForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
                         const wts = {}; invRollObjects.forEach(r => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts)
                         setBulkSendError(null)
                         fetchNextJCNo()
@@ -2874,8 +2877,8 @@ export default function RollsPage() {
                                   rolls: c.rolls || [detailRoll],
                                   vaName: c.value_addition?.name || latestLog.value_addition?.name || '—',
                                   vaShortCode: c.value_addition?.short_code || latestLog.value_addition?.short_code || '—',
-                                  vendorName: c.vendor_name || latestLog.vendor_name || '—',
-                                  vendorPhone: c.vendor_phone || latestLog.vendor_phone || '',
+                                  vaPartyName: c.va_party?.name || latestLog.va_party?.name || '—',
+                                  vaPartyPhone: c.va_party?.phone || latestLog.va_party?.phone || '',
                                   sentDate: c.sent_date || latestLog.sent_date || '',
                                   notes: c.notes || '',
                                 })
@@ -2886,18 +2889,18 @@ export default function RollsPage() {
                               } catch { /* fallback */ }
                             }
                             // Fallback: use client-side data
-                            const vendorKey = latestLog.vendor_name
+                            const vendorKey = latestLog.va_party?.name
                             const vaId = latestLog.value_addition?.id
                             const groupRolls = procRolls.filter((r) => {
                               const log = r.processing_logs?.[r.processing_logs.length - 1]
-                              return log?.vendor_name === vendorKey && log?.value_addition?.id === vaId
+                              return log?.va_party?.name === vendorKey && log?.value_addition?.id === vaId
                             })
                             setJobChallanData({
                               rolls: groupRolls.length > 0 ? groupRolls : [detailRoll],
                               vaName: latestLog.value_addition?.name || '—',
                               vaShortCode: latestLog.value_addition?.short_code || '—',
-                              vendorName: latestLog.vendor_name || '—',
-                              vendorPhone: latestLog.vendor_phone || '',
+                              vaPartyName: latestLog.va_party?.name || '—',
+                              vaPartyPhone: latestLog.va_party?.phone || '',
                               sentDate: latestLog.sent_date || '',
                               notes: latestLog.notes || '',
                             })
@@ -3124,8 +3127,8 @@ export default function RollsPage() {
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                                <div><span className="text-gray-500">Vendor:</span> <span className="text-gray-800">{log.vendor_name}</span></div>
-                                {log.vendor_phone && <div><span className="text-gray-500">Phone:</span> <span className="text-gray-800">{log.vendor_phone}</span></div>}
+                                <div><span className="text-gray-500">VA Party:</span> <span className="text-gray-800">{log.va_party?.name}</span></div>
+                                {log.va_party?.phone && <div><span className="text-gray-500">Phone:</span> <span className="text-gray-800">{log.va_party?.phone}</span></div>}
                                 <div><span className="text-gray-500">Sent:</span> <span className="text-gray-800">{new Date(log.sent_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
                                 {log.received_date && <div><span className="text-gray-500">Received:</span> <span className="text-gray-800">{new Date(log.received_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>}
                               </div>
@@ -3222,17 +3225,14 @@ export default function RollsPage() {
             </select>
             <p className="mt-1 text-xs text-gray-400">Adds to enhanced roll code after completion (e.g. +EMB, +DYE)</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLS}>Vendor Name <span className="text-red-500">*</span></label>
-              <input type="text" value={sendProcForm.vendor_name} onChange={(e) => setSendProcForm((f) => ({ ...f, vendor_name: e.target.value }))}
-                placeholder="e.g. Shree Embroidery Works" className={INPUT_CLS} />
-            </div>
-            <div>
-              <label className={LABEL_CLS}>Vendor Phone</label>
-              <input type="text" value={sendProcForm.vendor_phone} onChange={(e) => setSendProcForm((f) => ({ ...f, vendor_phone: e.target.value }))}
-                placeholder="e.g. 9898123456" className={INPUT_CLS} />
-            </div>
+          <div>
+            <label className={LABEL_CLS}>VA Party <span className="text-red-500">*</span></label>
+            <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+              <option value="">Select VA Party…</option>
+              {vaParties.filter(p => p.is_active !== false).map(p => (
+                <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
+              ))}
+            </select>
           </div>
           <div className="max-w-xs">
             <label className={LABEL_CLS}>Sent Date <span className="text-red-500">*</span></label>
@@ -3270,7 +3270,7 @@ export default function RollsPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                 <div><span className="text-orange-500">Roll:</span> <span className="font-medium text-orange-800">{recvProcRoll.roll_code}</span></div>
                 <div><span className="text-orange-500">Process:</span> <span className="font-medium text-orange-800">{recvProcLog.value_addition?.name || '—'}</span></div>
-                <div><span className="text-orange-500">Vendor:</span> <span className="font-medium text-orange-800">{recvProcLog.vendor_name}</span></div>
+                <div><span className="text-orange-500">VA Party:</span> <span className="font-medium text-orange-800">{recvProcLog.va_party?.name}</span></div>
                 <div><span className="text-orange-500">Sent:</span> <span className="font-medium text-orange-800">{new Date(recvProcLog.sent_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
                 <div><span className="text-orange-500">Weight Before:</span> <span className="font-medium text-orange-800">{recvProcLog.weight_before} kg</span></div>
                 <div>
@@ -3341,7 +3341,7 @@ export default function RollsPage() {
         {editProcError && <div className="mb-4"><ErrorAlert message={editProcError} onDismiss={() => setEditProcError(null)} /></div>}
 
         <div className="space-y-4">
-          {/* Row 1: Value Addition + Vendor */}
+          {/* Row 1: Value Addition + VA Party */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={LABEL_CLS}>Value Addition</label>
@@ -3351,17 +3351,18 @@ export default function RollsPage() {
               </select>
             </div>
             <div>
-              <label className={LABEL_CLS}>Vendor Name</label>
-              <input type="text" value={editProcForm.vendor_name} onChange={(e) => setEditProcForm((f) => ({ ...f, vendor_name: e.target.value }))} className={INPUT_CLS} />
+              <label className={LABEL_CLS}>VA Party</label>
+              <select data-master="va_party" value={editProcForm.va_party_id} onChange={(e) => setEditProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+                <option value="">Select VA Party…</option>
+                {vaParties.filter(p => p.is_active !== false).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Row 2: Vendor Phone + Sent Date */}
+          {/* Row 2: Sent Date */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={LABEL_CLS}>Vendor Phone</label>
-              <input type="text" value={editProcForm.vendor_phone} onChange={(e) => setEditProcForm((f) => ({ ...f, vendor_phone: e.target.value }))} placeholder="Optional" className={INPUT_CLS} />
-            </div>
             <div>
               <label className={LABEL_CLS}>Sent Date</label>
               <input type="date" value={editProcForm.sent_date} onChange={(e) => setEditProcForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
@@ -3519,14 +3520,13 @@ export default function RollsPage() {
                       <input type="date" value={bulkSendForm.sent_date} onChange={(e) => setBulkSendForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
                     </div>
                     <div>
-                      <label className={LABEL_CLS}>Vendor Name <span className="text-red-500">*</span></label>
-                      <input type="text" value={bulkSendForm.vendor_name} onChange={(e) => setBulkSendForm((f) => ({ ...f, vendor_name: e.target.value }))}
-                        placeholder="e.g. Shree Embroidery Works" className={INPUT_CLS} />
-                    </div>
-                    <div>
-                      <label className={LABEL_CLS}>Vendor Phone</label>
-                      <input type="text" value={bulkSendForm.vendor_phone} onChange={(e) => setBulkSendForm((f) => ({ ...f, vendor_phone: e.target.value }))}
-                        placeholder="e.g. 9898123456" className={INPUT_CLS} />
+                      <label className={LABEL_CLS}>VA Party <span className="text-red-500">*</span></label>
+                      <select data-master="va_party" value={bulkSendForm.va_party_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+                        <option value="">Select VA Party…</option>
+                        {vaParties.filter(p => p.is_active !== false).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                   <div>
@@ -3558,7 +3558,7 @@ export default function RollsPage() {
                   {bulkRecvChallan.challanNo && <span className="ml-2 font-mono text-orange-600">{bulkRecvChallan.challanNo}</span>}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {bulkRecvChallan.vendorName} — {bulkRecvChallan.va?.name || '—'} ({bulkRecvChallan.va?.short_code || '?'})
+                  {bulkRecvChallan.vaPartyName} — {bulkRecvChallan.va?.name || '—'} ({bulkRecvChallan.va?.short_code || '?'})
                 </p>
               </div>
               <div className="flex items-center gap-3">

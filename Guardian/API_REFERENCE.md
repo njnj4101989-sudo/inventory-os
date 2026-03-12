@@ -213,8 +213,7 @@ Paginated endpoints return:
       "id": "uuid",
       "value_addition_id": "uuid",
       "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
-      "vendor_name": "Shree Embroidery Works",
-      "vendor_phone": "9898123456",
+      "va_party": { "id": "uuid", "name": "Shree Embroidery Works", "phone": "9898123456", "city": "Surat" },
       "sent_date": "2026-02-09",
       "received_date": null,
       "weight_before": 23.120,
@@ -299,8 +298,7 @@ Same as `GET /rolls` with status filter pre-applied.
 ```json
 {
   "value_addition_id": "uuid (required)",
-  "vendor_name": "Shree Embroidery Works",
-  "vendor_phone": "9898123456",
+  "va_party_id": "uuid",
   "sent_date": "2026-02-09",
   "notes": "Chikan embroidery work",
   "weight_to_send": 20.000
@@ -337,8 +335,7 @@ Same as `GET /rolls` with status filter pre-applied.
 ```json
 {
   "value_addition_id": "uuid (optional)",
-  "vendor_name": "Updated Vendor",
-  "vendor_phone": "9898000000",
+  "va_party_id": "uuid (optional)",
   "sent_date": "2026-02-09",
   "received_date": "2026-02-15",
   "weight_after": 22.500,
@@ -681,7 +678,7 @@ created → assigned → in_progress → submitted → checked → packing → p
       "batch_challan_id": "uuid",
       "challan_no": "BC-001",
       "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
-      "processor_name": "Raju Hand-stone Works",
+      "va_party": { "id": "uuid", "name": "Raju Hand-stone Works", "phone": "9876500001", "city": "Surat" },
       "pieces_sent": 15,
       "pieces_received": 15,
       "cost": 2500.00,
@@ -763,7 +760,7 @@ When `sku` is present:
       "id": "uuid",
       "challan_no": "BC-001",
       "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
-      "processor_name": "Raju Hand-stone Works",
+      "va_party": { "id": "uuid", "name": "Raju Hand-stone Works", "phone": "9876500001", "city": "Surat" },
       "pieces_sent": 9,
       "pieces_received": null,
       "cost": null,
@@ -1273,8 +1270,7 @@ When `sku` is present:
       "id": "uuid",
       "name": "Embroidery",
       "short_code": "EMB",
-      "vendor_name": "Sonu Works",
-      "vendor_phone": "9999900002",
+      "va_party": { "id": "uuid", "name": "Sonu Works", "phone": "9999900002", "city": "Surat" },
       "sent_date": "2026-02-10",
       "received_date": "2026-02-15",
       "processing_cost": 2500.00,
@@ -1381,7 +1377,7 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
   "roll_id": "uuid",
   "value_addition_id": "uuid",
   "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
-  "vendor_name": "Sonu Works",
+  "va_party": { "id": "uuid", "name": "Sonu Works", "phone": "9999900002", "city": "Surat" },
   "sent_date": "2026-02-10",
   "received_date": "2026-02-15",
   "weight_before": 20.0,
@@ -1438,8 +1434,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 ```json
 {
   "value_addition_id": "uuid (required)",
-  "vendor_name": "Shree Embroidery Works",
-  "vendor_phone": "9898123456",
+  "va_party_id": "uuid",
   "sent_date": "2026-02-09",
   "notes": "Chikan embroidery on all rolls",
   "rolls": [
@@ -1459,8 +1454,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
   "id": "uuid",
   "challan_no": "JC-001",
   "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
-  "vendor_name": "Shree Embroidery Works",
-  "vendor_phone": "9898123456",
+  "va_party": { "id": "uuid", "name": "Shree Embroidery Works", "phone": "9898123456", "city": "Surat" },
   "sent_date": "2026-02-09",
   "notes": "Chikan embroidery on all rolls",
   "created_by_user": { "id": "uuid", "full_name": "Admin User" },
@@ -1483,12 +1477,25 @@ Creates a job challan and sends all specified rolls for processing atomically.
 
 ### GET `/job-challans` (List Job Challans)
 **Auth:** Required
-**Query:** `vendor_name`, `value_addition_id`, `page`, `page_size`
+**Query:** `va_party_id`, `value_addition_id`, `page`, `page_size`
 **Response:** Paginated list of challan objects (same shape as create response).
 
 ### GET `/job-challans/{id}` (Get Job Challan)
 **Auth:** Required
 **Response:** Single challan object with full roll details.
+
+### PATCH `/job-challans/{id}` (Update Job Challan)
+**Auth:** Required
+**Request:** All fields optional — only send changed fields:
+```json
+{
+  "va_party_id": "uuid",
+  "value_addition_id": "uuid",
+  "sent_date": "2026-02-09",
+  "notes": "Updated notes"
+}
+```
+**Response:** Updated challan object (same shape as create response).
 
 ---
 
@@ -1502,7 +1509,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 **Request:**
 ```json
 {
-  "processor_name": "Raju Hand-stone Works",
+  "va_party_id": "uuid",
   "value_addition_id": "uuid",
   "batches": [
     { "batch_id": "uuid", "pieces_to_send": 15 },
@@ -1523,7 +1530,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 {
   "id": "uuid",
   "challan_no": "BC-001",
-  "processor_name": "Raju Hand-stone Works",
+  "va_party": { "id": "uuid", "name": "Raju Hand-stone Works", "phone": "9876500001", "city": "Surat" },
   "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
   "total_pieces": 35,
   "total_cost": null,
@@ -1558,12 +1565,24 @@ Creates a job challan and sends all specified rolls for processing atomically.
 
 ### GET `/batch-challans` (List)
 **Auth:** Required
-**Query:** `processor_name`, `value_addition_id`, `status` (`sent`|`received`), `page`, `page_size`
+**Query:** `va_party_id`, `value_addition_id`, `status` (`sent`|`received`), `page`, `page_size`
 **Response:** Paginated list of challan objects (same shape as create response).
 
 ### GET `/batch-challans/{id}` (Detail)
 **Auth:** Required
 **Response:** Single challan object with full `batch_items[]`.
+
+### PATCH `/batch-challans/{id}` (Update Batch Challan)
+**Auth:** Required
+**Request:** All fields optional — only send changed fields:
+```json
+{
+  "va_party_id": "uuid",
+  "value_addition_id": "uuid",
+  "notes": "Updated notes"
+}
+```
+**Response:** Updated challan object (same shape as create response).
 
 ### POST `/batch-challans/{id}/receive` (Receive Batches Back from VA)
 **Auth:** Required (`batch_assign` permission — supervisor/admin)

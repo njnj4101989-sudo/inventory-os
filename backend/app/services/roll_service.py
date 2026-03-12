@@ -92,6 +92,7 @@ class RollService:
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(order)
@@ -120,6 +121,7 @@ class RollService:
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
         )
@@ -144,6 +146,7 @@ class RollService:
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
                 selectinload(Roll.lot_rolls)
                     .selectinload(LotRoll.lot)
@@ -320,6 +323,7 @@ class RollService:
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(Roll.created_at.asc())
@@ -432,6 +436,7 @@ class RollService:
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
             )
             .order_by(Roll.created_at.asc())
@@ -523,6 +528,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         result = await self.db.execute(stmt)
@@ -614,6 +620,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         result = await self.db.execute(stmt)
@@ -677,8 +684,7 @@ class RollService:
         log = RollProcessing(
             roll_id=roll_id,
             value_addition_id=req.value_addition_id,
-            vendor_name=req.vendor_name,
-            vendor_phone=req.vendor_phone,
+            va_party_id=req.va_party_id,
             sent_date=req.sent_date,
             weight_before=weight_to_send,  # partial amount sent
             length_before=roll.total_length,
@@ -702,6 +708,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
@@ -766,6 +773,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
@@ -833,6 +841,7 @@ class RollService:
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
         )
         roll = (await self.db.execute(reload)).scalar_one()
@@ -840,6 +849,7 @@ class RollService:
 
     def _processing_to_response(self, p: RollProcessing) -> dict:
         va = p.value_addition
+        vp = p.va_party
         return {
             "id": str(p.id),
             "roll_id": str(p.roll_id),
@@ -849,8 +859,12 @@ class RollService:
                 "name": va.name,
                 "short_code": va.short_code,
             } if va else None,
-            "vendor_name": p.vendor_name,
-            "vendor_phone": p.vendor_phone,
+            "va_party": {
+                "id": str(vp.id),
+                "name": vp.name,
+                "phone": vp.phone,
+                "city": vp.city,
+            } if vp else None,
             "sent_date": p.sent_date.isoformat() if p.sent_date else None,
             "received_date": p.received_date.isoformat() if p.received_date else None,
             "weight_before": float(p.weight_before) if p.weight_before else None,

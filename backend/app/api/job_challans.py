@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams
+from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams, JobChallanUpdate
 from app.services.job_challan_service import JobChallanService
 
 router = APIRouter(prefix="/job-challans", tags=["Job Challans"])
@@ -45,6 +45,19 @@ async def create_challan(
     """Create a job challan and send all specified rolls for processing."""
     svc = JobChallanService(db)
     result = await svc.create_challan(req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{challan_id}", response_model=None)
+async def update_challan(
+    challan_id: UUID,
+    req: JobChallanUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Edit a job challan (va_party, value_addition, sent_date, notes)."""
+    svc = JobChallanService(db)
+    result = await svc.update_challan(challan_id, req)
     return {"success": True, "data": result}
 
 

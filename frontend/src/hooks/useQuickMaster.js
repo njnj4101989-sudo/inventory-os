@@ -24,8 +24,27 @@ export default function useQuickMaster(onCreated) {
       if (e.key.toLowerCase() === 'm' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const el = document.activeElement
         if (!el) return
-        const masterType = el.getAttribute('data-master')
-        if (!masterType) return // silent no-op — no master on this field
+
+        // 1. Check if focused element itself has data-master
+        let masterType = el.getAttribute('data-master')
+
+        // 2. If not, search the nearest modal/form/overlay container for a data-master select
+        if (!masterType) {
+          const container = el.closest('[role="dialog"], .fixed, form')
+          if (container) {
+            const masterEls = container.querySelectorAll('[data-master]')
+            if (masterEls.length === 1) {
+              masterType = masterEls[0].getAttribute('data-master')
+            } else if (masterEls.length > 1) {
+              // Prefer va_party if available (most common quick-create need)
+              const vaPartyEl = container.querySelector('[data-master="va_party"]')
+              masterType = vaPartyEl ? 'va_party' : masterEls[0].getAttribute('data-master')
+            }
+          }
+        }
+
+        if (!masterType) return // no master found anywhere nearby
+
         e.preventDefault()
         e.stopPropagation()
         setTriggerElement(el)

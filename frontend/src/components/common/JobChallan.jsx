@@ -5,7 +5,7 @@ import { useReactToPrint } from 'react-to-print'
  * Job Challan — A4 print document for sending rolls to VA vendor.
  * Full-screen overlay with print button, follows LabelSheet pattern.
  */
-export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, vendorPhone, sentDate, notes, challanNo: challanNoProp, onClose }) {
+export default function JobChallan({ rolls, vaName, vaShortCode, vaPartyName, vaPartyPhone, sentDate, notes, challanNo: challanNoProp, onClose }) {
   const challanRef = useRef(null)
 
   // Use DB challan number if provided, otherwise generate client-side fallback
@@ -92,8 +92,8 @@ export default function JobChallan({ rolls, vaName, vaShortCode, vendorName, ven
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', fontSize: '10pt' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</div>
-            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{vendorName}</div>
-            {vendorPhone && <div style={{ color: '#555' }}>Ph: {vendorPhone}</div>}
+            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{vaPartyName}</div>
+            {vaPartyPhone && <div style={{ color: '#555' }}>Ph: {vaPartyPhone}</div>}
           </div>
           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Challan No.</div>

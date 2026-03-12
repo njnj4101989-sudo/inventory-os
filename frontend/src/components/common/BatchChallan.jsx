@@ -5,7 +5,7 @@ import { useReactToPrint } from 'react-to-print'
  * Batch Challan — A4 print document for sending batches to VA vendor.
  * Full-screen overlay with print button, follows JobChallan pattern.
  */
-export default function BatchChallan({ batchItems, vaName, vaShortCode, processorName, sentDate, notes, challanNo: challanNoProp, onClose }) {
+export default function BatchChallan({ batchItems, vaName, vaShortCode, vaPartyName, sentDate, notes, challanNo: challanNoProp, onClose }) {
   const challanRef = useRef(null)
 
   const now = new Date()
@@ -65,7 +65,7 @@ export default function BatchChallan({ batchItems, vaName, vaShortCode, processo
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', fontSize: '10pt' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</div>
-            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{processorName}</div>
+            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{vaPartyName}</div>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Challan No.</div>

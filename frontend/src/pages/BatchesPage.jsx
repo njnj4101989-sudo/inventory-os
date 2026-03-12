@@ -478,13 +478,13 @@ export default function BatchesPage() {
       list = list.filter((c) => c.value_addition?.short_code === bcVAFilter)
     }
     if (bcProcessorFilter) {
-      list = list.filter((c) => c.processor_name === bcProcessorFilter)
+      list = list.filter((c) => c.va_party?.name === bcProcessorFilter)
     }
     if (bcSearch.trim()) {
       const q = bcSearch.trim().toLowerCase()
       list = list.filter((c) =>
         (c.challan_no || '').toLowerCase().includes(q) ||
-        (c.processor_name || '').toLowerCase().includes(q) ||
+        (c.va_party?.name || '').toLowerCase().includes(q) ||
         (c.batch_items || []).some((i) => (i.batch?.batch_code || '').toLowerCase().includes(q))
       )
     }
@@ -495,7 +495,7 @@ export default function BatchesPage() {
   const bcKPIs = useMemo(() => {
     const challans = batchChallansData
     const totalPieces = challans.reduce((s, c) => s + (c.total_pieces || 0), 0)
-    const processors = new Set(challans.map((c) => c.processor_name)).size
+    const processors = new Set(challans.map((c) => c.va_party?.name)).size
     const now = Date.now()
     const overdue = challans.filter((c) => {
       const sent = c.sent_date ? new Date(c.sent_date).getTime() : 0
@@ -510,7 +510,7 @@ export default function BatchesPage() {
     const procs = new Set()
     batchChallansData.forEach((c) => {
       if (c.value_addition?.short_code) vas.add(c.value_addition.short_code)
-      if (c.processor_name) procs.add(c.processor_name)
+      if (c.va_party?.name) procs.add(c.va_party?.name)
     })
     return { vas: [...vas].sort(), processors: [...procs].sort() }
   }, [batchChallansData])
@@ -524,7 +524,7 @@ export default function BatchesPage() {
         batchItems: full.batch_items || [],
         vaName: full.value_addition?.name || '—',
         vaShortCode: full.value_addition?.short_code || '—',
-        processorName: full.processor_name || '—',
+        vaPartyName: full.va_party?.name || '—',
         sentDate: full.sent_date,
         notes: full.notes,
       })
@@ -748,7 +748,7 @@ export default function BatchesPage() {
                       </div>
 
                       {/* Processor */}
-                      <div className="text-sm font-medium text-gray-700 mb-2">{challan.processor_name}</div>
+                      <div className="text-sm font-medium text-gray-700 mb-2">{challan.va_party?.name}</div>
 
                       {/* Stats row */}
                       <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
@@ -871,7 +871,7 @@ export default function BatchesPage() {
           batchItems={batchChallanData.batchItems}
           vaName={batchChallanData.vaName}
           vaShortCode={batchChallanData.vaShortCode}
-          processorName={batchChallanData.processorName}
+          vaPartyName={batchChallanData.vaPartyName}
           sentDate={batchChallanData.sentDate}
           notes={batchChallanData.notes}
           challanNo={batchChallanData.challanNo}

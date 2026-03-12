@@ -1,5 +1,5 @@
 import client from './client'
-import { rolls, suppliers, fabrics as mockFabrics, colors as mockColors, rollProcessing, mockPaginated, mockResponse } from './mock'
+import { rolls, suppliers, fabrics as mockFabrics, colors as mockColors, rollProcessing, vaParties, mockPaginated, mockResponse } from './mock'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -309,13 +309,13 @@ export async function sendForProcessing(rollId, data) {
     if ((roll.remaining_weight || 0) <= 0) throw { response: { data: { detail: 'Roll has no remaining weight to send' } } }
     const weightToSend = data.weight_to_send != null ? parseFloat(data.weight_to_send) : roll.remaining_weight
     if (weightToSend > roll.remaining_weight) throw { response: { data: { detail: `Weight to send (${weightToSend}) exceeds remaining (${roll.remaining_weight})` } } }
+    const vaParty = vaParties.find((p) => p.id === data.va_party_id) || null
     const log = {
       id: crypto.randomUUID(),
       roll_id: rollId,
       value_addition_id: data.value_addition_id,
       value_addition: { id: data.value_addition_id, name: 'Value Addition', short_code: 'VA' },
-      vendor_name: data.vendor_name,
-      vendor_phone: data.vendor_phone || null,
+      va_party: vaParty ? { id: vaParty.id, name: vaParty.name, phone: vaParty.phone, city: vaParty.city } : null,
       sent_date: data.sent_date,
       received_date: null,
       weight_before: weightToSend,
@@ -343,7 +343,12 @@ export async function updateProcessingLog(rollId, processingId, data) {
     if (!log) throw { response: { data: { detail: 'Processing log not found' } } }
     // Apply partial updates
     for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined && v !== null) log[k] = typeof v === 'string' && !isNaN(v) && k !== 'notes' && k !== 'vendor_name' && k !== 'vendor_phone' && k !== 'value_addition_id' ? parseFloat(v) : v
+      if (v !== undefined && v !== null) log[k] = typeof v === 'string' && !isNaN(v) && k !== 'notes' && k !== 'va_party_id' && k !== 'value_addition_id' ? parseFloat(v) : v
+    }
+    // Resolve va_party object if va_party_id provided
+    if (data.va_party_id) {
+      const vaParty = vaParties.find((p) => p.id === data.va_party_id)
+      if (vaParty) log.va_party = { id: vaParty.id, name: vaParty.name, phone: vaParty.phone, city: vaParty.city }
     }
     return mockResponse(roll, 'Processing log updated')
   }
