@@ -373,80 +373,89 @@ export default function ChallansPage() {
 
       {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
 
-      {/* Challan cards */}
+      {/* Challan table */}
       {loading ? (
         <div className="py-12 text-center"><LoadingSpinner size="lg" /></div>
       ) : filtered.length === 0 ? (
         <div className="py-12 text-center text-gray-400">No challans found</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map(c => {
-            const st = getStatusStyle(c.status)
-            const vc = getVAColor(c.value_addition?.short_code)
-            const isJob = tab === 'job'
-            const daysOut = c.sent_date ? Math.floor((Date.now() - new Date(c.sent_date).getTime()) / (1000 * 60 * 60 * 24)) : 0
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left">Challan</th>
+                <th className="px-4 py-3 text-left">VA Party</th>
+                <th className="px-4 py-3 text-left">VA Type</th>
+                <th className="px-4 py-3 text-center">{tab === 'job' ? 'Rolls' : 'Pieces'}</th>
+                <th className="px-4 py-3 text-right">{tab === 'job' ? 'Weight' : 'Cost'}</th>
+                <th className="px-4 py-3 text-center">Sent</th>
+                <th className="px-4 py-3 text-center">Status</th>
+                <th className="px-4 py-3 text-center">Days</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => {
+                const st = getStatusStyle(c.status)
+                const vc = getVAColor(c.value_addition?.short_code)
+                const isJob = tab === 'job'
+                const daysOut = c.sent_date && c.status !== 'received'
+                  ? Math.floor((Date.now() - new Date(c.sent_date).getTime()) / (1000 * 60 * 60 * 24))
+                  : null
 
-            return (
-              <div key={c.id} onClick={() => openDetail(c)}
-                className="rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-pointer overflow-hidden">
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
+                return (
+                  <tr key={c.id} onClick={() => openDetail(c)}
+                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
+                    <td className="px-4 py-3">
                       <div className="font-mono text-sm font-bold text-gray-900">{c.challan_no}</div>
-                      <div className="text-sm font-medium text-gray-700 mt-0.5">{c.va_party?.name || '—'}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
+                      <div className="text-[10px] text-gray-400 mt-0.5">{c.created_by_user?.full_name || '—'}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-800">{c.va_party?.name || '—'}</div>
+                      {c.va_party?.city && <div className="text-[10px] text-gray-400">{c.va_party.city}</div>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vc.bg} ${vc.text}`}>
+                        {c.value_addition?.short_code || '?'} — {c.value_addition?.name || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-gray-900">
+                      {isJob ? (c.roll_count || 0) : (c.total_pieces || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-700">
+                      {isJob ? `${(c.total_weight || 0).toFixed(1)} kg` : (c.total_cost ? `₹${c.total_cost}` : '—')}
+                    </td>
+                    <td className="px-4 py-3 text-center text-gray-600">{c.sent_date || '—'}</td>
+                    <td className="px-4 py-3 text-center">
                       <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${st.bg} ${st.text} ${st.border}`}>
                         {st.label}
                       </span>
-                      {c.status === 'sent' && daysOut > 0 && (
-                        <span className={`text-[10px] font-medium rounded-full px-2 py-0.5 ${
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {daysOut !== null && daysOut > 0 ? (
+                        <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${
                           daysOut > 14 ? 'text-red-600 bg-red-50 border border-red-200' :
                           daysOut > 7 ? 'text-amber-600 bg-amber-50 border border-amber-200' :
                           'text-gray-500 bg-gray-50 border border-gray-200'
-                        }`}>{daysOut}d out</span>
+                        }`}>{daysOut}d</span>
+                      ) : c.status === 'received' ? (
+                        <span className="text-[10px] text-green-600">✓</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
                       )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${vc.bg} ${vc.text}`}>
-                      {c.value_addition?.short_code || '?'} — {c.value_addition?.name || '—'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-                      <div className="text-sm font-bold text-gray-900">{isJob ? (c.roll_count || 0) : (c.total_pieces || 0)}</div>
-                      <div className="text-[10px] text-gray-500">{isJob ? 'Rolls' : 'Pieces'}</div>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-                      <div className="text-sm font-bold text-gray-900">
-                        {isJob ? `${(c.total_weight || 0).toFixed(1)}` : (c.total_cost ? `₹${c.total_cost}` : '—')}
-                      </div>
-                      <div className="text-[10px] text-gray-500">{isJob ? 'kg' : 'Cost'}</div>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-                      <div className="text-sm font-bold text-gray-900">{c.sent_date || '—'}</div>
-                      <div className="text-[10px] text-gray-500">Sent</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="border-t border-gray-100 px-4 py-2 flex items-center justify-between text-xs text-gray-400">
-                  <span>{c.created_by_user?.full_name || '—'}</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); openPrint(c) }}
-                      className="text-gray-400 hover:text-gray-600">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                    </button>
-                    <span>View →</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={(e) => { e.stopPropagation(); openPrint(c) }}
+                        className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-orange-600 transition-colors"
+                        title="Print Challan">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
