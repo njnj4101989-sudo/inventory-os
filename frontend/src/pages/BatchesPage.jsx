@@ -518,19 +518,12 @@ export default function BatchesPage() {
   const handlePrintBatchChallan = async (challan) => {
     try {
       const res = await getBatchChallan(challan.id)
-      const full = res.data?.data || res.data
-      setBatchChallanData({
-        challanNo: full.challan_no,
-        batchItems: full.batch_items || [],
-        vaName: full.value_addition?.name || '—',
-        vaShortCode: full.value_addition?.short_code || '—',
-        vaPartyName: full.va_party?.name || '—',
-        sentDate: full.sent_date,
-        notes: full.notes,
-      })
+      setBatchChallanData(res.data?.data || res.data)
       setShowBatchChallan(true)
     } catch {
-      // silently fail
+      // Fallback to list-level data (may lack batch_items detail)
+      setBatchChallanData(challan)
+      setShowBatchChallan(true)
     }
   }
 
@@ -868,13 +861,7 @@ export default function BatchesPage() {
       {/* Batch Challan Print Overlay */}
       {showBatchChallan && batchChallanData && (
         <BatchChallan
-          batchItems={batchChallanData.batchItems}
-          vaName={batchChallanData.vaName}
-          vaShortCode={batchChallanData.vaShortCode}
-          vaPartyName={batchChallanData.vaPartyName}
-          sentDate={batchChallanData.sentDate}
-          notes={batchChallanData.notes}
-          challanNo={batchChallanData.challanNo}
+          challan={batchChallanData}
           onClose={() => { setShowBatchChallan(false); setBatchChallanData(null) }}
         />
       )}

@@ -701,18 +701,7 @@ export default function RollsPage() {
         _vaObj: masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id) || null,
       })
       const challan = res.data?.data || res.data
-      const vaObj = masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id)
-      const party = vaParties.find(p => p.id === (challan.va_party?.id || bulkSendForm.va_party_id))
-      setJobChallanData({
-        challanNo: challan.challan_no,
-        rolls: challan.rolls || bulkSendRolls,
-        vaName: challan.value_addition?.name || vaObj?.name || '—',
-        vaShortCode: challan.value_addition?.short_code || vaObj?.short_code || '—',
-        vaPartyName: party?.name || challan.va_party?.name || '—',
-        vaPartyPhone: party?.phone || challan.va_party?.phone || '',
-        sentDate: challan.sent_date || bulkSendForm.sent_date,
-        notes: challan.notes || bulkSendForm.notes.trim() || '',
-      })
+      setJobChallanData(challan)
       setBulkSendOpen(false)
       setBulkSendRolls([])
       setSelectedRolls(new Set())
@@ -1503,14 +1492,7 @@ export default function RollsPage() {
       )}
       {showJobChallan && jobChallanData && (
         <JobChallan
-          challanNo={jobChallanData.challanNo}
-          rolls={jobChallanData.rolls}
-          vaName={jobChallanData.vaName}
-          vaShortCode={jobChallanData.vaShortCode}
-          vaPartyName={jobChallanData.vaPartyName}
-          vaPartyPhone={jobChallanData.vaPartyPhone}
-          sentDate={jobChallanData.sentDate}
-          notes={jobChallanData.notes}
+          challan={jobChallanData}
           onClose={() => { setShowJobChallan(false); setJobChallanData(null) }}
         />
       )}
@@ -1942,28 +1924,18 @@ export default function RollsPage() {
                               if (g.challanId) {
                                 try {
                                   const res = await getJobChallan(g.challanId)
-                                  const c = res.data?.data || res.data
-                                  setJobChallanData({
-                                    challanNo: c.challan_no,
-                                    rolls: c.rolls || g.rolls.map(item => item.roll),
-                                    vaName: c.value_addition?.name || g.va?.name || '—',
-                                    vaShortCode: c.value_addition?.short_code || g.va?.short_code || '—',
-                                    vaPartyName: c.va_party?.name || g.vaPartyName,
-                                    vaPartyPhone: c.va_party?.phone || g.vaPartyPhone,
-                                    sentDate: c.sent_date || g.sentDate || '',
-                                    notes: c.notes || '',
-                                  })
+                                  setJobChallanData(res.data?.data || res.data)
                                   setShowJobChallan(true)
                                   return
-                                } catch { /* fallback */ }
+                                } catch { /* fallback below */ }
                               }
+                              // No challan ID or fetch failed — build API-shaped object from group data
                               setJobChallanData({
+                                challan_no: null,
                                 rolls: g.rolls.map(item => item.roll),
-                                vaName: g.va?.name || '—',
-                                vaShortCode: g.va?.short_code || '—',
-                                vaPartyName: g.vaPartyName,
-                                vaPartyPhone: g.vaPartyPhone,
-                                sentDate: g.sentDate || '',
+                                value_addition: g.va ? { name: g.va.name, short_code: g.va.short_code } : null,
+                                va_party: { name: g.vaPartyName, phone: g.vaPartyPhone },
+                                sent_date: g.sentDate || '',
                                 notes: '',
                               })
                               setShowJobChallan(true)

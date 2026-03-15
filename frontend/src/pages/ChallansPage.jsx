@@ -145,32 +145,9 @@ export default function ChallansPage() {
   // ── Print overlay ──
   if (printChallan) {
     if (tab === 'job') {
-      return (
-        <JobChallan
-          rolls={printChallan.rolls || []}
-          vaName={printChallan.value_addition?.name}
-          vaShortCode={printChallan.value_addition?.short_code}
-          vaPartyName={printChallan.va_party?.name}
-          vaPartyPhone={printChallan.va_party?.phone}
-          sentDate={printChallan.sent_date}
-          notes={printChallan.notes}
-          challanNo={printChallan.challan_no}
-          onClose={() => setPrintChallan(null)}
-        />
-      )
+      return <JobChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
     }
-    return (
-      <BatchChallan
-        batchItems={printChallan.batch_items || []}
-        vaName={printChallan.value_addition?.name}
-        vaShortCode={printChallan.value_addition?.short_code}
-        vaPartyName={printChallan.va_party?.name}
-        sentDate={printChallan.sent_date}
-        notes={printChallan.notes}
-        challanNo={printChallan.challan_no}
-        onClose={() => setPrintChallan(null)}
-      />
-    )
+    return <BatchChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
   }
 
   // ── Detail overlay ──

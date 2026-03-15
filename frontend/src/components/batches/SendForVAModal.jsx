@@ -110,15 +110,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
       onSuccess?.()
       onClose()
       if (onPrintChallan && challan) {
-        onPrintChallan({
-          challanNo: challan.challan_no,
-          batchItems: challan.batch_items || [],
-          vaName: vaObj?.name || '—',
-          vaShortCode: vaObj?.short_code || '—',
-          vaPartyName: vaParties.find(p => p.id === vaPartyId)?.name || '—',
-          sentDate: challan.sent_date || new Date().toISOString(),
-          notes: challan.notes || null,
-        })
+        onPrintChallan(challan)
       }
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create batch challan')

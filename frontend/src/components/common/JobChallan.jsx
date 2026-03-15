@@ -5,12 +5,20 @@ import { useReactToPrint } from 'react-to-print'
  * Job Challan — A4 print document for sending rolls to VA vendor.
  * Full-screen overlay with print button, follows LabelSheet pattern.
  */
-export default function JobChallan({ rolls, vaName, vaShortCode, vaPartyName, vaPartyPhone, sentDate, notes, challanNo: challanNoProp, onClose }) {
+export default function JobChallan({ challan, onClose }) {
   const challanRef = useRef(null)
 
-  // Use DB challan number if provided, otherwise generate client-side fallback
+  // Destructure from API response shape (single source of truth)
+  const rolls = challan?.rolls || []
+  const vaName = challan?.value_addition?.name || '—'
+  const vaShortCode = challan?.value_addition?.short_code || '—'
+  const vaPartyName = challan?.va_party?.name || '—'
+  const vaPartyPhone = challan?.va_party?.phone || ''
+  const sentDate = challan?.sent_date || ''
+  const notes = challan?.notes || ''
+
   const now = new Date()
-  const challanNo = challanNoProp || `JC-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+  const challanNo = challan?.challan_no || `JC-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
 
   const handlePrint = useReactToPrint({
     contentRef: challanRef,
