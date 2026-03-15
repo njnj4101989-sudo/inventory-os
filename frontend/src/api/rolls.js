@@ -298,7 +298,7 @@ export async function getProcessingRolls() {
     const processing = rolls.filter((r) => r.status === 'sent_for_processing')
     return mockResponse(processing)
   }
-  return client.get('/rolls', { params: { status: 'sent_for_processing', page_size: 200 } })
+  return client.get('/rolls', { params: { status: 'sent_for_processing', page_size: 0 } })
 }
 
 export async function sendForProcessing(rollId, data) {
