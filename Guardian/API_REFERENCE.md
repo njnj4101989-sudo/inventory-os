@@ -1456,6 +1456,8 @@ Creates a job challan and sends all specified rolls for processing atomically.
   "value_addition": { "id": "uuid", "name": "Embroidery", "short_code": "EMB" },
   "va_party": { "id": "uuid", "name": "Shree Embroidery Works", "phone": "9898123456", "city": "Surat" },
   "sent_date": "2026-02-09",
+  "received_date": null,
+  "status": "sent",
   "notes": "Chikan embroidery on all rolls",
   "created_by_user": { "id": "uuid", "full_name": "Admin User" },
   "created_at": "2026-02-09T10:30:00Z",
@@ -1477,7 +1479,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 
 ### GET `/job-challans` (List Job Challans)
 **Auth:** Required
-**Query:** `va_party_id`, `value_addition_id`, `page`, `page_size`
+**Query:** `va_party_id`, `value_addition_id`, `status` (`sent`|`partially_received`|`received`), `page`, `page_size`
 **Response:** Paginated list of challan objects (same shape as create response).
 
 ### GET `/job-challans/{id}` (Get Job Challan)
@@ -1496,6 +1498,39 @@ Creates a job challan and sends all specified rolls for processing atomically.
 }
 ```
 **Response:** Updated challan object (same shape as create response).
+
+### POST `/job-challans/{id}/receive` (Receive Rolls Back from VA) — NEW S71
+**Auth:** Required (`stock_in` permission)
+
+Bulk receive rolls in a single transaction. Supports partial receive (uncheck some rolls).
+Replaces sequential per-roll `receiveFromProcessing` calls.
+
+**Request:**
+```json
+{
+  "received_date": "2026-03-15",
+  "rolls": [
+    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 19.500, "processing_cost": 500.00 },
+    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 27.200, "processing_cost": null }
+  ],
+  "notes": "All rolls returned in good condition"
+}
+```
+- `rolls[]`: only include checked/selected rolls — unchecked rolls stay `sent`
+- `processing_cost`: optional per roll
+- `notes`: optional, appended to challan notes
+
+**Effect per roll:**
+- `RollProcessing.status → 'received'`, fills `weight_after`, `processing_cost`, `received_date`
+- Roll: `remaining_weight += weight_after`, `current_weight += (weight_after - weight_before)`
+- Roll status: counts ALL remaining `sent` logs (across all challans) — only returns to `in_stock` when zero sent logs remain
+
+**Challan status logic:**
+- All rolls received → `status = 'received'`, `received_date` set
+- Some rolls received → `status = 'partially_received'`
+- Already-received rolls are skipped (idempotent)
+
+**Response:** Updated challan object (same shape as create response, with `status` and `received_date`)
 
 ---
 
@@ -1565,7 +1600,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 
 ### GET `/batch-challans` (List)
 **Auth:** Required
-**Query:** `va_party_id`, `value_addition_id`, `status` (`sent`|`received`), `page`, `page_size`
+**Query:** `va_party_id`, `value_addition_id`, `status` (`sent`|`partially_received`|`received`), `page`, `page_size`
 **Response:** Paginated list of challan objects (same shape as create response).
 
 ### GET `/batch-challans/{id}` (Detail)
@@ -1596,7 +1631,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
   "notes": "All pieces returned in good condition"
 }
 ```
-**Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). When all items received, challan `status → 'received'`, `total_cost` = sum of costs.
+**Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). Challan status: all received → `'received'`, some received → `'partially_received'`. `total_cost` = sum of costs.
 **Response:** Updated challan object
 
 ---
@@ -1614,12 +1649,13 @@ invoice_manage, report_view
 
 | Entity  | Valid Statuses |
 |---------|---------------|
-| Roll    | `in_stock`, `sent_for_processing`, `in_cutting` |
+| Roll    | `in_stock`, `sent_for_processing`, `in_cutting`, `remnant` |
 | Roll Processing | `sent`, `received` |
 | Lot     | `open`, `cutting`, `distributed` |
 | Batch   | `created`, `assigned`, `in_progress`, `submitted`, `checked`, `packing`, `packed` |
 | Batch Processing | `sent`, `received` |
-| Batch Challan | `sent`, `received` |
+| Job Challan | `sent`, `partially_received`, `received` |
+| Batch Challan | `sent`, `partially_received`, `received` |
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
 
@@ -1642,5 +1678,6 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `period` | Inventory Movement | `{ from, to }` |
 | `checked_by` | Batches | `{ id, full_name }` |
 | `packed_by` | Batches | `{ id, full_name }` |
-| `value_addition` | BatchProcessing, BatchChallan | `{ id, name, short_code }` |
+| `value_addition` | RollProcessing, BatchProcessing, JobChallan, BatchChallan | `{ id, name, short_code }` |
+| `va_party` | RollProcessing, JobChallan, BatchChallan | `{ id, name, phone, city }` |
 | `batch` | BatchChallan items | `{ id, batch_code, size }` |
