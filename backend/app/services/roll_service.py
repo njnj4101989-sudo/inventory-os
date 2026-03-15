@@ -527,6 +527,7 @@ class RollService:
         stmt = select(Roll).where(Roll.id == roll.id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
+            selectinload(Roll.supplier_invoice),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -619,6 +620,7 @@ class RollService:
         stmt = select(Roll).where(Roll.id == roll.id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
+            selectinload(Roll.supplier_invoice),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -707,6 +709,7 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
+            selectinload(Roll.supplier_invoice),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -772,6 +775,7 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
+            selectinload(Roll.supplier_invoice),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
@@ -840,6 +844,7 @@ class RollService:
         reload = select(Roll).where(Roll.id == roll_id).options(
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
+            selectinload(Roll.supplier_invoice),
             selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
