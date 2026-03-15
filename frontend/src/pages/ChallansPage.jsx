@@ -131,16 +131,46 @@ export default function ChallansPage() {
     }
   }
 
-  const openPrint = (challan) => {
-    setPrintChallan(challan)
+  const openPrint = async (challan) => {
+    try {
+      const res = tab === 'job'
+        ? await getJobChallan(challan.id)
+        : await getBatchChallan(challan.id)
+      setPrintChallan(res.data?.data || res.data)
+    } catch {
+      setPrintChallan(challan) // fallback to list data
+    }
   }
 
   // ── Print overlay ──
   if (printChallan) {
     if (tab === 'job') {
-      return <JobChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
+      return (
+        <JobChallan
+          rolls={printChallan.rolls || []}
+          vaName={printChallan.value_addition?.name}
+          vaShortCode={printChallan.value_addition?.short_code}
+          vaPartyName={printChallan.va_party?.name}
+          vaPartyPhone={printChallan.va_party?.phone}
+          sentDate={printChallan.sent_date}
+          notes={printChallan.notes}
+          challanNo={printChallan.challan_no}
+          onClose={() => setPrintChallan(null)}
+        />
+      )
     }
-    return <BatchChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
+    return (
+      <BatchChallan
+        batchItems={printChallan.batch_items || []}
+        vaName={printChallan.value_addition?.name}
+        vaShortCode={printChallan.value_addition?.short_code}
+        vaPartyName={printChallan.va_party?.name}
+        sentDate={printChallan.sent_date}
+        notes={printChallan.notes}
+        challanNo={printChallan.challan_no}
+        onClose={() => setPrintChallan(null)}
+      />
+    )
   }
 
   // ── Detail overlay ──
