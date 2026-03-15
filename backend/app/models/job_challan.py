@@ -20,6 +20,10 @@ class JobChallan(Base):
         ForeignKey("va_parties.id"), index=True
     )
     sent_date: Mapped[datetime] = mapped_column(Date)
+    received_date: Mapped[datetime | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(
+        String(20), default="sent", server_default="'sent'", index=True
+    )
     notes: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
 

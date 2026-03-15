@@ -14,6 +14,7 @@ from app.schemas import BaseSchema, PaginatedParams
 class JobChallanFilterParams(PaginatedParams):
     va_party_id: UUID | None = None
     value_addition_id: UUID | None = None
+    status: str | None = None  # 'sent' | 'partially_received' | 'received'
 
 
 # --- Requests ---
@@ -37,6 +38,23 @@ class JobChallanUpdate(BaseModel):
     notes: str | None = None
 
 
+# --- Receive ---
+
+class JobChallanReceiveEntry(BaseModel):
+    """One roll in a challan receive request."""
+    roll_id: UUID
+    processing_id: UUID
+    weight_after: Decimal
+    processing_cost: Decimal | None = None
+    notes: str | None = None
+
+
+class JobChallanReceive(BaseModel):
+    received_date: date
+    rolls: list[JobChallanReceiveEntry]
+    notes: str | None = None
+
+
 # --- Responses ---
 
 class JobChallanRollBrief(BaseSchema):
@@ -55,6 +73,8 @@ class JobChallanResponse(BaseSchema):
     value_addition: dict | None = None
     va_party: dict | None = None
     sent_date: date
+    received_date: date | None = None
+    status: str = "sent"  # 'sent' | 'partially_received' | 'received'
     notes: str | None = None
     created_by_user: dict | None = None
     created_at: datetime

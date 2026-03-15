@@ -65,3 +65,22 @@ export async function getJobChallan(id) {
   }
   return client.get(`/job-challans/${id}`)
 }
+
+export async function receiveJobChallan(id, data) {
+  if (USE_MOCK) {
+    const challan = mockChallans.find((c) => c.id === id)
+    if (!challan) throw { response: { data: { detail: 'Job challan not found' } } }
+    if (challan.status === 'received') throw { response: { data: { detail: 'Challan already received' } } }
+    // Mark rolls as received in mock
+    let anyReceived = false
+    for (const entry of (data.rolls || [])) {
+      anyReceived = true
+      // Mock: just track that it happened
+    }
+    const allReceived = (data.rolls || []).length === (challan.rolls || []).length
+    challan.status = allReceived ? 'received' : 'partially_received'
+    challan.received_date = data.received_date || new Date().toISOString().split('T')[0]
+    return mockResponse(challan, 'Job challan received')
+  }
+  return client.post(`/job-challans/${id}/receive`, data)
+}

@@ -19,7 +19,7 @@ from app.schemas import BaseSchema, PaginatedParams
 class BatchChallanFilterParams(PaginatedParams):
     va_party_id: UUID | None = None
     value_addition_id: UUID | None = None
-    status: str | None = None  # 'sent' | 'received'
+    status: str | None = None  # 'sent' | 'partially_received' | 'received'
 
 
 # --- Nested / Brief ---

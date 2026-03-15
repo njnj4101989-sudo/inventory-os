@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice } from '../api/rolls'
-import { createJobChallan, getJobChallan, getNextJCNumber } from '../api/jobChallans'
+import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
 import { getSuppliers } from '../api/suppliers'
@@ -1427,14 +1427,34 @@ export default function RollsPage() {
     setBulkRecvSaving(true)
     setBulkRecvError(null)
     try {
-      for (const item of toReceive) {
+      // Build bulk payload — single API call instead of N sequential calls
+      const rollsPayload = toReceive.map(item => {
         const row = bulkRecvRows[item.log.id]
-        await receiveFromProcessing(item.roll.id, item.log.id, {
-          received_date: bulkRecvDate,
+        return {
+          roll_id: item.roll.id,
+          processing_id: item.log.id,
           weight_after: parseFloat(row.weight_after),
           processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
-          notes: null,
+        }
+      })
+
+      if (bulkRecvChallan.challanId) {
+        // Challan-based bulk receive — single transaction
+        await receiveJobChallan(bulkRecvChallan.challanId, {
+          received_date: bulkRecvDate,
+          rolls: rollsPayload,
         })
+      } else {
+        // No challan (legacy single sends) — fall back to sequential
+        for (const item of toReceive) {
+          const row = bulkRecvRows[item.log.id]
+          await receiveFromProcessing(item.roll.id, item.log.id, {
+            received_date: bulkRecvDate,
+            weight_after: parseFloat(row.weight_after),
+            processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
+            notes: null,
+          })
+        }
       }
       setBulkRecvOpen(false)
       setBulkRecvChallan(null)

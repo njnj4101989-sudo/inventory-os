@@ -9,6 +9,7 @@ const SKUsPage         = lazy(() => import('../pages/SKUsPage'))
 const LotsPage         = lazy(() => import('../pages/LotsPage'))
 const BatchesPage      = lazy(() => import('../pages/BatchesPage'))
 const BatchDetailPage  = lazy(() => import('../pages/BatchDetailPage'))
+const ChallansPage     = lazy(() => import('../pages/ChallansPage'))
 const InventoryPage    = lazy(() => import('../pages/InventoryPage'))
 const OrdersPage       = lazy(() => import('../pages/OrdersPage'))
 const InvoicesPage     = lazy(() => import('../pages/InvoicesPage'))
@@ -31,6 +32,7 @@ const routes = [
   { path: 'lots',             element: LotsPage,         requiredRoles: ['admin', 'supervisor'] },
   { path: 'batches',          element: BatchesPage,      requiredRoles: ['admin', 'supervisor'] },
   { path: 'batches/:id',      element: BatchDetailPage,  requiredRoles: ['admin', 'supervisor'] },
+  { path: 'challans',         element: ChallansPage,     requiredRoles: ['admin', 'supervisor'] },
   { path: 'inventory',        element: InventoryPage,    requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'orders',           element: OrdersPage,       requiredRoles: ['admin', 'billing'] },
   { path: 'invoices',         element: InvoicesPage,     requiredRoles: ['admin', 'billing'] },

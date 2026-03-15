@@ -1,4 +1,4 @@
-"""Job Challan routes — create (with bulk roll send), list, get by id."""
+"""Job Challan routes — create (with bulk roll send), list, get, receive."""
 
 from uuid import UUID
 
@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams, JobChallanUpdate
+from app.schemas.job_challan import (
+    JobChallanCreate, JobChallanFilterParams, JobChallanReceive, JobChallanUpdate,
+)
 from app.services.job_challan_service import JobChallanService
 
 router = APIRouter(prefix="/job-challans", tags=["Job Challans"])
@@ -45,6 +47,19 @@ async def create_challan(
     """Create a job challan and send all specified rolls for processing."""
     svc = JobChallanService(db)
     result = await svc.create_challan(req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{challan_id}/receive", response_model=None)
+async def receive_challan(
+    challan_id: UUID,
+    req: JobChallanReceive,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Receive rolls back from VA vendor — bulk, single transaction."""
+    svc = JobChallanService(db)
+    result = await svc.receive_challan(challan_id, req, current_user.id)
     return {"success": True, "data": result}
 
 

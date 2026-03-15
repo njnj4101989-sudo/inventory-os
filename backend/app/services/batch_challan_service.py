@@ -176,9 +176,12 @@ class BatchChallanService:
 
         # Check if all items received
         all_received = all(bp.status == "received" for bp in challan.batch_items)
+        any_received = any(bp.status == "received" for bp in challan.batch_items)
         if all_received:
             challan.status = "received"
             challan.received_date = datetime.now(timezone.utc).date()
+        elif any_received:
+            challan.status = "partially_received"
 
         challan.total_cost = total_cost or challan.total_cost
         if req.notes:

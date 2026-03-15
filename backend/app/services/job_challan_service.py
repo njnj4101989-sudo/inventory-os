@@ -1,6 +1,7 @@
-"""Job Challan service — create challan + bulk send rolls, list, get by id."""
+"""Job Challan service — create challan + bulk send/receive rolls, list, get by id."""
 
 import math
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -11,7 +12,9 @@ from app.database import is_postgresql
 from app.models.job_challan import JobChallan
 from app.models.roll import Roll, RollProcessing
 from app.models.va_party import VAParty
-from app.schemas.job_challan import JobChallanCreate, JobChallanFilterParams, JobChallanUpdate
+from app.schemas.job_challan import (
+    JobChallanCreate, JobChallanFilterParams, JobChallanReceive, JobChallanUpdate,
+)
 from app.core.exceptions import NotFoundError, BusinessRuleViolationError
 
 
@@ -159,6 +162,8 @@ class JobChallanService:
             conditions.append(JobChallan.va_party_id == params.va_party_id)
         if params.value_addition_id:
             conditions.append(JobChallan.value_addition_id == params.value_addition_id)
+        if params.status:
+            conditions.append(JobChallan.status == params.status)
 
         count_stmt = select(func.count()).select_from(JobChallan)
         if conditions:
@@ -238,6 +243,143 @@ class JobChallanService:
             raise NotFoundError(f"Job challan '{challan_no}' not found")
         return self._to_response(challan)
 
+    async def receive_challan(self, challan_id: UUID, req: JobChallanReceive, received_by: UUID) -> dict:
+        """Receive rolls back from VA vendor — bulk, single transaction.
+
+        Replicates roll_service.receive_from_processing() logic per roll but
+        executes all in one DB transaction. Supports partial receive.
+        """
+        # 1. Load challan with all processing logs + rolls
+        stmt = (
+            select(JobChallan)
+            .where(JobChallan.id == challan_id)
+            .options(
+                selectinload(JobChallan.value_addition),
+                selectinload(JobChallan.va_party),
+                selectinload(JobChallan.created_by_user),
+                selectinload(JobChallan.processing_logs).selectinload(RollProcessing.value_addition),
+                selectinload(JobChallan.processing_logs).selectinload(RollProcessing.va_party),
+                selectinload(JobChallan.processing_logs).selectinload(RollProcessing.roll),
+            )
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Job challan {challan_id} not found")
+        if challan.status == "received":
+            raise BusinessRuleViolationError("Challan already fully received")
+
+        # 2. Build lookup: processing_id → RollProcessing log
+        log_map = {log.id: log for log in challan.processing_logs}
+
+        # 3. Collect unique roll IDs to lock
+        roll_ids = list({entry.roll_id for entry in req.rolls})
+        lock_stmt = select(Roll).where(Roll.id.in_(roll_ids))
+        if is_postgresql():
+            lock_stmt = lock_stmt.with_for_update()
+        lock_result = await self.db.execute(lock_stmt)
+        roll_map = {r.id: r for r in lock_result.scalars().all()}
+
+        # Validate all referenced rolls exist
+        missing = [str(e.roll_id) for e in req.rolls if e.roll_id not in roll_map]
+        if missing:
+            raise NotFoundError(f"Rolls not found: {', '.join(missing)}")
+
+        # 4. Process each roll entry
+        received_count = 0
+        for entry in req.rolls:
+            log = log_map.get(entry.processing_id)
+            if not log:
+                raise NotFoundError(
+                    f"Processing log {entry.processing_id} not found on this challan"
+                )
+            if log.roll_id != entry.roll_id:
+                raise BusinessRuleViolationError(
+                    f"Processing log {entry.processing_id} does not belong to roll {entry.roll_id}"
+                )
+            if log.status == "received":
+                continue  # idempotent — skip already-received
+
+            if log.status != "sent":
+                raise BusinessRuleViolationError(
+                    f"Processing log for roll {roll_map[entry.roll_id].roll_code} "
+                    f"is in '{log.status}' status, expected 'sent'"
+                )
+
+            # --- Receive this log (mirrors roll_service.receive_from_processing) ---
+            log.received_date = req.received_date
+            log.weight_after = entry.weight_after
+            log.processing_cost = entry.processing_cost
+            log.status = "received"
+            if entry.notes:
+                log.notes = (log.notes + " | " + entry.notes) if log.notes else entry.notes
+
+            # --- Roll weight math ---
+            roll = roll_map[entry.roll_id]
+
+            # Add back the returned weight to remaining
+            roll.remaining_weight = (roll.remaining_weight or 0) + float(entry.weight_after)
+
+            # Adjust current_weight by VA delta (weight change from processing)
+            va_delta = float(entry.weight_after) - float(log.weight_before)
+            roll.current_weight = (roll.current_weight or 0) + va_delta
+
+            # Adjust cost_per_unit if applicable
+            if entry.processing_cost and roll.cost_per_unit and entry.weight_after:
+                roll.cost_per_unit = float(roll.cost_per_unit) + (
+                    float(entry.processing_cost) / float(entry.weight_after)
+                )
+
+            received_count += 1
+
+        # 5. Roll status check — for EACH affected roll, count remaining "sent" logs
+        #    across ALL challans (not just this one). A roll only returns to in_stock
+        #    when it has ZERO sent processing logs anywhere.
+        for roll_id in roll_ids:
+            roll = roll_map[roll_id]
+            if roll.status != "sent_for_processing":
+                continue  # don't change status of in_stock/remnant/in_cutting rolls
+
+            sent_logs_stmt = (
+                select(func.count())
+                .select_from(RollProcessing)
+                .where(
+                    RollProcessing.roll_id == roll_id,
+                    RollProcessing.status == "sent",
+                )
+            )
+            remaining_sent = (await self.db.execute(sent_logs_stmt)).scalar() or 0
+            if remaining_sent == 0:
+                roll.status = "in_stock"
+
+        # 6. Challan status — sent → partially_received → received
+        all_received = all(log.status == "received" for log in challan.processing_logs)
+        any_received = any(log.status == "received" for log in challan.processing_logs)
+        if all_received:
+            challan.status = "received"
+            challan.received_date = req.received_date
+        elif any_received:
+            challan.status = "partially_received"
+
+        if req.notes:
+            challan.notes = (challan.notes + "\n" + req.notes) if challan.notes else req.notes
+
+        await self.db.flush()
+
+        # 7. SSE event
+        from app.core.event_bus import event_bus
+        va_name = challan.value_addition.name if challan.value_addition else "Processing"
+        vendor = challan.va_party.name if challan.va_party else "—"
+        await event_bus.emit("va_received", {
+            "challan_no": challan.challan_no,
+            "vendor": vendor,
+            "roll_count": received_count,
+            "type": "roll",
+        }, str(received_by))
+
+        # 8. Return full challan response
+        return await self.get_challan(challan_id)
+
     async def _get_challan_response(self, challan_id: UUID, rolls: list[Roll], weight_sent_map: dict | None = None) -> dict:
         """Build response for a freshly created challan using already-loaded rolls."""
         stmt = (
@@ -288,6 +430,8 @@ class JobChallanService:
                 "city": vp.city,
             } if vp else None,
             "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
+            "received_date": challan.received_date.isoformat() if challan.received_date else None,
+            "status": challan.status or "sent",
             "notes": challan.notes,
             "created_by_user": {
                 "id": str(user.id),
@@ -376,6 +520,8 @@ class JobChallanService:
                 "city": vp.city,
             } if vp else None,
             "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
+            "received_date": challan.received_date.isoformat() if challan.received_date else None,
+            "status": challan.status or "sent",
             "notes": challan.notes,
             "created_by_user": {
                 "id": str(user.id),
