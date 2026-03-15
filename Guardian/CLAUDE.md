@@ -29,7 +29,72 @@
 
 ---
 
-## Current State (Session 69 — 2026-03-12)
+## Current State (Session 71 — 2026-03-15)
+
+### S71: Bulk Receive Endpoint + Partial Challan Status + ChallansPage
+
+**Bulk Receive Endpoint (kills 62-call latency bomb):**
+- `POST /job-challans/{id}/receive` — single transaction bulk receive
+- Replicates `roll_service.receive_from_processing()` per-roll logic (weight math, multi-VA status check) but atomic
+- Supports partial receive: unchecked rolls stay `sent`, challan → `partially_received`
+- Frontend `handleBulkReceive` now sends 1 API call instead of N sequential calls
+- Legacy fallback for rolls without challan ID (old single sends)
+
+**Challan 3-State Machine (both JC + BC):**
+- `sent → partially_received → received`
+- JobChallan model: added `status` (String, default='sent', indexed) + `received_date` (Date, nullable)
+- BatchChallan: added `partially_received` to existing receive logic (was binary sent/received)
+- Alembic migration `a1b2c3d4e5f6` — applied on both SQLite + PostgreSQL
+
+**ChallansPage (new — `/challans`):**
+- Table list view with columns: Challan No, VA Party, VA Type, Rolls/Pieces, Weight/Cost, Sent Date, Status, Days Out, Actions
+- Two tabs: Job Challans (Rolls) + Batch Challans (Garments)
+- KPI row: Total, Sent, Partial, Received, Rolls/Pieces
+- Filters: status, VA type, VA party + search
+- Click row → detail overlay with roll/batch item table + notes
+- Print icon → fetches full detail then opens print overlay
+- Sidebar: Challans entry in Production section (between Batches and SKUs)
+
+**Print Component Refactor (single source of truth):**
+- `JobChallan.jsx` + `BatchChallan.jsx` now accept single `challan` prop (raw API response)
+- All 6 call sites (RollsPage x2, BatchesPage x2, ChallansPage, SendForVAModal) pass API response directly
+- Deleted all manual field remapping code (-56 lines net)
+- Change print layout once → works everywhere
+
+**Data Fixes:**
+- JC-002: backfilled `status='received'`, `received_date='2026-03-15'` (was stuck at 'sent' from S70 old receive)
+- Local SQLite DB: recreated fresh (S69 batch_alter_table had silently failed on old DB)
+- Production PostgreSQL: verified clean — all S69/S71 migrations applied correctly
+
+**API_REFERENCE.md Updated:**
+- JobChallan response: `status` + `received_date` fields
+- NEW: `POST /job-challans/{id}/receive` fully documented
+- `partially_received` on both JC + BC
+- Appendix B: `remnant` (Roll), Job Challan row, `partially_received`
+- Appendix C: `va_party` + expanded `value_addition` coverage
+
+**JC-001 Audit (14 rolls):** All clear — all logs have job_challan_id, weight_before, va_party_id, status=sent. Safe to receive via new bulk endpoint.
+
+**Deployed:** All changes live on prod. Commits: `06ba550`, `c7b2846`, `83e386c`, `b7bfe1d`, `b1fbbad`
+
+**TODO (next session):**
+- [ ] Monitor JC-001 receive via new bulk endpoint (user will test)
+- [ ] Check EC2 logs for any errors after receive
+- [ ] S68 TODOs still open: data migration script (backfill existing rolls → SupplierInvoice), deploy S68 GST changes
+
+---
+
+## Previous State (Session 70 — 2026-03-15)
+
+### S70: VA Receive Hotfix — MissingGreenlet + Pagination
+
+**Bug 1:** MissingGreenlet crash — 5 missing selectinloads in roll_service.py
+**Bug 2:** Pagination — page_size=20 silently dropped data, fixed with page_size=0
+**Deployed:** JC-002 (62 rolls) fully received. Commits: `b2e1917`, `a0fd022`, `446b9e3`
+
+---
+
+## Previous State (Session 69 — 2026-03-12)
 
 ### S69: VA Party Master + FK Wiring + Challan Edit + Migration Cleanup
 
@@ -410,6 +475,8 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
+| S70 | VA Receive Hotfix | MissingGreenlet crash (5 missing selectinloads), pagination fix (page_size=0 = no limit), JC-002 fully received |
 | S69 | VA Party Master + FK Wiring | 26th model, va_party_id FK replaces vendor_name/processor_name on 3 tables, PATCH challan endpoints, migration cleanup, Shift+M fix |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
