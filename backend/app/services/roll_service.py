@@ -256,6 +256,42 @@ class RollService:
         created_rolls = []
         now = datetime.now(timezone.utc)
 
+        # Duplicate check: same supplier + invoice_no (+ challan_no if provided)
+        if req.supplier_id and req.supplier_invoice_no:
+            dup_conditions = [
+                SupplierInvoice.supplier_id == req.supplier_id,
+                SupplierInvoice.invoice_no == req.supplier_invoice_no,
+            ]
+            if req.supplier_challan_no:
+                dup_conditions.append(SupplierInvoice.challan_no == req.supplier_challan_no)
+            else:
+                dup_conditions.append(
+                    or_(SupplierInvoice.challan_no == None, SupplierInvoice.challan_no == "")
+                )
+
+            dup_stmt = (
+                select(SupplierInvoice)
+                .where(and_(*dup_conditions))
+                .options(selectinload(SupplierInvoice.supplier))
+                .limit(1)
+            )
+            dup_result = await self.db.execute(dup_stmt)
+            existing = dup_result.scalar_one_or_none()
+
+            if existing:
+                supplier_name = existing.supplier.name if existing.supplier else "Unknown"
+                roll_count = (await self.db.execute(
+                    select(func.count()).select_from(Roll)
+                    .where(Roll.supplier_invoice_id == existing.id)
+                )).scalar() or 0
+                challan_part = f" / Challan: {req.supplier_challan_no}" if req.supplier_challan_no else ""
+                raise BusinessRuleViolationError(
+                    f"Invoice '{req.supplier_invoice_no}'{challan_part} from '{supplier_name}' "
+                    f"is already in stock with {roll_count} roll(s) "
+                    f"(entered on {existing.received_at.strftime('%d-%b-%Y') if existing.received_at else '—'}). "
+                    f"Please verify before re-entering."
+                )
+
         # Create SupplierInvoice record first — invoice-level data lives here
         supplier_inv = SupplierInvoice(
             supplier_id=req.supplier_id,
