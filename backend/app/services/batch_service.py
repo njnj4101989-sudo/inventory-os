@@ -445,7 +445,7 @@ class BatchService:
                 ),
                 selectinload(Batch.processing_logs).selectinload(
                     BatchProcessing.batch_challan
-                ),
+                ).selectinload(BatchChallan.va_party),
             )
         )
         result = await self.db.execute(stmt)
@@ -630,7 +630,7 @@ class BatchService:
                 ),
                 selectinload(Batch.processing_logs).selectinload(
                     BatchProcessing.batch_challan
-                ),
+                ).selectinload(BatchChallan.va_party),
             )
         )
         result = await self.db.execute(stmt)
@@ -706,7 +706,7 @@ class BatchService:
                 ),
                 selectinload(Batch.processing_logs).selectinload(
                     BatchProcessing.batch_challan
-                ),
+                ).selectinload(BatchChallan.va_party),
             )
         )
         result = await self.db.execute(stmt)
