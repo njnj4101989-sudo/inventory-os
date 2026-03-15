@@ -866,7 +866,7 @@ export default function LotsPage() {
           </div>
           <div className="flex items-center gap-2">
             {/* Status transitions (forward-only) */}
-            {LOT_STATUS_FLOW.filter(s => canTransitionTo(detailLot.status, s)).map(s => (
+            {LOT_STATUS_FLOW.filter(s => s !== 'distributed' && canTransitionTo(detailLot.status, s)).map(s => (
               <button key={s} onClick={() => handleStatusChange(s)}
                 className="rounded-lg border border-white/30 px-3 py-1.5 text-xs font-medium hover:bg-white/20 transition-colors">
                 Move to {LOT_STATUS_COLORS[s].label}
