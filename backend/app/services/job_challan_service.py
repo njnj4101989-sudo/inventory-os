@@ -318,11 +318,11 @@ class JobChallanService:
             roll = roll_map[entry.roll_id]
 
             # Add back the returned weight to remaining
-            roll.remaining_weight = (roll.remaining_weight or 0) + float(entry.weight_after)
+            roll.remaining_weight = float(roll.remaining_weight or 0) + float(entry.weight_after)
 
             # Adjust current_weight by VA delta (weight change from processing)
             va_delta = float(entry.weight_after) - float(log.weight_before)
-            roll.current_weight = (roll.current_weight or 0) + va_delta
+            roll.current_weight = float(roll.current_weight or 0) + va_delta
 
             # Adjust cost_per_unit if applicable
             if entry.processing_cost and roll.cost_per_unit and entry.weight_after:
