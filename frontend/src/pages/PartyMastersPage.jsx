@@ -214,20 +214,34 @@ function CheckboxField({ label, name, form, set, className = '' }) {
   )
 }
 
-function InfoRow({ label, value }) {
+function DetailField({ label, value, icon, mono, full }) {
   return (
-    <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-800 text-right">{value || '—'}</span>
+    <div className={full ? 'sm:col-span-2' : ''}>
+      <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-0.5">{label}</dt>
+      <dd className={`text-sm font-medium ${mono ? 'font-mono tracking-wide' : ''} ${value && value !== '—' ? 'text-gray-800' : 'text-gray-300'}`}>
+        {icon && <span className="mr-1.5 inline-block align-middle">{icon}</span>}
+        {value || '—'}
+      </dd>
     </div>
   )
 }
 
-function InfoSection({ title, children }) {
+function DetailCard({ title, icon, children, accent = 'primary' }) {
+  const colors = {
+    primary: 'border-t-primary-500',
+    amber: 'border-t-amber-500',
+    emerald: 'border-t-emerald-500',
+    blue: 'border-t-blue-500',
+    purple: 'border-t-purple-500',
+    rose: 'border-t-rose-500',
+  }
   return (
-    <div>
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{title}</h3>
-      <div className="bg-gray-50 rounded-lg p-3">{children}</div>
+    <div className={`bg-white rounded-xl border border-gray-100 border-t-2 ${colors[accent] || colors.primary} shadow-sm`}>
+      <div className="px-5 py-3 border-b border-gray-50 flex items-center gap-2">
+        {icon && <span className="text-gray-400">{icon}</span>}
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">{title}</h3>
+      </div>
+      <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-3">{children}</div>
     </div>
   )
 }
@@ -604,121 +618,199 @@ export default function PartyMastersPage() {
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
 
-      {/* ── Detail Modal ── */}
-      <Modal
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        title={`${labels.singular} Details`}
-        actions={
-          <div className="flex w-full items-center justify-between">
-            <button
-              onClick={handleToggleStatus}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                selected?.is_active
-                  ? 'border border-red-300 text-red-600 hover:bg-red-50'
-                  : 'border border-green-300 text-green-600 hover:bg-green-50'
-              }`}
-            >
-              {selected?.is_active ? 'Deactivate' : 'Activate'}
-            </button>
-            <div className="flex gap-2">
-              <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded-lg border border-primary-300 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50">
-                View Ledger
-              </button>
-              <button onClick={() => setDetailOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                Close
-              </button>
-              <button onClick={openEditFromDetail} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
-                Edit {labels.singular}
-              </button>
+      {/* ── Detail Overlay (Full Page) ── */}
+      {detailOpen && selected && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+          {/* ── Header ── */}
+          <div className="bg-gradient-to-r from-primary-700 to-primary-600 text-white px-6 py-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button onClick={() => setDetailOpen(false)} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                </button>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg font-bold tracking-tight">{selected.name}</h1>
+                    {selected.short_name && <span className="bg-white/15 rounded px-2 py-0.5 text-xs font-medium">{selected.short_name}</span>}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${selected.is_active ? 'bg-green-500/20 text-green-100' : 'bg-red-500/20 text-red-200'}`}>
+                      {selected.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-primary-100 text-xs">
+                    <span>{labels.singular}</span>
+                    {selected.city && <span>|</span>}
+                    {selected.city && <span>{selected.city}{selected.state ? `, ${selected.state}` : ''}</span>}
+                    {selected.gst_no && <span>|</span>}
+                    {selected.gst_no && <span className="font-mono">{selected.gst_no}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleToggleStatus}
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                    selected.is_active
+                      ? 'bg-white/10 text-red-200 hover:bg-white/20'
+                      : 'bg-white/10 text-green-200 hover:bg-white/20'
+                  }`}
+                >
+                  {selected.is_active ? 'Deactivate' : 'Activate'}
+                </button>
+                <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded-lg bg-white/10 px-3.5 py-1.5 text-xs font-medium hover:bg-white/20 transition-colors">
+                  View Ledger
+                </button>
+                <button onClick={openEditFromDetail} className="rounded-lg bg-white px-4 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition-colors">
+                  Edit {labels.singular}
+                </button>
+              </div>
             </div>
           </div>
-        }
-      >
-        {selected && (
-          <div className="space-y-4">
-            <InfoSection title="Business Information">
-              <InfoRow label="Name" value={selected.name} />
-              {showShortName && <InfoRow label="Short Name" value={selected.short_name} />}
-              {showContactPerson && <InfoRow label="Contact Person" value={selected.contact_person} />}
-              {showBroker && <InfoRow label="Broker" value={selected.broker} />}
-              <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-                <span className="text-sm text-gray-500">Status</span>
-                <StatusBadge status={selected.is_active ? 'active' : 'inactive'} />
+
+          {/* ── KPI Row ── */}
+          <div className="px-6 py-4 bg-white border-b border-gray-100 shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              {(() => {
+                const b = balances[selected.id]
+                return (
+                  <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-100 px-4 py-3">
+                    <div className="text-xs font-medium text-blue-500 uppercase tracking-wide">Balance</div>
+                    <div className={`text-lg font-bold mt-0.5 ${b && b.balance !== 0 ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
+                      {b && b.balance !== 0 ? `₹${Number(b.balance).toLocaleString('en-IN')}` : '—'}
+                    </div>
+                    {b && b.balance !== 0 && <div className="text-xs text-blue-400 mt-0.5">{b.balance_type.toUpperCase()}</div>}
+                  </div>
+                )
+              })()}
+              <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-100 px-4 py-3">
+                <div className="text-xs font-medium text-emerald-500 uppercase tracking-wide">Credit Limit</div>
+                <div className="text-lg font-bold text-gray-800 mt-0.5">
+                  {selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : '—'}
+                </div>
               </div>
-            </InfoSection>
+              <div className="rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-100 px-4 py-3">
+                <div className="text-xs font-medium text-amber-500 uppercase tracking-wide">Due Days</div>
+                <div className="text-lg font-bold text-gray-800 mt-0.5">{selected.due_days != null ? `${selected.due_days} days` : '—'}</div>
+              </div>
+              <div className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-100 px-4 py-3">
+                <div className="text-xs font-medium text-purple-500 uppercase tracking-wide">GST Type</div>
+                <div className="text-lg font-bold text-gray-800 mt-0.5 capitalize">{selected.gst_type || '—'}</div>
+              </div>
+              {selected.contact_person && (
+                <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-100 px-4 py-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Contact Person</div>
+                  <div className="text-sm font-bold text-gray-800 mt-1">{selected.contact_person}</div>
+                </div>
+              )}
+              {selected.phone && (
+                <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-100 px-4 py-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Phone</div>
+                  <div className="text-sm font-bold text-gray-800 mt-1 font-mono">{selected.phone}</div>
+                </div>
+              )}
+            </div>
+          </div>
 
-            <InfoSection title="GST & Compliance">
-              <InfoRow label="GST No." value={selected.gst_no} />
-              <InfoRow label="GST Type" value={selected.gst_type ? selected.gst_type.charAt(0).toUpperCase() + selected.gst_type.slice(1) : null} />
-              <InfoRow label="State Code" value={selected.state_code ? `${selected.state_code} — ${GST_STATE_CODES[selected.state_code] || ''}` : null} />
-              <InfoRow label="PAN No." value={selected.pan_no} />
-              <InfoRow label="Aadhar No." value={selected.aadhar_no} />
-              {showHSN && <InfoRow label="HSN Code" value={selected.hsn_code} />}
-            </InfoSection>
+          {/* ── Content ── */}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            <InfoSection title="Contact">
-              <InfoRow label="Phone" value={selected.phone} />
-              <InfoRow label="Alt Phone" value={selected.phone_alt} />
-              <InfoRow label="Email" value={selected.email} />
-            </InfoSection>
+              {/* GST & Compliance */}
+              <DetailCard title="GST & Compliance" accent="blue" icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              }>
+                <DetailField label="GSTIN" value={selected.gst_no} mono />
+                <DetailField label="GST Type" value={selected.gst_type ? selected.gst_type.charAt(0).toUpperCase() + selected.gst_type.slice(1) : null} />
+                <DetailField label="State Code" value={selected.state_code ? `${selected.state_code} — ${GST_STATE_CODES[selected.state_code] || ''}` : null} />
+                <DetailField label="PAN" value={selected.pan_no} mono />
+                <DetailField label="Aadhar" value={selected.aadhar_no} mono />
+                {showHSN && <DetailField label="HSN Code" value={selected.hsn_code} mono />}
+              </DetailCard>
 
-            <InfoSection title="Address">
-              <InfoRow label="Address" value={selected.address} />
-              <InfoRow label="City" value={selected.city} />
-              <InfoRow label="State" value={selected.state} />
-              <InfoRow label="PIN Code" value={selected.pin_code} />
-            </InfoSection>
+              {/* Contact & Address */}
+              <DetailCard title="Contact & Address" accent="emerald" icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              }>
+                <DetailField label="Phone" value={selected.phone} mono />
+                <DetailField label="Alt Phone" value={selected.phone_alt} mono />
+                <DetailField label="Email" value={selected.email} />
+                {showBroker && <DetailField label="Broker" value={selected.broker} />}
+                <DetailField label="Address" value={selected.address} full />
+                <DetailField label="City" value={selected.city} />
+                <DetailField label="State" value={selected.state} />
+                <DetailField label="PIN Code" value={selected.pin_code} mono />
+              </DetailCard>
 
-            <InfoSection title="Credit & Payment">
-              <InfoRow label="Due Days" value={selected.due_days} />
-              <InfoRow label="Credit Limit" value={selected.credit_limit != null ? `Rs. ${Number(selected.credit_limit).toLocaleString('en-IN')}` : null} />
-              <InfoRow label="Opening Balance" value={selected.opening_balance != null ? `Rs. ${Number(selected.opening_balance).toLocaleString('en-IN')}` : null} />
-              <InfoRow label="Balance Type" value={selected.balance_type} />
-            </InfoSection>
+              {/* Credit & Payment */}
+              <DetailCard title="Credit & Payment" accent="amber" icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              }>
+                <DetailField label="Due Days" value={selected.due_days != null ? `${selected.due_days} days` : null} />
+                <DetailField label="Credit Limit" value={selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : null} />
+                <DetailField label="Opening Balance" value={selected.opening_balance != null ? `₹${Number(selected.opening_balance).toLocaleString('en-IN')}` : null} />
+                <DetailField label="Balance Type" value={selected.balance_type ? selected.balance_type.charAt(0).toUpperCase() + selected.balance_type.slice(1) : null} />
+              </DetailCard>
 
-            {(selected.tds_applicable || (showTCS && selected.tcs_applicable)) && (
-              <InfoSection title="TDS / TCS">
-                {selected.tds_applicable && (
-                  <>
-                    <InfoRow label="TDS" value="Applicable" />
-                    <InfoRow label="TDS Section" value={selected.tds_section ? `${selected.tds_section} — ${TDS_SECTIONS.find((s) => s.value === selected.tds_section)?.label.split(' — ')[1] || ''}` : null} />
-                    <InfoRow label="TDS Rate" value={selected.tds_rate != null ? `${selected.tds_rate}%` : null} />
-                    {!selected.pan_no && <InfoRow label="" value={<span className="text-amber-600 text-xs">No PAN — higher TDS rate applies</span>} />}
-                  </>
-                )}
-                {showTCS && selected.tcs_applicable && (
-                  <>
-                    <InfoRow label="TCS" value="Applicable" />
-                    <InfoRow label="TCS Section" value={selected.tcs_section ? `${selected.tcs_section} — ${TCS_SECTIONS.find((s) => s.value === selected.tcs_section)?.label.split(' — ')[1] || ''}` : null} />
-                    <InfoRow label="TCS Rate" value={selected.tcs_rate != null ? `${selected.tcs_rate}%` : null} />
-                  </>
-                )}
-              </InfoSection>
-            )}
+              {/* TDS / TCS */}
+              {(selected.tds_applicable || (showTCS && selected.tcs_applicable)) && (
+                <DetailCard title="TDS / TCS" accent="rose" icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
+                }>
+                  {selected.tds_applicable && (
+                    <>
+                      <DetailField label="TDS Status" value="Applicable" icon={<span className="w-2 h-2 rounded-full bg-green-500 inline-block" />} />
+                      <DetailField label="TDS Section" value={selected.tds_section ? `${selected.tds_section} — ${TDS_SECTIONS.find((s) => s.value === selected.tds_section)?.label.split(' — ')[1] || ''}` : null} />
+                      <DetailField label="TDS Rate" value={selected.tds_rate != null ? `${selected.tds_rate}%` : null} />
+                      {!selected.pan_no && (
+                        <div className="sm:col-span-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                          <p className="text-xs text-amber-700 font-medium">No PAN on file — higher TDS rate applies</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {showTCS && selected.tcs_applicable && (
+                    <>
+                      <DetailField label="TCS Status" value="Applicable" icon={<span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />} />
+                      <DetailField label="TCS Section" value={selected.tcs_section ? `${selected.tcs_section} — ${TCS_SECTIONS.find((s) => s.value === selected.tcs_section)?.label.split(' — ')[1] || ''}` : null} />
+                      <DetailField label="TCS Rate" value={selected.tcs_rate != null ? `${selected.tcs_rate}%` : null} />
+                    </>
+                  )}
+                </DetailCard>
+              )}
 
-            {showMSME && (selected.msme_type && selected.msme_type !== 'none') && (
-              <InfoSection title="MSME">
-                <InfoRow label="MSME Type" value={selected.msme_type.charAt(0).toUpperCase() + selected.msme_type.slice(1)} />
-                <InfoRow label="MSME Reg. No." value={selected.msme_reg_no} />
-                {(selected.msme_type === 'micro' || selected.msme_type === 'small') && (
-                  <p className="text-xs text-amber-600 mt-1">45-day payment rule applies (Sec 43B(h))</p>
-                )}
-              </InfoSection>
-            )}
+              {/* MSME */}
+              {showMSME && selected.msme_type && selected.msme_type !== 'none' && (
+                <DetailCard title="MSME Registration" accent="purple" icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                }>
+                  <DetailField label="MSME Type" value={selected.msme_type.charAt(0).toUpperCase() + selected.msme_type.slice(1)} />
+                  <DetailField label="Registration No." value={selected.msme_reg_no} mono />
+                  {(selected.msme_type === 'micro' || selected.msme_type === 'small') && (
+                    <div className="sm:col-span-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                      <p className="text-xs text-amber-700 font-medium">45-day payment rule applies (Sec 43B(h))</p>
+                    </div>
+                  )}
+                </DetailCard>
+              )}
 
-            {selected.notes && (
-              <InfoSection title="Notes">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selected.notes}</p>
-              </InfoSection>
-            )}
+              {/* Notes */}
+              {selected.notes && (
+                <DetailCard title="Notes" accent="primary" icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                }>
+                  <div className="sm:col-span-2">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{selected.notes}</p>
+                  </div>
+                </DetailCard>
+              )}
+            </div>
 
-            <div className="text-xs text-gray-400 text-right pt-2">
+            {/* Footer metadata */}
+            <div className="mt-4 text-xs text-gray-400 text-right">
               Created: {selected.created_at ? new Date(selected.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
             </div>
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
 
       {/* ── Create / Edit Modal ── */}
       <Modal
