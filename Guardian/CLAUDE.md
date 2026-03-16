@@ -17,6 +17,7 @@
 | `CLAUDE.md` | Session log, project state, architecture | Every session start |
 | `guardian.md` | Protocols, rules, coding standards | Before any coding |
 | `API_REFERENCE.md` | **THE** source of truth for API shapes | Before any frontend↔backend work |
+| `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) | Before any masters/FY work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |
@@ -29,7 +30,58 @@
 
 ---
 
-## Current State (Session 72 — 2026-03-15)
+## Current State (Session 73 — 2026-03-16)
+
+### S73: Color FK + Production DB Wipe + Party Masters Phase 1a
+
+**Color Master Fixes (direct DB on prod):**
+- RED: code `` `ORG `` → `RED`
+- YELLOW → MUSTARD: name + code `YLOW` → `MSTRD`
+- BOTTEL GREEN → BOTTLE GREEN: name + code `B GRE` → `BTGRN`
+- CHIKKU: confirmed (user changed GOLDEN → CHIKKU via admin panel), code still `BEIGE`
+
+**Color FK (rolls + SKUs):**
+- `Roll.color_id` FK → `colors.id` (nullable, RESTRICT ondelete)
+- `SKU.color_id` FK → `colors.id` (nullable, RESTRICT ondelete)
+- Roll response: nested `color_obj` (id, name, code, color_no) via selectinload
+- All 11 roll query paths updated with `selectinload(Roll.color_obj)`
+- `ColorUpdate` schema: `code` now editable (with duplicate check)
+- Frontend: stock-in sends `color_id`, MastersPage color edit includes code field
+- Migration `ca193c1c4572`
+
+**Production DB Wiped (fresh start):**
+- All 17 transaction tables emptied (rolls, lots, batches, challans, orders, invoices, etc.)
+- 10 master tables intact (colors=11, fabrics=4, suppliers=1, users=5, roles=5, va_additions=11, va_parties=1)
+- SKUs + inventory_state also cleared (generated from transactions)
+- Test VA party "handStoneHouse" deleted
+
+**Phase 1a: Party Masters + Customer Model (27th model):**
+- Customer model: name, contact_person, short_name, phone, phone_alt, email, address, city, state, pin_code, gst_no, gst_type, state_code, pan_no, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, tcs_applicable, tcs_rate, tcs_section, broker, notes, is_active
+- Customer schema (Create/Update/Response/Brief), service (CRUD + search), API routes (`/customers`)
+- Supplier enriched: +14 columns (phone_alt, gst_type, state_code, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
+- VAParty enriched: +19 columns (contact_person, phone_alt, email, address, state, pin_code, gst_type, state_code, pan_no, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
+- `Order.customer_id` FK (RESTRICT ondelete) + nested customer in response + selectinload
+- PartyMastersPage.jsx (NEW): 3 tabs (Suppliers, VA Parties, Customers), 8-section forms, full CRUD
+- Sidebar: "Suppliers" → "Party Masters" at `/parties`
+- MastersPage: removed VA Parties tab (4 tabs remain: PT, Color, Fabric, VA Types)
+- Routes: `/suppliers` → `/parties` (PartyMastersPage)
+- `api/customers.js`: CRUD API module
+- Migration `2f1ec3b945c7`
+- Planning doc: `MASTERS_AND_FY_PLAN.md` (Phases 1-4: Party Masters, Ledger, SKU Enrichment, FY)
+
+**Commits:** `f2ef490`, `d07c797` | All deployed to prod
+
+**TODO (next session):**
+- [ ] Phase 1b: TDS/TCS fields in party form UI (already in DB, enhance form sections)
+- [ ] Phase 1c: OrdersPage customer_id dropdown picker + QuickMasterModal customer config
+- [ ] Update API_REFERENCE.md with Customer endpoints, enriched Supplier/VAParty schemas, Order changes
+- [ ] Phase 2: Ledger system (LedgerEntry model, auto-entries, payment recording, ledger view)
+- [ ] Phase 3: SKU enrichment (hsn_code, gst_percent, mrp, sale_rate)
+- [ ] Phase 4: Financial Year (Company model, FY model, closing/opening, counter prefix)
+
+---
+
+## Previous State (Session 72 — 2026-03-15)
 
 ### S72: Production Hotfixes — 3 Bugs Fixed on Live
 
@@ -505,6 +557,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
 | S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
 | S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
 | S70 | VA Receive Hotfix | MissingGreenlet crash (5 missing selectinloads), pagination fix (page_size=0 = no limit), JC-002 fully received |
@@ -525,7 +578,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 ```
 inventory-os/
 ├── Guardian/           ← Docs (CLAUDE.md, guardian.md, API_REFERENCE.md, STEP1-6, AWS_DEPLOYMENT.md)
-├── backend/app/        ← FastAPI (models/26, schemas/20, services/16, api/17, core/, tasks/)
+├── backend/app/        ← FastAPI (models/27, schemas/21, services/17, api/18, core/, tasks/)
 ├── frontend/src/       ← React+Tailwind (api/17, pages/14+Login, components/, context/, hooks/)
 └── mobile/             ← Phase 6C (future)
 ```
