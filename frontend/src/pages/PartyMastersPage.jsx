@@ -675,37 +675,37 @@ export default function PartyMastersPage() {
                 const hasBalance = b && b.balance !== 0
                 return (
                   <div className="rounded-lg bg-blue-50/80 border border-blue-100 px-3 py-2">
-                    <div className="text-[10px] font-semibold text-blue-400">Balance</div>
-                    <div className={`text-sm font-bold ${hasBalance ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
+                    <div className="text-[11px] font-bold text-blue-500 tracking-wide">Balance</div>
+                    <div className={`text-[15px] font-extrabold mt-0.5 ${hasBalance ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
                       {hasBalance ? `₹${Number(b.balance).toLocaleString('en-IN')}` : '—'}
                     </div>
-                    {hasBalance && <div className="text-[10px] text-blue-400">{b.balance_type.toUpperCase()}</div>}
+                    {hasBalance && <div className="text-[10px] font-semibold text-blue-400">{b.balance_type.toUpperCase()}</div>}
                   </div>
                 )
               })()}
               <div className="rounded-lg bg-emerald-50/80 border border-emerald-100 px-3 py-2">
-                <div className="text-[10px] font-semibold text-emerald-400">Credit Limit</div>
-                <div className={`text-sm font-bold ${selected.credit_limit != null ? 'text-gray-800' : 'text-gray-300'}`}>
+                <div className="text-[11px] font-bold text-emerald-500 tracking-wide">Credit Limit</div>
+                <div className={`text-[15px] font-extrabold mt-0.5 ${selected.credit_limit != null ? 'text-gray-800' : 'text-gray-300'}`}>
                   {selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : '—'}
                 </div>
               </div>
               <div className="rounded-lg bg-amber-50/80 border border-amber-100 px-3 py-2">
-                <div className="text-[10px] font-semibold text-amber-400">Due Days</div>
-                <div className={`text-sm font-bold ${selected.due_days != null ? 'text-gray-800' : 'text-gray-300'}`}>
+                <div className="text-[11px] font-bold text-amber-500 tracking-wide">Due Days</div>
+                <div className={`text-[15px] font-extrabold mt-0.5 ${selected.due_days != null ? 'text-gray-800' : 'text-gray-300'}`}>
                   {selected.due_days != null ? selected.due_days : '—'}
                 </div>
               </div>
               <div className="rounded-lg bg-purple-50/80 border border-purple-100 px-3 py-2">
-                <div className="text-[10px] font-semibold text-purple-400">GST Type</div>
-                <div className={`text-sm font-bold capitalize ${selected.gst_type ? 'text-gray-800' : 'text-gray-300'}`}>{selected.gst_type || '—'}</div>
+                <div className="text-[11px] font-bold text-purple-500 tracking-wide">GST Type</div>
+                <div className={`text-[15px] font-extrabold mt-0.5 capitalize ${selected.gst_type ? 'text-gray-800' : 'text-gray-300'}`}>{selected.gst_type || '—'}</div>
               </div>
               <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
-                <div className="text-[10px] font-semibold text-gray-400">Contact</div>
-                <div className={`text-[13px] font-semibold truncate ${selected.contact_person ? 'text-gray-800' : 'text-gray-300'}`}>{selected.contact_person || '—'}</div>
+                <div className="text-[11px] font-bold text-gray-500 tracking-wide">Contact</div>
+                <div className={`text-[13px] font-bold mt-0.5 truncate ${selected.contact_person ? 'text-gray-800' : 'text-gray-300'}`}>{selected.contact_person || '—'}</div>
               </div>
               <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
-                <div className="text-[10px] font-semibold text-gray-400">Phone</div>
-                <div className={`text-[13px] font-semibold font-mono ${selected.phone ? 'text-gray-800' : 'text-gray-300'}`}>{selected.phone || '—'}</div>
+                <div className="text-[11px] font-bold text-gray-500 tracking-wide">Phone</div>
+                <div className={`text-[13px] font-bold mt-0.5 font-mono ${selected.phone ? 'text-gray-800' : 'text-gray-300'}`}>{selected.phone || '—'}</div>
               </div>
             </div>
           </div>
