@@ -150,7 +150,7 @@
 **Commits:** `96676b9`, `662395f`, `3aa7827` | All deployed to prod
 
 **TODO (next session):**
-- [ ] S68 TODOs still open: data migration script (backfill existing rolls → SupplierInvoice), deploy S68 GST changes
+- ~~S68 TODOs: obsolete — prod DB wiped in S73, GST deployed~~
 - [ ] Monitor lot distribution + batch VA flow end-to-end
 
 ---
@@ -206,7 +206,7 @@
 **TODO (next session):**
 - [ ] Monitor JC-001 receive via new bulk endpoint (user will test)
 - [ ] Check EC2 logs for any errors after receive
-- [ ] S68 TODOs still open: data migration script (backfill existing rolls → SupplierInvoice), deploy S68 GST changes
+- ~~S68 TODOs: obsolete — prod DB wiped in S73, GST deployed~~
 
 ---
 
@@ -294,7 +294,7 @@
 **NOT deployed yet.** Migration `63ca51d7966a` applied locally only.
 
 **TODO (next session):**
-- [ ] Data migration script (backfill existing rolls → SupplierInvoice records)
+- ~~Data migration script: obsolete — prod DB wiped in S73~~
 - [ ] Update `API_REFERENCE.md` + `mock.js`
 - [ ] Test full CRUD cycle (create/edit/delete with GST)
 - [ ] Deploy to prod (migration + restart)
