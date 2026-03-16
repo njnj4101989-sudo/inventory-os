@@ -227,7 +227,7 @@ function DetailField({ label, value, icon, mono, full }) {
   )
 }
 
-function DetailCard({ title, icon, children, accent = 'primary' }) {
+function DetailCard({ title, icon, children, accent = 'primary', span = 1, cols = 2 }) {
   const colors = {
     primary: 'border-l-primary-500',
     amber: 'border-l-amber-500',
@@ -236,13 +236,15 @@ function DetailCard({ title, icon, children, accent = 'primary' }) {
     purple: 'border-l-purple-500',
     rose: 'border-l-rose-500',
   }
+  const spanCls = span === 2 ? 'xl:col-span-2' : ''
+  const colsCls = cols === 3 ? 'grid-cols-3' : cols === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'
   return (
-    <div className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${colors[accent] || colors.primary} shadow-sm`}>
+    <div className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${colors[accent] || colors.primary} shadow-sm ${spanCls}`}>
       <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-1.5">
         {icon && <span className="text-gray-400">{icon}</span>}
         <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{title}</h3>
       </div>
-      <div className="px-4 py-3 grid grid-cols-2 gap-x-5 gap-y-2.5">{children}</div>
+      <div className={`px-4 py-3 grid ${colsCls} gap-x-5 gap-y-2.5`}>{children}</div>
     </div>
   )
 }
@@ -710,10 +712,10 @@ export default function PartyMastersPage() {
 
           {/* ── Content ── */}
           <div className="flex-1 overflow-y-auto px-5 py-3">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
 
               {/* GST & Compliance */}
-              <DetailCard title="GST & Compliance" accent="blue" icon={
+              <DetailCard title="GST & Compliance" accent="blue" cols={3} icon={
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               }>
                 <DetailField label="GSTIN" value={selected.gst_no} mono />
@@ -725,7 +727,7 @@ export default function PartyMastersPage() {
               </DetailCard>
 
               {/* Contact & Address */}
-              <DetailCard title="Contact & Address" accent="emerald" icon={
+              <DetailCard title="Contact & Address" accent="emerald" span={2} cols={4} icon={
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               }>
                 <DetailField label="Phone" value={selected.phone} mono />
