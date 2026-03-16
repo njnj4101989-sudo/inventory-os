@@ -16,6 +16,9 @@ class Order(Base):
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
     source: Mapped[str] = mapped_column(String(20), index=True)
     external_order_ref: Mapped[str | None] = mapped_column(String(100))
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), index=True
+    )
     customer_name: Mapped[str | None] = mapped_column(String(200))
     customer_phone: Mapped[str | None] = mapped_column(String(20))
     customer_address: Mapped[str | None] = mapped_column(Text)
@@ -26,6 +29,7 @@ class Order(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
+    customer: Mapped[Customer | None] = relationship(foreign_keys=[customer_id])
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     items: Mapped[list[OrderItem]] = relationship(back_populates="order")
     invoices: Mapped[list[Invoice]] = relationship(back_populates="order")

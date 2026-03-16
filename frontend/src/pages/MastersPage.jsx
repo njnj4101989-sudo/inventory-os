@@ -4,7 +4,6 @@ import {
   getColors, createColor, updateColor,
   getFabrics, createFabric, updateFabric,
   getValueAdditions, createValueAddition, updateValueAddition,
-  getVAParties, createVAParty, updateVAParty,
 } from '../api/masters'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -20,7 +19,6 @@ const TABS = [
   { key: 'colors', label: 'Colors', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
   { key: 'fabrics', label: 'Fabrics', icon: 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16' },
   { key: 'value_additions', label: 'VA Types', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
-  { key: 'va_parties', label: 'VA Parties', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
 
 // ── Column Definitions ──────────────────────────────────
@@ -73,14 +71,6 @@ const VA_COLUMNS = [
   { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
 ]
 
-const VA_PARTY_COLUMNS = [
-  { key: 'name', label: 'Party Name', render: (v) => <span className="font-medium">{v}</span> },
-  { key: 'phone', label: 'Phone', render: (v) => v || <span className="text-gray-400">—</span> },
-  { key: 'city', label: 'City', render: (v) => v || <span className="text-gray-400">—</span> },
-  { key: 'gst_no', label: 'GST No.', render: (v) => v ? <span className="font-mono text-xs">{v}</span> : <span className="text-gray-400">—</span> },
-  { key: 'hsn_code', label: 'HSN', render: (v) => v ? <span className="font-mono text-xs">{v}</span> : <span className="text-gray-400">—</span> },
-  { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
-]
 
 const VA_FILTER_TABS = [
   { key: 'all', label: 'All' },
@@ -100,7 +90,6 @@ export default function MastersPage() {
   const [colorData, setColorData] = useState([])
   const [fabricData, setFabricData] = useState([])
   const [vaData, setVaData] = useState([])
-  const [vaPartyData, setVaPartyData] = useState([])
 
   // VA filter
   const [vaFilter, setVaFilter] = useState('all')
@@ -129,9 +118,6 @@ export default function MastersPage() {
       } else if (tab === 'value_additions') {
         const res = await getValueAdditions()
         setVaData(res.data.data)
-      } else {
-        const res = await getVAParties()
-        setVaPartyData(res.data.data)
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load data')
@@ -145,7 +131,7 @@ export default function MastersPage() {
   // ── Filtered data ──
   const q = search.toLowerCase()
   const filteredData = (() => {
-    let list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : tab === 'value_additions' ? vaData : vaPartyData
+    let list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : vaData
     // VA applicable_to filter
     if (tab === 'value_additions' && vaFilter !== 'all') {
       list = list.filter((item) => (item.applicable_to || 'both') === vaFilter)
@@ -168,7 +154,6 @@ export default function MastersPage() {
     if (tab === 'product_types') setForm({ code: '', name: '', description: '' })
     else if (tab === 'colors') setForm({ name: '', code: '', color_no: '', hex_code: '#000000' })
     else if (tab === 'value_additions') setForm({ short_code: '', name: '', description: '', applicable_to: 'both' })
-    else if (tab === 'va_parties') setForm({ name: '', phone: '', city: '', gst_no: '', hsn_code: '' })
     else setForm({ code: '', name: '', description: '' })
     setModalOpen(true)
   }
@@ -179,7 +164,6 @@ export default function MastersPage() {
     if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     else if (tab === 'colors') setForm({ name: item.name, code: item.code || '', color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
     else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', applicable_to: item.applicable_to || 'both', is_active: item.is_active })
-    else if (tab === 'va_parties') setForm({ name: item.name, phone: item.phone || '', city: item.city || '', gst_no: item.gst_no || '', hsn_code: item.hsn_code || '', is_active: item.is_active })
     else setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     setModalOpen(true)
   }
@@ -193,7 +177,7 @@ export default function MastersPage() {
       if (tab === 'value_additions') {
         if (!form.short_code?.trim()) { setFormError('Short code is required'); return }
         if (form.short_code.trim().length > 4) { setFormError('Short code max 4 characters'); return }
-      } else if (tab !== 'va_parties') {
+      } else {
         if (!form.code?.trim()) { setFormError('Code is required'); return }
       }
     }
@@ -218,10 +202,6 @@ export default function MastersPage() {
       } else if (tab === 'value_additions') {
         if (editing) await updateValueAddition(editing.id, form)
         else await createValueAddition({ short_code: form.short_code.trim(), name: form.name.trim(), description: form.description || null, applicable_to: form.applicable_to || 'both' })
-      } else if (tab === 'va_parties') {
-        const payload = { name: form.name.trim(), phone: form.phone?.trim() || null, city: form.city?.trim() || null, gst_no: form.gst_no?.trim() || null, hsn_code: form.hsn_code?.trim() || null }
-        if (editing) await updateVAParty(editing.id, { ...payload, is_active: form.is_active })
-        else await createVAParty(payload)
       }
       setModalOpen(false)
       fetchData()
@@ -235,8 +215,8 @@ export default function MastersPage() {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   // ── Labels ──
-  const entityLabel = tab === 'product_types' ? 'Product Type' : tab === 'colors' ? 'Color' : tab === 'fabrics' ? 'Fabric' : tab === 'value_additions' ? 'VA Type' : 'VA Party'
-  const columns = tab === 'product_types' ? PT_COLUMNS : tab === 'colors' ? COLOR_COLUMNS : tab === 'fabrics' ? FABRIC_COLUMNS : tab === 'value_additions' ? VA_COLUMNS : VA_PARTY_COLUMNS
+  const entityLabel = tab === 'product_types' ? 'Product Type' : tab === 'colors' ? 'Color' : tab === 'fabrics' ? 'Fabric' : 'VA Type'
+  const columns = tab === 'product_types' ? PT_COLUMNS : tab === 'colors' ? COLOR_COLUMNS : tab === 'fabrics' ? FABRIC_COLUMNS : VA_COLUMNS
 
   return (
     <div>
@@ -314,7 +294,7 @@ export default function MastersPage() {
           {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
           {/* Code — only on create (not for VA Parties) */}
-          {!editing && tab !== 'value_additions' && tab !== 'va_parties' && (
+          {!editing && tab !== 'value_additions' && (
             <div>
               <label className={LABEL}>Code <span className="text-red-500">*</span></label>
               <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
@@ -362,7 +342,7 @@ export default function MastersPage() {
                 placeholder="e.g. RED" maxLength={5} className={`${INPUT} font-mono uppercase max-w-[160px]`} />
             </div>
           )}
-          {editing && tab !== 'value_additions' && tab !== 'va_parties' && tab !== 'colors' && (
+          {editing && tab !== 'value_additions' && tab !== 'colors' && (
             <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5 flex items-center gap-2">
               <span className="text-xs text-gray-400 uppercase tracking-wide">Code:</span>
               <span className="font-mono font-semibold text-primary-700">{editing.code}</span>
@@ -402,36 +382,8 @@ export default function MastersPage() {
             </div>
           )}
 
-          {/* VA Party fields */}
-          {tab === 'va_parties' && (
-            <>
-              <div>
-                <label className={LABEL}>Phone</label>
-                <input type="text" value={form.phone || ''} onChange={(e) => set('phone', e.target.value)}
-                  placeholder="e.g. 9876543210" maxLength={20} className={INPUT} />
-              </div>
-              <div>
-                <label className={LABEL}>City</label>
-                <input type="text" value={form.city || ''} onChange={(e) => set('city', e.target.value)}
-                  placeholder="e.g. Surat" className={INPUT} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={LABEL}>GST No.</label>
-                  <input type="text" value={form.gst_no || ''} onChange={(e) => set('gst_no', e.target.value.toUpperCase())}
-                    placeholder="e.g. 24AABCT1332L1ZH" maxLength={20} className={`${INPUT} font-mono`} />
-                </div>
-                <div>
-                  <label className={LABEL}>HSN Code</label>
-                  <input type="text" value={form.hsn_code || ''} onChange={(e) => set('hsn_code', e.target.value)}
-                    placeholder="e.g. 5407" maxLength={10} className={`${INPUT} font-mono`} />
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Description (PT / Fabric / VA) */}
-          {tab !== 'colors' && tab !== 'va_parties' && (
+          {tab !== 'colors' && (
             <div>
               <label className={LABEL}>Description</label>
               <textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)}

@@ -67,6 +67,7 @@ class OrderCreate(BaseModel):
     """POST /orders."""
 
     source: str  # web, ecommerce, walk_in
+    customer_id: UUID
     customer_name: str | None = None
     customer_phone: str | None = None
     customer_address: str | None = None
@@ -88,6 +89,8 @@ class OrderResponse(BaseSchema):
     order_number: str
     source: str
     external_order_ref: str | None = None
+    customer_id: UUID | None = None
+    customer: dict | None = None
     customer_name: str | None = None
     customer_phone: str | None = None
     customer_address: str | None = None

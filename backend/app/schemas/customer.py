@@ -9,22 +9,19 @@ from pydantic import BaseModel
 from app.schemas import BaseSchema
 
 
-# --- Brief ---
-
-
-class SupplierBrief(BaseSchema):
-    """Nested supplier info in roll responses."""
-
+class CustomerBrief(BaseSchema):
+    """Nested customer info in order/invoice responses."""
     id: UUID
     name: str
+    phone: str | None = None
+    city: str | None = None
+    gst_no: str | None = None
 
 
-# --- Requests ---
-
-
-class SupplierCreate(BaseModel):
+class CustomerCreate(BaseModel):
     name: str
     contact_person: str | None = None
+    short_name: str | None = None
     phone: str | None = None
     phone_alt: str | None = None
     email: str | None = None
@@ -37,7 +34,6 @@ class SupplierCreate(BaseModel):
     state_code: str | None = None
     pan_no: str | None = None
     aadhar_no: str | None = None
-    hsn_code: str | None = None
     due_days: int | None = None
     credit_limit: Decimal | None = None
     opening_balance: Decimal | None = None
@@ -45,15 +41,17 @@ class SupplierCreate(BaseModel):
     tds_applicable: bool = False
     tds_rate: Decimal | None = None
     tds_section: str | None = None
-    msme_type: str | None = None
-    msme_reg_no: str | None = None
+    tcs_applicable: bool = False
+    tcs_rate: Decimal | None = None
+    tcs_section: str | None = None
     broker: str | None = None
     notes: str | None = None
 
 
-class SupplierUpdate(BaseModel):
+class CustomerUpdate(BaseModel):
     name: str | None = None
     contact_person: str | None = None
+    short_name: str | None = None
     phone: str | None = None
     phone_alt: str | None = None
     email: str | None = None
@@ -66,7 +64,6 @@ class SupplierUpdate(BaseModel):
     state_code: str | None = None
     pan_no: str | None = None
     aadhar_no: str | None = None
-    hsn_code: str | None = None
     due_days: int | None = None
     credit_limit: Decimal | None = None
     opening_balance: Decimal | None = None
@@ -74,20 +71,19 @@ class SupplierUpdate(BaseModel):
     tds_applicable: bool | None = None
     tds_rate: Decimal | None = None
     tds_section: str | None = None
-    msme_type: str | None = None
-    msme_reg_no: str | None = None
+    tcs_applicable: bool | None = None
+    tcs_rate: Decimal | None = None
+    tcs_section: str | None = None
     broker: str | None = None
     notes: str | None = None
     is_active: bool | None = None
 
 
-# --- Response ---
-
-
-class SupplierResponse(BaseSchema):
+class CustomerResponse(BaseSchema):
     id: UUID
     name: str
     contact_person: str | None = None
+    short_name: str | None = None
     phone: str | None = None
     phone_alt: str | None = None
     email: str | None = None
@@ -100,7 +96,6 @@ class SupplierResponse(BaseSchema):
     state_code: str | None = None
     pan_no: str | None = None
     aadhar_no: str | None = None
-    hsn_code: str | None = None
     due_days: int | None = None
     credit_limit: Decimal | None = None
     opening_balance: Decimal | None = None
@@ -108,9 +103,10 @@ class SupplierResponse(BaseSchema):
     tds_applicable: bool = False
     tds_rate: Decimal | None = None
     tds_section: str | None = None
-    msme_type: str | None = None
-    msme_reg_no: str | None = None
+    tcs_applicable: bool = False
+    tcs_rate: Decimal | None = None
+    tcs_section: str | None = None
     broker: str | None = None
     notes: str | None = None
-    is_active: bool
+    is_active: bool = True
     created_at: datetime

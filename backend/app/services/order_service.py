@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.sku import SKU
+from app.models.customer import Customer
 from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, OrderResponse
 from app.core.code_generator import next_order_number
 from app.core.exceptions import (
@@ -49,7 +50,10 @@ class OrderService:
 
         stmt = (
             select(Order)
-            .options(selectinload(Order.items).selectinload(OrderItem.sku))
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.items).selectinload(OrderItem.sku),
+            )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
             .limit(params.page_size)
@@ -115,6 +119,7 @@ class OrderService:
         order = Order(
             order_number=order_number,
             source=req.source or "web",
+            customer_id=req.customer_id,
             customer_name=req.customer_name,
             customer_phone=req.customer_phone,
             customer_address=req.customer_address,
@@ -251,7 +256,10 @@ class OrderService:
         stmt = (
             select(Order)
             .where(Order.id == order_id)
-            .options(selectinload(Order.items).selectinload(OrderItem.sku))
+            .options(
+                selectinload(Order.customer),
+                selectinload(Order.items).selectinload(OrderItem.sku),
+            )
         )
         result = await self.db.execute(stmt)
         order = result.scalar_one_or_none()
@@ -260,11 +268,20 @@ class OrderService:
         return order
 
     def _to_response(self, o: Order) -> dict:
+        cust = o.customer if hasattr(o, 'customer') and o.customer else None
         return {
             "id": str(o.id),
             "order_number": o.order_number,
             "source": o.source,
             "external_order_ref": o.external_order_ref,
+            "customer_id": str(o.customer_id) if o.customer_id else None,
+            "customer": {
+                "id": str(cust.id),
+                "name": cust.name,
+                "phone": cust.phone,
+                "city": cust.city,
+                "gst_no": cust.gst_no,
+            } if cust else None,
             "customer_name": o.customer_name,
             "customer_phone": o.customer_phone,
             "customer_address": o.customer_address,

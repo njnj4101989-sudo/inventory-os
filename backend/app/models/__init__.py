@@ -25,6 +25,7 @@ from app.models.supplier_invoice import SupplierInvoice
 from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
+from app.models.customer import Customer
 
 __all__ = [
     "Role",
@@ -54,4 +55,5 @@ __all__ = [
     "JobChallan",
     "BatchChallan",
     "BatchProcessing",
+    "Customer",
 ]

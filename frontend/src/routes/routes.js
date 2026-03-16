@@ -3,7 +3,7 @@ import { lazy } from 'react'
 // Lazy-load all pages — code-split per route
 const DashboardPage    = lazy(() => import('../pages/DashboardPage'))
 const UsersPage        = lazy(() => import('../pages/UsersPage'))
-const SuppliersPage    = lazy(() => import('../pages/SuppliersPage'))
+const PartyMastersPage = lazy(() => import('../pages/PartyMastersPage'))
 const RollsPage        = lazy(() => import('../pages/RollsPage'))
 const SKUsPage         = lazy(() => import('../pages/SKUsPage'))
 const LotsPage         = lazy(() => import('../pages/LotsPage'))
@@ -26,7 +26,7 @@ const ProfilePage      = lazy(() => import('../pages/ProfilePage'))
 const routes = [
   { path: 'dashboard',        element: DashboardPage,    requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'users',            element: UsersPage,        requiredRoles: ['admin'] },
-  { path: 'suppliers',        element: SuppliersPage,    requiredRoles: ['admin', 'supervisor'] },
+  { path: 'parties',          element: PartyMastersPage, requiredRoles: ['admin', 'supervisor'] },
   { path: 'rolls',            element: RollsPage,        requiredRoles: ['admin', 'supervisor'] },
   { path: 'skus',             element: SKUsPage,         requiredRoles: ['admin', 'supervisor'] },
   { path: 'lots',             element: LotsPage,         requiredRoles: ['admin', 'supervisor'] },

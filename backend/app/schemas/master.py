@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -140,30 +141,91 @@ class VAPartyBrief(BaseSchema):
     id: UUID
     name: str
     phone: str | None = None
+    city: str | None = None
 
 
 class VAPartyCreate(BaseModel):
     name: str
+    contact_person: str | None = None
     phone: str | None = None
+    phone_alt: str | None = None
+    email: str | None = None
+    address: str | None = None
     city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
     gst_no: str | None = None
+    gst_type: str | None = None
+    state_code: str | None = None
+    pan_no: str | None = None
+    aadhar_no: str | None = None
     hsn_code: str | None = None
+    due_days: int | None = None
+    credit_limit: Decimal | None = None
+    opening_balance: Decimal | None = None
+    balance_type: str | None = None
+    tds_applicable: bool = False
+    tds_rate: Decimal | None = None
+    tds_section: str | None = None
+    msme_type: str | None = None
+    msme_reg_no: str | None = None
+    notes: str | None = None
 
 
 class VAPartyUpdate(BaseModel):
     name: str | None = None
+    contact_person: str | None = None
     phone: str | None = None
+    phone_alt: str | None = None
+    email: str | None = None
+    address: str | None = None
     city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
     gst_no: str | None = None
+    gst_type: str | None = None
+    state_code: str | None = None
+    pan_no: str | None = None
+    aadhar_no: str | None = None
     hsn_code: str | None = None
+    due_days: int | None = None
+    credit_limit: Decimal | None = None
+    opening_balance: Decimal | None = None
+    balance_type: str | None = None
+    tds_applicable: bool | None = None
+    tds_rate: Decimal | None = None
+    tds_section: str | None = None
+    msme_type: str | None = None
+    msme_reg_no: str | None = None
+    notes: str | None = None
     is_active: bool | None = None
 
 
 class VAPartyResponse(BaseSchema):
     id: UUID
     name: str
+    contact_person: str | None = None
     phone: str | None = None
+    phone_alt: str | None = None
+    email: str | None = None
+    address: str | None = None
     city: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
     gst_no: str | None = None
+    gst_type: str | None = None
+    state_code: str | None = None
+    pan_no: str | None = None
+    aadhar_no: str | None = None
     hsn_code: str | None = None
+    due_days: int | None = None
+    credit_limit: Decimal | None = None
+    opening_balance: Decimal | None = None
+    balance_type: str | None = None
+    tds_applicable: bool = False
+    tds_rate: Decimal | None = None
+    tds_section: str | None = None
+    msme_type: str | None = None
+    msme_reg_no: str | None = None
+    notes: str | None = None
     is_active: bool = True

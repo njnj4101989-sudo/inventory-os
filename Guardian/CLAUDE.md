@@ -29,7 +29,37 @@
 
 ---
 
-## Current State (Session 71 — 2026-03-15)
+## Current State (Session 72 — 2026-03-15)
+
+### S72: Production Hotfixes — 3 Bugs Fixed on Live
+
+**Bug 1: Bulk Receive 500 — Decimal+float TypeError (JC-001)**
+- `POST /job-challans/{id}/receive` crashed with `unsupported operand type(s) for +: 'decimal.Decimal' and 'float'`
+- PostgreSQL returns `Decimal` for numeric columns; code mixed `Decimal + float`
+- Fix: `float(roll.remaining_weight or 0)` and `float(roll.current_weight or 0)` in `job_challan_service.py`
+- Browser showed CORS error (500 crashes bypass CORS middleware headers)
+- 1 roll (MEHDI/14-01) test-received during diagnosis; 13 remaining received by user
+
+**Bug 2: Lot "Move to Distributed" — No Batches Created (LOT-0001)**
+- Status flow buttons included "Move to Distributed" which just PATCHed status without creating batches
+- User clicked that instead of "Distribute (18 Batches)" button (which calls `POST /lots/{id}/distribute`)
+- Fix: Filtered `distributed` out of status transition buttons — now only reachable via Distribute button
+- Reset LOT-0001 back to `cutting` via direct DB update so user could re-distribute properly
+
+**Bug 3: Batch GET 500 — MissingGreenlet after VA Send**
+- `_to_response()` accesses `challan.va_party` but 3 of 4 query paths missing `.selectinload(BatchChallan.va_party)`
+- Same class of bug as S70 (selectinload regression trap)
+- Fix: Added `.selectinload(BatchChallan.va_party)` to `get_batches_for_tailor`, `get_batch_by_code`, `_get_or_404`
+
+**Commits:** `96676b9`, `662395f`, `3aa7827` | All deployed to prod
+
+**TODO (next session):**
+- [ ] S68 TODOs still open: data migration script (backfill existing rolls → SupplierInvoice), deploy S68 GST changes
+- [ ] Monitor lot distribution + batch VA flow end-to-end
+
+---
+
+## Previous State (Session 71 — 2026-03-15)
 
 ### S71: Bulk Receive Endpoint + Partial Challan Status + ChallansPage
 
@@ -475,6 +505,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
 | S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
 | S70 | VA Receive Hotfix | MissingGreenlet crash (5 missing selectinloads), pagination fix (page_size=0 = no limit), JC-002 fully received |
 | S69 | VA Party Master + FK Wiring | 26th model, va_party_id FK replaces vendor_name/processor_name on 3 tables, PATCH challan endpoints, migration cleanup, Shift+M fix |

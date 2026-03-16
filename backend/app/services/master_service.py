@@ -244,10 +244,30 @@ class MasterService:
     async def create_va_party(db: AsyncSession, data) -> VAParty:
         obj = VAParty(
             name=data.name.strip(),
+            contact_person=data.contact_person.strip() if data.contact_person else None,
             phone=data.phone.strip() if data.phone else None,
+            phone_alt=data.phone_alt.strip() if data.phone_alt else None,
+            email=data.email.strip() if data.email else None,
+            address=data.address.strip() if data.address else None,
             city=data.city.strip() if data.city else None,
-            gst_no=data.gst_no.strip() if data.gst_no else None,
+            state=data.state.strip() if data.state else None,
+            pin_code=data.pin_code.strip() if data.pin_code else None,
+            gst_no=data.gst_no.strip().upper() if data.gst_no else None,
+            gst_type=data.gst_type,
+            state_code=data.state_code.strip() if data.state_code else None,
+            pan_no=data.pan_no.strip().upper() if data.pan_no else None,
+            aadhar_no=data.aadhar_no.strip() if data.aadhar_no else None,
             hsn_code=data.hsn_code.strip() if data.hsn_code else None,
+            due_days=data.due_days,
+            credit_limit=data.credit_limit,
+            opening_balance=data.opening_balance,
+            balance_type=data.balance_type,
+            tds_applicable=data.tds_applicable,
+            tds_rate=data.tds_rate,
+            tds_section=data.tds_section,
+            msme_type=data.msme_type,
+            msme_reg_no=data.msme_reg_no.strip() if data.msme_reg_no else None,
+            notes=data.notes.strip() if data.notes else None,
         )
         db.add(obj)
         await db.flush()
@@ -256,17 +276,12 @@ class MasterService:
     @staticmethod
     async def update_va_party(db: AsyncSession, party_id: UUID, data) -> VAParty:
         obj = await MasterService._get(db, VAParty, party_id, "VA Party")
-        if data.name is not None:
-            obj.name = data.name.strip()
-        if data.phone is not None:
-            obj.phone = data.phone.strip() or None
-        if data.city is not None:
-            obj.city = data.city.strip() or None
-        if data.gst_no is not None:
-            obj.gst_no = data.gst_no.strip() or None
-        if data.hsn_code is not None:
-            obj.hsn_code = data.hsn_code.strip() or None
-        if data.is_active is not None:
-            obj.is_active = data.is_active
+        updates = data.model_dump(exclude_unset=True)
+        for field, value in updates.items():
+            if isinstance(value, str):
+                value = value.strip()
+                if field in ("gst_no", "pan_no"):
+                    value = value.upper()
+            setattr(obj, field, value)
         await db.flush()
         return obj
