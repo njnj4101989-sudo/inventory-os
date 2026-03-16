@@ -378,9 +378,19 @@ Step 4: Post-close rules
 24. Migration on prod + deploy
 25. Verify all 3 tabs + order creation + invoice display
 
-### Phase 1b: (Future — after 1a is stable)
-- Enrich party forms with TDS/TCS/MSME/Aadhar fields
-- These are stored in DB from Phase 1a but UI can be added incrementally
+### Phase 1b: COMPLETED (S74 — 2026-03-16)
+- ✅ `state_code` added to all 3 EMPTY_FORMS + sent in payload
+- ✅ GST auto-fill: first 2 digits of GSTIN → auto-populates `state` + `state_code` (official 37-state mapping)
+- ✅ State dropdown → auto-fills `state_code`
+- ✅ TDS Section: dropdown with 194C (Job Work), 194H (Brokerage), 194J (Professional), 194Q (Purchase)
+- ✅ TCS Section: dropdown with 206C(1H) (Sale >50L), 206C (Other) — customers only
+- ✅ TDS rate placeholder auto-adjusts per section (1/2 for 194C, 5 for 194H)
+- ✅ No-PAN warning: amber alert when TDS enabled but PAN is empty
+- ✅ Aadhar hint: "Required if no PAN (higher TDS)"
+- ✅ MSME 45-day hint: Sec 43B(h) warning for micro/small enterprises
+- ✅ Detail view: state_code with decoded name, TDS/TCS section descriptions, MSME type capitalized
+- ✅ Modal UX: auto-focus first input on open, Ctrl+S save, scrollable on zoom, compact section padding
+- ✅ TDS checkbox + MSME Type + Notes all inline in one 5-col row
 
 ### Phase 2: Ledger System (Separate Session)
 1. Create `LedgerEntry` model (Part 3D)

@@ -1,18 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * Overlay dialog.
- *
- * Props:
- *  open      — boolean
- *  onClose   — () => void
- *  title     — header text
- *  children  — body content
- *  actions   — optional footer JSX (buttons)
- *  wide      — use wider max-width
  */
 export default function Modal({ open, onClose, title, children, actions, wide = false, extraWide = false }) {
-  // Close on Escape
+  const bodyRef = useRef(null)
+
   useEffect(() => {
     if (!open) return
     const handler = (e) => e.key === 'Escape' && onClose()
@@ -20,41 +13,48 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  // Auto-focus first input/select/textarea on open
+  useEffect(() => {
+    if (!open || !bodyRef.current) return
+    const timer = setTimeout(() => {
+      const el = bodyRef.current.querySelector('input:not([type="hidden"]):not([type="checkbox"]), select, textarea')
+      if (el) el.focus()
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [open])
+
   if (!open) return null
 
+  const maxW = extraWide ? 'max-w-6xl' : wide ? 'max-w-2xl' : 'max-w-md'
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50" style={{ overflowY: 'auto' }}>
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
 
-      {/* Dialog */}
-      <div
-        className={`relative z-10 w-full max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl ${
-          extraWide ? 'max-w-6xl' : wide ? 'max-w-2xl' : 'max-w-md'
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
-
-        {/* Footer */}
-        {actions && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
-            {actions}
+      {/* Centering wrapper — min-h so it centers when small, scrolls when big */}
+      <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div className={`relative z-10 w-full ${maxW} flex flex-col rounded-xl bg-white shadow-xl`}>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-2 shrink-0">
+            <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+            <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-        )}
+
+          {/* Body */}
+          <div ref={bodyRef} className="px-6 py-1">{children}</div>
+
+          {/* Footer */}
+          {actions && (
+            <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4 shrink-0">
+              {actions}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getSuppliers, createSupplier, updateSupplier } from '../api/suppliers'
 import { getVAParties, createVAParty, updateVAParty } from '../api/masters'
 import { getCustomers, createCustomer, updateCustomer } from '../api/customers'
@@ -29,6 +29,40 @@ const INDIAN_STATES = [
 const GST_TYPES = ['regular', 'composition', 'unregistered']
 const MSME_TYPES = ['none', 'micro', 'small', 'medium']
 const BALANCE_TYPES = ['debit', 'credit']
+
+const TDS_SECTIONS = [
+  { value: '194C', label: '194C — Job Work (1%/2%)' },
+  { value: '194H', label: '194H — Brokerage (5%)' },
+  { value: '194J', label: '194J — Professional Fees (10%)' },
+  { value: '194Q', label: '194Q — Purchase of Goods (0.1%)' },
+]
+
+const TCS_SECTIONS = [
+  { value: '206C(1H)', label: '206C(1H) — Sale of Goods >50L (0.1%)' },
+  { value: '206C', label: '206C — Other (varies)' },
+]
+
+// GST State Code → State Name mapping (official 2-digit codes)
+const GST_STATE_CODES = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
+  '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan',
+  '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh',
+  '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura',
+  '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand',
+  '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat',
+  '25': 'Dadra & Nagar Haveli', '26': 'Goa', '27': 'Maharashtra', '28': 'Andhra Pradesh',
+  '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
+  '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman & Nicobar', '36': 'Telangana',
+  '37': 'Andhra Pradesh', '38': 'Ladakh',
+}
+
+// Reverse: State Name → State Code
+const STATE_TO_CODE = Object.fromEntries(
+  INDIAN_STATES.map((s) => {
+    const code = Object.entries(GST_STATE_CODES).find(([, name]) => name === s)?.[0]
+    return [s, code || '']
+  })
+)
 
 const PAGE_SIZE = 20
 
@@ -88,7 +122,7 @@ const COLUMNS_MAP = {
 const EMPTY_FORMS = {
   suppliers: {
     name: '', contact_person: '', broker: '',
-    gst_no: '', gst_type: '', pan_no: '', aadhar_no: '', hsn_code: '',
+    gst_no: '', gst_type: '', state_code: '', pan_no: '', aadhar_no: '', hsn_code: '',
     phone: '', phone_alt: '', email: '',
     address: '', city: '', state: '', pin_code: '',
     due_days: '', credit_limit: '', opening_balance: '', balance_type: '',
@@ -98,7 +132,7 @@ const EMPTY_FORMS = {
   },
   va_parties: {
     name: '', contact_person: '',
-    gst_no: '', gst_type: '', pan_no: '', aadhar_no: '', hsn_code: '',
+    gst_no: '', gst_type: '', state_code: '', pan_no: '', aadhar_no: '', hsn_code: '',
     phone: '', phone_alt: '', email: '',
     address: '', city: '', state: '', pin_code: '',
     due_days: '', credit_limit: '', opening_balance: '', balance_type: '',
@@ -108,7 +142,7 @@ const EMPTY_FORMS = {
   },
   customers: {
     name: '', short_name: '', contact_person: '', broker: '',
-    gst_no: '', gst_type: '', pan_no: '', aadhar_no: '',
+    gst_no: '', gst_type: '', state_code: '', pan_no: '', aadhar_no: '',
     phone: '', phone_alt: '', email: '',
     address: '', city: '', state: '', pin_code: '',
     due_days: '', credit_limit: '', opening_balance: '', balance_type: '',
@@ -123,7 +157,7 @@ const EMPTY_FORMS = {
 const INPUT = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm placeholder:text-xs placeholder:text-gray-300 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
 const HINT = 'text-xs text-gray-400 mt-0.5'
-const SECTION_TITLE = 'text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3'
+const SECTION_TITLE = 'text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5'
 
 // ── Extracted Components (outside main to avoid re-mount) ──
 
@@ -224,11 +258,13 @@ export default function PartyMastersPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
-  const [tdsOpen, setTdsOpen] = useState(false)
-  const [msmeOpen, setMsmeOpen] = useState(false)
 
   const labels = TAB_LABELS[tab]
   const columns = COLUMNS_MAP[tab]
+
+  // ── Ctrl+S to save ────────────────────────────────────
+  const handleSaveRef = useRef(null)
+  // ref updated after handleSave is defined (below)
 
   // ── Data Fetching ──────────────────────────────────────
 
@@ -328,7 +364,24 @@ export default function PartyMastersPage() {
   // ── Form helpers ───────────────────────────────────────
 
   const set = (k, v) => {
-    setForm((f) => ({ ...f, [k]: v }))
+    setForm((f) => {
+      const next = { ...f, [k]: v }
+      // Auto-derive state + state_code from GST number (first 2 digits)
+      if (k === 'gst_no' && v.length >= 2) {
+        const code = v.substring(0, 2)
+        const stateName = GST_STATE_CODES[code]
+        if (stateName) {
+          next.state_code = code
+          next.state = stateName
+        }
+      }
+      // Auto-derive state_code from state selection
+      if (k === 'state') {
+        const code = STATE_TO_CODE[v]
+        if (code) next.state_code = code
+      }
+      return next
+    })
     if (fieldErrors[k]) setFieldErrors((e) => { const n = { ...e }; delete n[k]; return n })
   }
 
@@ -372,8 +425,6 @@ export default function PartyMastersPage() {
     setForm(EMPTY_FORMS[tab])
     setFormError(null)
     setFieldErrors({})
-    setTdsOpen(false)
-    setMsmeOpen(false)
     setModalOpen(true)
   }
 
@@ -388,8 +439,6 @@ export default function PartyMastersPage() {
     setForm(populateForm(selected))
     setFormError(null)
     setFieldErrors({})
-    setTdsOpen(!!selected.tds_applicable || !!selected.tds_rate)
-    setMsmeOpen(!!selected.msme_type && selected.msme_type !== 'none')
     setModalOpen(true)
   }
 
@@ -432,6 +481,18 @@ export default function PartyMastersPage() {
       setSaving(false)
     }
   }
+
+  handleSaveRef.current = modalOpen ? handleSave : null
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (handleSaveRef.current) handleSaveRef.current()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   // ── Form fields config per tab ─────────────────────────
 
@@ -549,7 +610,8 @@ export default function PartyMastersPage() {
 
             <InfoSection title="GST & Compliance">
               <InfoRow label="GST No." value={selected.gst_no} />
-              <InfoRow label="GST Type" value={selected.gst_type} />
+              <InfoRow label="GST Type" value={selected.gst_type ? selected.gst_type.charAt(0).toUpperCase() + selected.gst_type.slice(1) : null} />
+              <InfoRow label="State Code" value={selected.state_code ? `${selected.state_code} — ${GST_STATE_CODES[selected.state_code] || ''}` : null} />
               <InfoRow label="PAN No." value={selected.pan_no} />
               <InfoRow label="Aadhar No." value={selected.aadhar_no} />
               {showHSN && <InfoRow label="HSN Code" value={selected.hsn_code} />}
@@ -575,24 +637,21 @@ export default function PartyMastersPage() {
               <InfoRow label="Balance Type" value={selected.balance_type} />
             </InfoSection>
 
-            {(selected.tds_applicable || selected.tds_rate || (showTCS && (selected.tcs_applicable || selected.tcs_rate))) && (
+            {(selected.tds_applicable || (showTCS && selected.tcs_applicable)) && (
               <InfoSection title="TDS / TCS">
-                <InfoRow label="TDS Applicable" value={selected.tds_applicable ? 'Yes' : 'No'} />
                 {selected.tds_applicable && (
                   <>
+                    <InfoRow label="TDS" value="Applicable" />
+                    <InfoRow label="TDS Section" value={selected.tds_section ? `${selected.tds_section} — ${TDS_SECTIONS.find((s) => s.value === selected.tds_section)?.label.split(' — ')[1] || ''}` : null} />
                     <InfoRow label="TDS Rate" value={selected.tds_rate != null ? `${selected.tds_rate}%` : null} />
-                    <InfoRow label="TDS Section" value={selected.tds_section} />
+                    {!selected.pan_no && <InfoRow label="" value={<span className="text-amber-600 text-xs">No PAN — higher TDS rate applies</span>} />}
                   </>
                 )}
-                {showTCS && (
+                {showTCS && selected.tcs_applicable && (
                   <>
-                    <InfoRow label="TCS Applicable" value={selected.tcs_applicable ? 'Yes' : 'No'} />
-                    {selected.tcs_applicable && (
-                      <>
-                        <InfoRow label="TCS Rate" value={selected.tcs_rate != null ? `${selected.tcs_rate}%` : null} />
-                        <InfoRow label="TCS Section" value={selected.tcs_section} />
-                      </>
-                    )}
+                    <InfoRow label="TCS" value="Applicable" />
+                    <InfoRow label="TCS Section" value={selected.tcs_section ? `${selected.tcs_section} — ${TCS_SECTIONS.find((s) => s.value === selected.tcs_section)?.label.split(' — ')[1] || ''}` : null} />
+                    <InfoRow label="TCS Rate" value={selected.tcs_rate != null ? `${selected.tcs_rate}%` : null} />
                   </>
                 )}
               </InfoSection>
@@ -600,8 +659,11 @@ export default function PartyMastersPage() {
 
             {showMSME && (selected.msme_type && selected.msme_type !== 'none') && (
               <InfoSection title="MSME">
-                <InfoRow label="MSME Type" value={selected.msme_type} />
+                <InfoRow label="MSME Type" value={selected.msme_type.charAt(0).toUpperCase() + selected.msme_type.slice(1)} />
                 <InfoRow label="MSME Reg. No." value={selected.msme_reg_no} />
+                {(selected.msme_type === 'micro' || selected.msme_type === 'small') && (
+                  <p className="text-xs text-amber-600 mt-1">45-day payment rule applies (Sec 43B(h))</p>
+                )}
               </InfoSection>
             )}
 
@@ -639,7 +701,7 @@ export default function PartyMastersPage() {
 
         <div className="space-y-0 -mx-6">
           {/* Row 1: Business Identity — 5 cols */}
-          <div className="bg-gray-50 px-6 py-3">
+          <div className="bg-gray-50 px-6 py-1.5">
             <h3 className={SECTION_TITLE}>Business Information</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="name" label={`${labels.singular} Name`} required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
@@ -651,13 +713,13 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 2: GST & Compliance — 5 cols */}
-          <div className="px-6 py-3">
+          <div className="px-6 py-1.5">
             <h3 className={SECTION_TITLE}>GST & Compliance</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} hint={form.state_code ? `State: ${form.state_code} — ${GST_STATE_CODES[form.state_code] || ''}` : 'Auto-fills state from GSTIN'} form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="gst_type" label="GST Type" options={GST_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
               <Field name="pan_no" label="PAN No." placeholder="e.g. AABCK1234F" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="aadhar_no" label="Aadhar No." placeholder="e.g. 123456789012" maxLength={14} form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="aadhar_no" label="Aadhar No." placeholder="e.g. 123456789012" maxLength={14} hint={!form.pan_no ? 'Required if no PAN (higher TDS)' : ''} form={form} set={set} fieldErrors={fieldErrors} />
               {showHSN ? (
                 <Field name="hsn_code" label="HSN Code" placeholder="e.g. 5208" maxLength={8} form={form} set={set} fieldErrors={fieldErrors} />
               ) : showShortName ? (
@@ -667,7 +729,7 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 3: Address — 5 cols */}
-          <div className="bg-gray-50 px-6 py-3">
+          <div className="bg-gray-50 px-6 py-1.5">
             <h3 className={SECTION_TITLE}>Address</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
@@ -683,53 +745,65 @@ export default function PartyMastersPage() {
             </div>
           </div>
 
-          {/* Row 4: Credit + TDS/TCS — 5 cols */}
-          <div className="px-6 py-3">
-            <h3 className={SECTION_TITLE}>Credit & Payment / TDS {showTCS ? '/ TCS' : ''}</h3>
+          {/* Row 4: Credit & Payment — 5 cols */}
+          <div className="px-6 py-1.5">
+            <h3 className={SECTION_TITLE}>Credit & Payment</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="credit_limit" label="Credit Limit" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="opening_balance" label="Opn Balance" type="number" placeholder="e.g. 0" form={form} set={set} fieldErrors={fieldErrors} />
-              <SelectField name="balance_type" label="Bal Type" options={BALANCE_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
-              <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-4" />
+              <Field name="credit_limit" label="Credit Limit (Rs.)" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="opening_balance" label="Opening Balance" type="number" placeholder="e.g. 0" form={form} set={set} fieldErrors={fieldErrors} />
+              <SelectField name="balance_type" label="Balance Type" options={BALANCE_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
+              <div />
             </div>
-            {(form.tds_applicable || (showTCS && form.tcs_applicable)) && (
+          </div>
+
+          {/* Row 5: TDS + MSME + Notes — all inline 5 cols */}
+          <div className="bg-gray-50 px-6 py-1.5">
+            <h3 className={SECTION_TITLE}>TDS {showTCS ? '/ TCS ' : ''}/ MSME / Notes</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-start">
+              <div>
+                <label className={LABEL}>&nbsp;</label>
+                <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-1.5" />
+              </div>
+              {showMSME ? (
+                <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
+              ) : (
+                <div>
+                  <label className={LABEL}>&nbsp;</label>
+                  <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-1.5" />
+                </div>
+              )}
+              {showMSME && form.msme_type && form.msme_type !== 'none' && (
+                <Field name="msme_reg_no" label="MSME Reg No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
+              )}
+              <div className={showMSME && form.msme_type && form.msme_type !== 'none' ? 'md:col-span-2' : 'md:col-span-3'}>
+                <label className={LABEL}>Notes</label>
+                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className={INPUT} />
+              </div>
+            </div>
+            {/* TDS expanded fields */}
+            {form.tds_applicable && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2 items-end">
-                {form.tds_applicable && (
+                <SelectField name="tds_section" label="TDS Section" options={TDS_SECTIONS} placeholder="Select section" form={form} set={set} />
+                <Field name="tds_rate" label="TDS Rate (%)" type="number" placeholder={form.tds_section === '194C' ? '1 or 2' : form.tds_section === '194H' ? '5' : 'Rate'} form={form} set={set} fieldErrors={fieldErrors} />
+                {!form.pan_no && <p className="text-xs text-amber-600 md:col-span-3 pt-2">No PAN — TDS rate may be higher (20% or double rate)</p>}
+              </div>
+            )}
+            {/* TCS expanded fields (customers only) */}
+            {showTCS && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2 items-end">
+                <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} />
+                {form.tcs_applicable && (
                   <>
-                    <Field name="tds_rate" label="TDS Rate (%)" type="number" placeholder="e.g. 1" form={form} set={set} fieldErrors={fieldErrors} />
-                    <Field name="tds_section" label="TDS Section" placeholder="e.g. 194C" form={form} set={set} fieldErrors={fieldErrors} />
-                  </>
-                )}
-                {showTCS && (
-                  <>
-                    <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-4" />
-                    {form.tcs_applicable && (
-                      <>
-                        <Field name="tcs_rate" label="TCS Rate (%)" type="number" placeholder="e.g. 0.1" form={form} set={set} fieldErrors={fieldErrors} />
-                        <Field name="tcs_section" label="TCS Section" placeholder="e.g. 206C" form={form} set={set} fieldErrors={fieldErrors} />
-                      </>
-                    )}
+                    <SelectField name="tcs_section" label="TCS Section" options={TCS_SECTIONS} placeholder="Select section" form={form} set={set} />
+                    <Field name="tcs_rate" label="TCS Rate (%)" type="number" placeholder="e.g. 0.1" form={form} set={set} fieldErrors={fieldErrors} />
                   </>
                 )}
               </div>
             )}
-          </div>
-
-          {/* Row 5: MSME + Notes — compact */}
-          <div className="bg-gray-50 px-6 py-3 grid grid-cols-1 md:grid-cols-5 gap-3">
-            {showMSME && (
-              <>
-                <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
-                {form.msme_type && form.msme_type !== 'none' && (
-                  <Field name="msme_reg_no" label="MSME Reg No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
-                )}
-              </>
+            {showMSME && form.msme_type && (form.msme_type === 'micro' || form.msme_type === 'small') && (
+              <p className="text-xs text-amber-600 mt-2">Sec 43B(h): Payment to micro/small enterprise must be within 45 days</p>
             )}
-            <div className={showMSME ? 'md:col-span-3' : 'md:col-span-5'}>
-              <label className={LABEL}>Notes</label>
-              <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className={INPUT} />
-            </div>
           </div>
         </div>
       </Modal>

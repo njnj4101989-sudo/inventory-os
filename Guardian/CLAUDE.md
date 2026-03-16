@@ -30,7 +30,47 @@
 
 ---
 
-## Current State (Session 73 — 2026-03-16)
+## Current State (Session 74 — 2026-03-16)
+
+### S74: Phase 1b — TDS/TCS/MSME Form Enrichment + Modal UX
+
+**Party Masters Form Enrichment (frontend-only, all 3 tabs):**
+- `state_code` field added to all 3 EMPTY_FORMS + sent in API payload
+- GST auto-fill: GSTIN first 2 digits → auto-populates `state` + `state_code` (37-state GST code map)
+- State dropdown → auto-fills `state_code` (reverse lookup)
+- TDS Section: dropdown with 194C/194H/194J/194Q (was free text)
+- TCS Section: dropdown with 206C(1H)/206C — customers tab only
+- TDS rate placeholder adjusts per section (1/2 for 194C, 5 for 194H)
+- No-PAN amber warning when TDS enabled
+- Aadhar hint: "Required if no PAN (higher TDS)"
+- MSME 45-day Sec 43B(h) warning for micro/small enterprises
+- Detail view: state_code with decoded name, TDS/TCS section descriptions, capitalized types
+
+**Modal UX (affects all modals app-wide):**
+- Auto-focus first input/select on modal open (no more 6x Tab to reach form)
+- Ctrl+S saves form (gated to modal open, ref-based — always latest state)
+- Scrollable outer container on zoom (no more height cap cutting off content)
+- Compact header padding (py-4 → py-2)
+- Minimal body padding (py-4 → py-1)
+
+**Form Layout Polish:**
+- Section title margin: mb-3 → mb-1.5
+- Section padding: py-3 → py-1.5
+- TDS checkbox + MSME Type + Notes: all inline in one 5-col row (was 2 separate rows)
+- Removed dead `tdsOpen`/`msmeOpen` state (checkbox values drive visibility)
+
+**Files:** Modal.jsx, PartyMastersPage.jsx, MASTERS_AND_FY_PLAN.md, guardian.md
+
+**TODO (next session):**
+- [ ] Phase 1c: OrdersPage customer_id dropdown picker + QuickMasterModal customer config
+- [ ] Update API_REFERENCE.md with Customer endpoints, enriched Supplier/VAParty schemas
+- [ ] Phase 2: Ledger system
+- [ ] Phase 3: SKU enrichment
+- [ ] Phase 4: Financial Year
+
+---
+
+## Previous State (Session 73 — 2026-03-16)
 
 ### S73: Color FK + Production DB Wipe + Party Masters Phase 1a
 
@@ -557,6 +597,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S74 | Phase 1b — TDS/TCS/MSME Form UX | GST→state auto-fill, TDS/TCS section dropdowns, MSME 45-day hint, No-PAN warning, state_code field, modal auto-focus + Ctrl+S save, scrollable modal on zoom, compact form layout |
 | S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
 | S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
 | S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
