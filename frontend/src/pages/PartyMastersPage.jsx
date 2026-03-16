@@ -449,8 +449,8 @@ export default function PartyMastersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Party Masters</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-gray-800">Party Masters</h1>
+          <p className="text-xs text-gray-500">
             {labels.desc}
             {total > 0 && <span className="ml-2 text-gray-400">({total} total)</span>}
           </p>
@@ -467,7 +467,7 @@ export default function PartyMastersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mt-4 flex gap-1 border-b border-gray-200">
+      <div className="mt-2 flex gap-1 border-b border-gray-200">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -484,7 +484,7 @@ export default function PartyMastersPage() {
       </div>
 
       {/* Search */}
-      <div className="mt-4 max-w-sm">
+      <div className="mt-2 max-w-sm">
         <SearchInput
           value={search}
           onChange={(v) => { setSearch(v); setPage(1) }}
@@ -492,10 +492,10 @@ export default function PartyMastersPage() {
         />
       </div>
 
-      {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+      {error && <div className="mt-2"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
 
       {/* Table */}
-      <div className="mt-4">
+      <div className="mt-2">
         <DataTable
           columns={columns}
           data={items}

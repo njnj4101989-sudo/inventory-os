@@ -17,7 +17,7 @@ export default function Layout() {
         }`}
       >
         <Header />
-        <main className="p-6">
+        <main className="px-4 py-3 lg:px-5 lg:py-4">
           <Outlet />
         </main>
       </div>
