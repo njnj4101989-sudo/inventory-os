@@ -31,42 +31,67 @@
 
 ---
 
-## Current State (Session 75 — 2026-03-16)
+## Current State (Session 76 — 2026-03-17)
 
-### S75: Party Detail UI Overhaul + API_REFERENCE.md Update
+### S76: Multi-Company Schema-Per-Tenant + HttpOnly Cookie Auth + FY Closing
 
-**Party Detail — Full-Page Overlay (replaces narrow modal):**
-- Gradient header: party name, status badge, city/GST, action buttons (Deactivate, Ledger, Edit)
-- 6 KPI strip: Balance, Credit Limit, Due Days, GST Type, Contact, Phone — compact cards with colored backgrounds
-- 3-column card grid (xl), 2-col (md), 1-col (mobile) — left-border accent cards
-- Cards: GST & Compliance (3-col fields), Contact & Address (spans 2 cols, 4-col fields), Credit & Payment, TDS/TCS, MSME, Notes
-- Proper font hierarchy: `text-[11px]` labels, `text-[13px]` values, `font-extrabold` KPI values, mono for GSTIN/PAN/phone
-- Works for all 3 party types (Suppliers, VA Parties, Customers)
+**Phase 1 — PostgreSQL Only (drop SQLite):**
+- Local PG 18.3 (`inventory_dev` DB), `aiosqlite` removed, `is_postgresql()` removed
+- 4 public tables: `companies` (+ slug/schema_name), `users`, `roles`, `user_companies` (NEW)
+- 28 tenant tables: all business tables (rolls, lots, batches, orders, etc.)
+- All 17 tenant model FKs updated: `ForeignKey("public.users.id")`
+- Fresh Alembic baseline: `d5de97f3daf8` (32 tables) + `3e78791f67a1` (closing_snapshot)
+- Schema provisioning: `create_company()` → PG schema + 28 tables + seed/inherit masters
+- Master inheritance: copy item/party masters from source company (selective or all)
 
-**API_REFERENCE.md — Full Update (S73-S74 coverage):**
-- NEW §18: Customers — 5 endpoints (CRUD + `/all` for dropdowns)
-- NEW §19: Ledger — 4 endpoints (list, balance, balances, payment)
-- NEW §20: Company & Financial Years — 6 endpoints
-- Updated §4 Suppliers (+14 enriched fields), §6 SKUs (+5 fields), §10 Orders (+customer_id/nested customer), §15b VA Parties (+19 fields)
-- Appendix B: +FY statuses, +ledger entry types
-- Appendix C: +`customer` on Orders, +`color_obj` on Rolls/SKUs
+**Phase 2 — Auth Migration (HttpOnly Cookies):**
+- JWT in HttpOnly cookies (no more localStorage tokens), `SameSite=None` in prod
+- `/auth/me` endpoint (server = single source of truth), `/auth/select-company`
+- TenantMiddleware: extracts `company_schema` from JWT → `request.state`
+- `get_db(request: Request)` — `SET search_path TO {schema}, public` per request
+- Extended JWT: `company_id`, `company_schema`, `company_name`, `fy_id`, `fy_code`
+- Login: 1 company → auto-select | N companies → picker | 0 → settings redirect
+- SSE: cookie-based auth (no more `?token=` query param)
 
-**Decision:** Counter prefix migration (ORD-2627-0001) NOT needed — client confirmed current sequential codes (ORD-0001) are fine. Counters reset to 1 on new FY.
+**Phase 3 — Frontend:**
+- Login company picker (radio cards, initial avatar, default badge)
+- Header: company switcher dropdown + FY badge switcher (both reload page on switch)
+- Settings → Companies tab: company cards grid + 2-step creation wizard (master inheritance checkboxes)
+- Settings → FY tab: edit (inline), delete (with linked-data check), validation (date range)
+- AuthContext: zero localStorage for auth, `/auth/me` on mount, `selectCompany()` for switching
 
-**Commits:** `556a23d`, `b03e6bb`, `ecdb1f0`, `520ab0f`, `a96e5af` | All pushed
+**Phase 4a — Year Closing:**
+- `FYClosingService`: validate → snapshot balances → close old FY → create new FY → opening entries
+- Atomic: validate-then-mutate, single transaction (route commits)
+- `/financial-years/{id}/close-preview` (warnings + balance snapshot)
+- `/financial-years/{id}/close` (execute closing)
+- UI: "Close Year" button on current FY → confirmation modal with balance summary + "What will happen"
+
+**Production Fixes (6 blockers from audit):**
+- `from __future__ import annotations` broke FastAPI Request injection in `get_db`
+- 401 interceptor infinite loop on auth endpoints (excluded `/auth/me`, `/auth/refresh`)
+- Company creation transactional (rollback drops schema on failure)
+- FY closing atomic (validate-then-mutate, single transaction)
+- Auth service reuses injected session (no extra pool connections per login)
+- 0-companies edge case → redirects to Settings
 
 **Decisions:**
-- Schema-per-company for multi-tenancy (not `company_id` column, not separate DB)
-- FY-at-login (not per-page filter) — `fy_id` + `company_schema` in JWT
-- Drop SQLite dev — Docker PostgreSQL locally
-- Counter prefix NOT needed — codes reset to 1 on new FY via `fy_id` filter in code generators
+- Native PG 18 (not Docker — laptop can't run Docker Desktop/WSL2)
+- ONE Base class, `search_path` for routing (no PublicBase/TenantBase split)
+- `schema="public"` on 4 models, tenant models have no schema qualifier
+- `checkfirst=False` in `create_tenant_tables` (search_path fallthrough skips creation)
+- Party opening balances reset to null on master inheritance (fresh books per company)
+- FY closing carries forward party balances as opening ledger entries, stock untouched
 
-**TODO (next session — S76):**
-- [ ] Phase 1: Docker PG, schema-aware DB layer, drop SQLite
-- [ ] Phase 1: Company model → public schema, UserCompany junction, schema provisioning
-- [ ] Phase 2: JWT with company_id/company_schema/fy_id, middleware search_path injection
-- [ ] Phase 2: Login flow — company picker + FY selector
-- [ ] See `MULTI_COMPANY_PLAN.md` for full 4-phase breakdown (S76-S79)
+**Commits:** `6ebcdc8` | 60 files, +3279/-958
+
+**TODO (next session — S77):**
+- [ ] Phase 4c: Counter reset — add `fy_id` filter to code generators (ORD/INV/JC/BC/LOT/BATCH)
+- [ ] Phase 4d: Production data migration script (move prod data → `co_drs_blouse` schema on AWS RDS)
+- [ ] Alembic multi-schema `env.py` (iterate tenant schemas for future model changes)
+- [ ] Link all prod users to company + create UserCompany records
+- [ ] Deploy multi-company + auth changes to production
+- [ ] Update API_REFERENCE.md with new auth endpoints + company/FY endpoints
 
 ---
 
@@ -597,11 +622,21 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 - **Database:** AWS RDS PostgreSQL db.t3.micro (free 12 months)
 - **Cost:** ₹0 year 1, ~₹2,300/mo after. Guide: `Guardian/AWS_DEPLOYMENT.md`
 
-### PostgreSQL Migration (S53)
-- SQLite for dev, PostgreSQL on AWS RDS only. `psycopg2-binary` for Alembic sync
-- Seeds cleaned: removed Suppliers/SKUs/Fabrics (add from Masters page). Kept ProductTypes/Colors/VAs
-- Old migrations deleted. Fresh `alembic revision --autogenerate` on deploy target
-- `DATABASE_URL`: `sqlite+aiosqlite:///./inventory_os.db` → `postgresql+asyncpg://user:pass@host:5432/inventory_os`
+### Multi-Company + Auth (S76)
+- **Schema-per-tenant:** 4 public tables (companies, users, roles, user_companies) + 28 tenant tables per company
+- **`SET search_path TO co_{slug}, public`** per request via TenantMiddleware + `get_db(request: Request)`
+- **HttpOnly cookie JWT:** access_token (path=/), refresh_token (path=/api/v1/auth), SameSite=None in prod
+- **No localStorage for auth:** `/auth/me` is single source of truth on page load
+- **Company creation:** schema provisioning + master inheritance (selective: colors/fabrics/PTs/VAs/suppliers/customers/VA parties)
+- **FY closing:** snapshot balances → close old FY → create new FY → opening ledger entries (atomic, single transaction)
+- **Login flow:** 1 company → auto-select | N companies → picker | 0 → settings redirect
+- **Dev DB:** PostgreSQL 18.3 local (`inventory_dev`), SQLite fully removed
+
+### PostgreSQL Migration (S53 → S76)
+- S53: SQLite dev + PostgreSQL prod. S76: **PostgreSQL everywhere** — SQLite dropped entirely
+- `aiosqlite` removed, `is_postgresql()` removed, `batch_alter_table` workarounds removed
+- `with_for_update()` now unconditional (no more PG conditional)
+- Fresh Alembic baseline (S76): 32 tables, public/tenant split
 
 ---
 
@@ -641,6 +676,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S76 | Multi-Company + Auth + FY Closing | Schema-per-tenant (4 public + 28 tenant), HttpOnly cookie JWT (replaces localStorage), company picker/switcher, master inheritance, FY closing with balance carry-forward, 6 production blockers fixed |
 | S75 | Party Detail UI + API Docs | Full-page detail overlay (3-col cards, KPI strip, gradient header), API_REFERENCE.md updated (§18 Customers, §19 Ledger, §20 Company/FY, enriched Suppliers/VA/SKU/Orders). Counter prefix dropped (client: not needed) |
 | S74 | MASTERS_AND_FY_PLAN COMPLETE | 1b: GST→state, TDS/TCS dropdowns, modal UX. 1c: customer picker+Shift+M. P2: Ledger (28th model, auto-entries, LedgerPanel, payments). P3: SKU enrichment (5 cols). P4: Company (29th)+FY (30th), fy_id FK on 5 tables, SettingsPage |
 | S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
@@ -664,7 +700,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 ```
 inventory-os/
 ├── Guardian/           ← Docs (CLAUDE.md, guardian.md, API_REFERENCE.md, STEP1-6, AWS_DEPLOYMENT.md)
-├── backend/app/        ← FastAPI (models/27, schemas/21, services/17, api/18, core/, tasks/)
+├── backend/app/        ← FastAPI (models/32, schemas/21, services/19, api/18, core/, tasks/)
 ├── frontend/src/       ← React+Tailwind (api/17, pages/14+Login, components/, context/, hooks/)
 └── mobile/             ← Phase 6C (future)
 ```
