@@ -637,9 +637,9 @@ export default function PartyMastersPage() {
       >
         {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
-        <div className="space-y-3">
+        <div className="space-y-0 -mx-6">
           {/* Row 1: Business Identity — 5 cols */}
-          <div>
+          <div className="bg-gray-50 px-6 py-3">
             <h3 className={SECTION_TITLE}>Business Information</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="name" label={`${labels.singular} Name`} required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
@@ -651,7 +651,7 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 2: GST & Compliance — 5 cols */}
-          <div>
+          <div className="px-6 py-3">
             <h3 className={SECTION_TITLE}>GST & Compliance</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} form={form} set={set} fieldErrors={fieldErrors} />
@@ -667,7 +667,7 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 3: Address — 5 cols */}
-          <div>
+          <div className="bg-gray-50 px-6 py-3">
             <h3 className={SECTION_TITLE}>Address</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
@@ -684,7 +684,7 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 4: Credit + TDS/TCS — 5 cols */}
-          <div>
+          <div className="px-6 py-3">
             <h3 className={SECTION_TITLE}>Credit & Payment / TDS {showTCS ? '/ TCS' : ''}</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />
@@ -717,7 +717,7 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 5: MSME + Notes — compact */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="bg-gray-50 px-6 py-3 grid grid-cols-1 md:grid-cols-5 gap-3">
             {showMSME && (
               <>
                 <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
