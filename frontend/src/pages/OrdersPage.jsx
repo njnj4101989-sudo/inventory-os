@@ -952,6 +952,7 @@ export default function OrdersPage() {
             </div>
           </div>
         </div>
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
