@@ -25,7 +25,7 @@ class JobChallan(Base):
         String(20), default="sent", server_default="'sent'", index=True
     )
     notes: Mapped[str | None] = mapped_column(Text)
-    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id"))
 
     # Relationships
     value_addition = relationship("ValueAddition")

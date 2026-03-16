@@ -6,7 +6,7 @@ Routes import from here:
 
 from uuid import UUID as PyUUID
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import ExpiredSignatureError, JWTError
 from sqlalchemy import select
@@ -14,13 +14,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db  # re-export so routes have a single import point
-from app.core.security import verify_token
+from app.core.security import verify_token, ACCESS_COOKIE_NAME
 from app.core.exceptions import ForbiddenError, TokenExpiredError, UnauthorizedError
 from app.models.user import User
 
 __all__ = ["get_db", "get_current_user", "require_permission", "require_role"]
 
-_bearer = HTTPBearer()
+# Bearer header is now optional — cookies are primary
+_bearer = HTTPBearer(auto_error=False)
+
+
+# ---------------------------------------------------------------------------
+# Extract JWT — cookie first, then Authorization header fallback
+# ---------------------------------------------------------------------------
+
+def _extract_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str:
+    """Get JWT from HttpOnly cookie, falling back to Authorization header."""
+    # 1. HttpOnly cookie (primary — set by login/refresh)
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if token:
+        return token
+
+    # 2. Authorization: Bearer header (fallback — for SSE query param rewrite, etc.)
+    if credentials and credentials.credentials:
+        return credentials.credentials
+
+    raise UnauthorizedError("Not authenticated")
 
 
 # ---------------------------------------------------------------------------
@@ -28,11 +47,12 @@ _bearer = HTTPBearer()
 # ---------------------------------------------------------------------------
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Verify access token and load user from DB with role eagerly loaded."""
-    token = credentials.credentials
+    token = _extract_token(request, credentials)
 
     # Decode JWT
     try:
@@ -50,7 +70,7 @@ async def get_current_user(
     if not user_id_str:
         raise UnauthorizedError("Invalid token payload")
 
-    # Convert string UUID from JWT to proper UUID object (SQLite stores UUIDs as bytes)
+    # Convert string UUID from JWT to proper UUID object
     try:
         user_id = PyUUID(user_id_str)
     except ValueError:

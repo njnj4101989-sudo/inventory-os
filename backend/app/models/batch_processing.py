@@ -39,7 +39,7 @@ class BatchProcessing(Base):
     )
     phase: Mapped[str] = mapped_column(String(20))  # 'stitching' or 'post_qc'
     notes: Mapped[str | None] = mapped_column(Text)
-    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id"))
 
     # Relationships
     batch = relationship("Batch", back_populates="processing_logs")

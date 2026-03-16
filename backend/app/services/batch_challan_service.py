@@ -12,7 +12,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import is_postgresql
 from app.models.batch import Batch
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
@@ -37,19 +36,13 @@ class BatchChallanService:
 
     async def _next_challan_no(self) -> str:
         """Generate next sequential challan number: BC-001, BC-002, etc."""
-        if is_postgresql():
-            stmt = (
-                select(BatchChallan.challan_no)
-                .where(BatchChallan.challan_no.like("BC-%"))
-                .order_by(BatchChallan.challan_no.desc())
-                .limit(1)
-                .with_for_update()
-            )
-        else:
-            stmt = (
-                select(func.max(BatchChallan.challan_no))
-                .where(BatchChallan.challan_no.like("BC-%"))
-            )
+        stmt = (
+            select(BatchChallan.challan_no)
+            .where(BatchChallan.challan_no.like("BC-%"))
+            .order_by(BatchChallan.challan_no.desc())
+            .limit(1)
+            .with_for_update()
+        )
         result = await self.db.execute(stmt)
         last = result.scalar_one_or_none()
         if last:

@@ -25,7 +25,7 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(20), index=True)
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id"), nullable=True, index=True

@@ -24,7 +24,7 @@ class InventoryEvent(Base):
     quantity: Mapped[int] = mapped_column(Integer)
     unit: Mapped[str | None] = mapped_column(String(20))
     reason: Mapped[str | None] = mapped_column(Text)
-    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
     performed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

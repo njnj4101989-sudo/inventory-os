@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import is_postgresql
 from app.models.job_challan import JobChallan
 from app.models.ledger_entry import LedgerEntry
 from app.models.roll import Roll, RollProcessing
@@ -25,19 +24,13 @@ class JobChallanService:
 
     async def _next_challan_no(self) -> str:
         """Generate next sequential challan number: JC-001, JC-002, etc."""
-        if is_postgresql():
-            stmt = (
-                select(JobChallan.challan_no)
-                .where(JobChallan.challan_no.like("JC-%"))
-                .order_by(JobChallan.challan_no.desc())
-                .limit(1)
-                .with_for_update()
-            )
-        else:
-            stmt = (
-                select(func.max(JobChallan.challan_no))
-                .where(JobChallan.challan_no.like("JC-%"))
-            )
+        stmt = (
+            select(JobChallan.challan_no)
+            .where(JobChallan.challan_no.like("JC-%"))
+            .order_by(JobChallan.challan_no.desc())
+            .limit(1)
+            .with_for_update()
+        )
         result = await self.db.execute(stmt)
         last = result.scalar_one_or_none()
         if last:
@@ -65,8 +58,7 @@ class JobChallanService:
                 selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
             )
         )
-        if is_postgresql():
-            stmt = stmt.with_for_update(of=Roll)
+        stmt = stmt.with_for_update(of=Roll)
         result = await self.db.execute(stmt)
         rolls = result.scalars().all()
 
@@ -275,9 +267,7 @@ class JobChallanService:
 
         # 3. Collect unique roll IDs to lock
         roll_ids = list({entry.roll_id for entry in req.rolls})
-        lock_stmt = select(Roll).where(Roll.id.in_(roll_ids))
-        if is_postgresql():
-            lock_stmt = lock_stmt.with_for_update()
+        lock_stmt = select(Roll).where(Roll.id.in_(roll_ids)).with_for_update()
         lock_result = await self.db.execute(lock_stmt)
         roll_map = {r.id: r for r in lock_result.scalars().all()}
 

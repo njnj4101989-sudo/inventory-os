@@ -1,67 +1,114 @@
 import { createContext, useState, useEffect, useCallback } from 'react'
-import { login as apiLogin, logout as apiLogout } from '../api/auth'
+import { login as apiLogin, logout as apiLogout, getMe, selectCompany as apiSelectCompany } from '../api/auth'
 
 export const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [token, setToken] = useState(null)
+  const [company, setCompany] = useState(null)
+  const [companies, setCompanies] = useState([])
+  const [fy, setFy] = useState(null)
+  const [fys, setFys] = useState([])
+  const [needsCompanySelect, setNeedsCompanySelect] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Restore session from localStorage on mount
+  // Restore session on mount — /auth/me is the single source of truth
   useEffect(() => {
-    const storedToken = localStorage.getItem('access_token')
-    const storedUser = localStorage.getItem('user')
-    if (storedToken && storedUser) {
+    let cancelled = false
+
+    async function checkSession() {
       try {
-        setToken(storedToken)
-        setUser(JSON.parse(storedUser))
+        const response = await getMe()
+        const data = response.data.data
+        if (!cancelled) {
+          setUser(data)
+          setCompany(data.company || null)
+          setFy(data.fy || null)
+        }
       } catch {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user')
+        // No valid cookie — not logged in
+        if (!cancelled) {
+          setUser(null)
+          setCompany(null)
+          setFy(null)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
-    setLoading(false)
+
+    checkSession()
+    return () => { cancelled = true }
   }, [])
 
   const login = useCallback(async (username, password) => {
     const response = await apiLogin(username, password)
-    const payload = response.data.data
+    const data = response.data.data
 
-    localStorage.setItem('access_token', payload.access_token)
-    localStorage.setItem('refresh_token', payload.refresh_token)
-    localStorage.setItem('user', JSON.stringify(payload.user))
+    setUser(data.user)
+    setCompanies(data.companies || [])
+    setFys(data.fys || [])
 
-    setToken(payload.access_token)
-    setUser(payload.user)
+    if (data.needs_company_select) {
+      setNeedsCompanySelect(true)
+      setCompany(null)
+      setFy(null)
+      return { ...data.user, _needsCompanySelect: true, _companies: data.companies }
+    }
 
-    return payload.user
+    // Single company — auto-selected
+    setCompany(data.company || null)
+    setFy(data.fy || null)
+    return data.user
+  }, [])
+
+  const selectCompany = useCallback(async (companyId, fyId = null) => {
+    const response = await apiSelectCompany(companyId, fyId)
+    const data = response.data.data
+
+    setUser(data.user)
+    setCompany(data.company)
+    setCompanies(data.companies || [])
+    setFy(data.fy)
+    setFys(data.fys || [])
+    setNeedsCompanySelect(false)
+
+    return data
   }, [])
 
   const logout = useCallback(async () => {
-    try {
-      await apiLogout()
-    } catch {
-      // Ignore logout API errors — clear local state regardless
-    }
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
-    setToken(null)
+    try { await apiLogout() } catch { /* ignore */ }
     setUser(null)
+    setCompany(null)
+    setCompanies([])
+    setFy(null)
+    setFys([])
+    setNeedsCompanySelect(false)
   }, [])
 
   const value = {
     user,
-    token,
     loading,
     login,
     logout,
-    isAuthenticated: !!token,
+    selectCompany,
+    isAuthenticated: !!user,
     role: user?.role || null,
     roleDisplayName: user?.role_display_name || user?.role || null,
     permissions: user?.permissions || {},
+    company,
+    companies,
+    fy,
+    fys,
+    needsCompanySelect,
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
+      </div>
+    )
   }
 
   return (

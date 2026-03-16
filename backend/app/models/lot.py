@@ -36,7 +36,7 @@ class Lot(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="open", server_default="'open'", index=True
     )
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships

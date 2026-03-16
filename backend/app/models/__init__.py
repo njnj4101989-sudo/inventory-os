@@ -28,6 +28,7 @@ from app.models.batch_processing import BatchProcessing
 from app.models.customer import Customer
 from app.models.ledger_entry import LedgerEntry
 from app.models.company import Company
+from app.models.user_company import UserCompany
 from app.models.financial_year import FinancialYear
 
 __all__ = [
@@ -61,5 +62,6 @@ __all__ = [
     "Customer",
     "LedgerEntry",
     "Company",
+    "UserCompany",
     "FinancialYear",
 ]

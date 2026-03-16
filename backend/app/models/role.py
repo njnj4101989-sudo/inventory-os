@@ -8,6 +8,7 @@ from app.database import Base
 
 class Role(Base):
     __tablename__ = "roles"
+    __table_args__ = {"schema": "public"}
 
     name: Mapped[str] = mapped_column(String(50), unique=True)
     display_name: Mapped[str | None] = mapped_column(String(100))

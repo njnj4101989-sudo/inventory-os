@@ -42,7 +42,7 @@ export default function ScanPage() {
     `,
   })
 
-  const isLoggedIn = !!localStorage.getItem('access_token')
+  const isLoggedIn = !!localStorage.getItem('user')
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
   const userRole = currentUser.role || null
   const perms = currentUser.permissions || {}

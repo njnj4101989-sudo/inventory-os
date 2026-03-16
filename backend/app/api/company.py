@@ -5,16 +5,58 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel as PydanticBase
+
 from app.dependencies import get_db, require_permission
 from app.models.user import User
 from app.services.company_service import CompanyService, FinancialYearService
-from app.schemas.company import CompanyUpdate
+from app.services.fy_closing_service import FYClosingService
+from app.schemas.company import CompanyUpdate, CompanyCreate
 from app.schemas.financial_year import FinancialYearCreate, FinancialYearUpdate
 
 router = APIRouter(tags=["company"])
 
 
-# ── Company (single row) ──
+# ── Companies (multi-company) ──
+
+@router.get("/companies")
+async def list_companies(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    """List all companies (admin only)."""
+    svc = CompanyService(db)
+    companies = await svc.get_companies()
+    return {"success": True, "data": companies}
+
+
+@router.post("/companies")
+async def create_company(
+    req: CompanyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    """Create a new company with its own schema + optional master inheritance."""
+    svc = CompanyService(db)
+    company = await svc.create_company(
+        name=req.name,
+        created_by_user_id=current_user.id,
+        copy_from_company_id=req.copy_from_company_id,
+        inherit_masters=req.inherit_masters,
+        address=req.address,
+        city=req.city,
+        state=req.state,
+        pin_code=req.pin_code,
+        gst_no=req.gst_no,
+        state_code=req.state_code,
+        pan_no=req.pan_no,
+        phone=req.phone,
+        email=req.email,
+    )
+    return {"success": True, "data": company, "message": f"Company '{company.name}' created"}
+
+
+# ── Company (single row — current company profile) ──
 
 @router.get("/company")
 async def get_company(
@@ -80,3 +122,54 @@ async def update_financial_year(
     svc = FinancialYearService(db)
     fy = await svc.update(fy_id, req)
     return {"success": True, "data": fy, "message": f"Financial year {fy.code} updated"}
+
+
+@router.delete("/financial-years/{fy_id}")
+async def delete_financial_year(
+    fy_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    svc = FinancialYearService(db)
+    await svc.delete(fy_id)
+    return {"success": True, "message": "Financial year deleted"}
+
+
+# ── Year Closing ──
+
+class CloseFYRequest(PydanticBase):
+    new_fy_code: str          # e.g. "FY2026-27"
+    new_start_date: str       # "2026-04-01"
+    new_end_date: str         # "2027-03-31"
+
+
+@router.get("/financial-years/{fy_id}/close-preview")
+async def close_preview(
+    fy_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    """Preview year closing — warnings, party balance snapshot."""
+    svc = FYClosingService(db)
+    result = await svc.validate_closing(fy_id)
+    return {"success": True, "data": result}
+
+
+@router.post("/financial-years/{fy_id}/close")
+async def close_fy(
+    fy_id: UUID,
+    req: CloseFYRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    """Close the current FY — snapshot balances, create new FY, carry forward."""
+    from datetime import date as date_cls
+    svc = FYClosingService(db)
+    result = await svc.close_fy(
+        fy_id=fy_id,
+        new_fy_code=req.new_fy_code,
+        new_start_date=date_cls.fromisoformat(req.new_start_date),
+        new_end_date=date_cls.fromisoformat(req.new_end_date),
+        closed_by_user_id=current_user.id,
+    )
+    return {"success": True, "data": result, "message": f"FY closed. New FY: {req.new_fy_code}"}

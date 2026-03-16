@@ -3,9 +3,8 @@
 Each function queries the current MAX code from the database, extracts the
 numeric suffix, increments it, and returns the next padded code.
 
-PostgreSQL: uses ORDER BY DESC LIMIT 1 FOR UPDATE to lock the latest row
+Uses ORDER BY DESC LIMIT 1 FOR UPDATE to lock the latest row
 and prevent concurrent code collisions.
-SQLite: uses MAX() aggregate (no row locking needed — single-writer).
 """
 
 import re
@@ -30,21 +29,10 @@ def _extract_number(code: str | None, prefix: str) -> int:
 
 
 async def _max_code(db: AsyncSession, col, pattern: str | None = None) -> str | None:
-    """Get current max code, with row-level locking on PostgreSQL.
-
-    On PostgreSQL: SELECT col FROM table [WHERE ...] ORDER BY col DESC LIMIT 1 FOR UPDATE
-    On SQLite: SELECT MAX(col) FROM table [WHERE ...]
-    """
-    from app.database import is_postgresql
-
-    if is_postgresql():
-        stmt = select(col).order_by(col.desc()).limit(1).with_for_update()
-        if pattern:
-            stmt = select(col).where(col.like(pattern)).order_by(col.desc()).limit(1).with_for_update()
-    else:
-        stmt = select(func.max(col))
-        if pattern:
-            stmt = stmt.where(col.like(pattern))
+    """Get current max code with row-level locking (FOR UPDATE)."""
+    stmt = select(col).order_by(col.desc()).limit(1).with_for_update()
+    if pattern:
+        stmt = select(col).where(col.like(pattern)).order_by(col.desc()).limit(1).with_for_update()
 
     result = await db.execute(stmt)
     return result.scalar()

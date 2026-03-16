@@ -15,10 +15,6 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
 # --- Responses ---
 
 
@@ -34,13 +30,14 @@ class UserBriefAuth(BaseSchema):
 
 
 class TokenResponse(BaseSchema):
+    """Internal response from AuthService.login() — tokens set as cookies, only user sent to client."""
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
     expires_in: int
     user: UserBriefAuth
 
 
 class RefreshResponse(BaseSchema):
+    """Internal response from AuthService.refresh_from_token()."""
     access_token: str
     expires_in: int

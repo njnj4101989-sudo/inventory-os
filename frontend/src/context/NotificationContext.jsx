@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
 import { getBaseUrl } from '../api/client'
+import { useAuth } from '../hooks/useAuth'
 
 const NotificationContext = createContext(null)
 
@@ -48,6 +48,7 @@ export function NotificationProvider({ children }) {
   const eventSourceRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const backoffRef = useRef(1000)
+  const { isAuthenticated } = useAuth()
 
   const addNotification = useCallback((event) => {
     const msgFn = EVENT_MESSAGES[event.type]
@@ -93,55 +94,18 @@ export function NotificationProvider({ children }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
-  // SSE connection with automatic token refresh
+  // SSE connection — cookies auto-sent by browser (no token query param)
   useEffect(() => {
+    if (!isAuthenticated) return
+
     let stopped = false
 
-    const decodeExp = (token) => {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        return payload.exp ? payload.exp * 1000 : Infinity
-      } catch { return 0 }
-    }
-
-    // Read fresh token from localStorage, refresh if expired
-    const getValidToken = async () => {
-      const token = localStorage.getItem('access_token')
-      if (!token) return null
-
-      if (decodeExp(token) > Date.now()) return token
-
-      // Token expired — try refresh
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) return null
-
-      try {
-        const baseUrl = getBaseUrl()
-        const { data } = await axios.post(`${baseUrl}/auth/refresh`, {
-          refresh_token: refreshToken,
-        })
-        const newToken = data.data?.access_token || data.access_token
-        if (!newToken) return null
-        localStorage.setItem('access_token', newToken)
-        return newToken
-      } catch {
-        // Refresh failed — session is dead, clean up
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user')
-        return null
-      }
-    }
-
-    const connect = async () => {
+    const connect = () => {
       if (stopped) return
 
-      const token = await getValidToken()
-      if (!token || stopped) return // logged out or session expired
-
       const baseUrl = getBaseUrl()
-      const url = `${baseUrl}/events/stream?token=${encodeURIComponent(token)}`
-      const es = new EventSource(url)
+      const url = `${baseUrl}/events/stream`
+      const es = new EventSource(url, { withCredentials: true })
       eventSourceRef.current = es
 
       es.onopen = () => {
@@ -168,10 +132,7 @@ export function NotificationProvider({ children }) {
       }
     }
 
-    // Only start if we have a token
-    if (localStorage.getItem('access_token')) {
-      connect()
-    }
+    connect()
 
     return () => {
       stopped = true
@@ -183,7 +144,7 @@ export function NotificationProvider({ children }) {
         clearTimeout(reconnectTimeoutRef.current)
       }
     }
-  }, [addNotification])
+  }, [isAuthenticated, addNotification])
 
   return (
     <NotificationContext.Provider

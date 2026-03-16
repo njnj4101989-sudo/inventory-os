@@ -5,25 +5,24 @@ const API_URL = import.meta.env.VITE_API_URL || '/api/v1'
 const client = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // send HttpOnly cookies with every request
 })
 
-// Attach JWT access token to every request
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+// Auth endpoints that should NOT trigger the refresh interceptor
+const AUTH_URLS = ['/auth/login', '/auth/refresh', '/auth/me', '/auth/logout']
+
+function isAuthUrl(url) {
+  return AUTH_URLS.some((u) => url?.endsWith(u))
+}
 
 // Handle 401 — attempt token refresh once, then logout
 let isRefreshing = false
 let failedQueue = []
 
-const processQueue = (error, token = null) => {
+const processQueue = (error, success = false) => {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) reject(error)
-    else resolve(token)
+    else resolve()
   })
   failedQueue = []
 }
@@ -33,39 +32,33 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Don't intercept auth endpoints — let them fail naturally
+    if (isAuthUrl(originalRequest?.url)) {
+      return Promise.reject(error)
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return client(originalRequest)
-        })
+        }).then(() => client(originalRequest))
       }
 
       originalRequest._retry = true
       isRefreshing = true
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token')
-        if (!refreshToken) throw new Error('No refresh token')
-
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, {
-          refresh_token: refreshToken,
-        })
-
-        const newToken = data.data?.access_token || data.access_token
-        localStorage.setItem('access_token', newToken)
-        processQueue(null, newToken)
-
-        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        // Refresh cookie is sent automatically (HttpOnly, path=/api/v1/auth)
+        await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+        processQueue(null, true)
         return client(originalRequest)
       } catch (refreshError) {
-        processQueue(refreshError, null)
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user')
-        window.location.href = '/login'
+        processQueue(refreshError)
+        // Refresh failed — session is dead
+        // Only redirect if not already on login page
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login'
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

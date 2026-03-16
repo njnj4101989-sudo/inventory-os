@@ -16,6 +16,9 @@ class FinancialYearCreate(BaseModel):
 
 
 class FinancialYearUpdate(BaseModel):
+    code: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     status: str | None = None  # open / closed
     is_current: bool | None = None
 

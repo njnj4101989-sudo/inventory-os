@@ -6,11 +6,13 @@ Run with: uvicorn app.main:app --reload
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
 from app.database import engine
+from app.core.security import verify_token, ACCESS_COOKIE_NAME
 from app.api.router import api_router
 from app.core.error_handlers import register_exception_handlers
 from app.core.event_bus import event_bus
@@ -64,6 +66,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Tenant middleware — extract company_schema from JWT cookie ---
+_mw_logger = logging.getLogger("tenant_middleware")
+
+class TenantMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request.state.company_schema = "public"  # default
+        token = request.cookies.get(ACCESS_COOKIE_NAME)
+        if token:
+            try:
+                payload = verify_token(token)
+                schema = payload.get("company_schema")
+                if schema:
+                    request.state.company_schema = schema
+            except Exception as e:
+                # Don't block the request — auth dependency will reject invalid tokens.
+                # But log so we can diagnose stale-cookie issues.
+                _mw_logger.debug("JWT decode skipped in middleware: %s", e)
+        response = await call_next(request)
+        return response
+
+app.add_middleware(TenantMiddleware)
 
 # Exception handlers
 register_exception_handlers(app)

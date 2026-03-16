@@ -1,24 +1,26 @@
 """SSE (Server-Sent Events) endpoint for real-time notifications.
 
-EventSource doesn't support Authorization headers, so we accept the JWT
-token as a query parameter: GET /events/stream?token=<access_token>
+Reads JWT from HttpOnly cookie (auto-sent by browser).
 """
 
 import asyncio
 import json
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from jose import ExpiredSignatureError, JWTError
 
 from app.core.event_bus import event_bus
-from app.core.security import verify_token
+from app.core.security import verify_token, ACCESS_COOKIE_NAME
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 
-async def _validate_token(token: str) -> dict | None:
-    """Validate JWT from query param. Returns claims dict or None."""
+async def _validate_from_cookie(request: Request) -> dict | None:
+    """Validate JWT from HttpOnly cookie. Returns claims dict or None."""
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if not token:
+        return None
     try:
         payload = verify_token(token)
         if payload.get("type") != "access":
@@ -52,12 +54,9 @@ async def _event_generator(request: Request, client_id: str, queue: asyncio.Queu
 
 
 @router.get("/stream")
-async def event_stream(
-    request: Request,
-    token: str = Query(..., description="JWT access token"),
-):
-    """SSE stream — real-time production events."""
-    claims = await _validate_token(token)
+async def event_stream(request: Request):
+    """SSE stream — real-time production events. Auth via HttpOnly cookie."""
+    claims = await _validate_from_cookie(request)
     if claims is None:
         return StreamingResponse(
             iter([f"data: {json.dumps({'error': 'unauthorized'})}\n\n"]),

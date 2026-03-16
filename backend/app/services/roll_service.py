@@ -8,7 +8,6 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import is_postgresql
 from app.models.supplier import Supplier
 
 from app.models.roll import Roll, RollProcessing
@@ -735,9 +734,7 @@ class RollService:
         ]
 
     async def send_for_processing(self, roll_id: UUID, req: SendForProcessing) -> dict:
-        stmt = select(Roll).where(Roll.id == roll_id)
-        if is_postgresql():
-            stmt = stmt.with_for_update()
+        stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:
@@ -794,9 +791,7 @@ class RollService:
     async def receive_from_processing(
         self, roll_id: UUID, processing_id: UUID, req: ReceiveFromProcessing
     ) -> dict:
-        stmt = select(Roll).where(Roll.id == roll_id)
-        if is_postgresql():
-            stmt = stmt.with_for_update()
+        stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:
@@ -871,9 +866,7 @@ class RollService:
         self, roll_id: UUID, processing_id: UUID, req: UpdateProcessingLog
     ) -> dict:
         """Update editable fields on a processing log (cost, vendor, dates, notes, etc.)."""
-        stmt = select(Roll).where(Roll.id == roll_id)
-        if is_postgresql():
-            stmt = stmt.with_for_update()
+        stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
         if not roll:

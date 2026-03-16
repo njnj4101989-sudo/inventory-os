@@ -12,7 +12,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import is_postgresql
 from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll
 from app.models.batch import Batch
@@ -89,9 +88,7 @@ class LotService:
 
         # Batch-fetch all rolls in one query instead of N individual queries
         roll_ids = [ri.roll_id for ri in req.rolls]
-        roll_stmt = select(Roll).where(Roll.id.in_(roll_ids))
-        if is_postgresql():
-            roll_stmt = roll_stmt.with_for_update()
+        roll_stmt = select(Roll).where(Roll.id.in_(roll_ids)).with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll_map = {r.id: r for r in roll_result.scalars().all()}
 
@@ -201,9 +198,7 @@ class LotService:
         if lot.status not in ("open",):
             raise InvalidStateTransitionError("Can only add rolls to lots in 'open' status")
 
-        roll_stmt = select(Roll).where(Roll.id == roll_id)
-        if is_postgresql():
-            roll_stmt = roll_stmt.with_for_update()
+        roll_stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll = roll_result.scalar_one_or_none()
         if not roll:
@@ -262,9 +257,7 @@ class LotService:
             raise NotFoundError(f"LotRoll {lot_roll_id} not found in lot {lot_id}")
 
         # Restore roll weight
-        roll_stmt = select(Roll).where(Roll.id == lot_roll.roll_id)
-        if is_postgresql():
-            roll_stmt = roll_stmt.with_for_update()
+        roll_stmt = select(Roll).where(Roll.id == lot_roll.roll_id).with_for_update()
         roll_result = await self.db.execute(roll_stmt)
         roll = roll_result.scalar_one_or_none()
         if roll:
@@ -300,13 +293,10 @@ class LotService:
             color_breakdown[color] = (color_breakdown.get(color, 0) + (lr.num_pallas or 0))
 
         # Get current max batch code once, generate all sequentially
-        from sqlalchemy import func, select as sa_select
-        if is_postgresql():
-            result = await self.db.execute(
-                sa_select(Batch.batch_code).order_by(Batch.batch_code.desc()).limit(1).with_for_update()
-            )
-        else:
-            result = await self.db.execute(sa_select(func.max(Batch.batch_code)))
+        from sqlalchemy import select as sa_select
+        result = await self.db.execute(
+            sa_select(Batch.batch_code).order_by(Batch.batch_code.desc()).limit(1).with_for_update()
+        )
         current_max = _extract_number(result.scalar(), "BATCH-")
 
         batch_objects = []

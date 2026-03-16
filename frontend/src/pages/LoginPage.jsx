@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 function getLandingPath(role) {
@@ -15,9 +15,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [capsLock, setCapsLock] = useState(false)
-  const { login, isAuthenticated, role } = useAuth()
 
-  // Detect CapsLock globally (keydown/keyup both expose getModifierState)
+  // Company picker state
+  const [showPicker, setShowPicker] = useState(false)
+  const [pickerCompanies, setPickerCompanies] = useState([])
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null)
+
+  const { login, selectCompany, isAuthenticated, role, company } = useAuth()
+  const navigate = useNavigate()
+
   useEffect(() => {
     const handler = (e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)
     window.addEventListener('keydown', handler)
@@ -27,12 +33,15 @@ export default function LoginPage() {
       window.removeEventListener('keyup', handler)
     }
   }, [])
-  const navigate = useNavigate()
 
-  // If already logged in, redirect
-  if (isAuthenticated) {
-    navigate(getLandingPath(role), { replace: true })
-    return null
+  // If already logged in with company context, redirect
+  if (isAuthenticated && company) {
+    return <Navigate to={getLandingPath(role)} replace />
+  }
+
+  // Logged in but no companies at all — admin setup mode
+  if (isAuthenticated && !company && !showPicker) {
+    return <Navigate to="/settings" replace />
   }
 
   const handleSubmit = async (e) => {
@@ -40,41 +49,124 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const user = await login(username, password)
-      navigate(getLandingPath(user.role), { replace: true })
+      const result = await login(username, password)
+      if (result._needsCompanySelect) {
+        // Multi-company user — show picker
+        setPickerCompanies(result._companies || [])
+        setSelectedCompanyId(result._companies?.find((c) => c.is_default)?.id || result._companies?.[0]?.id)
+        setShowPicker(true)
+      } else {
+        navigate(getLandingPath(result.role), { replace: true })
+      }
     } catch (err) {
       if (err.response?.data?.detail) {
         setError(err.response.data.detail)
       } else if (err.code === 'ERR_NETWORK' || !err.response) {
-        setError('Cannot reach server. If using tunnel, wait 30s and retry.')
+        setError('Cannot reach server. Check connection and retry.')
       } else {
-        setError(`Login failed (${err.response?.status || 'unknown'}). Check connection.`)
+        setError(`Login failed (${err.response?.status || 'unknown'}).`)
       }
     } finally {
       setLoading(false)
     }
   }
 
+  const handleCompanySelect = async () => {
+    if (!selectedCompanyId) return
+    setError('')
+    setLoading(true)
+    try {
+      await selectCompany(selectedCompanyId)
+      navigate(getLandingPath(role), { replace: true })
+    } catch (err) {
+      setError('Failed to select company. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // --- Company Picker View ---
+  if (showPicker) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center">
+            <h1 className="text-3xl font-bold text-primary-600">Inventory-OS</h1>
+            <p className="mt-1 text-sm text-gray-500">Select your workspace</p>
+          </div>
+
+          <div className="rounded-xl bg-white p-8 shadow-lg">
+            <h2 className="mb-2 text-lg font-semibold text-gray-800">Choose Company</h2>
+            <p className="mb-6 text-sm text-gray-500">You have access to multiple companies</p>
+
+            {error && (
+              <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            )}
+
+            <div className="space-y-2">
+              {pickerCompanies.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedCompanyId(c.id)}
+                  className={`w-full flex items-center gap-3 rounded-lg border-2 px-4 py-3 text-left transition-all ${
+                    selectedCompanyId === c.id
+                      ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold ${
+                    selectedCompanyId === c.id
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {c.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-gray-900">{c.name}</div>
+                    <div className="text-xs text-gray-500">{c.slug}</div>
+                  </div>
+                  {c.is_default && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      Default
+                    </span>
+                  )}
+                  {selectedCompanyId === c.id && (
+                    <svg className="h-5 w-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handleCompanySelect}
+              disabled={loading || !selectedCompanyId}
+              className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Loading...' : 'Continue'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Login Form View ---
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
       <div className="w-full max-w-sm">
-        {/* Brand */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-primary-600">Inventory-OS</h1>
           <p className="mt-1 text-sm text-gray-500">Textile Inventory Management</p>
         </div>
 
-        {/* Login Card */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl bg-white p-8 shadow-lg"
-        >
+        <form onSubmit={handleSubmit} className="rounded-xl bg-white p-8 shadow-lg">
           <h2 className="mb-6 text-lg font-semibold text-gray-800">Sign in</h2>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           )}
 
           <div className="space-y-4">
@@ -154,7 +246,6 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
 
-          {/* Dev hint */}
           <p className="mt-4 text-center text-xs text-gray-400">
             Login: admin / test1234 (or supervisor, tailor1, checker1, billing)
           </p>

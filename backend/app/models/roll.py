@@ -46,7 +46,7 @@ class Roll(Base):
     supplier_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("supplier_invoices.id", ondelete="SET NULL"), index=True, nullable=True
     )
-    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

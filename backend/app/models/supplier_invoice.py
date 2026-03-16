@@ -23,7 +23,7 @@ class SupplierInvoice(Base):
     gst_percent: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"
     )
-    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

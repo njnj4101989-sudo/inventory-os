@@ -16,7 +16,11 @@ function getFallbackPath(role) {
 export default function ProtectedRoute({ requiredRoles, children }) {
   const { isAuthenticated, role, loading } = useAuth()
 
-  if (loading) return null
+  if (loading) return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent" />
+    </div>
+  )
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />

@@ -12,11 +12,7 @@ export async function login(username, password) {
       throw err
     }
     const permissions = PERMISSIONS[user.role.name] || {}
-    const tokenPayload = {
-      access_token: `mock_access_${user.id}`,
-      refresh_token: `mock_refresh_${user.id}`,
-      token_type: 'bearer',
-      expires_in: 3600,
+    return mockResponse({
       user: {
         id: user.id,
         username: user.username,
@@ -25,17 +21,38 @@ export async function login(username, password) {
         role_display_name: user.role.display_name || null,
         permissions,
       },
-    }
-    return mockResponse(tokenPayload)
+    })
   }
   return client.post('/auth/login', { username, password })
 }
 
-export async function refresh(refreshToken) {
+export async function getMe() {
   if (USE_MOCK) {
-    return mockResponse({ access_token: 'mock_refreshed_token', expires_in: 3600 })
+    const storedUser = localStorage.getItem('user')
+    if (!storedUser) {
+      const err = new Error('Not authenticated')
+      err.response = { status: 401 }
+      throw err
+    }
+    return mockResponse(JSON.parse(storedUser))
   }
-  return client.post('/auth/refresh', { refresh_token: refreshToken })
+  return client.get('/auth/me')
+}
+
+export async function refresh() {
+  if (USE_MOCK) {
+    return mockResponse({ expires_in: 3600 })
+  }
+  return client.post('/auth/refresh')
+}
+
+export async function selectCompany(companyId, fyId = null) {
+  if (USE_MOCK) {
+    return mockResponse({ user: JSON.parse(localStorage.getItem('user') || '{}') })
+  }
+  const body = { company_id: companyId }
+  if (fyId) body.fy_id = fyId
+  return client.post('/auth/select-company', body)
 }
 
 export async function logout() {
