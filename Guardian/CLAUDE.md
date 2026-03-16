@@ -32,52 +32,45 @@
 
 ## Current State (Session 74 — 2026-03-16)
 
-### S74: Phase 1b — TDS/TCS/MSME Form Enrichment + Modal UX
+### S74: MASTERS_AND_FY_PLAN Complete — Phases 1b, 1c, 2, 3, 4
 
-**Party Masters Form Enrichment (frontend-only, all 3 tabs):**
-- `state_code` field added to all 3 EMPTY_FORMS + sent in API payload
-- GST auto-fill: GSTIN first 2 digits → auto-populates `state` + `state_code` (37-state GST code map)
-- State dropdown → auto-fills `state_code` (reverse lookup)
-- TDS Section: dropdown with 194C/194H/194J/194Q (was free text)
-- TCS Section: dropdown with 206C(1H)/206C — customers tab only
-- TDS rate placeholder adjusts per section (1/2 for 194C, 5 for 194H)
-- No-PAN amber warning when TDS enabled
-- Aadhar hint: "Required if no PAN (higher TDS)"
-- MSME 45-day Sec 43B(h) warning for micro/small enterprises
-- Detail view: state_code with decoded name, TDS/TCS section descriptions, capitalized types
+**Phase 1b: TDS/TCS/MSME Form Enrichment + Modal UX**
+- GST auto-fill (GSTIN → state + state_code), TDS/TCS section dropdowns (194C/194H/194J/206C)
+- No-PAN warning, Aadhar hint, MSME 45-day Sec 43B(h) warning
+- Modal: auto-focus first input, Ctrl+S save, scrollable on zoom, compact padding
+- TDS + MSME + Notes inline in one 5-col row
 
-**Modal UX (affects all modals app-wide):**
-- Auto-focus first input/select on modal open (no more 6x Tab to reach form)
-- Ctrl+S saves form (gated to modal open, ref-based — always latest state)
-- Scrollable outer container on zoom (no more height cap cutting off content)
-- Compact header padding (py-4 → py-2)
-- Minimal body padding (py-4 → py-1)
+**Phase 1c: OrdersPage Customer Picker**
+- Customer dropdown picker (fetches `/customers/all`), Shift+M quick create
+- InvoicesPage: nested customer in table/detail/print (name, phone, GST)
+- QuickMasterModal: `customer` type added
 
-**Form Layout Polish:**
-- Section title margin: mb-3 → mb-1.5
-- Section padding: py-3 → py-1.5
-- TDS checkbox + MSME Type + Notes: all inline in one 5-col row (was 2 separate rows)
-- Removed dead `tdsOpen`/`msmeOpen` state (checkbox values drive visibility)
+**Phase 2: Ledger System (28th model — LedgerEntry)**
+- LedgerService: payment recording with TDS/TCS, balance computation
+- 4 API endpoints: GET /ledger, GET /balance, GET /balances, POST /payment
+- Auto-entry wiring: stock-in→supplier, invoice→customer, JC/BC receive→VA party
+- LedgerPanel slide-out + inline payment form + balance column on PartyMasters
 
-**Files:** Modal.jsx, PartyMastersPage.jsx, MASTERS_AND_FY_PLAN.md, guardian.md
+**Phase 3: SKU Enrichment**
+- 5 columns added: hsn_code, gst_percent, mrp, sale_rate, unit
+- SKUsPage detail: 4-col grid editor
 
-**Phase 1c (same session):**
-- OrdersPage: customer_id dropdown picker (fetches all active via `/customers/all`)
-- Shift+M quick create on customer dropdown (`data-master="customer"`)
-- Selected customer shows phone + GST inline, payload sends `customer_id` + denormalized fields
-- InvoicesPage: table/detail/print show customer from nested FK (name, phone, city, GST)
-- QuickMasterModal: `customer` type config (name, phone, city)
-- OrdersPage detail: customer info from nested `customer` object with fallback to flat fields
+**Phase 4: Company + Financial Year (29th Company, 30th FinancialYear)**
+- fy_id FK on rolls, orders, invoices, supplier_invoices, ledger_entries
+- SettingsPage: Company Profile tab + Financial Years tab
+- Sidebar: Settings entry (admin-only)
 
-**Files:** OrdersPage.jsx, InvoicesPage.jsx, QuickMasterModal.jsx, customers.js, MASTERS_AND_FY_PLAN.md
+**30 models total. MASTERS_AND_FY_PLAN.md fully completed.**
 
-**Phase 1 COMPLETE.** All tasks from MASTERS_AND_FY_PLAN.md Phase 1a/1b/1c done.
+**Commits:** `910735e`, `275d14d`, `ba308c1`, `c022b63`, `9fc2841`, `839a08a`
 
 **TODO (next session):**
-- [ ] Update API_REFERENCE.md with Customer endpoints, enriched Supplier/VAParty schemas
-- [ ] Phase 2: Ledger system
-- [ ] Phase 3: SKU enrichment
-- [ ] Phase 4: Financial Year
+- [ ] Update API_REFERENCE.md with Customer, Ledger, Company, FY endpoints
+- [ ] Year closing logic (validate → snapshot → carry forward → create new FY)
+- [ ] FY filter dropdown on all list pages
+- [ ] Counter prefix migration (ORD-0001 → ORD-2627-0001)
+- [ ] Auto-tag fy_id on transaction creation
+- [ ] Deploy Phase 2-4 to production (migration + restart)
 
 ---
 
@@ -608,7 +601,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
-| S74 | Phase 1 COMPLETE — 1b+1c | 1b: GST→state auto-fill, TDS/TCS dropdowns, MSME 45-day hint, state_code, modal auto-focus+Ctrl+S. 1c: OrdersPage customer picker, Shift+M quick create, InvoicesPage nested customer, QuickMasterModal customer type |
+| S74 | MASTERS_AND_FY_PLAN COMPLETE | 1b: GST→state, TDS/TCS dropdowns, modal UX. 1c: customer picker+Shift+M. P2: Ledger (28th model, auto-entries, LedgerPanel, payments). P3: SKU enrichment (5 cols). P4: Company (29th)+FY (30th), fy_id FK on 5 tables, SettingsPage |
 | S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
 | S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
 | S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |

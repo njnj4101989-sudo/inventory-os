@@ -400,28 +400,39 @@ Step 4: Post-close rules
 - ✅ Modal UX: auto-focus first input on open, Ctrl+S save, scrollable on zoom, compact section padding
 - ✅ TDS checkbox + MSME Type + Notes all inline in one 5-col row
 
-### Phase 2: Ledger System (Separate Session)
-1. Create `LedgerEntry` model (Part 3D)
-2. Service: auto-create entries on stock-in, invoice, challan
-3. Service: manual payment recording with TDS/TCS
-4. API: `GET /ledger?party_type=supplier&party_id=xxx` + `POST /ledger/payment`
-5. Frontend: click party → ledger slide-out with transaction table
-6. Frontend: "Record Payment" modal (amount, date, payment mode, TDS deduction)
-7. Party balance summary on party list (outstanding amount badge)
+### Phase 2: COMPLETED (S74 — 2026-03-16)
+- ✅ LedgerEntry model (28th) — journal table with 3 composite indexes
+- ✅ LedgerService: create entry, record payment with TDS/TCS, balance computation (single + bulk)
+- ✅ 4 API endpoints: GET /ledger, GET /balance, GET /balances, POST /payment
+- ✅ Auto-entry wiring: stock-in→supplier credit, invoice→customer debit, JC receive→VA credit, BC receive→VA credit
+- ✅ Partial receive safety: updates existing ledger entry instead of duplicating
+- ✅ LedgerPanel slide-out: running balance table, inline Record Payment form
+- ✅ Payment form: amount, date, mode (NEFT/UPI/cash/cheque), ref no, TDS/TCS section dropdowns
+- ✅ Balance column on all 3 PartyMasters tabs
+- ✅ "View Ledger" button in party detail modal
+- NOTE: fy_id nullable until Phase 4 wiring
 
-### Phase 3: SKU Enrichment (Separate Session)
-1. Add to SKU: hsn_code, gst_percent, mrp, sale_rate, unit
-2. Update SKU create/edit forms
-3. Migration + deploy
+### Phase 3: COMPLETED (S74 — 2026-03-16)
+- ✅ 5 new columns on SKU: hsn_code, gst_percent, mrp, sale_rate, unit
+- ✅ Schemas updated (Create, Update, Response)
+- ✅ SKUsPage detail: 4-col grid with Base Price, MRP, Sale Rate, Unit, HSN, GST% dropdown, Description
+- ✅ Migration applied
 
-### Phase 4: Financial Year (Separate Session)
-1. Company model + settings page (name, GST, PAN, bank details, logo)
-2. FinancialYear model + admin page (create FY, view status)
-3. `fy_id` FK on transaction tables + auto-tag on creation
-4. Year closing logic (validate → snapshot → carry forward → create new FY)
-5. FY filter dropdown on all list pages
-6. Counter prefix migration (ORD-0001 → ORD-2627-0001)
-7. Opening balance carry-forward (inventory + party balances via ledger)
+### Phase 4: COMPLETED (S74 — 2026-03-16) — Foundation
+- ✅ Company model (29th) — single-row profile (GST, PAN, bank details, address)
+- ✅ FinancialYear model (30th) — FY periods with open/closed, is_current toggle
+- ✅ `fy_id` FK added to: rolls, orders, invoices, supplier_invoices, ledger_entries
+- ✅ Company + FY service (CRUD, current FY toggle, upsert company)
+- ✅ 5 API endpoints: GET/PATCH /company, GET/POST/PATCH /financial-years
+- ✅ SettingsPage (admin-only): Company Profile tab + Financial Years tab
+- ✅ Sidebar: Settings entry under Setup section
+
+**Deferred to future session:**
+- Year closing logic (validate → snapshot → carry forward → create new FY)
+- FY filter dropdown on all list pages
+- Counter prefix migration (ORD-0001 → ORD-2627-0001)
+- Opening balance carry-forward (inventory + party balances via ledger)
+- Auto-tag fy_id on transaction creation (needs current FY lookup)
 
 ---
 
