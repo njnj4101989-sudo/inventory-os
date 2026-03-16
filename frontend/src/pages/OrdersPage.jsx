@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder } from '../api/orders'
 import { getSKUs } from '../api/skus'
+import { getAllCustomers, createCustomer } from '../api/customers'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
+import QuickMasterModal from '../components/common/QuickMasterModal'
+import useQuickMaster from '../hooks/useQuickMaster'
 
 /* ── Module-level helpers (re-declared, not imported cross-page) ── */
 
@@ -102,7 +105,7 @@ function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRo
 
 const COLUMNS = [
   { key: 'order_number', label: 'Order #', render: (val) => <span className="font-semibold text-primary-700">{val}</span> },
-  { key: 'customer_name', label: 'Customer', render: (val) => val || <span className="text-gray-400">Walk-in</span> },
+  { key: 'customer_name', label: 'Customer', render: (val, row) => row.customer?.name || val || <span className="text-gray-400">Walk-in</span> },
   {
     key: 'source', label: 'Source',
     render: (val) => (
@@ -161,7 +164,8 @@ export default function OrdersPage() {
   const [skuLoading, setSKULoading] = useState(false)
   const [gridQty, setGridQty] = useState({})    // { sku_id: qty }
   const [gridPrice, setGridPrice] = useState({}) // { designKey: price }
-  const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '', source: 'web', notes: '' })
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '' })
+  const [customers, setCustomers] = useState([])
   const [designSearch, setDesignSearch] = useState('')
   const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
   const [saving, setSaving] = useState(false)
@@ -170,11 +174,19 @@ export default function OrdersPage() {
   const [deleteConfirmKey, setDeleteConfirmKey] = useState(null) // design key pending deletion
   const nameRef = useRef(null)
 
+  // Quick master for customer Shift+M
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
+    (type, newItem) => {
+      if (type === 'customer') {
+        setCustomers(prev => [...prev, newItem])
+        setCustomerForm(f => ({ ...f, customer_id: newItem.id }))
+      }
+    }
+  )
+
   /* ── Dirty detection ── */
   const isDirty = useMemo(() => {
-    if (customerForm.name.trim()) return true
-    if (customerForm.phone.trim()) return true
-    if (customerForm.address.trim()) return true
+    if (customerForm.customer_id) return true
     if (customerForm.notes.trim()) return true
     if (selectedDesigns.size > 0) return true
     if (Object.values(gridQty).some(q => q > 0)) return true
@@ -283,7 +295,7 @@ export default function OrdersPage() {
   const handleCustomerKeyDown = useCallback((e, fieldName) => {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    const fields = ['name', 'phone', 'address', 'source', 'notes']
+    const fields = ['customer_id', 'source', 'notes']
     const idx = fields.indexOf(fieldName)
     if (idx < fields.length - 1) {
       const nextField = document.querySelector(`[data-customer-field="${fields[idx + 1]}"]`)
@@ -364,15 +376,20 @@ export default function OrdersPage() {
     setSKULoading(true)
     setGridQty({})
     setGridPrice({})
-    setCustomerForm({ name: '', phone: '', address: '', source: 'web', notes: '' })
+    setCustomerForm({ customer_id: '', source: 'web', notes: '' })
     setDesignSearch('')
     setSelectedDesigns(new Set())
     setFormError(null)
     try {
-      const res = await getSKUs({ is_active: true, page_size: 500 })
-      setAllSKUs(res.data.data || [])
+      const [skuRes, custRes] = await Promise.all([
+        getSKUs({ is_active: true, page_size: 500 }),
+        getAllCustomers(),
+      ])
+      setAllSKUs(skuRes.data.data || [])
+      setCustomers(custRes.data.data || [])
     } catch {
       setAllSKUs([])
+      setCustomers([])
     } finally {
       setSKULoading(false)
     }
@@ -458,13 +475,15 @@ export default function OrdersPage() {
         items.push({ sku_id: skuId, quantity: qty, unit_price: price })
       }
       if (!items.length) { setFormError('Add at least one item'); setSaving(false); return }
-      if (!customerForm.name.trim()) { setFormError('Customer name is required'); setSaving(false); return }
+      if (!customerForm.customer_id) { setFormError('Please select a customer'); setSaving(false); return }
 
+      const cust = customers.find(c => c.id === customerForm.customer_id)
       await createOrder({
         source: customerForm.source,
-        customer_name: customerForm.name.trim(),
-        customer_phone: customerForm.phone.trim() || null,
-        customer_address: customerForm.address.trim() || null,
+        customer_id: customerForm.customer_id,
+        customer_name: cust?.name || null,
+        customer_phone: cust?.phone || null,
+        customer_address: cust?.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : null,
         notes: customerForm.notes.trim() || null,
         items,
       })
@@ -501,7 +520,7 @@ export default function OrdersPage() {
         {/* Header */}
         <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
-            <h1 className="text-lg font-bold leading-tight">{o.customer_name || 'Walk-in'}</h1>
+            <h1 className="text-lg font-bold leading-tight">{o.customer?.name || o.customer_name || 'Walk-in'}</h1>
             <p className="text-xs opacity-80">{o.order_number} &middot; <StatusBadge status={o.status} /></p>
           </div>
           <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Close</button>
@@ -517,7 +536,7 @@ export default function OrdersPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="bg-gray-50 rounded p-2">
                 <p className="text-[11px] uppercase text-gray-500 font-semibold">Phone</p>
-                <p className="text-xs font-medium text-gray-800">{o.customer_phone || '—'}</p>
+                <p className="text-xs font-medium text-gray-800">{o.customer?.phone || o.customer_phone || '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="text-[11px] uppercase text-gray-500 font-semibold">Source</p>
@@ -529,7 +548,7 @@ export default function OrdersPage() {
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="text-[11px] uppercase text-gray-500 font-semibold">Address</p>
-                <p className="text-xs font-medium text-gray-800">{o.customer_address || '—'}</p>
+                <p className="text-xs font-medium text-gray-800">{o.customer_address || o.customer?.city || '—'}</p>
               </div>
             </div>
 
@@ -661,30 +680,31 @@ export default function OrdersPage() {
           <div className="bg-gray-50 rounded-lg p-3 mb-3">
             <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <div>
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Name *</label>
-                <input ref={nameRef} type="text" value={customerForm.name}
-                  data-customer-field="name"
-                  onChange={(e) => setCustomerForm(f => ({ ...f, name: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'name')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Customer name" />
+              <div className="md:col-span-2">
+                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Customer *</label>
+                <select ref={nameRef} value={customerForm.customer_id}
+                  data-customer-field="customer_id"
+                  data-master="customer"
+                  onChange={(e) => setCustomerForm(f => ({ ...f, customer_id: e.target.value }))}
+                  onKeyDown={(e) => handleCustomerKeyDown(e, 'customer_id')}
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                  <option value="">Select customer (Shift+M to create)</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}{c.city ? ` — ${c.city}` : ''}{c.phone ? ` (${c.phone})` : ''}</option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Phone</label>
-                <input type="text" value={customerForm.phone}
-                  data-customer-field="phone"
-                  onChange={(e) => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'phone')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="9876543210" />
-              </div>
-              <div>
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Address</label>
-                <input type="text" value={customerForm.address}
-                  data-customer-field="address"
-                  onChange={(e) => setCustomerForm(f => ({ ...f, address: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'address')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Address" />
-              </div>
+              {customerForm.customer_id && (() => {
+                const c = customers.find(cu => cu.id === customerForm.customer_id)
+                return c ? (
+                  <div className="flex items-center gap-3 text-xs text-gray-600 md:col-span-1">
+                    <div>
+                      {c.phone && <p>{c.phone}</p>}
+                      {c.gst_no && <p className="text-[10px] text-gray-400">{c.gst_no}</p>}
+                    </div>
+                  </div>
+                ) : null
+              })()}
               <div>
                 <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Source</label>
                 <select value={customerForm.source}
@@ -987,6 +1007,8 @@ export default function OrdersPage() {
         <DataTable columns={COLUMNS} data={ordersList} loading={loading} onRowClick={handleRowClick} emptyText="No orders found." />
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
+
+      <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
     </div>
   )
 }

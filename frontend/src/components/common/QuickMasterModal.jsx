@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
 import { createColor, createFabric, createProductType, createValueAddition, createVAParty } from '../../api/masters'
 import { createSupplier } from '../../api/suppliers'
+import { createCustomer } from '../../api/customers'
 
 const MASTER_CONFIG = {
   color: {
@@ -60,6 +61,15 @@ const MASTER_CONFIG = {
       { key: 'city', label: 'City', placeholder: 'e.g. Surat' },
     ],
     create: createVAParty,
+  },
+  customer: {
+    title: 'Add Customer',
+    fields: [
+      { key: 'name', label: 'Customer Name', required: true, placeholder: 'e.g. Fashion Hub', autoFocus: true },
+      { key: 'phone', label: 'Phone', placeholder: 'e.g. 9876543210' },
+      { key: 'city', label: 'City', placeholder: 'e.g. Mumbai' },
+    ],
+    create: createCustomer,
   },
 }
 

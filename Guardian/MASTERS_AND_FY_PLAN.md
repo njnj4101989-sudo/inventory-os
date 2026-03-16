@@ -378,6 +378,14 @@ Step 4: Post-close rules
 24. Migration on prod + deploy
 25. Verify all 3 tabs + order creation + invoice display
 
+### Phase 1c: COMPLETED (S74 — 2026-03-16)
+- ✅ Task 19: OrdersPage — customer_id dropdown picker (fetches all active customers on create)
+- ✅ Task 19: Shift+M quick create on customer dropdown (`data-master="customer"`)
+- ✅ Task 19: Selected customer shows phone + GST inline, auto-fills customer_name/phone/address in payload
+- ✅ Task 20: InvoicesPage — shows customer from nested FK object (name, phone, city, GST) in table, detail, and print
+- ✅ Task 21: QuickMasterModal — `customer` type added (name, phone, city fields)
+- ✅ OrdersPage detail — customer name/phone/address from nested `customer` object with fallback to flat fields
+
 ### Phase 1b: COMPLETED (S74 — 2026-03-16)
 - ✅ `state_code` added to all 3 EMPTY_FORMS + sent in payload
 - ✅ GST auto-fill: first 2 digits of GSTIN → auto-populates `state` + `state_code` (official 37-state mapping)

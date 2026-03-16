@@ -67,7 +67,7 @@ function KPICard({ label, value, sub, color = 'slate' }) {
 const COLUMNS = [
   { key: 'invoice_number', label: 'Invoice #', render: (val) => <span className="font-semibold text-primary-700">{val}</span> },
   { key: 'order', label: 'Order #', render: (val) => val?.order_number || '—' },
-  { key: 'order', label: 'Customer', render: (val) => val?.customer_name || <span className="text-gray-400">—</span> },
+  { key: 'order', label: 'Customer', render: (val, row) => row.order?.customer_name || val?.customer_name || <span className="text-gray-400">—</span> },
   {
     key: 'subtotal', label: 'Subtotal',
     render: (val) => `₹${(val || 0).toLocaleString('en-IN')}`,
@@ -233,9 +233,10 @@ export default function InvoicesPage() {
           <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
             <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
               <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bill To</p>
-              <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{o.customer_name || '—'}</p>
-              {o.customer_phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {o.customer_phone}</p>}
-              {o.customer_address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{o.customer_address}</p>}
+              <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{o.customer?.name || o.customer_name || '—'}</p>
+              {(o.customer?.phone || o.customer_phone) && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {o.customer?.phone || o.customer_phone}</p>}
+              {(o.customer_address || o.customer?.city) && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{o.customer_address || o.customer?.city}</p>}
+              {o.customer?.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GST: {o.customer.gst_no}</p>}
             </div>
             <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
               <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Payment Status</p>
@@ -350,9 +351,10 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="bg-gray-50 rounded p-2">
                 <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Bill To</p>
-                <p className="text-sm font-bold text-gray-800">{o.customer_name || '—'}</p>
-                {o.customer_phone && <p className="text-xs text-gray-600 mt-0.5">Phone: {o.customer_phone}</p>}
-                {o.customer_address && <p className="text-xs text-gray-600 mt-0.5">{o.customer_address}</p>}
+                <p className="text-sm font-bold text-gray-800">{o.customer?.name || o.customer_name || '—'}</p>
+                {(o.customer?.phone || o.customer_phone) && <p className="text-xs text-gray-600 mt-0.5">Phone: {o.customer?.phone || o.customer_phone}</p>}
+                {(o.customer_address || o.customer?.city) && <p className="text-xs text-gray-600 mt-0.5">{o.customer_address || o.customer?.city}</p>}
+                {o.customer?.gst_no && <p className="text-xs text-gray-600 mt-0.5">GST: {o.customer.gst_no}</p>}
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Invoice Info</p>

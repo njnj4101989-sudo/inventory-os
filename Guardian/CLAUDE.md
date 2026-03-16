@@ -61,8 +61,19 @@
 
 **Files:** Modal.jsx, PartyMastersPage.jsx, MASTERS_AND_FY_PLAN.md, guardian.md
 
+**Phase 1c (same session):**
+- OrdersPage: customer_id dropdown picker (fetches all active via `/customers/all`)
+- Shift+M quick create on customer dropdown (`data-master="customer"`)
+- Selected customer shows phone + GST inline, payload sends `customer_id` + denormalized fields
+- InvoicesPage: table/detail/print show customer from nested FK (name, phone, city, GST)
+- QuickMasterModal: `customer` type config (name, phone, city)
+- OrdersPage detail: customer info from nested `customer` object with fallback to flat fields
+
+**Files:** OrdersPage.jsx, InvoicesPage.jsx, QuickMasterModal.jsx, customers.js, MASTERS_AND_FY_PLAN.md
+
+**Phase 1 COMPLETE.** All tasks from MASTERS_AND_FY_PLAN.md Phase 1a/1b/1c done.
+
 **TODO (next session):**
-- [ ] Phase 1c: OrdersPage customer_id dropdown picker + QuickMasterModal customer config
 - [ ] Update API_REFERENCE.md with Customer endpoints, enriched Supplier/VAParty schemas
 - [ ] Phase 2: Ledger system
 - [ ] Phase 3: SKU enrichment
@@ -597,7 +608,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
-| S74 | Phase 1b — TDS/TCS/MSME Form UX | GST→state auto-fill, TDS/TCS section dropdowns, MSME 45-day hint, No-PAN warning, state_code field, modal auto-focus + Ctrl+S save, scrollable modal on zoom, compact form layout |
+| S74 | Phase 1 COMPLETE — 1b+1c | 1b: GST→state auto-fill, TDS/TCS dropdowns, MSME 45-day hint, state_code, modal auto-focus+Ctrl+S. 1c: OrdersPage customer picker, Shift+M quick create, InvoicesPage nested customer, QuickMasterModal customer type |
 | S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
 | S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
 | S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
