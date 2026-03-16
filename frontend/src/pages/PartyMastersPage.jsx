@@ -120,7 +120,7 @@ const EMPTY_FORMS = {
 
 // ── Style Classes ────────────────────────────────────────
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
+const INPUT = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm placeholder:text-xs placeholder:text-gray-300 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
 const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
 const HINT = 'text-xs text-gray-400 mt-0.5'
 const SECTION_TITLE = 'text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3'
