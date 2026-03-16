@@ -55,6 +55,7 @@ class ColorCreate(BaseModel):
 
 class ColorUpdate(BaseModel):
     name: str | None = None
+    code: str | None = None
     color_no: int | None = None
     hex_code: str | None = None
     is_active: bool | None = None

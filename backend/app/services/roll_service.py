@@ -12,6 +12,7 @@ from app.database import is_postgresql
 from app.models.supplier import Supplier
 
 from app.models.roll import Roll, RollProcessing
+from app.models.color import Color
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.inventory_event import InventoryEvent
 from app.models.batch_roll_consumption import BatchRollConsumption
@@ -89,6 +90,7 @@ class RollService:
         stmt = (
             select(Roll)
             .options(
+                selectinload(Roll.color_obj),
                 selectinload(Roll.supplier),
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
@@ -118,6 +120,7 @@ class RollService:
             select(Roll)
             .where(Roll.id == roll_id)
             .options(
+                selectinload(Roll.color_obj),
                 selectinload(Roll.supplier),
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
@@ -143,6 +146,7 @@ class RollService:
             select(Roll)
             .where(Roll.roll_code == roll_code)
             .options(
+                selectinload(Roll.color_obj),
                 selectinload(Roll.supplier),
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
@@ -326,6 +330,7 @@ class RollService:
                 roll_code=roll_code,
                 fabric_type=entry.fabric_type,
                 color=entry.color,
+                color_id=entry.color_id,
                 total_weight=entry.total_weight,
                 remaining_weight=entry.total_weight,
                 current_weight=entry.total_weight,
@@ -356,6 +361,7 @@ class RollService:
             select(Roll)
             .where(Roll.id.in_(roll_ids))
             .options(
+                selectinload(Roll.color_obj),
                 selectinload(Roll.supplier),
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
@@ -469,6 +475,7 @@ class RollService:
             select(Roll)
             .where(or_(*group_conditions))
             .options(
+                selectinload(Roll.color_obj),
                 selectinload(Roll.supplier),
                 selectinload(Roll.supplier_invoice),
                 selectinload(Roll.received_by_user),
@@ -539,6 +546,7 @@ class RollService:
             roll_code=roll_code,
             fabric_type=req.fabric_type,
             color=req.color,
+            color_id=req.color_id,
             total_weight=req.total_weight,
             remaining_weight=req.total_weight,
             current_weight=req.total_weight,
@@ -562,6 +570,7 @@ class RollService:
 
         # Reload with relationships
         stmt = select(Roll).where(Roll.id == roll.id).options(
+            selectinload(Roll.color_obj),
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.supplier_invoice),
@@ -614,7 +623,7 @@ class RollService:
         stmt = (
             select(Roll)
             .where(Roll.id == roll_id)
-            .options(selectinload(Roll.supplier), selectinload(Roll.supplier_invoice))
+            .options(selectinload(Roll.color_obj), selectinload(Roll.supplier), selectinload(Roll.supplier_invoice))
         )
         result = await self.db.execute(stmt)
         roll = result.scalar_one_or_none()
@@ -655,6 +664,7 @@ class RollService:
 
         # Reload with relationships (supplier may have changed)
         stmt = select(Roll).where(Roll.id == roll.id).options(
+            selectinload(Roll.color_obj),
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.supplier_invoice),
@@ -744,6 +754,7 @@ class RollService:
 
         # Reload with all relationships for full roll response
         reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.color_obj),
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.supplier_invoice),
@@ -810,6 +821,7 @@ class RollService:
 
         # Reload with all relationships for full roll response
         reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.color_obj),
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.supplier_invoice),
@@ -879,6 +891,7 @@ class RollService:
 
         # Reload full roll with relationships
         reload = select(Roll).where(Roll.id == roll_id).options(
+            selectinload(Roll.color_obj),
             selectinload(Roll.supplier),
             selectinload(Roll.received_by_user),
             selectinload(Roll.supplier_invoice),
@@ -933,12 +946,20 @@ class RollService:
 
     def _to_response(self, r: Roll) -> dict:
         enhanced = self._compute_enhanced_roll_code(r.roll_code, r.processing_logs)
+        c = r.color_obj
         return {
             "id": str(r.id),
             "roll_code": r.roll_code,
             "enhanced_roll_code": enhanced,
             "fabric_type": r.fabric_type,
             "color": r.color,
+            "color_id": str(r.color_id) if r.color_id else None,
+            "color_obj": {
+                "id": str(c.id),
+                "name": c.name,
+                "code": c.code,
+                "color_no": c.color_no,
+            } if c else None,
             "total_weight": float(r.total_weight) if r.total_weight else 0,
             "remaining_weight": float(r.remaining_weight) if r.remaining_weight else 0,
             "current_weight": float(r.current_weight) if r.current_weight else 0,

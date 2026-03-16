@@ -885,6 +885,7 @@ export default function RollsPage() {
                 fabric_code: fabricMatch?.code || null,
                 color_code: colorMatch?.code || null,
                 color_no: colorMatch?.color_no || null,
+                color_id: colorMatch?.id || null,
               })
             }
           }

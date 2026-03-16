@@ -117,6 +117,11 @@ class MasterService:
         obj = await MasterService._get(db, Color, color_id, "Color")
         if data.name is not None:
             obj.name = data.name.strip()
+        if data.code is not None:
+            new_code = data.code.strip().upper()[:5]
+            if new_code != obj.code:
+                await MasterService._check_code(db, Color, new_code, "Color")
+                obj.code = new_code
         if data.color_no is not None:
             obj.color_no = data.color_no
         if data.hex_code is not None:

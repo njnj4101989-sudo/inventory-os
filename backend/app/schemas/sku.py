@@ -37,6 +37,7 @@ class SKUCreate(BaseModel):
     product_type: str
     product_name: str
     color: str
+    color_id: UUID | None = None
     size: str
     description: str | None = None
     base_price: Decimal | None = None
@@ -58,6 +59,7 @@ class SKUResponse(BaseSchema):
     product_type: str
     product_name: str
     color: str
+    color_id: UUID | None = None
     size: str
     description: str | None = None
     base_price: Decimal | None = None

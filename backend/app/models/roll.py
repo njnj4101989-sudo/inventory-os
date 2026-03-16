@@ -24,6 +24,9 @@ class Roll(Base):
     roll_code: Mapped[str] = mapped_column(String(80), unique=True)
     fabric_type: Mapped[str] = mapped_column(String(100))
     color: Mapped[str] = mapped_column(String(50))
+    color_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("colors.id", ondelete="RESTRICT"), index=True
+    )
     total_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     remaining_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     current_weight: Mapped[Decimal] = mapped_column(Numeric(10, 3))
@@ -50,6 +53,7 @@ class Roll(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
+    color_obj: Mapped[Color | None] = relationship(foreign_keys=[color_id])
     supplier: Mapped[Supplier | None] = relationship(back_populates="rolls")
     supplier_invoice: Mapped[SupplierInvoice | None] = relationship(back_populates="rolls")
     received_by_user: Mapped[User | None] = relationship(foreign_keys=[received_by])

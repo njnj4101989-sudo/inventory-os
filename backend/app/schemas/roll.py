@@ -36,6 +36,7 @@ class RollCreate(BaseModel):
 
     fabric_type: str
     color: str
+    color_id: UUID | None = None    # FK to colors master
     total_weight: Decimal
     unit: str = "kg"
     cost_per_unit: Decimal | None = None
@@ -58,6 +59,7 @@ class BulkRollEntry(BaseModel):
 
     fabric_type: str
     color: str
+    color_id: UUID | None = None    # FK to colors master
     total_weight: Decimal
     unit: str = "kg"
     cost_per_unit: Decimal | None = None
@@ -93,6 +95,7 @@ class RollUpdate(BaseModel):
 
     fabric_type: str | None = None
     color: str | None = None
+    color_id: UUID | None = None
     total_weight: Decimal | None = None
     unit: str | None = None
     cost_per_unit: Decimal | None = None
@@ -141,6 +144,8 @@ class RollResponse(BaseSchema):
     roll_code: str
     fabric_type: str
     color: str
+    color_id: UUID | None = None
+    color_obj: dict | None = None
     total_weight: Decimal
     remaining_weight: Decimal
     current_weight: Decimal

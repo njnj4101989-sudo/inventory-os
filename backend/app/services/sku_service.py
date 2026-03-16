@@ -93,6 +93,7 @@ class SKUService:
             product_type=req.product_type,
             product_name=req.product_name,
             color=req.color,
+            color_id=req.color_id,
             size=req.size,
             description=req.description,
             base_price=req.base_price,
@@ -127,7 +128,8 @@ class SKUService:
         return self._to_response(sku, inv)
 
     async def find_or_create(
-        self, sku_code: str, product_type: str, product_name: str, color: str, size: str
+        self, sku_code: str, product_type: str, product_name: str, color: str, size: str,
+        color_id: UUID | None = None,
     ) -> SKU:
         """Find existing SKU by code, or create new one with InventoryState."""
         stmt = select(SKU).where(SKU.sku_code == sku_code)
@@ -141,6 +143,7 @@ class SKUService:
             product_type=product_type,
             product_name=product_name,
             color=color,
+            color_id=color_id,
             size=size,
             is_active=True,
         )
@@ -223,6 +226,7 @@ class SKUService:
             "product_type": s.product_type,
             "product_name": s.product_name,
             "color": s.color,
+            "color_id": str(s.color_id) if s.color_id else None,
             "size": s.size,
             "description": s.description,
             "base_price": float(s.base_price) if s.base_price else 0,

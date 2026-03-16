@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Numeric, String, Text
+from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -15,12 +16,16 @@ class SKU(Base):
     product_type: Mapped[str] = mapped_column(String(50))
     product_name: Mapped[str] = mapped_column(String(200))
     color: Mapped[str] = mapped_column(String(50))
+    color_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("colors.id", ondelete="RESTRICT"), index=True
+    )
     size: Mapped[str] = mapped_column(String(20))
     description: Mapped[str | None] = mapped_column(Text)
     base_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     # Relationships
+    color_obj: Mapped[Color | None] = relationship(foreign_keys=[color_id])
     lots: Mapped[list[Lot]] = relationship(back_populates="sku")
     batches: Mapped[list[Batch]] = relationship(back_populates="sku")
     inventory_state: Mapped[InventoryState | None] = relationship(

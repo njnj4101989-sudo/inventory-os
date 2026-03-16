@@ -161,6 +161,7 @@ export async function stockInBulk(header, rollEntries) {
       fabric_code: entry.fabric_code || null,
       color_code: entry.color_code || null,
       color_no: entry.color_no || null,
+      color_id: entry.color_id || null,
     })),
   }
   return await client.post('/rolls/bulk-stock-in', payload)

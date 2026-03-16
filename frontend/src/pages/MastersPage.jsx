@@ -177,7 +177,7 @@ export default function MastersPage() {
     setEditing(item)
     setFormError(null)
     if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
-    else if (tab === 'colors') setForm({ name: item.name, color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
+    else if (tab === 'colors') setForm({ name: item.name, code: item.code || '', color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
     else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', applicable_to: item.applicable_to || 'both', is_active: item.is_active })
     else if (tab === 'va_parties') setForm({ name: item.name, phone: item.phone || '', city: item.city || '', gst_no: item.gst_no || '', hsn_code: item.hsn_code || '', is_active: item.is_active })
     else setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
@@ -197,7 +197,7 @@ export default function MastersPage() {
         if (!form.code?.trim()) { setFormError('Code is required'); return }
       }
     }
-    if (tab === 'colors' && !editing && form.code?.trim().length > 5) { setFormError('Color code max 5 characters'); return }
+    if (tab === 'colors' && form.code?.trim().length > 5) { setFormError('Color code max 5 characters'); return }
     if (tab === 'fabrics' && !editing && form.code?.trim().length > 3) { setFormError('Fabric code max 3 characters'); return }
     if (!form.name?.trim()) { setFormError('Name is required'); return }
 
@@ -354,8 +354,15 @@ export default function MastersPage() {
             </div>
           )}
 
-          {/* Code display on edit (non-VA) */}
-          {editing && tab !== 'value_additions' && tab !== 'va_parties' && (
+          {/* Code display on edit — editable for colors, immutable for others */}
+          {editing && tab === 'colors' && (
+            <div>
+              <label className={LABEL}>Code</label>
+              <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
+                placeholder="e.g. RED" maxLength={5} className={`${INPUT} font-mono uppercase max-w-[160px]`} />
+            </div>
+          )}
+          {editing && tab !== 'value_additions' && tab !== 'va_parties' && tab !== 'colors' && (
             <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5 flex items-center gap-2">
               <span className="text-xs text-gray-400 uppercase tracking-wide">Code:</span>
               <span className="font-mono font-semibold text-primary-700">{editing.code}</span>
