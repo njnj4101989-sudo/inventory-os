@@ -5,9 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.dependencies import get_db, require_permission
 from app.models.user import User
-from app.core.auth import require_permission
 from app.services.customer_service import CustomerService
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 
