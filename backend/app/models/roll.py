@@ -51,6 +51,9 @@ class Roll(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("financial_years.id"), nullable=True, index=True
+    )
 
     # Relationships
     color_obj: Mapped[Color | None] = relationship(foreign_keys=[color_id])

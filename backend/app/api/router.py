@@ -28,6 +28,7 @@ from app.api import (
     events,
     customers,
     ledger,
+    company,
 )
 
 api_router = APIRouter()
@@ -52,3 +53,4 @@ api_router.include_router(job_challans.router)
 api_router.include_router(events.router)
 api_router.include_router(customers.router)
 api_router.include_router(ledger.router)
+api_router.include_router(company.router)

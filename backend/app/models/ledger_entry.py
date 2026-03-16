@@ -8,7 +8,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, Index, Numeric, String, Text
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -37,7 +37,7 @@ class LedgerEntry(Base):
 
     # Metadata
     description: Mapped[str] = mapped_column(String(500))
-    fy_id: Mapped[uuid.UUID | None] = mapped_column()  # Phase 4: FK to financial_years
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("financial_years.id"), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column()  # FK to users (no constraint — polymorphic)
     notes: Mapped[str | None] = mapped_column(Text)
 

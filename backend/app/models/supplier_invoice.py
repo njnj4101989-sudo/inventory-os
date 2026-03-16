@@ -28,6 +28,9 @@ class SupplierInvoice(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("financial_years.id"), nullable=True, index=True
+    )
 
     # Relationships
     supplier: Mapped[Supplier | None] = relationship(foreign_keys=[supplier_id])

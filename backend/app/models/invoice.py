@@ -29,6 +29,9 @@ class Invoice(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     notes: Mapped[str | None] = mapped_column(Text)
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("financial_years.id"), nullable=True, index=True
+    )
 
     # Relationships
     order: Mapped[Order] = relationship(back_populates="invoices")

@@ -27,6 +27,9 @@ class Order(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("financial_years.id"), nullable=True, index=True
+    )
 
     # Relationships
     customer: Mapped[Customer | None] = relationship(foreign_keys=[customer_id])
