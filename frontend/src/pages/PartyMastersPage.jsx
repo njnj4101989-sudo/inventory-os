@@ -215,11 +215,12 @@ function CheckboxField({ label, name, form, set, className = '' }) {
 }
 
 function DetailField({ label, value, icon, mono, full }) {
+  const hasValue = value && value !== '—'
   return (
     <div className={full ? 'sm:col-span-2' : ''}>
-      <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-0.5">{label}</dt>
-      <dd className={`text-sm font-medium ${mono ? 'font-mono tracking-wide' : ''} ${value && value !== '—' ? 'text-gray-800' : 'text-gray-300'}`}>
-        {icon && <span className="mr-1.5 inline-block align-middle">{icon}</span>}
+      <dt className="text-[11px] font-semibold text-gray-400 mb-0.5">{label}</dt>
+      <dd className={`text-[13px] ${mono ? 'font-mono' : ''} ${hasValue ? 'font-semibold text-gray-800' : 'text-gray-300 font-normal'}`}>
+        {icon && <span className="mr-1 inline-block align-middle">{icon}</span>}
         {value || '—'}
       </dd>
     </div>
@@ -228,20 +229,20 @@ function DetailField({ label, value, icon, mono, full }) {
 
 function DetailCard({ title, icon, children, accent = 'primary' }) {
   const colors = {
-    primary: 'border-t-primary-500',
-    amber: 'border-t-amber-500',
-    emerald: 'border-t-emerald-500',
-    blue: 'border-t-blue-500',
-    purple: 'border-t-purple-500',
-    rose: 'border-t-rose-500',
+    primary: 'border-l-primary-500',
+    amber: 'border-l-amber-500',
+    emerald: 'border-l-emerald-500',
+    blue: 'border-l-blue-500',
+    purple: 'border-l-purple-500',
+    rose: 'border-l-rose-500',
   }
   return (
-    <div className={`bg-white rounded-xl border border-gray-100 border-t-2 ${colors[accent] || colors.primary} shadow-sm`}>
-      <div className="px-5 py-3 border-b border-gray-50 flex items-center gap-2">
+    <div className={`bg-white rounded-lg border border-gray-100 border-l-[3px] ${colors[accent] || colors.primary} shadow-sm`}>
+      <div className="px-4 py-2 border-b border-gray-50 flex items-center gap-1.5">
         {icon && <span className="text-gray-400">{icon}</span>}
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">{title}</h3>
+        <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{title}</h3>
       </div>
-      <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-3">{children}</div>
+      <div className="px-4 py-3 grid grid-cols-2 gap-x-5 gap-y-2.5">{children}</div>
     </div>
   )
 }
@@ -622,33 +623,31 @@ export default function PartyMastersPage() {
       {detailOpen && selected && (
         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
           {/* ── Header ── */}
-          <div className="bg-gradient-to-r from-primary-700 to-primary-600 text-white px-6 py-4 shadow-lg">
+          <div className="bg-gradient-to-r from-primary-700 to-primary-600 text-white px-5 py-3 shadow-md">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button onClick={() => setDetailOpen(false)} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setDetailOpen(false)} className="rounded p-1 hover:bg-white/10 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                 </button>
                 <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-lg font-bold tracking-tight">{selected.name}</h1>
-                    {selected.short_name && <span className="bg-white/15 rounded px-2 py-0.5 text-xs font-medium">{selected.short_name}</span>}
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${selected.is_active ? 'bg-green-500/20 text-green-100' : 'bg-red-500/20 text-red-200'}`}>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-base font-bold">{selected.name}</h1>
+                    {selected.short_name && <span className="bg-white/15 rounded px-1.5 py-0.5 text-[10px] font-medium">{selected.short_name}</span>}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${selected.is_active ? 'bg-green-500/20 text-green-100' : 'bg-red-500/20 text-red-200'}`}>
                       {selected.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-primary-100 text-xs">
+                  <div className="flex items-center gap-2 mt-0.5 text-primary-200 text-[11px]">
                     <span>{labels.singular}</span>
-                    {selected.city && <span>|</span>}
-                    {selected.city && <span>{selected.city}{selected.state ? `, ${selected.state}` : ''}</span>}
-                    {selected.gst_no && <span>|</span>}
-                    {selected.gst_no && <span className="font-mono">{selected.gst_no}</span>}
+                    {selected.city && <><span className="text-primary-300">|</span><span>{selected.city}{selected.state ? `, ${selected.state}` : ''}</span></>}
+                    {selected.gst_no && <><span className="text-primary-300">|</span><span className="font-mono text-[10px]">{selected.gst_no}</span></>}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleToggleStatus}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded px-3 py-1 text-[11px] font-medium transition-colors ${
                     selected.is_active
                       ? 'bg-white/10 text-red-200 hover:bg-white/20'
                       : 'bg-white/10 text-green-200 hover:bg-white/20'
@@ -656,63 +655,62 @@ export default function PartyMastersPage() {
                 >
                   {selected.is_active ? 'Deactivate' : 'Activate'}
                 </button>
-                <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded-lg bg-white/10 px-3.5 py-1.5 text-xs font-medium hover:bg-white/20 transition-colors">
-                  View Ledger
+                <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded bg-white/10 px-3 py-1 text-[11px] font-medium hover:bg-white/20 transition-colors">
+                  Ledger
                 </button>
-                <button onClick={openEditFromDetail} className="rounded-lg bg-white px-4 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-50 transition-colors">
-                  Edit {labels.singular}
+                <button onClick={openEditFromDetail} className="rounded bg-white px-3 py-1 text-[11px] font-semibold text-primary-700 hover:bg-primary-50 transition-colors">
+                  Edit
                 </button>
               </div>
             </div>
           </div>
 
-          {/* ── KPI Row ── */}
-          <div className="px-6 py-4 bg-white border-b border-gray-100 shadow-sm">
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          {/* ── KPI Strip ── */}
+          <div className="px-5 py-2.5 bg-white border-b border-gray-100">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {(() => {
                 const b = balances[selected.id]
+                const hasBalance = b && b.balance !== 0
                 return (
-                  <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-100 px-4 py-3">
-                    <div className="text-xs font-medium text-blue-500 uppercase tracking-wide">Balance</div>
-                    <div className={`text-lg font-bold mt-0.5 ${b && b.balance !== 0 ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
-                      {b && b.balance !== 0 ? `₹${Number(b.balance).toLocaleString('en-IN')}` : '—'}
+                  <div className="rounded-lg bg-blue-50/80 border border-blue-100 px-3 py-2">
+                    <div className="text-[10px] font-semibold text-blue-400">Balance</div>
+                    <div className={`text-sm font-bold ${hasBalance ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
+                      {hasBalance ? `₹${Number(b.balance).toLocaleString('en-IN')}` : '—'}
                     </div>
-                    {b && b.balance !== 0 && <div className="text-xs text-blue-400 mt-0.5">{b.balance_type.toUpperCase()}</div>}
+                    {hasBalance && <div className="text-[10px] text-blue-400">{b.balance_type.toUpperCase()}</div>}
                   </div>
                 )
               })()}
-              <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-100 px-4 py-3">
-                <div className="text-xs font-medium text-emerald-500 uppercase tracking-wide">Credit Limit</div>
-                <div className="text-lg font-bold text-gray-800 mt-0.5">
+              <div className="rounded-lg bg-emerald-50/80 border border-emerald-100 px-3 py-2">
+                <div className="text-[10px] font-semibold text-emerald-400">Credit Limit</div>
+                <div className={`text-sm font-bold ${selected.credit_limit != null ? 'text-gray-800' : 'text-gray-300'}`}>
                   {selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : '—'}
                 </div>
               </div>
-              <div className="rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/50 border border-amber-100 px-4 py-3">
-                <div className="text-xs font-medium text-amber-500 uppercase tracking-wide">Due Days</div>
-                <div className="text-lg font-bold text-gray-800 mt-0.5">{selected.due_days != null ? `${selected.due_days} days` : '—'}</div>
-              </div>
-              <div className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-100 px-4 py-3">
-                <div className="text-xs font-medium text-purple-500 uppercase tracking-wide">GST Type</div>
-                <div className="text-lg font-bold text-gray-800 mt-0.5 capitalize">{selected.gst_type || '—'}</div>
-              </div>
-              {selected.contact_person && (
-                <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-100 px-4 py-3">
-                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Contact Person</div>
-                  <div className="text-sm font-bold text-gray-800 mt-1">{selected.contact_person}</div>
+              <div className="rounded-lg bg-amber-50/80 border border-amber-100 px-3 py-2">
+                <div className="text-[10px] font-semibold text-amber-400">Due Days</div>
+                <div className={`text-sm font-bold ${selected.due_days != null ? 'text-gray-800' : 'text-gray-300'}`}>
+                  {selected.due_days != null ? selected.due_days : '—'}
                 </div>
-              )}
-              {selected.phone && (
-                <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-100 px-4 py-3">
-                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Phone</div>
-                  <div className="text-sm font-bold text-gray-800 mt-1 font-mono">{selected.phone}</div>
-                </div>
-              )}
+              </div>
+              <div className="rounded-lg bg-purple-50/80 border border-purple-100 px-3 py-2">
+                <div className="text-[10px] font-semibold text-purple-400">GST Type</div>
+                <div className={`text-sm font-bold capitalize ${selected.gst_type ? 'text-gray-800' : 'text-gray-300'}`}>{selected.gst_type || '—'}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                <div className="text-[10px] font-semibold text-gray-400">Contact</div>
+                <div className={`text-[13px] font-semibold truncate ${selected.contact_person ? 'text-gray-800' : 'text-gray-300'}`}>{selected.contact_person || '—'}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                <div className="text-[10px] font-semibold text-gray-400">Phone</div>
+                <div className={`text-[13px] font-semibold font-mono ${selected.phone ? 'text-gray-800' : 'text-gray-300'}`}>{selected.phone || '—'}</div>
+              </div>
             </div>
           </div>
 
           {/* ── Content ── */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto px-5 py-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
               {/* GST & Compliance */}
               <DetailCard title="GST & Compliance" accent="blue" icon={
@@ -805,7 +803,7 @@ export default function PartyMastersPage() {
             </div>
 
             {/* Footer metadata */}
-            <div className="mt-4 text-xs text-gray-400 text-right">
+            <div className="mt-2 text-[11px] text-gray-400 text-right">
               Created: {selected.created_at ? new Date(selected.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
             </div>
           </div>
