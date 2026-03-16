@@ -30,7 +30,39 @@
 
 ---
 
-## Current State (Session 74 — 2026-03-16)
+## Current State (Session 75 — 2026-03-16)
+
+### S75: Party Detail UI Overhaul + API_REFERENCE.md Update
+
+**Party Detail — Full-Page Overlay (replaces narrow modal):**
+- Gradient header: party name, status badge, city/GST, action buttons (Deactivate, Ledger, Edit)
+- 6 KPI strip: Balance, Credit Limit, Due Days, GST Type, Contact, Phone — compact cards with colored backgrounds
+- 3-column card grid (xl), 2-col (md), 1-col (mobile) — left-border accent cards
+- Cards: GST & Compliance (3-col fields), Contact & Address (spans 2 cols, 4-col fields), Credit & Payment, TDS/TCS, MSME, Notes
+- Proper font hierarchy: `text-[11px]` labels, `text-[13px]` values, `font-extrabold` KPI values, mono for GSTIN/PAN/phone
+- Works for all 3 party types (Suppliers, VA Parties, Customers)
+
+**API_REFERENCE.md — Full Update (S73-S74 coverage):**
+- NEW §18: Customers — 5 endpoints (CRUD + `/all` for dropdowns)
+- NEW §19: Ledger — 4 endpoints (list, balance, balances, payment)
+- NEW §20: Company & Financial Years — 6 endpoints
+- Updated §4 Suppliers (+14 enriched fields), §6 SKUs (+5 fields), §10 Orders (+customer_id/nested customer), §15b VA Parties (+19 fields)
+- Appendix B: +FY statuses, +ledger entry types
+- Appendix C: +`customer` on Orders, +`color_obj` on Rolls/SKUs
+
+**Decision:** Counter prefix migration (ORD-2627-0001) NOT needed — client confirmed current sequential codes (ORD-0001) are fine. Counters reset to 1 on new FY.
+
+**Commits:** `556a23d`, `b03e6bb`, `ecdb1f0`, `520ab0f`, `a96e5af` | All pushed
+
+**TODO (next session):**
+- [ ] Year closing logic (validate → snapshot → carry forward → create new FY → reset counters to 1)
+- [ ] Auto-tag fy_id on transaction creation
+- [ ] FY filter dropdown on all list pages
+- [ ] Deploy Phase 2-4 to production (migration + restart)
+
+---
+
+## Previous State (Session 74 — 2026-03-16)
 
 ### S74: MASTERS_AND_FY_PLAN Complete — Phases 1b, 1c, 2, 3, 4
 
@@ -65,12 +97,12 @@
 **Commits:** `910735e`, `275d14d`, `ba308c1`, `c022b63`, `9fc2841`, `839a08a`
 
 **TODO (next session):**
-- [ ] Update API_REFERENCE.md with Customer, Ledger, Company, FY endpoints
-- [ ] Year closing logic (validate → snapshot → carry forward → create new FY)
-- [ ] FY filter dropdown on all list pages
-- [ ] Counter prefix migration (ORD-0001 → ORD-2627-0001)
-- [ ] Auto-tag fy_id on transaction creation
-- [ ] Deploy Phase 2-4 to production (migration + restart)
+- [x] Update API_REFERENCE.md ✅ S75
+- [x] Counter prefix migration ❌ Not needed (client confirmed)
+- [ ] Year closing logic → moved to S76+
+- [ ] Auto-tag fy_id → moved to S76+
+- [ ] FY filter dropdown → moved to S76+
+- [ ] Deploy Phase 2-4 to production → moved to S76+
 
 ---
 
@@ -601,6 +633,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S75 | Party Detail UI + API Docs | Full-page detail overlay (3-col cards, KPI strip, gradient header), API_REFERENCE.md updated (§18 Customers, §19 Ledger, §20 Company/FY, enriched Suppliers/VA/SKU/Orders). Counter prefix dropped (client: not needed) |
 | S74 | MASTERS_AND_FY_PLAN COMPLETE | 1b: GST→state, TDS/TCS dropdowns, modal UX. 1c: customer picker+Shift+M. P2: Ledger (28th model, auto-entries, LedgerPanel, payments). P3: SKU enrichment (5 cols). P4: Company (29th)+FY (30th), fy_id FK on 5 tables, SettingsPage |
 | S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
 | S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
