@@ -41,12 +41,22 @@ class SKUCreate(BaseModel):
     size: str
     description: str | None = None
     base_price: Decimal | None = None
+    hsn_code: str | None = None
+    gst_percent: Decimal | None = None
+    mrp: Decimal | None = None
+    sale_rate: Decimal | None = None
+    unit: str | None = None
 
 
 class SKUUpdate(BaseModel):
     product_name: str | None = None
     description: str | None = None
     base_price: Decimal | None = None
+    hsn_code: str | None = None
+    gst_percent: Decimal | None = None
+    mrp: Decimal | None = None
+    sale_rate: Decimal | None = None
+    unit: str | None = None
     is_active: bool | None = None
 
 
@@ -63,5 +73,10 @@ class SKUResponse(BaseSchema):
     size: str
     description: str | None = None
     base_price: Decimal | None = None
+    hsn_code: str | None = None
+    gst_percent: Decimal | None = None
+    mrp: Decimal | None = None
+    sale_rate: Decimal | None = None
+    unit: str | None = None
     is_active: bool
     stock: StockBrief | None = None

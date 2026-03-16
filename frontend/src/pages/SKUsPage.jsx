@@ -140,6 +140,11 @@ export default function SKUsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [editPrice, setEditPrice] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  const [editHsn, setEditHsn] = useState('')
+  const [editGst, setEditGst] = useState('')
+  const [editMrp, setEditMrp] = useState('')
+  const [editSaleRate, setEditSaleRate] = useState('')
+  const [editUnit, setEditUnit] = useState('')
   const [savingDetail, setSavingDetail] = useState(false)
   const [detailError, setDetailError] = useState(null)
 
@@ -192,6 +197,11 @@ export default function SKUsPage() {
       setDetailSKU(sku)
       setEditPrice(sku.base_price ?? '')
       setEditDesc(sku.description || '')
+      setEditHsn(sku.hsn_code || '')
+      setEditGst(sku.gst_percent ?? '')
+      setEditMrp(sku.mrp ?? '')
+      setEditSaleRate(sku.sale_rate ?? '')
+      setEditUnit(sku.unit || '')
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load SKU details')
     } finally {
@@ -222,6 +232,11 @@ export default function SKUsPage() {
       const payload = {
         base_price: editPrice !== '' ? parseFloat(editPrice) : null,
         description: editDesc || null,
+        hsn_code: editHsn || null,
+        gst_percent: editGst !== '' ? parseFloat(editGst) : null,
+        mrp: editMrp !== '' ? parseFloat(editMrp) : null,
+        sale_rate: editSaleRate !== '' ? parseFloat(editSaleRate) : null,
+        unit: editUnit || null,
       }
       const res = await updateSKU(detailSKU.id, payload)
       const updated = res.data.data || res.data
@@ -247,6 +262,11 @@ export default function SKUsPage() {
     const batches = detailSKU.source_batches || []
     const hasChanged = (editPrice !== '' ? parseFloat(editPrice) : null) !== (detailSKU.base_price || null)
       || (editDesc || '') !== (detailSKU.description || '')
+      || (editHsn || '') !== (detailSKU.hsn_code || '')
+      || (editGst !== '' ? parseFloat(editGst) : null) !== (detailSKU.gst_percent || null)
+      || (editMrp !== '' ? parseFloat(editMrp) : null) !== (detailSKU.mrp || null)
+      || (editSaleRate !== '' ? parseFloat(editSaleRate) : null) !== (detailSKU.sale_rate || null)
+      || (editUnit || '') !== (detailSKU.unit || '')
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
@@ -298,7 +318,7 @@ export default function SKUsPage() {
           {/* Price + Description Editors */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Pricing & Description</h3>
+              <h3 className="text-sm font-semibold text-gray-700">Pricing, Tax & Details</h3>
               {hasChanged && (
                 <button onClick={handleSaveDetail} disabled={savingDetail}
                   className="rounded-lg bg-primary-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors">
@@ -306,7 +326,7 @@ export default function SKUsPage() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Base Price (₹)</label>
                 <div className="relative">
@@ -317,6 +337,46 @@ export default function SKUsPage() {
                 </div>
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">MRP (₹)</label>
+                <input type="number" value={editMrp} onChange={e => setEditMrp(e.target.value)}
+                  placeholder="0.00" min="0" step="0.01"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Sale Rate (₹)</label>
+                <input type="number" value={editSaleRate} onChange={e => setEditSaleRate(e.target.value)}
+                  placeholder="0.00" min="0" step="0.01"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
+                <select value={editUnit} onChange={e => setEditUnit(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                  <option value="">Select</option>
+                  <option value="pcs">Pieces</option>
+                  <option value="meters">Meters</option>
+                  <option value="kg">Kg</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">HSN Code</label>
+                <input type="text" value={editHsn} onChange={e => setEditHsn(e.target.value)}
+                  placeholder="e.g. 6206" maxLength={8}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">GST %</label>
+                <select value={editGst} onChange={e => setEditGst(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                  <option value="">Select</option>
+                  <option value="0">0%</option>
+                  <option value="5">5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
                 <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
                   placeholder="Product description..."
