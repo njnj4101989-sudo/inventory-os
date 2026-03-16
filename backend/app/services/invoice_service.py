@@ -118,6 +118,24 @@ class InvoiceService:
             self.db.add(inv_item)
         await self.db.flush()
 
+        # Auto-create ledger entry for customer invoice
+        if order.customer_id and total_amount > 0:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=invoice.issued_at.date() if invoice.issued_at else datetime.now(timezone.utc).date(),
+                party_type="customer",
+                party_id=order.customer_id,
+                entry_type="invoice",
+                reference_type="invoice",
+                reference_id=invoice.id,
+                debit=total_amount,
+                credit=0,
+                description=f"Invoice {invoice_number} — ₹{total_amount:,.2f}",
+            ))
+            await self.db.flush()
+
         return await self.get_invoice(invoice.id)
 
     async def mark_paid(self, invoice_id: UUID) -> dict:

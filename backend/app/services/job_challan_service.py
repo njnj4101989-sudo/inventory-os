@@ -1,7 +1,7 @@
 """Job Challan service — create challan + bulk send/receive rolls, list, get by id."""
 
 import math
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import is_postgresql
 from app.models.job_challan import JobChallan
+from app.models.ledger_entry import LedgerEntry
 from app.models.roll import Roll, RollProcessing
 from app.models.va_party import VAParty
 from app.schemas.job_challan import (
@@ -366,7 +367,43 @@ class JobChallanService:
 
         await self.db.flush()
 
-        # 7. SSE event
+        # 7. Auto-create ledger entry for VA party (only when cost is known)
+        total_cost = sum(
+            float(log.processing_cost or 0)
+            for log in challan.processing_logs
+            if log.status == "received" and log.processing_cost
+        )
+        if total_cost > 0 and challan.va_party_id:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger_svc = LedgerService(self.db)
+            # Check if entry already exists for this challan (partial receives)
+            existing = (await self.db.execute(
+                select(LedgerEntry).where(
+                    LedgerEntry.reference_type == "job_challan",
+                    LedgerEntry.reference_id == challan.id,
+                )
+            )).scalar_one_or_none()
+            va_name_str = challan.va_party.name if challan.va_party else "VA"
+            if existing:
+                existing.credit = total_cost
+                existing.description = f"{challan.challan_no} {va_name_str} — {received_count} rolls, ₹{total_cost:,.2f}"
+            else:
+                await ledger_svc.create_entry(LedgerEntryCreate(
+                    entry_date=req.received_date or date.today(),
+                    party_type="va_party",
+                    party_id=challan.va_party_id,
+                    entry_type="challan",
+                    reference_type="job_challan",
+                    reference_id=challan.id,
+                    debit=0,
+                    credit=total_cost,
+                    description=f"{challan.challan_no} {va_name_str} — {received_count} rolls, ₹{total_cost:,.2f}",
+                    created_by=received_by,
+                ))
+            await self.db.flush()
+
+        # 8. SSE event
         from app.core.event_bus import event_bus
         va_name = challan.value_addition.name if challan.value_addition else "Processing"
         vendor = challan.va_party.name if challan.va_party else "—"
@@ -377,7 +414,7 @@ class JobChallanService:
             "type": "roll",
         }, str(received_by))
 
-        # 8. Return full challan response
+        # 9. Return full challan response
         return await self.get_challan(challan_id)
 
     async def _get_challan_response(self, challan_id: UUID, rolls: list[Roll], weight_sent_map: dict | None = None) -> dict:

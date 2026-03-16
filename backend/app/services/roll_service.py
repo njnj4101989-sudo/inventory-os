@@ -355,6 +355,32 @@ class RollService:
 
         await self.db.flush()
 
+        # Auto-create ledger entry for supplier invoice
+        subtotal = sum(
+            float(r.total_weight or 0) * float(r.cost_per_unit or 0)
+            for r in created_rolls
+        )
+        if subtotal > 0:
+            gst_pct = float(req.gst_percent or 0)
+            gst_amt = round(subtotal * gst_pct / 100, 2)
+            total = round(subtotal + gst_amt, 2)
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=req.supplier_invoice_date or now.date(),
+                party_type="supplier",
+                party_id=req.supplier_id,
+                entry_type="invoice",
+                reference_type="supplier_invoice",
+                reference_id=supplier_inv.id,
+                debit=0,
+                credit=total,
+                description=f"Stock-in {req.supplier_invoice_no or 'N/A'} — {len(created_rolls)} rolls, ₹{total:,.2f}",
+                created_by=received_by,
+            ))
+            await self.db.flush()
+
         # Reload all with relationships
         roll_ids = [r.id for r in created_rolls]
         stmt = (

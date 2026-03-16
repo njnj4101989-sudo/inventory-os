@@ -26,6 +26,7 @@ from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.customer import Customer
+from app.models.ledger_entry import LedgerEntry
 
 __all__ = [
     "Role",
@@ -56,4 +57,5 @@ __all__ = [
     "BatchChallan",
     "BatchProcessing",
     "Customer",
+    "LedgerEntry",
 ]

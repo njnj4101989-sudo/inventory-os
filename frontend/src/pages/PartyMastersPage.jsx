@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getSuppliers, createSupplier, updateSupplier } from '../api/suppliers'
 import { getVAParties, createVAParty, updateVAParty } from '../api/masters'
 import { getCustomers, createCustomer, updateCustomer } from '../api/customers'
+import { getAllBalances } from '../api/ledger'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import SearchInput from '../components/common/SearchInput'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
+import LedgerPanel from '../components/common/LedgerPanel'
 
 // ── Constants ────────────────────────────────────────────
 
@@ -258,9 +260,31 @@ export default function PartyMastersPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [balances, setBalances] = useState({}) // { party_id: { balance, balance_type } }
+  const [ledgerOpen, setLedgerOpen] = useState(false)
 
   const labels = TAB_LABELS[tab]
-  const columns = COLUMNS_MAP[tab]
+  const baseColumns = COLUMNS_MAP[tab]
+
+  // Append balance column dynamically (needs access to balances state)
+  const columns = useMemo(() => [
+    ...baseColumns,
+    {
+      key: '_balance', label: 'Balance',
+      render: (_, row) => {
+        const b = balances[row.id]
+        if (!b || b.balance === 0) return <span className="text-gray-300">—</span>
+        return (
+          <span className={`text-xs font-semibold ${b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
+            ₹{Number(b.balance).toLocaleString('en-IN')} {b.balance_type.toUpperCase()}
+          </span>
+        )
+      },
+    },
+  ], [baseColumns, balances])
+
+  // Map tab key to party_type for ledger
+  const partyTypeMap = { suppliers: 'supplier', va_parties: 'va_party', customers: 'customer' }
 
   // ── Ctrl+S to save ────────────────────────────────────
   const handleSaveRef = useRef(null)
@@ -318,6 +342,19 @@ export default function PartyMastersPage() {
   }, [tab, page, search, labels.plural])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Fetch balances for current tab
+  useEffect(() => {
+    const pt = partyTypeMap[tab]
+    if (!pt) return
+    getAllBalances(pt).then((res) => {
+      const map = {}
+      for (const b of res.data.data || []) {
+        map[b.party_id] = b
+      }
+      setBalances(map)
+    }).catch(() => setBalances({}))
+  }, [tab, items])
 
   // ── Tab Switch ─────────────────────────────────────────
 
@@ -585,6 +622,9 @@ export default function PartyMastersPage() {
               {selected?.is_active ? 'Deactivate' : 'Activate'}
             </button>
             <div className="flex gap-2">
+              <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded-lg border border-primary-300 px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50">
+                View Ledger
+              </button>
               <button onClick={() => setDetailOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
                 Close
               </button>
@@ -807,6 +847,14 @@ export default function PartyMastersPage() {
           </div>
         </div>
       </Modal>
+
+      <LedgerPanel
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        partyType={partyTypeMap[tab]}
+        partyId={selected?.id}
+        partyName={selected?.name}
+      />
     </div>
   )
 }

@@ -189,6 +189,38 @@ class BatchChallanService:
 
         await self.db.flush()
 
+        # Auto-create ledger entry for VA party (batch challan receive)
+        if total_cost > 0 and challan.va_party_id:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            from app.models.ledger_entry import LedgerEntry
+            ledger_svc = LedgerService(self.db)
+            existing = (await self.db.execute(
+                select(LedgerEntry).where(
+                    LedgerEntry.reference_type == "batch_challan",
+                    LedgerEntry.reference_id == challan.id,
+                )
+            )).scalar_one_or_none()
+            va_name = challan.va_party.name if challan.va_party else "VA"
+            pieces = sum((bp.pieces_received or 0) for bp in challan.batch_items)
+            if existing:
+                existing.credit = total_cost
+                existing.description = f"{challan.challan_no} {va_name} — {pieces} pcs, ₹{total_cost:,.2f}"
+            else:
+                await ledger_svc.create_entry(LedgerEntryCreate(
+                    entry_date=challan.received_date or datetime.now(timezone.utc).date(),
+                    party_type="va_party",
+                    party_id=challan.va_party_id,
+                    entry_type="challan",
+                    reference_type="batch_challan",
+                    reference_id=challan.id,
+                    debit=0,
+                    credit=total_cost,
+                    description=f"{challan.challan_no} {va_name} — {pieces} pcs, ₹{total_cost:,.2f}",
+                    created_by=received_by,
+                ))
+            await self.db.flush()
+
         from app.core.event_bus import event_bus
         await event_bus.emit("va_received", {
             "challan_no": challan.challan_no,
