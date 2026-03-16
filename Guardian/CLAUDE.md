@@ -18,6 +18,7 @@
 | `guardian.md` | Protocols, rules, coding standards | Before any coding |
 | `API_REFERENCE.md` | **THE** source of truth for API shapes | Before any frontend↔backend work |
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) | Before any masters/FY work |
+| `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |
@@ -54,11 +55,18 @@
 
 **Commits:** `556a23d`, `b03e6bb`, `ecdb1f0`, `520ab0f`, `a96e5af` | All pushed
 
-**TODO (next session):**
-- [ ] Year closing logic (validate → snapshot → carry forward → create new FY → reset counters to 1)
-- [ ] Auto-tag fy_id on transaction creation
-- [ ] FY filter dropdown on all list pages
-- [ ] Deploy Phase 2-4 to production (migration + restart)
+**Decisions:**
+- Schema-per-company for multi-tenancy (not `company_id` column, not separate DB)
+- FY-at-login (not per-page filter) — `fy_id` + `company_schema` in JWT
+- Drop SQLite dev — Docker PostgreSQL locally
+- Counter prefix NOT needed — codes reset to 1 on new FY via `fy_id` filter in code generators
+
+**TODO (next session — S76):**
+- [ ] Phase 1: Docker PG, schema-aware DB layer, drop SQLite
+- [ ] Phase 1: Company model → public schema, UserCompany junction, schema provisioning
+- [ ] Phase 2: JWT with company_id/company_schema/fy_id, middleware search_path injection
+- [ ] Phase 2: Login flow — company picker + FY selector
+- [ ] See `MULTI_COMPANY_PLAN.md` for full 4-phase breakdown (S76-S79)
 
 ---
 
