@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
-> **Generated from:** `frontend/src/api/mock.js` + all 13 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-12 (Session 69 — SupplierInvoice model + GST)
+> **Generated from:** `frontend/src/api/mock.js` + all 17 API modules
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-16 (Session 75 — Customers, Ledger, Company, FY, enriched Suppliers/VA Parties/SKUs/Orders)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -148,26 +148,41 @@ Paginated endpoints return:
   "name": "Krishna Textiles",
   "contact_person": "Krishna Sharma",
   "phone": "9876543210",
+  "phone_alt": "9876543211",
   "email": "krishna@krishnatextiles.com",
   "gst_no": "24AABCK1234F1Z5",
+  "gst_type": "regular",
+  "state_code": "24",
   "pan_no": "AABCK1234F",
+  "aadhar_no": null,
   "address": "45, Ring Road, Textile Market",
   "city": "Surat",
   "state": "Gujarat",
   "pin_code": "395002",
   "broker": "Ramesh Broker",
   "hsn_code": "5208",
+  "due_days": 30,
+  "credit_limit": 500000.00,
+  "opening_balance": 0.00,
+  "balance_type": "debit",
+  "tds_applicable": false,
+  "tds_rate": null,
+  "tds_section": null,
+  "msme_type": "small",
+  "msme_reg_no": "UDYAM-GJ-01-0012345",
+  "notes": null,
   "is_active": true,
   "created_at": "2026-02-07T08:00:00Z"
 }
 ```
+**S73 enrichment:** +14 fields (phone_alt, gst_type, state_code, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
 
 ### POST `/suppliers`
-**Request:** `{ name, contact_person, phone, email?, city?, state?, pin_code?, gst_no?, pan_no?, broker?, hsn_code? }`
+**Request:** `{ name (required), contact_person?, phone?, phone_alt?, email?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, broker?, hsn_code?, due_days?, credit_limit?, opening_balance?, balance_type?, tds_applicable?, tds_rate?, tds_section?, msme_type?, msme_reg_no?, notes? }`
 **Response:** Single supplier object
 
 ### PATCH `/suppliers/{id}`
-**Request:** `{ name?, contact_person?, phone?, email?, city?, state?, pin_code?, gst_no?, pan_no?, broker?, hsn_code? }`
+**Request:** All fields optional + `is_active?`
 **Response:** Updated supplier object
 
 ---
@@ -481,6 +496,11 @@ Same as `GET /rolls` with status filter pre-applied.
   "size": "M",
   "description": "Cotton red blouse, regular fit",
   "base_price": 450.0,
+  "hsn_code": "6206",
+  "gst_percent": 12.0,
+  "mrp": 799.0,
+  "sale_rate": 650.0,
+  "unit": "pcs",
   "is_active": true,
   "stock": {
     "total_qty": 150,
@@ -489,6 +509,7 @@ Same as `GET /rolls` with status filter pre-applied.
   }
 }
 ```
+**S74 enrichment:** +5 fields (hsn_code, gst_percent, mrp, sale_rate, unit) — all nullable.
 **IMPORTANT:** `stock` is a nested object with 3 fields. Backend must JOIN with `InventoryState` to produce this.
 
 **S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{design_no}-{color}-{size}+{VA1}+{VA2}...`, and fires `ready_stock_in` inventory event per color.
@@ -535,7 +556,7 @@ Same as `GET /rolls` with status filter pre-applied.
 **Note:** Manual creation is secondary — auto-generated from batch packing is the primary flow.
 
 ### PATCH `/skus/{id}`
-**Request:** `{ product_name?, base_price?, description?, is_active? }`
+**Request:** `{ product_name?, base_price?, description?, hsn_code?, gst_percent?, mrp?, sale_rate?, unit?, is_active? }`
 **Response:** Updated SKU object
 
 ---
@@ -887,6 +908,8 @@ When `sku` is present:
   "order_number": "ORD-0001",
   "source": "web",
   "external_order_ref": null,
+  "customer_id": "uuid | null",
+  "customer": { "id": "uuid", "name": "Priya Sharma", "phone": "9876543210", "gst_no": null },
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
@@ -922,6 +945,7 @@ When `sku` is present:
 ```json
 {
   "source": "web",
+  "customer_id": "uuid (optional — links to Customer master)",
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
@@ -1391,10 +1415,9 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
 
 ---
 
-## 15b. VA Parties (`/api/v1/masters/va-parties`) — NEW S69
+## 15b. VA Parties (`/api/v1/masters/va-parties`) — S69, enriched S73
 
 > Value Addition party/vendor master. Stores external processors (embroidery houses, dye works, etc.)
-> Future: GST portal integration via `gst_no` + `hsn_code`
 
 ### GET `/masters/va-parties`
 **Response:** Array of:
@@ -1402,23 +1425,45 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
 {
   "id": "uuid",
   "name": "Pasupatti Trendz",
+  "contact_person": "Rajesh Patel",
   "phone": "9876543210",
+  "phone_alt": null,
+  "email": null,
+  "address": "Diamond Industrial Estate",
   "city": "Surat",
+  "state": "Gujarat",
+  "pin_code": "395004",
   "gst_no": "24AABCT1332L1ZH",
+  "gst_type": "regular",
+  "state_code": "24",
+  "pan_no": "AABCT1332L",
+  "aadhar_no": null,
   "hsn_code": "5407",
-  "is_active": true
+  "due_days": 15,
+  "credit_limit": null,
+  "opening_balance": null,
+  "balance_type": null,
+  "tds_applicable": true,
+  "tds_rate": 1.0,
+  "tds_section": "194C",
+  "msme_type": "micro",
+  "msme_reg_no": "UDYAM-GJ-02-0054321",
+  "notes": null,
+  "is_active": true,
+  "created_at": "2026-03-12T10:00:00Z"
 }
 ```
+**S73 enrichment:** +19 fields (contact_person, phone_alt, email, address, state, pin_code, gst_type, state_code, pan_no, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
 
 ### GET `/masters/va-parties/all`
 **Response:** Array (active only, for dropdowns)
 
 ### POST `/masters/va-parties`
-**Request:** `{ name, phone?, city?, gst_no?, hsn_code? }`
+**Request:** `{ name (required), contact_person?, phone?, phone_alt?, email?, address?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, hsn_code?, due_days?, credit_limit?, opening_balance?, balance_type?, tds_applicable?, tds_rate?, tds_section?, msme_type?, msme_reg_no?, notes? }`
 **Response:** Created VA Party
 
 ### PATCH `/masters/va-parties/{id}`
-**Request:** `{ name?, phone?, city?, gst_no?, hsn_code?, is_active? }`
+**Request:** All fields optional + `is_active?`
 **Response:** Updated VA Party
 
 ---
@@ -1636,6 +1681,209 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 
 ---
 
+## 18. Customers (`/api/v1/customers`) — NEW S73
+
+### GET `/customers`
+**Auth:** `supplier_manage` permission
+**Query:** `is_active`, `search`, `page`, `page_size`
+**Response:** Paginated array of:
+```json
+{
+  "id": "uuid",
+  "name": "Fashion Hub",
+  "short_name": "FH",
+  "contact_person": "Priya Sharma",
+  "phone": "9876543210",
+  "phone_alt": null,
+  "email": "priya@fashionhub.com",
+  "address": "12, Ring Road, Textile Market",
+  "city": "Surat",
+  "state": "Gujarat",
+  "pin_code": "395003",
+  "gst_no": "24AABCF5678K1Z2",
+  "gst_type": "regular",
+  "state_code": "24",
+  "pan_no": "AABCF5678K",
+  "aadhar_no": null,
+  "due_days": 45,
+  "credit_limit": 1000000.00,
+  "opening_balance": 0.00,
+  "balance_type": "credit",
+  "tds_applicable": false,
+  "tds_rate": null,
+  "tds_section": null,
+  "tcs_applicable": true,
+  "tcs_rate": 0.1,
+  "tcs_section": "206C(1H)",
+  "broker": "Narendra Singh",
+  "notes": null,
+  "is_active": true,
+  "created_at": "2026-03-16T10:00:00Z"
+}
+```
+
+### GET `/customers/all`
+**Auth:** `supplier_manage` permission
+**Response:** Array of `CustomerBrief` (active only, for dropdowns):
+```json
+{ "id": "uuid", "name": "Fashion Hub", "phone": "9876543210", "city": "Surat", "gst_no": "24AABCF5678K1Z2" }
+```
+
+### GET `/customers/{customer_id}`
+**Response:** Single customer object (same shape as list)
+
+### POST `/customers`
+**Request:** `{ name (required), short_name?, contact_person?, phone?, phone_alt?, email?, address?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, due_days?, credit_limit?, opening_balance?, balance_type?, tds_applicable?, tds_rate?, tds_section?, tcs_applicable?, tcs_rate?, tcs_section?, broker?, notes? }`
+**Response:** Single customer object
+
+### PATCH `/customers/{customer_id}`
+**Request:** All fields optional + `is_active?`
+**Response:** Updated customer object
+
+---
+
+## 19. Ledger (`/api/v1/ledger`) — NEW S74
+
+> Tracks financial entries (debits/credits) per party. Auto-entries created by stock-in (supplier), invoice (customer), JC/BC receive (VA party). Manual payments via POST.
+
+### GET `/ledger`
+**Auth:** `supplier_manage` permission
+**Query:** `party_type` (required: `supplier`|`customer`|`va_party`), `party_id` (required: UUID), `entry_type?`, `date_from?`, `date_to?`, `page`, `page_size`
+**Response:** Paginated array of:
+```json
+{
+  "id": "uuid",
+  "entry_date": "2026-03-16",
+  "party_type": "supplier",
+  "party_id": "uuid",
+  "entry_type": "stock_in",
+  "reference_type": "supplier_invoice",
+  "reference_id": "uuid",
+  "debit": 11100.00,
+  "credit": 0.00,
+  "tds_amount": null,
+  "tds_section": null,
+  "tcs_amount": null,
+  "net_amount": 11100.00,
+  "description": "Stock-in: 5 rolls, Invoice KT-2026-0451",
+  "fy_id": "uuid | null",
+  "created_by": "uuid | null",
+  "notes": null,
+  "created_at": "2026-03-16T10:00:00Z"
+}
+```
+
+### GET `/ledger/balance`
+**Auth:** `supplier_manage` permission
+**Query:** `party_type` (required), `party_id` (required)
+**Response:**
+```json
+{
+  "party_type": "supplier",
+  "party_id": "uuid",
+  "party_name": "Krishna Textiles",
+  "total_debit": 55000.00,
+  "total_credit": 30000.00,
+  "balance": 25000.00,
+  "balance_type": "dr"
+}
+```
+
+### GET `/ledger/balances`
+**Auth:** `supplier_manage` permission
+**Query:** `party_type` (required: `supplier`|`customer`|`va_party`)
+**Response:** Array of `PartyBalanceResponse` (same shape as above, one per party)
+
+### POST `/ledger/payment`
+**Auth:** `supplier_manage` permission
+**Request:**
+```json
+{
+  "party_type": "supplier",
+  "party_id": "uuid",
+  "amount": 25000.00,
+  "payment_date": "2026-03-16",
+  "payment_mode": "neft",
+  "reference_no": "UTR123456789",
+  "tds_applicable": true,
+  "tds_rate": 1.0,
+  "tds_section": "194C",
+  "tcs_applicable": false,
+  "tcs_rate": null,
+  "tcs_section": null,
+  "notes": "March payment"
+}
+```
+**Response:** Created ledger entry object
+**Auto-entry wiring (S74):** Stock-in → supplier debit, Invoice → customer debit, JC/BC receive → VA party debit
+
+---
+
+## 20. Company & Financial Years (`/api/v1`) — NEW S74
+
+### GET `/company`
+**Auth:** `supplier_manage` permission
+**Response:**
+```json
+{
+  "id": "uuid",
+  "name": "Dr's Blouse",
+  "address": "45, Ring Road",
+  "city": "Surat",
+  "state": "Gujarat",
+  "pin_code": "395002",
+  "gst_no": "24AABCD1234F1Z5",
+  "state_code": "24",
+  "pan_no": "AABCD1234F",
+  "phone": "9876543210",
+  "email": "info@drsblouse.com",
+  "logo_url": null,
+  "bank_name": "HDFC Bank",
+  "bank_account": "50200012345678",
+  "bank_ifsc": "HDFC0001234",
+  "bank_branch": "Ring Road, Surat"
+}
+```
+
+### PATCH `/company`
+**Auth:** `supplier_manage` permission
+**Request:** All fields optional: `{ name?, address?, city?, state?, pin_code?, gst_no?, state_code?, pan_no?, phone?, email?, logo_url?, bank_name?, bank_account?, bank_ifsc?, bank_branch? }`
+**Response:** Updated company object
+
+### GET `/financial-years`
+**Auth:** `supplier_manage` permission
+**Response:** Array of:
+```json
+{
+  "id": "uuid",
+  "code": "FY2026-27",
+  "start_date": "2026-04-01",
+  "end_date": "2027-03-31",
+  "status": "open",
+  "is_current": true,
+  "closed_by": null,
+  "closed_at": null,
+  "created_at": "2026-03-16T10:00:00Z"
+}
+```
+
+### GET `/financial-years/current`
+**Response:** Single FY object (the one with `is_current = true`)
+
+### POST `/financial-years`
+**Auth:** `supplier_manage` permission
+**Request:** `{ code, start_date, end_date, is_current? (default false) }`
+**Response:** Created FY object
+
+### PATCH `/financial-years/{fy_id}`
+**Auth:** `supplier_manage` permission
+**Request:** `{ status? ("open"|"closed"), is_current? }`
+**Response:** Updated FY object
+
+**Note:** `fy_id` FK exists on rolls, orders, invoices, supplier_invoices, ledger_entries (all nullable). Auto-tagging and year closing logic planned for future session.
+
+---
+
 ## Appendix A: All Permission Keys
 
 ```
@@ -1658,6 +1906,8 @@ invoice_manage, report_view
 | Batch Challan | `sent`, `partially_received`, `received` |
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
+| Financial Year | `open`, `closed` |
+| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `va_receive`, `tds`, `tcs`, `adjustment` |
 
 ## Appendix C: Nested Object Patterns
 
@@ -1673,6 +1923,7 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `lot` | Batches | `{ id, lot_code, design_no, total_pieces, status }` |
 | `sku` | Batches, Inventory, Orders, Invoices | varies — see each section |
 | `order` | Invoices | `{ order_number, customer_name }` |
+| `customer` | Orders | `{ id, name, phone, gst_no }` |
 | `performed_by` | Inventory Events | `{ id, full_name }` |
 | `stock` | SKUs | `{ total_qty, available_qty, reserved_qty }` |
 | `period` | Inventory Movement | `{ from, to }` |
@@ -1681,3 +1932,4 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `value_addition` | RollProcessing, BatchProcessing, JobChallan, BatchChallan | `{ id, name, short_code }` |
 | `va_party` | RollProcessing, JobChallan, BatchChallan | `{ id, name, phone, city }` |
 | `batch` | BatchChallan items | `{ id, batch_code, size }` |
+| `color_obj` | Rolls, SKUs | `{ id, name, code, color_no }` |
