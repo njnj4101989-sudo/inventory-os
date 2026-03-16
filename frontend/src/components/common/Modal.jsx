@@ -30,7 +30,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
       {/* Dialog */}
       <div
         className={`relative z-10 w-full max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl ${
-          extraWide ? 'max-w-4xl' : wide ? 'max-w-2xl' : 'max-w-md'
+          extraWide ? 'max-w-6xl' : wide ? 'max-w-2xl' : 'max-w-md'
         }`}
       >
         {/* Header */}

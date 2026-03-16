@@ -623,7 +623,7 @@ export default function PartyMastersPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? `Edit ${labels.singular}` : `Add New ${labels.singular}`}
-        wide
+        extraWide
         actions={
           <>
             <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
@@ -637,170 +637,99 @@ export default function PartyMastersPage() {
       >
         {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
-        <div className="space-y-5">
-          {/* Section 1: Business Information */}
+        <div className="space-y-3">
+          {/* Row 1: Business Identity — 5 cols */}
           <div>
             <h3 className={SECTION_TITLE}>Business Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="name" label={`${labels.singular} Name`} required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="contact_person" label="Contact Person" placeholder="e.g. Krishna Sharma" form={form} set={set} fieldErrors={fieldErrors} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              {showShortName && (
-                <Field name="short_name" label="Short Name" placeholder="e.g. KT" form={form} set={set} fieldErrors={fieldErrors} />
-              )}
-              {showBroker && (
-                <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
-              )}
-            </div>
-          </div>
-
-          {/* Section 2: GST & Compliance */}
-          <div>
-            <h3 className={SECTION_TITLE}>GST & Compliance</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" hint="15-character GSTIN" maxLength={15} form={form} set={set} fieldErrors={fieldErrors} />
-              <SelectField
-                name="gst_type" label="GST Type"
-                options={GST_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
-                placeholder="Select GST Type"
-                form={form} set={set}
-              />
-              <Field name="pan_no" label="PAN No." placeholder="e.g. AABCK1234F" hint="10-character PAN" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-              <Field name="aadhar_no" label="Aadhar No." placeholder="e.g. 1234 5678 9012" hint="12-digit Aadhar" maxLength={14} form={form} set={set} fieldErrors={fieldErrors} />
-              {showHSN && (
-                <Field name="hsn_code" label="HSN Code" placeholder="e.g. 5208" hint="Harmonized System" maxLength={8} form={form} set={set} fieldErrors={fieldErrors} />
-              )}
-            </div>
-          </div>
-
-          {/* Section 3: Contact */}
-          <div>
-            <h3 className={SECTION_TITLE}>Contact Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field name="phone" label="Phone" type="tel" placeholder="e.g. 9876543210" hint="10-digit mobile" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="phone" label="Phone" type="tel" placeholder="e.g. 9876543210" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="phone_alt" label="Alt Phone" type="tel" placeholder="e.g. 9876543211" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="email" label="Email" type="email" placeholder="e.g. info@company.com" form={form} set={set} fieldErrors={fieldErrors} />
             </div>
           </div>
 
-          {/* Section 4: Address */}
+          {/* Row 2: GST & Compliance — 5 cols */}
+          <div>
+            <h3 className={SECTION_TITLE}>GST & Compliance</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} form={form} set={set} fieldErrors={fieldErrors} />
+              <SelectField name="gst_type" label="GST Type" options={GST_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
+              <Field name="pan_no" label="PAN No." placeholder="e.g. AABCK1234F" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="aadhar_no" label="Aadhar No." placeholder="e.g. 123456789012" maxLength={14} form={form} set={set} fieldErrors={fieldErrors} />
+              {showHSN ? (
+                <Field name="hsn_code" label="HSN Code" placeholder="e.g. 5208" maxLength={8} form={form} set={set} fieldErrors={fieldErrors} />
+              ) : showShortName ? (
+                <Field name="short_name" label="Short Name" placeholder="e.g. KT" form={form} set={set} fieldErrors={fieldErrors} />
+              ) : <div />}
+            </div>
+          </div>
+
+          {/* Row 3: Address — 5 cols */}
           <div>
             <h3 className={SECTION_TITLE}>Address</h3>
-            <div className="space-y-4">
-              <div>
-                <label className={LABEL}>Street Address</label>
-                <textarea
-                  value={form.address}
-                  onChange={(e) => set('address', e.target.value)}
-                  rows={2}
-                  placeholder="e.g. 45, Ring Road, Textile Market"
-                  className={INPUT}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
-                <SelectField name="state" label="State" options={INDIAN_STATES} placeholder="Select State" form={form} set={set} />
-                <Field name="pin_code" label="PIN Code" placeholder="e.g. 395002" hint="6-digit code" maxLength={6} form={form} set={set} fieldErrors={fieldErrors} />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
+              <SelectField name="state" label="State" options={INDIAN_STATES} placeholder="Select State" form={form} set={set} />
+              <Field name="pin_code" label="PIN Code" placeholder="e.g. 395002" maxLength={6} form={form} set={set} fieldErrors={fieldErrors} />
+              {showBroker ? (
+                <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
+              ) : <div />}
+              <div className="md:col-span-1">
+                <label className={LABEL}>Address</label>
+                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={1} placeholder="Street address" className={INPUT} />
               </div>
             </div>
           </div>
 
-          {/* Section 5: Credit & Payment */}
+          {/* Row 4: Credit + TDS/TCS — 5 cols */}
           <div>
-            <h3 className={SECTION_TITLE}>Credit & Payment</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <h3 className={SECTION_TITLE}>Credit & Payment / TDS {showTCS ? '/ TCS' : ''}</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="credit_limit" label="Credit Limit (Rs.)" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="opening_balance" label="Opening Balance (Rs.)" type="number" placeholder="e.g. 0" form={form} set={set} fieldErrors={fieldErrors} />
-              <SelectField
-                name="balance_type" label="Balance Type"
-                options={BALANCE_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
-                placeholder="Select Type"
-                form={form} set={set}
-              />
+              <Field name="credit_limit" label="Credit Limit" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
+              <Field name="opening_balance" label="Opn Balance" type="number" placeholder="e.g. 0" form={form} set={set} fieldErrors={fieldErrors} />
+              <SelectField name="balance_type" label="Bal Type" options={BALANCE_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
+              <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-4" />
             </div>
-          </div>
-
-          {/* Section 6: TDS/TCS (collapsible) */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setTdsOpen(!tdsOpen)}
-              className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
-            >
-              <svg className={`h-4 w-4 transition-transform ${tdsOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              TDS {showTCS ? '/ TCS' : ''}
-            </button>
-            {tdsOpen && (
-              <div className="mt-3 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                  <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-5" />
-                  {form.tds_applicable && (
-                    <>
-                      <Field name="tds_rate" label="TDS Rate (%)" type="number" placeholder="e.g. 1" form={form} set={set} fieldErrors={fieldErrors} />
-                      <Field name="tds_section" label="TDS Section" placeholder="e.g. 194C" form={form} set={set} fieldErrors={fieldErrors} />
-                    </>
-                  )}
-                </div>
+            {(form.tds_applicable || (showTCS && form.tcs_applicable)) && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2 items-end">
+                {form.tds_applicable && (
+                  <>
+                    <Field name="tds_rate" label="TDS Rate (%)" type="number" placeholder="e.g. 1" form={form} set={set} fieldErrors={fieldErrors} />
+                    <Field name="tds_section" label="TDS Section" placeholder="e.g. 194C" form={form} set={set} fieldErrors={fieldErrors} />
+                  </>
+                )}
                 {showTCS && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-5" />
+                  <>
+                    <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-4" />
                     {form.tcs_applicable && (
                       <>
                         <Field name="tcs_rate" label="TCS Rate (%)" type="number" placeholder="e.g. 0.1" form={form} set={set} fieldErrors={fieldErrors} />
                         <Field name="tcs_section" label="TCS Section" placeholder="e.g. 206C" form={form} set={set} fieldErrors={fieldErrors} />
                       </>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
             )}
           </div>
 
-          {/* Section 7: MSME (suppliers + va_parties only, collapsible) */}
-          {showMSME && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setMsmeOpen(!msmeOpen)}
-                className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
-              >
-                <svg className={`h-4 w-4 transition-transform ${msmeOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                MSME
-              </button>
-              {msmeOpen && (
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <SelectField
-                    name="msme_type" label="MSME Type"
-                    options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
-                    placeholder="Select MSME Type"
-                    form={form} set={set}
-                  />
-                  {form.msme_type && form.msme_type !== 'none' && (
-                    <Field name="msme_reg_no" label="MSME Reg. No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
-                  )}
-                </div>
-              )}
+          {/* Row 5: MSME + Notes — compact */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            {showMSME && (
+              <>
+                <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
+                {form.msme_type && form.msme_type !== 'none' && (
+                  <Field name="msme_reg_no" label="MSME Reg No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
+                )}
+              </>
+            )}
+            <div className={showMSME ? 'md:col-span-3' : 'md:col-span-5'}>
+              <label className={LABEL}>Notes</label>
+              <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className={INPUT} />
             </div>
-          )}
-
-          {/* Section 8: Notes */}
-          <div>
-            <h3 className={SECTION_TITLE}>Notes</h3>
-            <textarea
-              value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
-              rows={3}
-              placeholder="Any additional notes..."
-              className={INPUT}
-            />
           </div>
         </div>
       </Modal>
