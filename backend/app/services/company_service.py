@@ -33,13 +33,9 @@ class CompanyService:
     async def upsert_company(self, data: CompanyUpdate) -> Company:
         company = await self.get_company()
         if not company:
-            slug = slugify(data.name or "My Company")
-            company = Company(
-                name=data.name or "My Company",
-                slug=slug,
-                schema_name=f"co_{slug}",
+            raise ValidationError(
+                "No company exists yet. Please create one from Settings → Companies tab first."
             )
-            self.db.add(company)
 
         for k, v in data.model_dump(exclude_unset=True).items():
             if hasattr(company, k):
