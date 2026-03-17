@@ -318,7 +318,7 @@ export default function SKUsPage() {
           {/* Price + Description Editors */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Pricing, Tax & Details</h3>
+              <h3 className="typo-card-title">Pricing, Tax & Details</h3>
               {hasChanged && (
                 <button onClick={handleSaveDetail} disabled={savingDetail}
                   className="rounded-lg bg-primary-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors">
@@ -328,7 +328,7 @@ export default function SKUsPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Base Price (₹)</label>
+                <label className="typo-label-sm">Base Price (₹)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
                   <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)}
@@ -337,19 +337,19 @@ export default function SKUsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">MRP (₹)</label>
+                <label className="typo-label-sm">MRP (₹)</label>
                 <input type="number" value={editMrp} onChange={e => setEditMrp(e.target.value)}
                   placeholder="0.00" min="0" step="0.01"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Sale Rate (₹)</label>
+                <label className="typo-label-sm">Sale Rate (₹)</label>
                 <input type="number" value={editSaleRate} onChange={e => setEditSaleRate(e.target.value)}
                   placeholder="0.00" min="0" step="0.01"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
+                <label className="typo-label-sm">Unit</label>
                 <select value={editUnit} onChange={e => setEditUnit(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
                   <option value="">Select</option>
@@ -359,13 +359,13 @@ export default function SKUsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">HSN Code</label>
+                <label className="typo-label-sm">HSN Code</label>
                 <input type="text" value={editHsn} onChange={e => setEditHsn(e.target.value)}
                   placeholder="e.g. 6206" maxLength={8}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">GST %</label>
+                <label className="typo-label-sm">GST %</label>
                 <select value={editGst} onChange={e => setEditGst(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
                   <option value="">Select</option>
@@ -377,7 +377,7 @@ export default function SKUsPage() {
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
+                <label className="typo-label-sm">Description</label>
                 <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
                   placeholder="Product description..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
@@ -387,7 +387,7 @@ export default function SKUsPage() {
 
           {/* Source Batches */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            <h3 className="typo-card-title mb-3">
               Source Batches <span className="text-gray-400 font-normal">({batches.length})</span>
             </h3>
             {batches.length === 0 ? (
@@ -404,7 +404,7 @@ export default function SKUsPage() {
           {/* Color QC Breakdown (aggregate from all batches) */}
           {batches.some(b => b.color_qc) && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Per-Color QC Breakdown</h3>
+              <h3 className="typo-card-title mb-3">Per-Color QC Breakdown</h3>
               <ColorQCTable batches={batches} />
             </div>
           )}
@@ -418,8 +418,8 @@ export default function SKUsPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Finished Goods</h1>
-          <p className="mt-1 text-sm text-gray-500">SKUs are auto-generated when batches are packed</p>
+          <h1 className="typo-page-title">Finished Goods</h1>
+          <p className="mt-1 typo-caption">SKUs are auto-generated when batches are packed</p>
         </div>
         <button onClick={openCreate} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
           + Manual SKU
@@ -505,8 +505,8 @@ const KPI_COLORS = {
 function KPICard({ label, value, color }) {
   return (
     <div className={`rounded-lg border px-4 py-3 ${KPI_COLORS[color] || KPI_COLORS.blue}`}>
-      <div className="text-xl font-bold">{value}</div>
-      <div className="text-[11px] font-semibold uppercase tracking-wide">{label}</div>
+      <div className="typo-kpi-sm">{value}</div>
+      <div className="typo-kpi-label">{label}</div>
     </div>
   )
 }
@@ -524,9 +524,9 @@ function StockKPI({ label, value, color, icon }) {
     <div className={`rounded-lg border bg-white px-3 py-2.5 ${STOCK_KPI_COLORS[color] || STOCK_KPI_COLORS.gray}`}>
       <div className="flex items-center gap-1.5">
         {icon}
-        <span className="text-lg font-bold">{value}</span>
+        <span className="typo-kpi-sm">{value}</span>
       </div>
-      <div className="text-[11px] uppercase tracking-wide opacity-60 mt-0.5">{label}</div>
+      <div className="typo-kpi-label opacity-60 mt-0.5">{label}</div>
     </div>
   )
 }
@@ -621,7 +621,7 @@ function ColorQCTable({ batches }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-xs text-gray-500 uppercase">
+          <tr className="border-b border-gray-200 typo-th">
             <th className="text-left py-2 pr-3">Color</th>
             <th className="text-right py-2 px-3">Expected</th>
             <th className="text-right py-2 px-3">Approved</th>

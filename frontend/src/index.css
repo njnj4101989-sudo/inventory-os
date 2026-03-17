@@ -42,40 +42,130 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* ── Semantic typography classes (opt-in) ── */
+/* ── Global Typography System ──
+   ONE place to control ALL text styles across the app.
+   Change here → every page updates instantly.
+
+   Hierarchy:  page-title > section-title > card-title > body > caption
+   Data:       kpi-value > kpi-label | th > td | label > data
+   Controls:   btn-primary > btn-secondary | input | badge
+── */
 @layer components {
+
+  /* ── Page-level ── */
   .typo-page-title {
-    @apply text-xl font-bold tracking-tight;
+    @apply text-2xl font-bold tracking-tight text-gray-900;
   }
   .typo-section-title {
-    @apply text-sm font-semibold uppercase tracking-wider text-gray-500;
+    @apply text-lg font-semibold text-gray-800;
   }
+  .typo-card-title {
+    @apply text-sm font-semibold text-gray-700;
+  }
+
+  /* ── Table ── */
   .typo-th {
-    @apply text-xs font-semibold uppercase tracking-wider text-gray-600;
+    @apply text-xs font-semibold uppercase tracking-wider text-gray-500;
     font-variant-numeric: tabular-nums;
   }
   .typo-td {
-    @apply text-sm;
+    @apply text-sm font-medium text-gray-700;
     font-variant-numeric: tabular-nums;
   }
-  .typo-label {
-    @apply font-semibold uppercase tracking-wide text-gray-500;
-    font-size: 11px;
+  .typo-td-secondary {
+    @apply text-sm text-gray-500;
+    font-variant-numeric: tabular-nums;
   }
-  .typo-data {
-    @apply font-medium text-gray-700;
-    font-size: 13px;
-  }
+
+  /* ── KPI / Stats ── */
   .typo-kpi {
-    @apply text-2xl font-bold tracking-tight;
+    @apply text-2xl font-bold tracking-tight text-gray-900;
     font-variant-numeric: tabular-nums;
   }
-  .typo-badge {
-    @apply text-xs font-medium;
+  .typo-kpi-sm {
+    @apply text-xl font-bold tracking-tight;
+    font-variant-numeric: tabular-nums;
   }
+  .typo-kpi-label {
+    @apply text-xs font-medium uppercase tracking-wide text-gray-500;
+  }
+
+  /* ── Form ── */
+  .typo-label {
+    @apply block text-sm font-semibold text-gray-700 mb-1;
+  }
+  .typo-label-sm {
+    @apply block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-0.5;
+  }
+  .typo-input {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800
+           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+  }
+  .typo-input-sm {
+    @apply w-full rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-800
+           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+  }
+  .typo-required {
+    @apply text-red-500 ml-0.5;
+  }
+
+  /* ── Data display (detail panels, passport, cards) ── */
+  .typo-data {
+    @apply text-sm font-semibold text-gray-800;
+  }
+  .typo-data-label {
+    @apply text-xs font-medium text-gray-500;
+  }
+
+  /* ── Body / Description ── */
+  .typo-body {
+    @apply text-sm font-medium text-gray-700;
+  }
+  .typo-caption {
+    @apply text-xs text-gray-500;
+  }
+  .typo-empty {
+    @apply text-sm font-medium text-gray-400;
+  }
+
+  /* ── Badge ── */
+  .typo-badge {
+    @apply text-xs font-semibold;
+  }
+
+  /* ── Button text ── */
+  .typo-btn {
+    @apply text-sm font-semibold;
+  }
+  .typo-btn-sm {
+    @apply text-xs font-semibold;
+  }
+
+  /* ── Navigation ── */
+  .typo-nav {
+    @apply text-sm font-medium;
+  }
+  .typo-nav-section {
+    @apply text-xs font-semibold uppercase tracking-wider text-gray-400;
+  }
+
+  /* ── Modal ── */
+  .typo-modal-title {
+    @apply text-lg font-bold text-gray-900;
+  }
+
+  /* ── Code / Mono ── */
   .typo-code {
     font-family: var(--font-family-mono);
-    @apply text-sm;
+    @apply text-sm font-medium;
+  }
+
+  /* ── Tabs ── */
+  .typo-tab {
+    @apply text-sm font-semibold;
+  }
+  .typo-tab-active {
+    @apply text-sm font-bold;
   }
 }
 

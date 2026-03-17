@@ -24,7 +24,7 @@ export default function BottomNav({ role }) {
             key={tab.path}
             to={tab.path}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+              `flex flex-col items-center gap-0.5 px-3 py-1.5 typo-btn-sm transition-colors ${
                 isActive ? 'text-primary-600' : 'text-gray-400'
               }`
             }

@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import ErrorAlert from '../common/ErrorAlert'
 import { getAllProductTypes, getAllColors } from '../../api/masters'
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-
 export default function SKUForm({ form, onChange, editing = false, error = null, onDismissError }) {
   const [productTypes, setProductTypes] = useState([])
   const [colorsList, setColorsList] = useState([])
@@ -27,20 +25,20 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
       {/* SKU code preview */}
       {preview && (
         <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5 flex items-center gap-2">
-          <span className="text-xs text-gray-400 uppercase tracking-wide">SKU Code:</span>
-          <span className="font-mono font-semibold text-primary-700">{preview}</span>
+          <span className="typo-data-label uppercase tracking-wide">SKU Code:</span>
+          <span className="typo-data font-mono text-primary-700">{preview}</span>
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+        <label className="typo-label">Product Name</label>
         <input type="text" value={form.product_name} onChange={(e) => set('product_name', e.target.value)}
-          placeholder="e.g. White Cotton Blouse" className={INPUT} />
+          placeholder="e.g. White Cotton Blouse" className="typo-input" />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
-          <select value={form.product_type} onChange={(e) => set('product_type', e.target.value)} className={INPUT}
+          <label className="typo-label">Product Type</label>
+          <select value={form.product_type} onChange={(e) => set('product_type', e.target.value)} className="typo-input"
             disabled={editing}>
             <option value="">Select type</option>
             {productTypes.map((t) => (
@@ -49,15 +47,15 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Design No.</label>
+          <label className="typo-label">Design No.</label>
           <input type="text" value={form.design_no} onChange={(e) => set('design_no', e.target.value)}
-            placeholder="e.g. 101" className={INPUT} disabled={editing} />
+            placeholder="e.g. 101" className="typo-input" disabled={editing} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-          <select value={form.color} onChange={(e) => set('color', e.target.value)} className={INPUT}
+          <label className="typo-label">Color</label>
+          <select value={form.color} onChange={(e) => set('color', e.target.value)} className="typo-input"
             disabled={editing}>
             <option value="">Select color</option>
             {colorsList.map((c) => (
@@ -66,8 +64,8 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-          <select value={form.size} onChange={(e) => set('size', e.target.value)} className={INPUT}
+          <label className="typo-label">Size</label>
+          <select value={form.size} onChange={(e) => set('size', e.target.value)} className="typo-input"
             disabled={editing}>
             <option value="">Select</option>
             <option value="XS">XS</option>
@@ -81,12 +79,12 @@ export default function SKUForm({ form, onChange, editing = false, error = null,
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Base Price (₹)</label>
-        <input type="number" step="0.01" value={form.base_price} onChange={(e) => set('base_price', e.target.value)} className={INPUT} />
+        <label className="typo-label">Base Price (₹)</label>
+        <input type="number" step="0.01" value={form.base_price} onChange={(e) => set('base_price', e.target.value)} className="typo-input" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={2} className={INPUT} />
+        <label className="typo-label">Description</label>
+        <textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={2} className="typo-input" />
       </div>
     </div>
   )

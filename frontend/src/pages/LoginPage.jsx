@@ -116,8 +116,8 @@ export default function LoginPage() {
               }
             }}
           >
-            <h2 className="mb-2 text-lg font-semibold text-gray-800">Choose Company</h2>
-            <p className="mb-6 text-sm text-gray-500">You have access to multiple companies</p>
+            <h2 className="mb-2 typo-section-title">Choose Company</h2>
+            <p className="mb-6 typo-body text-gray-500">You have access to multiple companies</p>
 
             {error && (
               <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -145,8 +145,8 @@ export default function LoginPage() {
                     {c.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-semibold text-gray-900">{c.name}</div>
-                    <div className="text-xs text-gray-500">{c.slug}</div>
+                    <div className="typo-data">{c.name}</div>
+                    <div className="typo-caption">{c.slug}</div>
                   </div>
                   {c.is_default && (
                     <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
@@ -165,7 +165,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !selectedCompanyId}
-              className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+              className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 typo-btn text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Loading...' : 'Continue'}
             </button>
@@ -185,7 +185,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-xl bg-white p-8 shadow-lg">
-          <h2 className="mb-6 text-lg font-semibold text-gray-800">Sign in</h2>
+          <h2 className="mb-6 typo-section-title">Sign in</h2>
 
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -193,7 +193,7 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="username" className="typo-label">
                 Username
               </label>
               <input
@@ -206,13 +206,13 @@ export default function LoginPage() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="typo-input focus:border-primary-500 focus:ring-primary-500"
                 placeholder="e.g. admin"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="typo-label">
                 Password
               </label>
               <div className="relative">
@@ -226,7 +226,7 @@ export default function LoginPage() {
                   autoCorrect="off"
                   autoComplete="current-password"
                   spellCheck={false}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="typo-input pr-10 focus:border-primary-500 focus:ring-primary-500"
                   placeholder="Enter password"
                 />
                 <button
@@ -263,7 +263,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 typo-btn text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

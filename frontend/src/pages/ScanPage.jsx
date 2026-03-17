@@ -296,7 +296,7 @@ export default function ScanPage() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           </div>
-          <span className="font-semibold text-gray-900 text-sm">{pageTitle}</span>
+          <span className="typo-data text-gray-900">{pageTitle}</span>
         </div>
         <div className="flex items-center gap-2">
           {batchPassport && (
@@ -336,7 +336,7 @@ export default function ScanPage() {
         {/* Error */}
         {!loading && error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-8">
-            <h3 className="font-semibold text-red-800 mb-1">Not Found</h3>
+            <h3 className="typo-data text-red-800 mb-1">Not Found</h3>
             <p className="text-red-600 text-sm">{error}</p>
             <button onClick={() => { setError(null); setShowScanner(true) }}
               className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
@@ -355,7 +355,7 @@ export default function ScanPage() {
               </svg>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Scan a QR Code</h3>
+              <h3 className="typo-data text-gray-900">Scan a QR Code</h3>
               <p className="text-gray-500 text-sm mt-1">Point your camera at the QR label on any roll or batch</p>
             </div>
             <button onClick={() => setShowScanner(true)}
@@ -372,7 +372,7 @@ export default function ScanPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg font-bold text-gray-900 font-mono">{batchPassport.batch_code}</h1>
+                  <h1 className="typo-section-title text-gray-900 font-mono">{batchPassport.batch_code}</h1>
                   {batchPassport.size && (
                     <div className="mt-2 inline-flex items-center gap-2 bg-emerald-50 border-2 border-emerald-200 rounded-xl px-4 py-2">
                       <span className="text-xs font-bold text-emerald-600 uppercase">Size</span>
@@ -412,7 +412,7 @@ export default function ScanPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
                 <div>
-                  <p className="text-sm font-semibold text-amber-800">Out-House — VA Pending</p>
+                  <p className="typo-data text-amber-800">Out-House -- VA Pending</p>
                   {(batchPassport.processing_logs || []).filter((l) => l.status === 'sent').map((log, i) => (
                     <p key={i} className="text-xs text-amber-600 mt-0.5">
                       {log.pieces_sent} pcs at {log.va_party?.name || 'vendor'} ({log.value_addition?.short_code})
@@ -433,7 +433,7 @@ export default function ScanPage() {
                         {log.value_addition && (
                           <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.value_addition.short_code}</span>
                         )}
-                        <span className="text-sm font-medium text-gray-900">{log.value_addition?.name || '—'}</span>
+                        <span className="typo-body text-gray-900">{log.value_addition?.name || '—'}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                           log.phase === 'post_qc' ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-500'
                         }`}>
@@ -475,7 +475,7 @@ export default function ScanPage() {
                     <div className="text-emerald-700 font-semibold">Batch claimed successfully!</div>
                   ) : isLoggedIn ? (
                     <button onClick={handleClaim} disabled={claiming}
-                      className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                      className="w-full py-3 bg-emerald-600 text-white rounded-xl typo-btn hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                       {claiming ? 'Claiming...' : 'Claim This Batch'}
                     </button>
                   ) : (
@@ -493,7 +493,7 @@ export default function ScanPage() {
               {perms.batch_start && batchPassport.status === 'assigned' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <button onClick={handleStartBatch} disabled={actionLoading}
-                    className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    className="w-full py-3 bg-blue-600 text-white rounded-xl typo-btn hover:bg-blue-700 disabled:opacity-50 transition-colors">
                     {actionLoading ? 'Starting...' : 'Start Work'}
                   </button>
                 </div>
@@ -503,7 +503,7 @@ export default function ScanPage() {
               {perms.batch_submit && batchPassport.status === 'in_progress' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <button onClick={handleSubmitBatch} disabled={actionLoading}
-                    className="w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                    className="w-full py-3 bg-purple-600 text-white rounded-xl typo-btn hover:bg-purple-700 disabled:opacity-50 transition-colors">
                     {actionLoading ? 'Submitting...' : 'Submit for QC'}
                   </button>
                 </div>
@@ -512,7 +512,7 @@ export default function ScanPage() {
               {/* QC Check (batch_check permission + submitted) */}
               {perms.batch_check && batchPassport.status === 'submitted' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Quality Check</h3>
+                  <h3 className="typo-card-title mb-3">Quality Check</h3>
 
                   {(() => {
                     const scanColors = batchPassport.color_breakdown || {}
@@ -527,7 +527,7 @@ export default function ScanPage() {
                         <button
                           onClick={handleAllPassBatch}
                           disabled={actionLoading || showRejectMode}
-                          className="w-full py-3 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors mb-3 flex items-center justify-center gap-2"
+                          className="w-full py-3 bg-green-600 text-white typo-btn rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors mb-3 flex items-center justify-center gap-2"
                         >
                           {actionLoading && !showRejectMode ? (
                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -613,7 +613,7 @@ export default function ScanPage() {
                                 )}
 
                                 <button onClick={handleSubmitRejectsBatch} disabled={actionLoading || rejects.length === 0}
-                                  className="w-full py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
+                                  className="w-full py-3 bg-red-600 text-white typo-btn rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
                                   {actionLoading ? 'Checking...' : `Submit (${scanTotal - scanTotalRej} pass, ${scanTotalRej} reject)`}
                                 </button>
                               </div>
@@ -622,13 +622,13 @@ export default function ScanPage() {
                               <div className="space-y-3 mb-3">
                                 <div className="grid grid-cols-2 gap-3">
                                   <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
+                                    <label className="typo-label-sm">Approved</label>
                                     <input type="number" min="0" value={checkForm.approved}
                                       onChange={(e) => { const v = e.target.value; setCheckForm(f => ({ ...f, approved: v, rejected: String(Math.max(0, scanTotal - (parseInt(v) || 0))) })) }}
                                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
                                   </div>
                                   <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
+                                    <label className="typo-label-sm">Rejected</label>
                                     <input type="number" min="0" value={checkForm.rejected}
                                       onChange={(e) => { const v = e.target.value; setCheckForm(f => ({ ...f, rejected: v, approved: String(Math.max(0, scanTotal - (parseInt(v) || 0))) })) }}
                                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
@@ -636,13 +636,13 @@ export default function ScanPage() {
                                 </div>
                                 {parseInt(checkForm.rejected) > 0 && (
                                   <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
+                                    <label className="typo-label-sm">Rejection Reason</label>
                                     <input type="text" value={checkForm.reason} onChange={(e) => setCheckForm(f => ({ ...f, reason: e.target.value }))}
                                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
                                   </div>
                                 )}
                                 <button onClick={handleSubmitRejectsBatch} disabled={actionLoading}
-                                  className="w-full py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
+                                  className="w-full py-3 bg-red-600 text-white typo-btn rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors">
                                   {actionLoading ? 'Checking...' : 'Submit Check'}
                                 </button>
                               </div>
@@ -659,7 +659,7 @@ export default function ScanPage() {
               {perms.batch_ready_packing && batchPassport.status === 'checked' && !batchPassport.has_pending_va && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <button onClick={handleReadyForPacking} disabled={actionLoading}
-                    className="w-full py-3 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 transition-colors">
+                    className="w-full py-3 bg-orange-500 text-white rounded-xl typo-btn hover:bg-orange-600 disabled:opacity-50 transition-colors">
                     {actionLoading ? 'Processing...' : 'Ready for Packing'}
                   </button>
                 </div>
@@ -668,15 +668,15 @@ export default function ScanPage() {
               {/* Mark Packed (batch_pack permission + packing) */}
               {perms.batch_pack && batchPassport.status === 'packing' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Confirm Packing</h3>
+                  <h3 className="typo-card-title mb-3">Confirm Packing</h3>
                   <div className="mb-3">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Box / Bundle Reference (optional)</label>
+                    <label className="typo-label-sm">Box / Bundle Reference (optional)</label>
                     <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500"
                       placeholder="e.g. BOX-A12" />
                   </div>
                   <button onClick={handlePackBatch} disabled={actionLoading}
-                    className="w-full py-3 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors">
+                    className="w-full py-3 bg-green-600 text-white rounded-xl typo-btn hover:bg-green-700 disabled:opacity-50 transition-colors">
                     {actionLoading ? 'Packing...' : 'Mark as Packed'}
                   </button>
                 </div>
@@ -686,7 +686,7 @@ export default function ScanPage() {
             {/* Packed info (show in print too) */}
             {batchPassport.status === 'packed' && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                <div className="text-green-700 font-semibold text-sm">Packed & Ready Stock</div>
+                <div className="typo-data text-green-700">Packed & Ready Stock</div>
                 {batchPassport.pack_reference && (
                   <p className="text-xs text-green-600 mt-1">Box: {batchPassport.pack_reference}</p>
                 )}
@@ -712,7 +712,7 @@ export default function ScanPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold text-gray-900 font-mono break-all">
+                  <h1 className="typo-section-title text-gray-900 font-mono break-all">
                     {passport.enhanced_roll_code || passport.roll_code}
                   </h1>
                   {passport.effective_sku && (
@@ -766,7 +766,7 @@ export default function ScanPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.short_code}</span>
-                        <span className="text-sm font-medium text-gray-900">{log.name}</span>
+                        <span className="typo-body text-gray-900">{log.name}</span>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
@@ -793,7 +793,7 @@ export default function ScanPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {log.value_addition && <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{log.value_addition.short_code}</span>}
-                        <span className="text-sm font-medium text-gray-900">{log.value_addition?.name || '—'}</span>
+                        <span className="typo-body text-gray-900">{log.value_addition?.name || '—'}</span>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         log.status === 'received' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
@@ -818,7 +818,7 @@ export default function ScanPage() {
                 {passport.lots.map((lot, i) => (
                   <div key={lot.id || i} className="py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-gray-900 font-mono">{lot.lot_code}</span>
+                      <span className="typo-data text-gray-900 font-mono">{lot.lot_code}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         lot.status === 'distributed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                       }`}>{lot.status}</span>
@@ -839,7 +839,7 @@ export default function ScanPage() {
                 {passport.batches.map((batch, i) => (
                   <div key={batch.id || i} className="py-2 border-b border-gray-50 last:border-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-gray-900 font-mono">{batch.batch_code}</span>
+                      <span className="typo-data text-gray-900 font-mono">{batch.batch_code}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${batchStatusColor[batch.status] || 'bg-gray-100 text-gray-600'}`}>
                         {batch.status}
                       </span>
@@ -890,7 +890,7 @@ export default function ScanPage() {
 function Section({ title, icon, children }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+      <h3 className="typo-th mb-3 flex items-center gap-1.5">
         <span>{icon}</span> {title}
       </h3>
       {children}
@@ -902,8 +902,8 @@ function InfoRow({ label, value }) {
   if (!value) return null
   return (
     <div className="flex items-baseline gap-2 py-1 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-gray-500 w-24 flex-shrink-0">{label}</span>
-      <span className="text-sm text-gray-900 font-medium">{value}</span>
+      <span className="typo-data-label w-24 flex-shrink-0">{label}</span>
+      <span className="typo-body text-gray-900">{value}</span>
     </div>
   )
 }
@@ -912,8 +912,8 @@ function Metric({ label, value }) {
   if (!value) return null
   return (
     <div className="text-center">
-      <div className="text-sm font-semibold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-400 mt-0.5">{label}</div>
+      <div className="typo-data text-gray-900">{value}</div>
+      <div className="typo-caption mt-0.5">{label}</div>
     </div>
   )
 }

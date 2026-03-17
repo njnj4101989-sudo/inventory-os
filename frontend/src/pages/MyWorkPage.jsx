@@ -90,10 +90,10 @@ export default function MyWorkPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">
+          <h1 className="typo-section-title text-gray-900">
             Hi, {currentUser.full_name?.split(' ')[0] || 'Tailor'}
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="typo-caption mt-0.5">
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
           </p>
         </div>
@@ -122,27 +122,27 @@ export default function MyWorkPage() {
             <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-blue-700">{assigned.length}</span>
+            <span className="typo-kpi text-blue-700">{assigned.length}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 mt-0.5">To Start</div>
+          <div className="typo-kpi-label text-blue-500 mt-0.5">To Start</div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-amber-50 to-yellow-100/60 px-3 py-3 text-center border border-amber-100">
           <div className="flex items-center justify-center gap-1.5">
             <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-amber-700">{inProgress.length}</span>
+            <span className="typo-kpi text-amber-700">{inProgress.length}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-500 mt-0.5">Stitching</div>
+          <div className="typo-kpi-label text-amber-500 mt-0.5">Stitching</div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100/60 px-3 py-3 text-center border border-purple-100">
           <div className="flex items-center justify-center gap-1.5">
             <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-purple-700">{submitted.length}</span>
+            <span className="typo-kpi text-purple-700">{submitted.length}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-purple-500 mt-0.5">Submitted</div>
+          <div className="typo-kpi-label text-purple-500 mt-0.5">Submitted</div>
         </div>
       </div>
 
@@ -160,11 +160,11 @@ export default function MyWorkPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
             </svg>
           </div>
-          <p className="font-semibold text-gray-700">No batches yet</p>
-          <p className="text-sm text-gray-400 mt-1">Scan a batch QR to claim work</p>
+          <p className="typo-data">No batches yet</p>
+          <p className="typo-body text-gray-400 mt-1">Scan a batch QR to claim work</p>
           <button
             onClick={() => navigate('/scan')}
-            className="mt-4 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition-colors"
+            className="mt-4 px-5 py-2.5 bg-primary-600 text-white typo-btn rounded-xl hover:bg-primary-700 transition-colors"
           >
             Open Scanner
           </button>
@@ -222,7 +222,7 @@ function BatchGroup({ title, count, color, batches, actionLoading, onStart, onSu
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-md ${color}`}>{title}</span>
+        <span className={`typo-badge uppercase tracking-wide px-2 py-0.5 rounded-md ${color}`}>{title}</span>
         <span className="text-xs text-gray-400">{count}</span>
       </div>
       <div className="space-y-2.5">
@@ -260,7 +260,7 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</span>
+              <span className="font-mono typo-data text-gray-900">{batch.batch_code}</span>
               {batch.size && (
                 <span className="inline-flex items-center bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 text-xs font-bold text-emerald-700">
                   {batch.size}
@@ -273,9 +273,9 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
 
             {/* Design + Lot + Pieces */}
             <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500">
-              {design && <span className="font-medium text-gray-700">Design {design}</span>}
+              {design && <span className="typo-body">Design {design}</span>}
               {lotCode && <span>{lotCode}</span>}
-              <span className="font-semibold text-gray-800">{pieces} pcs</span>
+              <span className="typo-data">{pieces} pcs</span>
             </div>
           </div>
 
@@ -285,7 +285,7 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
               <button
                 onClick={() => onStart(batch.id)}
                 disabled={isLoading}
-                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 bg-blue-600 text-white typo-btn-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {isLoading ? 'Starting...' : 'Start'}
               </button>
@@ -294,7 +294,7 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
               <button
                 onClick={() => onSubmit(batch.id)}
                 disabled={isLoading}
-                className="px-4 py-2 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 bg-purple-600 text-white typo-btn-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
               >
                 {isLoading ? '...' : 'Submit QC'}
               </button>

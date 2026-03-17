@@ -78,7 +78,7 @@ export default function Header() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-primary-600 to-primary-700 text-[11px] font-bold text-white shadow-sm">
                   {company.name?.charAt(0)?.toUpperCase() || 'C'}
                 </div>
-                <span className="text-sm font-semibold text-gray-800 max-w-[140px] truncate">
+                <span className="typo-data max-w-[140px] truncate">
                   {company.name}
                 </span>
                 {hasMultipleCompanies && (
@@ -91,7 +91,7 @@ export default function Header() {
               {/* Company dropdown */}
               {showCompanyMenu && (
                 <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl z-50">
-                  <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch Company</p>
+                  <p className="px-3 py-1.5 typo-nav-section">Switch Company</p>
                   {companies.map((c) => (
                     <button
                       key={c.id}
@@ -110,7 +110,7 @@ export default function Header() {
                         {c.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{c.name}</div>
+                        <div className="typo-nav truncate">{c.name}</div>
                       </div>
                       {c.id === company.id && (
                         <svg className="h-4 w-4 text-primary-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -144,7 +144,7 @@ export default function Header() {
 
                 {showFyMenu && (
                   <div className="absolute left-0 top-full mt-1 w-48 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl z-50">
-                    <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Financial Year</p>
+                    <p className="px-3 py-1.5 typo-nav-section">Financial Year</p>
                     {fys.map((f) => (
                       <button
                         key={f.id}
@@ -158,7 +158,7 @@ export default function Header() {
                         <span>{f.code}</span>
                         <div className="flex items-center gap-1.5">
                           {f.status === 'closed' && (
-                            <span className="text-[10px] text-gray-400">Closed</span>
+                            <span className="typo-caption text-gray-400">Closed</span>
                           )}
                           {f.id === fy.id && (
                             <svg className="h-4 w-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
@@ -174,7 +174,7 @@ export default function Header() {
             )}
           </>
         ) : (
-          <span className="text-sm text-gray-500">Textile Inventory Management</span>
+          <span className="typo-body text-gray-500">Textile Inventory Management</span>
         )}
       </div>
 
@@ -183,14 +183,14 @@ export default function Header() {
         <NotificationBell />
 
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 typo-badge capitalize ${
             ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'
           }`}
         >
           {roleDisplayName}
         </span>
 
-        <span className="hidden sm:inline text-sm font-medium text-gray-700">
+        <span className="hidden sm:inline typo-nav text-gray-700">
           {user?.full_name}
         </span>
 

@@ -4,8 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL = 'block text-xs font-medium text-gray-500 mb-1'
+// Typography: use typo-input-sm and typo-data-label globally
 
 const MASTER_OPTIONS = [
   { key: 'colors', label: 'Colors', color: 'bg-pink-400', group: 'item' },
@@ -262,7 +261,7 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800">Settings</h1>
+      <h1 className="typo-page-title">Settings</h1>
       <p className="text-xs text-gray-500">Company profile, financial years, and multi-company management</p>
 
       <div className="mt-2 flex gap-1 border-b border-gray-200">
@@ -291,37 +290,37 @@ export default function SettingsPage() {
         <div className="mt-3 space-y-4 max-w-4xl">
           {companyMsg && <p className="text-xs text-green-600 font-medium">{companyMsg}</p>}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Business Identity</h3>
+            <h3 className="typo-label-sm mb-2">Business Identity</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2"><label className={LABEL}>Company Name</label><input value={company.name} onChange={(e) => set('name', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>Phone</label><input value={company.phone} onChange={(e) => set('phone', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>Email</label><input value={company.email} onChange={(e) => set('email', e.target.value)} className={INPUT} /></div>
+              <div className="md:col-span-2"><label className="block typo-data-label mb-1">Company Name</label><input value={company.name} onChange={(e) => set('name', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">Phone</label><input value={company.phone} onChange={(e) => set('phone', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">Email</label><input value={company.email} onChange={(e) => set('email', e.target.value)} className="typo-input-sm" /></div>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">GST & PAN</h3>
+            <h3 className="typo-label-sm mb-2">GST & PAN</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div><label className={LABEL}>GST No.</label><input value={company.gst_no} onChange={(e) => set('gst_no', e.target.value.toUpperCase())} className={INPUT} maxLength={15} /></div>
-              <div><label className={LABEL}>State Code</label><input value={company.state_code} onChange={(e) => set('state_code', e.target.value)} className={INPUT} maxLength={2} /></div>
-              <div><label className={LABEL}>PAN No.</label><input value={company.pan_no} onChange={(e) => set('pan_no', e.target.value.toUpperCase())} className={INPUT} maxLength={10} /></div>
+              <div><label className="block typo-data-label mb-1">GST No.</label><input value={company.gst_no} onChange={(e) => set('gst_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={15} /></div>
+              <div><label className="block typo-data-label mb-1">State Code</label><input value={company.state_code} onChange={(e) => set('state_code', e.target.value)} className="typo-input-sm" maxLength={2} /></div>
+              <div><label className="block typo-data-label mb-1">PAN No.</label><input value={company.pan_no} onChange={(e) => set('pan_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={10} /></div>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Address</h3>
+            <h3 className="typo-label-sm mb-2">Address</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2"><label className={LABEL}>Address</label><input value={company.address} onChange={(e) => set('address', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>City</label><input value={company.city} onChange={(e) => set('city', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>State</label><input value={company.state} onChange={(e) => set('state', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>PIN Code</label><input value={company.pin_code} onChange={(e) => set('pin_code', e.target.value)} className={INPUT} maxLength={6} /></div>
+              <div className="md:col-span-2"><label className="block typo-data-label mb-1">Address</label><input value={company.address} onChange={(e) => set('address', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">City</label><input value={company.city} onChange={(e) => set('city', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">State</label><input value={company.state} onChange={(e) => set('state', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">PIN Code</label><input value={company.pin_code} onChange={(e) => set('pin_code', e.target.value)} className="typo-input-sm" maxLength={6} /></div>
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Bank Details</h3>
+            <h3 className="typo-label-sm mb-2">Bank Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div><label className={LABEL}>Bank Name</label><input value={company.bank_name} onChange={(e) => set('bank_name', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>Account No.</label><input value={company.bank_account} onChange={(e) => set('bank_account', e.target.value)} className={INPUT} /></div>
-              <div><label className={LABEL}>IFSC Code</label><input value={company.bank_ifsc} onChange={(e) => set('bank_ifsc', e.target.value.toUpperCase())} className={INPUT} maxLength={11} /></div>
-              <div><label className={LABEL}>Branch</label><input value={company.bank_branch} onChange={(e) => set('bank_branch', e.target.value)} className={INPUT} /></div>
+              <div><label className="block typo-data-label mb-1">Bank Name</label><input value={company.bank_name} onChange={(e) => set('bank_name', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">Account No.</label><input value={company.bank_account} onChange={(e) => set('bank_account', e.target.value)} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">IFSC Code</label><input value={company.bank_ifsc} onChange={(e) => set('bank_ifsc', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={11} /></div>
+              <div><label className="block typo-data-label mb-1">Branch</label><input value={company.bank_branch} onChange={(e) => set('bank_branch', e.target.value)} className="typo-input-sm" /></div>
             </div>
           </div>
           <button onClick={handleCompanySave} disabled={companySaving}
@@ -338,11 +337,11 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-500">Managing financial years for <span className="font-semibold text-gray-700">{activeCompany.name}</span></p>
           )}
           <div className="bg-gray-50 rounded-lg p-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Create Financial Year</h3>
+            <h3 className="typo-label-sm mb-2">Create Financial Year</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
-              <div><label className={LABEL}>Code</label><input value={fyForm.code} onChange={(e) => setFYForm(f => ({ ...f, code: e.target.value }))} className={INPUT} placeholder="FY2026-27" /></div>
-              <div><label className={LABEL}>Start Date</label><input type="date" value={fyForm.start_date} onChange={(e) => setFYForm(f => ({ ...f, start_date: e.target.value }))} className={INPUT} /></div>
-              <div><label className={LABEL}>End Date</label><input type="date" value={fyForm.end_date} onChange={(e) => setFYForm(f => ({ ...f, end_date: e.target.value }))} className={INPUT} /></div>
+              <div><label className="block typo-data-label mb-1">Code</label><input value={fyForm.code} onChange={(e) => setFYForm(f => ({ ...f, code: e.target.value }))} className="typo-input-sm" placeholder="FY2026-27" /></div>
+              <div><label className="block typo-data-label mb-1">Start Date</label><input type="date" value={fyForm.start_date} onChange={(e) => setFYForm(f => ({ ...f, start_date: e.target.value }))} className="typo-input-sm" /></div>
+              <div><label className="block typo-data-label mb-1">End Date</label><input type="date" value={fyForm.end_date} onChange={(e) => setFYForm(f => ({ ...f, end_date: e.target.value }))} className="typo-input-sm" /></div>
               <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={fyForm.is_current} onChange={(e) => setFYForm(f => ({ ...f, is_current: e.target.checked }))} /> Current</label>
               <button onClick={handleFYCreate} disabled={fyCreating} className="rounded bg-primary-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-primary-700 disabled:opacity-50">
                 {fyCreating ? 'Creating...' : 'Create'}
@@ -358,9 +357,9 @@ export default function SettingsPage() {
                 {editingFy?.id === fy.id ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-2">
-                      <div><label className={LABEL}>Code</label><input value={editingFy.code} onChange={(e) => setEditingFy(f => ({ ...f, code: e.target.value }))} className={INPUT} /></div>
-                      <div><label className={LABEL}>Start Date</label><input type="date" value={editingFy.start_date} onChange={(e) => setEditingFy(f => ({ ...f, start_date: e.target.value }))} className={INPUT} /></div>
-                      <div><label className={LABEL}>End Date</label><input type="date" value={editingFy.end_date} onChange={(e) => setEditingFy(f => ({ ...f, end_date: e.target.value }))} className={INPUT} /></div>
+                      <div><label className="block typo-data-label mb-1">Code</label><input value={editingFy.code} onChange={(e) => setEditingFy(f => ({ ...f, code: e.target.value }))} className="typo-input-sm" /></div>
+                      <div><label className="block typo-data-label mb-1">Start Date</label><input type="date" value={editingFy.start_date} onChange={(e) => setEditingFy(f => ({ ...f, start_date: e.target.value }))} className="typo-input-sm" /></div>
+                      <div><label className="block typo-data-label mb-1">End Date</label><input type="date" value={editingFy.end_date} onChange={(e) => setEditingFy(f => ({ ...f, end_date: e.target.value }))} className="typo-input-sm" /></div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={handleFYEdit} disabled={fySaving} className="rounded bg-primary-600 text-white px-3 py-1 text-xs font-bold hover:bg-primary-700 disabled:opacity-50">
@@ -434,7 +433,7 @@ export default function SettingsPage() {
 
                   {/* Balance Summary */}
                   <div>
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Closing Balances</h4>
+                    <h4 className="typo-label-sm mb-2">Closing Balances</h4>
                     <div className="grid grid-cols-3 gap-2">
                       <div className="rounded-lg bg-gray-50 p-2.5 text-center">
                         <p className="text-lg font-bold text-gray-800">{closePreview.balances?.suppliers?.length || 0}</p>
@@ -458,11 +457,11 @@ export default function SettingsPage() {
 
                   {/* New FY Details */}
                   <div>
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">New Financial Year</h4>
+                    <h4 className="typo-label-sm mb-2">New Financial Year</h4>
                     <div className="grid grid-cols-3 gap-2">
-                      <div><label className={LABEL}>Code</label><input value={closeForm.new_fy_code} onChange={(e) => setCloseForm(f => ({ ...f, new_fy_code: e.target.value }))} className={INPUT} /></div>
-                      <div><label className={LABEL}>Start Date</label><input type="date" value={closeForm.new_start_date} onChange={(e) => setCloseForm(f => ({ ...f, new_start_date: e.target.value }))} className={INPUT} /></div>
-                      <div><label className={LABEL}>End Date</label><input type="date" value={closeForm.new_end_date} onChange={(e) => setCloseForm(f => ({ ...f, new_end_date: e.target.value }))} className={INPUT} /></div>
+                      <div><label className="block typo-data-label mb-1">Code</label><input value={closeForm.new_fy_code} onChange={(e) => setCloseForm(f => ({ ...f, new_fy_code: e.target.value }))} className="typo-input-sm" /></div>
+                      <div><label className="block typo-data-label mb-1">Start Date</label><input type="date" value={closeForm.new_start_date} onChange={(e) => setCloseForm(f => ({ ...f, new_start_date: e.target.value }))} className="typo-input-sm" /></div>
+                      <div><label className="block typo-data-label mb-1">End Date</label><input type="date" value={closeForm.new_end_date} onChange={(e) => setCloseForm(f => ({ ...f, new_end_date: e.target.value }))} className="typo-input-sm" /></div>
                     </div>
                   </div>
 
@@ -496,7 +495,7 @@ export default function SettingsPage() {
       {tab === 'companies' && (
         <div className="mt-3 max-w-4xl">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-700">{allCompanies.length} {allCompanies.length === 1 ? 'Company' : 'Companies'}</h3>
+            <h3 className="typo-card-title">{allCompanies.length} {allCompanies.length === 1 ? 'Company' : 'Companies'}</h3>
             <button
               onClick={() => { setShowWizard(true); setWizardStep(1) }}
               className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors shadow-sm"
@@ -573,20 +572,20 @@ export default function SettingsPage() {
                   {wizardStep === 1 && (
                     <div className="space-y-3">
                       <div>
-                        <label className={LABEL}>Company Name *</label>
-                        <input value={wizardData.name} onChange={(e) => setW('name', e.target.value)} className={INPUT} placeholder="Krishna Textiles" autoFocus />
+                        <label className="block typo-data-label mb-1">Company Name *</label>
+                        <input value={wizardData.name} onChange={(e) => setW('name', e.target.value)} className="typo-input-sm" placeholder="Krishna Textiles" autoFocus />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div><label className={LABEL}>City</label><input value={wizardData.city} onChange={(e) => setW('city', e.target.value)} className={INPUT} /></div>
-                        <div><label className={LABEL}>Phone</label><input value={wizardData.phone} onChange={(e) => setW('phone', e.target.value)} className={INPUT} /></div>
+                        <div><label className="block typo-data-label mb-1">City</label><input value={wizardData.city} onChange={(e) => setW('city', e.target.value)} className="typo-input-sm" /></div>
+                        <div><label className="block typo-data-label mb-1">Phone</label><input value={wizardData.phone} onChange={(e) => setW('phone', e.target.value)} className="typo-input-sm" /></div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div><label className={LABEL}>GST No.</label><input value={wizardData.gst_no} onChange={(e) => setW('gst_no', e.target.value.toUpperCase())} className={INPUT} maxLength={15} /></div>
-                        <div><label className={LABEL}>PAN No.</label><input value={wizardData.pan_no} onChange={(e) => setW('pan_no', e.target.value.toUpperCase())} className={INPUT} maxLength={10} /></div>
+                        <div><label className="block typo-data-label mb-1">GST No.</label><input value={wizardData.gst_no} onChange={(e) => setW('gst_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={15} /></div>
+                        <div><label className="block typo-data-label mb-1">PAN No.</label><input value={wizardData.pan_no} onChange={(e) => setW('pan_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={10} /></div>
                       </div>
                       <div>
-                        <label className={LABEL}>Email</label>
-                        <input value={wizardData.email} onChange={(e) => setW('email', e.target.value)} className={INPUT} />
+                        <label className="block typo-data-label mb-1">Email</label>
+                        <input value={wizardData.email} onChange={(e) => setW('email', e.target.value)} className="typo-input-sm" />
                       </div>
                     </div>
                   )}
@@ -596,11 +595,11 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       {allCompanies.length > 0 && (
                         <div>
-                          <label className={LABEL}>Copy Masters From</label>
+                          <label className="block typo-data-label mb-1">Copy Masters From</label>
                           <select
                             value={wizardData.copy_from_company_id || ''}
                             onChange={(e) => setW('copy_from_company_id', e.target.value || null)}
-                            className={INPUT}
+                            className="typo-input-sm"
                           >
                             <option value="">None — start fresh</option>
                             {allCompanies.map((c) => (

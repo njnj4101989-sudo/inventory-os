@@ -11,8 +11,7 @@ import SearchInput from '../components/common/SearchInput'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
+// Typography: use typo-input and typo-label globally
 
 const TABS = [
   { key: 'product_types', label: 'Product Types', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
@@ -223,7 +222,7 @@ export default function MastersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Masters</h1>
+          <h1 className="typo-page-title">Masters</h1>
           <p className="text-xs text-gray-500">Manage product types, colors, fabrics, and VA types</p>
         </div>
         <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
@@ -296,11 +295,11 @@ export default function MastersPage() {
           {/* Code — only on create (not for VA Parties) */}
           {!editing && tab !== 'value_additions' && (
             <div>
-              <label className={LABEL}>Code <span className="text-red-500">*</span></label>
+              <label className="typo-label">Code <span className="text-red-500">*</span></label>
               <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
                 placeholder={tab === 'colors' ? 'e.g. CORAL (max 5)' : tab === 'fabrics' ? 'e.g. COT (max 3)' : 'e.g. BLS'}
                 maxLength={tab === 'colors' ? 5 : tab === 'fabrics' ? 3 : 10}
-                className={`${INPUT} font-mono`} />
+                className={`typo-input font-mono`} />
               <p className="mt-1 text-xs text-gray-400">
                 {tab === 'product_types' && 'Used in SKU codes. Cannot be changed after creation.'}
                 {tab === 'colors' && 'Used in roll codes (max 5 chars). Cannot be changed after creation.'}
@@ -312,11 +311,11 @@ export default function MastersPage() {
           {/* Short Code — value additions */}
           {tab === 'value_additions' && (
             <div>
-              <label className={LABEL}>Short Code <span className="text-red-500">*</span></label>
+              <label className="typo-label">Short Code <span className="text-red-500">*</span></label>
               <input type="text" value={form.short_code || ''} onChange={(e) => set('short_code', e.target.value.toUpperCase())}
                 placeholder="e.g. EMB (max 4)" maxLength={4}
                 disabled={editing != null}
-                className={`${INPUT} font-mono max-w-[160px] ${editing ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
+                className={`typo-input font-mono max-w-[160px] ${editing ? 'bg-gray-100 cursor-not-allowed' : ''}`} />
               <p className="mt-1 text-xs text-gray-400">Appended to roll code after processing (e.g. +EMB). Max 4 uppercase chars.</p>
             </div>
           )}
@@ -324,8 +323,8 @@ export default function MastersPage() {
           {/* Applicable To — value additions */}
           {tab === 'value_additions' && (
             <div>
-              <label className={LABEL}>Applies To</label>
-              <select value={form.applicable_to || 'both'} onChange={(e) => set('applicable_to', e.target.value)} className={INPUT}>
+              <label className="typo-label">Applies To</label>
+              <select value={form.applicable_to || 'both'} onChange={(e) => set('applicable_to', e.target.value)} className="typo-input">
                 <option value="both">Both (Roll + Garment)</option>
                 <option value="roll">Roll Only</option>
                 <option value="garment">Garment Only</option>
@@ -337,9 +336,9 @@ export default function MastersPage() {
           {/* Code display on edit — editable for colors, immutable for others */}
           {editing && tab === 'colors' && (
             <div>
-              <label className={LABEL}>Code</label>
+              <label className="typo-label">Code</label>
               <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
-                placeholder="e.g. RED" maxLength={5} className={`${INPUT} font-mono uppercase max-w-[160px]`} />
+                placeholder="e.g. RED" maxLength={5} className={`typo-input font-mono uppercase max-w-[160px]`} />
             </div>
           )}
           {editing && tab !== 'value_additions' && tab !== 'colors' && (
@@ -352,18 +351,18 @@ export default function MastersPage() {
 
           {/* Name */}
           <div>
-            <label className={LABEL}>Name <span className="text-red-500">*</span></label>
+            <label className="typo-label">Name <span className="text-red-500">*</span></label>
             <input type="text" value={form.name || ''} onChange={(e) => set('name', e.target.value)}
               placeholder={tab === 'product_types' ? 'e.g. Blouse' : tab === 'colors' ? 'e.g. Coral' : 'e.g. Cotton'}
-              className={INPUT} />
+              className="typo-input" />
           </div>
 
           {/* Color-specific: color_no */}
           {tab === 'colors' && (
             <div>
-              <label className={LABEL}>Color No.</label>
+              <label className="typo-label">Color No.</label>
               <input type="number" min="1" value={form.color_no ?? ''} onChange={(e) => set('color_no', e.target.value)}
-                placeholder="Auto-assigned if empty" className={`${INPUT} font-mono max-w-[160px]`} />
+                placeholder="Auto-assigned if empty" className={`typo-input font-mono max-w-[160px]`} />
               <p className="mt-1 text-xs text-gray-400">Numeric ID for quick reference (e.g. "4 no. Pink")</p>
             </div>
           )}
@@ -371,12 +370,12 @@ export default function MastersPage() {
           {/* Color-specific: hex code */}
           {tab === 'colors' && (
             <div>
-              <label className={LABEL}>Hex Color</label>
+              <label className="typo-label">Hex Color</label>
               <div className="flex items-center gap-3">
                 <input type="color" value={form.hex_code || '#000000'} onChange={(e) => set('hex_code', e.target.value)}
                   className="h-10 w-14 rounded border border-gray-300 cursor-pointer" />
                 <input type="text" value={form.hex_code || ''} onChange={(e) => set('hex_code', e.target.value)}
-                  placeholder="#000000" className={`${INPUT} font-mono max-w-[120px]`} />
+                  placeholder="#000000" className={`typo-input font-mono max-w-[120px]`} />
                 <span className="inline-block h-8 w-8 rounded-full border border-gray-300" style={{ backgroundColor: form.hex_code || '#000000' }} />
               </div>
             </div>
@@ -385,9 +384,9 @@ export default function MastersPage() {
           {/* Description (PT / Fabric / VA) */}
           {tab !== 'colors' && (
             <div>
-              <label className={LABEL}>Description</label>
+              <label className="typo-label">Description</label>
               <textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)}
-                rows={2} className={INPUT} placeholder="Optional description" />
+                rows={2} className="typo-input" placeholder="Optional description" />
             </div>
           )}
 

@@ -119,7 +119,7 @@ function LotProgressBar({ batches }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-semibold text-gray-500 tabular-nums whitespace-nowrap">
+      <span className="typo-caption tabular-nums whitespace-nowrap font-semibold">
         {completed}/{total}
       </span>
     </div>
@@ -144,7 +144,7 @@ function TailorSummary({ batches }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
-      <span className="font-semibold text-gray-700">{batches.length} batches</span>
+      <span className="typo-card-title">{batches.length} batches</span>
       <span className="text-gray-300">|</span>
       {summary.tailors.map(([name, count]) => (
         <span key={name} className="text-blue-600">{name.split(' ')[0]}({count})</span>
@@ -161,13 +161,13 @@ function BatchDetailTable({ batches, onRowClick, highlightBatch }) {
     <div className="border-t border-gray-100">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-50 text-gray-500">
-            <th className="text-left py-1.5 pl-4 pr-2 font-medium">Batch</th>
-            <th className="text-left py-1.5 px-2 font-medium">Size</th>
-            <th className="text-right py-1.5 px-2 font-medium">Pieces</th>
-            <th className="text-left py-1.5 px-2 font-medium">Status</th>
-            <th className="text-left py-1.5 px-2 font-medium">Tailor</th>
-            <th className="text-left py-1.5 pl-2 pr-4 font-medium">Created</th>
+          <tr className="bg-gray-50">
+            <th className="typo-th text-left py-1.5 pl-4 pr-2">Batch</th>
+            <th className="typo-th text-left py-1.5 px-2">Size</th>
+            <th className="typo-th text-right py-1.5 px-2">Pieces</th>
+            <th className="typo-th text-left py-1.5 px-2">Status</th>
+            <th className="typo-th text-left py-1.5 px-2">Tailor</th>
+            <th className="typo-th text-left py-1.5 pl-2 pr-4">Created</th>
           </tr>
         </thead>
         <tbody>
@@ -179,13 +179,13 @@ function BatchDetailTable({ batches, onRowClick, highlightBatch }) {
                 highlightBatch === b.id ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-emerald-50/40'
               }`}
             >
-              <td className="py-1.5 pl-4 pr-2 font-mono font-semibold text-gray-800">{b.batch_code}</td>
+              <td className="py-1.5 pl-4 pr-2 font-mono typo-data">{b.batch_code}</td>
               <td className="py-1.5 px-2">
                 {b.size ? (
                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">{b.size}</span>
                 ) : '—'}
               </td>
-              <td className="py-1.5 px-2 text-right font-semibold text-gray-700">{b.piece_count}</td>
+              <td className="py-1.5 px-2 text-right typo-td">{b.piece_count}</td>
               <td className="py-1.5 px-2">
                 <div className="flex items-center gap-1.5">
                   <StatusDot status={b.status} />
@@ -226,9 +226,9 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, hi
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="font-bold text-gray-900 text-sm">{lotCode}</span>
-            <span className="text-gray-400 text-xs">Design {designNo}</span>
-            <span className="text-gray-400 text-xs">{dateStr}</span>
+            <span className="typo-card-title text-gray-900">{lotCode}</span>
+            <span className="typo-caption">Design {designNo}</span>
+            <span className="typo-caption">{dateStr}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -563,8 +563,8 @@ export default function BatchesPage() {
     <div>
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Batches</h1>
-        <p className="mt-1 text-sm text-gray-500">Production batches grouped by lot — track tailoring progress at a glance</p>
+        <h1 className="typo-page-title">Batches</h1>
+        <p className="mt-1 typo-body text-gray-500">Production batches grouped by lot — track tailoring progress at a glance</p>
       </div>
 
       {/* Pipeline KPI bar */}
@@ -573,8 +573,8 @@ export default function BatchesPage() {
           const c = PIPELINE_COLORS[status]
           return (
             <div key={status} className={`rounded-xl border ${c.border} ${c.bg} px-4 py-3 text-center`}>
-              <div className={`text-2xl font-bold tabular-nums ${c.accent}`}>{pipelineCounts[status]}</div>
-              <div className={`text-[11px] font-semibold uppercase tracking-wide mt-0.5 ${c.text}`}>{STATUS_LABEL[status]}</div>
+              <div className={`typo-kpi ${c.accent}`}>{pipelineCounts[status]}</div>
+              <div className={`typo-kpi-label mt-0.5 ${c.text}`}>{STATUS_LABEL[status]}</div>
             </div>
           )
         })}
@@ -665,20 +665,20 @@ export default function BatchesPage() {
           {/* VA KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center">
-              <div className="text-2xl font-bold tabular-nums text-amber-800">{bcKPIs.count}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-amber-600">Challans Out</div>
+              <div className="typo-kpi text-amber-800">{bcKPIs.count}</div>
+              <div className="typo-kpi-label mt-0.5 text-amber-600">Challans Out</div>
             </div>
             <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-center">
-              <div className="text-2xl font-bold tabular-nums text-violet-800">{bcKPIs.totalPieces}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-violet-600">Total Pieces</div>
+              <div className="typo-kpi text-violet-800">{bcKPIs.totalPieces}</div>
+              <div className="typo-kpi-label mt-0.5 text-violet-600">Total Pieces</div>
             </div>
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center">
-              <div className="text-2xl font-bold tabular-nums text-blue-800">{bcKPIs.processors}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5 text-blue-600">Processors</div>
+              <div className="typo-kpi text-blue-800">{bcKPIs.processors}</div>
+              <div className="typo-kpi-label mt-0.5 text-blue-600">Processors</div>
             </div>
             <div className={`rounded-xl border px-4 py-3 text-center ${bcKPIs.overdue > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-              <div className={`text-2xl font-bold tabular-nums ${bcKPIs.overdue > 0 ? 'text-red-800' : 'text-gray-800'}`}>{bcKPIs.overdue}</div>
-              <div className={`text-[11px] font-semibold uppercase tracking-wide mt-0.5 ${bcKPIs.overdue > 0 ? 'text-red-600' : 'text-gray-600'}`}>Overdue (&gt;14d)</div>
+              <div className={`typo-kpi ${bcKPIs.overdue > 0 ? 'text-red-800' : 'text-gray-800'}`}>{bcKPIs.overdue}</div>
+              <div className={`typo-kpi-label mt-0.5 ${bcKPIs.overdue > 0 ? 'text-red-600' : 'text-gray-600'}`}>Overdue (&gt;14d)</div>
             </div>
           </div>
 
@@ -713,8 +713,8 @@ export default function BatchesPage() {
               <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm font-medium">No batch challans out</p>
-              <p className="text-xs mt-1">All batches are in-house</p>
+              <p className="typo-empty">No batch challans out</p>
+              <p className="typo-caption mt-1">All batches are in-house</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -734,14 +734,14 @@ export default function BatchesPage() {
                     <div className="px-4 pt-3 pb-3">
                       {/* Challan header */}
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-mono font-bold text-sm text-gray-900">{challan.challan_no}</span>
+                        <span className="font-mono typo-card-title text-gray-900">{challan.challan_no}</span>
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${vaStyle.bg} ${vaStyle.text} border ${vaStyle.border}`}>
                           {vaCode}
                         </span>
                       </div>
 
                       {/* Processor */}
-                      <div className="text-sm font-medium text-gray-700 mb-2">{challan.va_party?.name}</div>
+                      <div className="typo-body mb-2">{challan.va_party?.name}</div>
 
                       {/* Stats row */}
                       <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
@@ -751,7 +751,7 @@ export default function BatchesPage() {
                           </svg>
                           {batchCount} batch{batchCount !== 1 ? 'es' : ''}
                         </span>
-                        <span className="font-semibold text-gray-700">{totalPcs} pcs</span>
+                        <span className="typo-card-title">{totalPcs} pcs</span>
                         <span>{dateStr}</span>
                       </div>
 
@@ -811,7 +811,7 @@ export default function BatchesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
-              <p className="text-sm font-medium">No lots found</p>
+              <p className="typo-empty">No lots found</p>
               <p className="text-xs mt-1">
                 {search ? 'Try a different search term' : 'Distribute lots from the Lots page to create batches'}
               </p>

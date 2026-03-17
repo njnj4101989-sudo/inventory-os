@@ -57,7 +57,7 @@ export default function SearchInput({
         value={local}
         onChange={handleChange}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-9 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+        className="typo-input pl-10 pr-9"
       />
 
       {/* Clear button */}

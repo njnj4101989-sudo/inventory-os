@@ -133,9 +133,9 @@ function KpiCard({ label, value, sub, icon, color }) {
     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-          {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
+          <p className="typo-kpi-label">{label}</p>
+          <p className="mt-1 typo-kpi">{value}</p>
+          {sub && <p className="mt-1 typo-caption">{sub}</p>}
         </div>
         <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
           <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,8 +255,8 @@ export default function InventoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-          <p className="mt-1 text-sm text-gray-500">Real-time stock levels, health tracking, and adjustments</p>
+          <h1 className="typo-page-title">Inventory</h1>
+          <p className="mt-1 typo-caption">Real-time stock levels, health tracking, and adjustments</p>
         </div>
         <div className="flex gap-2">
           <button onClick={handleReconcile} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
@@ -410,7 +410,7 @@ export default function InventoryPage() {
         {adjustError && <div className="mb-4"><ErrorAlert message={adjustError} onDismiss={() => setAdjustError(null)} /></div>}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+            <label className="typo-label">SKU</label>
             <select value={adjustForm.sku_id} onChange={(e) => setAdjustForm((f) => ({ ...f, sku_id: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
               <option value="">Select SKU</option>
@@ -420,7 +420,7 @@ export default function InventoryPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+            <label className="typo-label">Event Type</label>
             <select value={adjustForm.event_type} onChange={(e) => setAdjustForm((f) => ({ ...f, event_type: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
               <option value="ADJUSTMENT">Adjustment (+/-)</option>
@@ -429,13 +429,13 @@ export default function InventoryPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+            <label className="typo-label">Quantity</label>
             <input type="number" value={adjustForm.quantity} onChange={(e) => setAdjustForm((f) => ({ ...f, quantity: e.target.value }))}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               placeholder="Positive to add, negative to remove" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+            <label className="typo-label">Reason</label>
             <textarea value={adjustForm.reason} onChange={(e) => setAdjustForm((f) => ({ ...f, reason: e.target.value }))} rows={2}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               placeholder="Reason for this adjustment..." />

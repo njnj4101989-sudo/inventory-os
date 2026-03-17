@@ -46,7 +46,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* Logo / Brand */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-gray-800">
         {!collapsed && (
-          <span className="text-lg font-bold text-primary-400">Inventory-OS</span>
+          <span className="typo-section-title text-primary-400">Inventory-OS</span>
         )}
         <button
           onClick={onToggle}
@@ -64,7 +64,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           item.section ? (
             !collapsed && (
               <div key={item.section} className="px-3 pt-2.5 pb-0.5">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                <span className="typo-nav-section">
                   {item.section}
                 </span>
               </div>
@@ -74,7 +74,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-1.5 rounded-lg typo-nav transition-colors ${
                   isActive
                     ? 'bg-primary-600 text-white'
                     : 'text-gray-300 hover:bg-gray-800 hover:text-white'
@@ -92,7 +92,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Footer */}
       {!collapsed && (
-        <div className="px-4 py-2 border-t border-gray-800 text-xs text-gray-500">
+        <div className="px-4 py-2 border-t border-gray-800 typo-caption">
           v1.0.0
         </div>
       )}

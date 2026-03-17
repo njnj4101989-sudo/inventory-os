@@ -185,12 +185,12 @@ export default function BatchDetailPage() {
       <div className="flex items-center gap-1.5 text-xs">
         <button onClick={() => navigate('/batches')} className="text-gray-400 hover:text-primary-600 transition-colors">Batches</button>
         <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-        <span className="text-gray-600 font-medium">{batch.batch_code}</span>
+        <span className="typo-body text-gray-600">{batch.batch_code}</span>
       </div>
       <div className="flex items-center gap-3">
         <h1 className="typo-page-title text-gray-900">{batch.batch_code}</h1>
         <StatusBadge status={batch.status} />
-        <span className="text-sm text-gray-500">
+        <span className="typo-body text-gray-500">
           {lot ? `${lot.lot_code} · Design ${lot.design_no}` : batch.sku ? batch.sku.sku_code : ''}
         </span>
         {batch.size && <span className="rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-inset ring-primary-200">{batch.size}</span>}
@@ -215,7 +215,7 @@ export default function BatchDetailPage() {
                 <p className="text-[11px] text-indigo-600 mt-0.5">{pieces} pieces from {tailor || 'tailor'}</p>
               </div>
               <button onClick={() => { setShowQCForm(true); setQcApproved(String(pieces)); setQcRejected('0') }}
-                className="rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 text-sm font-semibold transition-colors">
+                className="rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 typo-btn transition-colors">
                 QC Check
               </button>
             </div>
@@ -247,7 +247,7 @@ export default function BatchDetailPage() {
                   </div>
                 )}
                 <button onClick={handleCheckBatch} disabled={actionLoading || (parseInt(qcApproved) || 0) + (parseInt(qcRejected) || 0) === 0}
-                  className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-1.5 text-sm font-semibold disabled:opacity-50 transition-colors whitespace-nowrap">
+                  className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-1.5 typo-btn disabled:opacity-50 transition-colors whitespace-nowrap">
                   {actionLoading ? 'Saving...' : 'Submit QC'}
                 </button>
               </div>
@@ -264,7 +264,7 @@ export default function BatchDetailPage() {
             <p className="text-[11px] text-orange-600 mt-0.5">{pieces} pieces checked ({approved} approved, {rejected} rejected)</p>
           </div>
           <button onClick={handleReadyForPacking} disabled={actionLoading}
-            className="rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50 transition-colors">
+            className="rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 typo-btn disabled:opacity-50 transition-colors">
             {actionLoading ? 'Processing...' : 'Ready for Packing'}
           </button>
         </div>
@@ -281,7 +281,7 @@ export default function BatchDetailPage() {
               placeholder="Pack reference (optional)"
               className="rounded-lg border border-green-300 px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-green-400" />
             <button onClick={handlePackBatch} disabled={actionLoading}
-              className="rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50 transition-colors whitespace-nowrap">
+              className="rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 typo-btn disabled:opacity-50 transition-colors whitespace-nowrap">
               {actionLoading ? 'Packing...' : 'Mark as Packed'}
             </button>
           </div>
@@ -434,7 +434,7 @@ export default function BatchDetailPage() {
               const active = stepActive(node.step, node.stepIndex)
               return (
                 <div key={node.step.key} className="text-center">
-                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  <span className={`typo-kpi-label ${
                     active ? 'text-amber-700' : done ? 'text-gray-700' : 'text-gray-400'
                   }`}>{node.step.label}</span>
                 </div>

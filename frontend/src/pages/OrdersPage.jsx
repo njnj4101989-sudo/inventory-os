@@ -535,20 +535,20 @@ export default function OrdersPage() {
             {/* Customer info */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold">Phone</p>
-                <p className="text-xs font-medium text-gray-800">{o.customer?.phone || o.customer_phone || '—'}</p>
+                <p className="typo-label-sm">Phone</p>
+                <p className="typo-body">{o.customer?.phone || o.customer_phone || '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold">Source</p>
+                <p className="typo-label-sm">Source</p>
                 <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_COLORS[o.source] || 'bg-gray-100 text-gray-600'}`}>{o.source}</span>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold">Date</p>
-                <p className="text-xs font-medium text-gray-800">{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
+                <p className="typo-label-sm">Date</p>
+                <p className="typo-body">{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold">Address</p>
-                <p className="text-xs font-medium text-gray-800">{o.customer_address || o.customer?.city || '—'}</p>
+                <p className="typo-label-sm">Address</p>
+                <p className="typo-body">{o.customer_address || o.customer?.city || '—'}</p>
               </div>
             </div>
 
@@ -678,10 +678,10 @@ export default function OrdersPage() {
 
           {/* Customer section */}
           <div className="bg-gray-50 rounded-lg p-3 mb-3">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
+            <h3 className="typo-card-title mb-2">Customer Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <div className="md:col-span-2">
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Customer *</label>
+                <label className="typo-label-sm">Customer *</label>
                 <select ref={nameRef} value={customerForm.customer_id}
                   data-customer-field="customer_id"
                   data-master="customer"
@@ -706,7 +706,7 @@ export default function OrdersPage() {
                 ) : null
               })()}
               <div>
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Source</label>
+                <label className="typo-label-sm">Source</label>
                 <select value={customerForm.source}
                   data-customer-field="source"
                   onChange={(e) => setCustomerForm(f => ({ ...f, source: e.target.value }))}
@@ -718,7 +718,7 @@ export default function OrdersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] uppercase text-gray-500 font-semibold mb-0.5">Notes</label>
+                <label className="typo-label-sm">Notes</label>
                 <input type="text" value={customerForm.notes}
                   data-customer-field="notes"
                   onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
@@ -741,7 +741,7 @@ export default function OrdersPage() {
               {/* ── Design Picker ── */}
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-semibold text-gray-700">Select Designs</h3>
+                  <h3 className="typo-card-title">Select Designs</h3>
                   <span className="text-[11px] text-gray-400">{designGroups.length} designs available</span>
                 </div>
                 <div className="mb-2" data-design-search>
@@ -798,7 +798,7 @@ export default function OrdersPage() {
               {/* ── Selected Designs — color×size grids ── */}
               {selectedGroups.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-gray-700">Order Items ({selectedGroups.length} design{selectedGroups.length > 1 ? 's' : ''})</h3>
+                  <h3 className="typo-card-title">Order Items ({selectedGroups.length} design{selectedGroups.length > 1 ? 's' : ''})</h3>
                   {selectedGroups.map(group => {
                     const groupSubtotal = group.skus.reduce((s, sku) => {
                       const qty = gridQty[sku.id] || 0
@@ -963,8 +963,8 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Orders</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage customer orders and fulfillment</p>
+          <h1 className="typo-page-title">Orders</h1>
+          <p className="mt-1 typo-caption">Manage customer orders and fulfillment</p>
         </div>
         <button onClick={openCreate}
           className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">

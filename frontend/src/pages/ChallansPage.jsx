@@ -162,7 +162,7 @@ export default function ChallansPage() {
         <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-lg font-bold text-gray-900 font-mono">{detail.challan_no}</h2>
+              <h2 className="typo-modal-title font-mono">{detail.challan_no}</h2>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold border ${st.bg} ${st.text} ${st.border}`}>
                 {st.label}
               </span>
@@ -194,33 +194,33 @@ export default function ChallansPage() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               <div className="rounded-xl border border-gray-200 bg-white p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900">{isJob ? (detail.roll_count || 0) : (detail.total_pieces || 0)}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{isJob ? 'Rolls' : 'Pieces'}</div>
+                <div className="typo-kpi">{isJob ? (detail.roll_count || 0) : (detail.total_pieces || 0)}</div>
+                <div className="typo-kpi-label mt-0.5">{isJob ? 'Rolls' : 'Pieces'}</div>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="typo-kpi">
                   {isJob ? `${(detail.total_weight || 0).toFixed(1)} kg` : (detail.total_cost ? `₹${detail.total_cost}` : '—')}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">{isJob ? 'Total Weight' : 'Total Cost'}</div>
+                <div className="typo-kpi-label mt-0.5">{isJob ? 'Total Weight' : 'Total Cost'}</div>
               </div>
               <div className={`rounded-xl border p-4 text-center ${vc.bg} ${vc.border}`}>
                 <div className={`text-lg font-bold ${vc.text}`}>{detail.value_addition?.short_code || '—'}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{detail.value_addition?.name || 'VA Type'}</div>
+                <div className="typo-kpi-label mt-0.5">{detail.value_addition?.name || 'VA Type'}</div>
               </div>
               <div className="rounded-xl border border-gray-200 bg-white p-4 text-center">
-                <div className="text-sm font-semibold text-gray-700">{detail.created_by_user?.full_name || '—'}</div>
-                <div className="text-xs text-gray-500 mt-0.5">Created By</div>
+                <div className="typo-data">{detail.created_by_user?.full_name || '—'}</div>
+                <div className="typo-kpi-label mt-0.5">Created By</div>
               </div>
             </div>
 
             {/* Items table */}
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
               <div className="border-b border-gray-100 px-5 py-3">
-                <h3 className="text-sm font-semibold text-gray-700">{isJob ? 'Rolls' : 'Batch Items'}</h3>
+                <h3 className="typo-card-title">{isJob ? 'Rolls' : 'Batch Items'}</h3>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <tr className="border-b border-gray-100 bg-gray-50/50 typo-th">
                     <th className="px-4 py-2.5 text-center w-10">#</th>
                     {isJob ? (
                       <>
@@ -281,7 +281,7 @@ export default function ChallansPage() {
             {/* Notes */}
             {detail.notes && (
               <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-                <h4 className="text-xs font-semibold uppercase text-gray-500 mb-1">Notes</h4>
+                <h4 className="typo-label-sm">Notes</h4>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.notes}</p>
               </div>
             )}
@@ -297,8 +297,8 @@ export default function ChallansPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Challans</h1>
-          <p className="text-sm text-gray-500">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
+          <h1 className="typo-page-title">Challans</h1>
+          <p className="typo-caption">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
         </div>
         <button onClick={fetchData} className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -322,24 +322,24 @@ export default function ChallansPage() {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-bold text-gray-900">{kpis.total}</div>
-          <div className="text-[10px] font-medium text-gray-500 uppercase">Total</div>
+          <div className="typo-kpi-sm text-gray-900">{kpis.total}</div>
+          <div className="typo-kpi-label">Total</div>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-center">
-          <div className="text-xl font-bold text-blue-700">{kpis.sent}</div>
-          <div className="text-[10px] font-medium text-blue-500 uppercase">Sent</div>
+          <div className="typo-kpi-sm text-blue-700">{kpis.sent}</div>
+          <div className="typo-kpi-label text-blue-500">Sent</div>
         </div>
         <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3 text-center">
-          <div className="text-xl font-bold text-amber-700">{kpis.partial}</div>
-          <div className="text-[10px] font-medium text-amber-500 uppercase">Partial</div>
+          <div className="typo-kpi-sm text-amber-700">{kpis.partial}</div>
+          <div className="typo-kpi-label text-amber-500">Partial</div>
         </div>
         <div className="rounded-xl border border-green-100 bg-green-50/50 p-3 text-center">
-          <div className="text-xl font-bold text-green-700">{kpis.received}</div>
-          <div className="text-[10px] font-medium text-green-500 uppercase">Received</div>
+          <div className="typo-kpi-sm text-green-700">{kpis.received}</div>
+          <div className="typo-kpi-label text-green-500">Received</div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-bold text-gray-900">{kpis.totalItems}</div>
-          <div className="text-[10px] font-medium text-gray-500 uppercase">{tab === 'job' ? 'Rolls' : 'Pieces'}</div>
+          <div className="typo-kpi-sm text-gray-900">{kpis.totalItems}</div>
+          <div className="typo-kpi-label">{tab === 'job' ? 'Rolls' : 'Pieces'}</div>
         </div>
       </div>
 
@@ -382,7 +382,7 @@ export default function ChallansPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <tr className="border-b border-gray-200 bg-gray-50 typo-th">
                 <th className="px-4 py-3 text-left">Challan</th>
                 <th className="px-4 py-3 text-left">VA Party</th>
                 <th className="px-4 py-3 text-left">VA Type</th>

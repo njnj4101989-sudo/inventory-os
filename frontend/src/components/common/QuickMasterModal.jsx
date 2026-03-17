@@ -147,18 +147,18 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
       title={config.title}
       actions={
         <>
-          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn text-gray-600 hover:bg-gray-50">
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            className="rounded-lg bg-primary-600 px-4 py-2 typo-btn text-white hover:bg-primary-700 disabled:opacity-50">
             {saving ? 'Creating...' : 'Create & Select'}
           </button>
         </>
       }
     >
       <div className="space-y-3" onKeyDown={handleKeyDown}>
-        <p className="text-xs text-gray-500 bg-gray-50 rounded px-3 py-2">
+        <p className="typo-caption bg-gray-50 rounded px-3 py-2">
           Quick create — press <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-white border border-gray-300 rounded">Enter</kbd> to save, <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-white border border-gray-300 rounded">Esc</kbd> to cancel
         </p>
         {error && (
@@ -166,7 +166,7 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
         )}
         {config.fields.map((f, idx) => (
           <div key={f.key}>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
+            <label className="typo-label-sm">
               {f.label} {f.required && <span className="text-red-500">*</span>}
             </label>
             {f.type === 'select' ? (
@@ -174,7 +174,7 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
                 ref={idx === 0 ? firstInputRef : undefined}
                 value={formData[f.key] || ''}
                 onChange={(e) => setField(f.key, e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="typo-input"
               >
                 {f.options.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -194,7 +194,7 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
                   onChange={(e) => setField(f.key, e.target.value)}
                   placeholder={f.placeholder}
                   maxLength={7}
-                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="typo-input flex-1 font-mono"
                 />
                 <div className="h-9 w-9 rounded-full border border-gray-200 shadow-inner" style={{ backgroundColor: formData[f.key] || '#000000' }} />
               </div>
@@ -206,7 +206,7 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
                 onChange={(e) => setField(f.key, f.uppercase ? e.target.value.toUpperCase() : e.target.value)}
                 placeholder={f.placeholder}
                 maxLength={f.maxLength}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="typo-input"
               />
             )}
           </div>

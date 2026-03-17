@@ -89,10 +89,10 @@ export default function QCQueuePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">
+          <h1 className="typo-section-title text-gray-900">
             Hi, {currentUser.full_name?.split(' ')[0] || 'Checker'}
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="typo-caption mt-0.5">
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
           </p>
         </div>
@@ -121,27 +121,27 @@ export default function QCQueuePage() {
             <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-indigo-700">{batches.length}</span>
+            <span className="typo-kpi text-indigo-700">{batches.length}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-indigo-500 mt-0.5">Pending</div>
+          <div className="typo-kpi-label text-indigo-500 mt-0.5">Pending</div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/60 px-3 py-3 text-center border border-emerald-100">
           <div className="flex items-center justify-center gap-1.5">
             <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-emerald-700">{checkedToday}</span>
+            <span className="typo-kpi text-emerald-700">{checkedToday}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500 mt-0.5">Checked</div>
+          <div className="typo-kpi-label text-emerald-500 mt-0.5">Checked</div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/60 px-3 py-3 text-center border border-gray-100">
           <div className="flex items-center justify-center gap-1.5">
             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
-            <span className="text-2xl font-bold tabular-nums text-gray-700">{totalPieces}</span>
+            <span className="typo-kpi text-gray-700">{totalPieces}</span>
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mt-0.5">Pieces</div>
+          <div className="typo-kpi-label text-gray-500 mt-0.5">Pieces</div>
         </div>
       </div>
 
@@ -152,8 +152,8 @@ export default function QCQueuePage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p className="font-semibold text-gray-700">All caught up!</p>
-          <p className="text-sm text-gray-400 mt-1">No batches awaiting quality check</p>
+          <p className="typo-data">All caught up!</p>
+          <p className="typo-body text-gray-400 mt-1">No batches awaiting quality check</p>
           {checkedToday > 0 && (
             <p className="text-xs text-emerald-600 font-medium mt-3">
               You checked {checkedToday} batch{checkedToday !== 1 ? 'es' : ''} today
@@ -276,13 +276,13 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
       <button onClick={onToggle} className="w-full px-4 py-3 flex items-start justify-between text-left">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-bold text-gray-900">{batch.batch_code}</span>
+            <span className="font-mono typo-data text-gray-900">{batch.batch_code}</span>
             {batch.size && (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5">
                 {batch.size}
               </span>
             )}
-            <span className="text-sm font-semibold text-gray-800">{total} pcs</span>
+            <span className="typo-data">{total} pcs</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
             {batch.tailor && (
@@ -344,7 +344,7 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
           <button
             onClick={handleAllPass}
             disabled={isLoading || showRejectMode}
-            className="w-full py-3 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors mb-3 flex items-center justify-center gap-2"
+            className="w-full py-3 bg-green-600 text-white typo-btn rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors mb-3 flex items-center justify-center gap-2"
           >
             {isLoading && !showRejectMode ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -429,7 +429,7 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
                   <button
                     onClick={handleSubmitRejects}
                     disabled={isLoading || rejects.length === 0}
-                    className="w-full py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    className="w-full py-2.5 bg-red-600 text-white typo-btn rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
                   >
                     {isLoading ? 'Checking...' : `Submit (${total - totalRejected()} pass, ${totalRejected()} reject)`}
                   </button>
@@ -438,13 +438,13 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
                 <div className="space-y-3 mb-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Approved</label>
+                      <label className="typo-label-sm">Approved</label>
                       <input type="number" min="0" max={total} value={flatApproved}
                         onChange={(e) => { const v = e.target.value; setFlatApproved(v); setFlatRejected(String(Math.max(0, total - (parseInt(v) || 0)))) }}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Rejected</label>
+                      <label className="typo-label-sm">Rejected</label>
                       <input type="number" min="0" max={total} value={flatRejected}
                         onChange={(e) => { const v = e.target.value; setFlatRejected(v); setFlatApproved(String(Math.max(0, total - (parseInt(v) || 0)))) }}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="0" />
@@ -452,13 +452,13 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
                   </div>
                   {parseInt(flatRejected) > 0 && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Rejection Reason</label>
+                      <label className="typo-label-sm">Rejection Reason</label>
                       <input type="text" value={flatReason} onChange={(e) => setFlatReason(e.target.value)}
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="e.g. Stitching defects" />
                     </div>
                   )}
                   <button onClick={handleSubmitRejects} disabled={isLoading}
-                    className="w-full py-2.5 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
+                    className="w-full py-2.5 bg-red-600 text-white typo-btn rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
                     {isLoading ? 'Checking...' : 'Submit Check'}
                   </button>
                 </div>

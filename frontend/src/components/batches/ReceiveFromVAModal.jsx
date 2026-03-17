@@ -87,8 +87,6 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
     }
   }
 
-  const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-
   return (
     <Modal
       open={open}
@@ -97,9 +95,9 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
       wide
       actions={
         <>
-          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn text-gray-700 hover:bg-gray-50">Cancel</button>
           <button onClick={handleSubmit} disabled={saving || !selectedChallan}
-            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+            className="rounded-lg bg-green-600 px-4 py-2 typo-btn text-white hover:bg-green-700 disabled:opacity-50">
             {saving ? 'Receiving...' : `Receive${totalCost > 0 ? ` (₹${totalCost.toLocaleString('en-IN')})` : ''}`}
           </button>
         </>
@@ -111,11 +109,11 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
         {/* Challan selector */}
         {!selectedChallan ? (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Pending Challan</label>
+            <label className="typo-label mb-2">Select Pending Challan</label>
             {loadingChallans ? (
-              <p className="text-sm text-gray-400">Loading challans...</p>
+              <p className="typo-empty">Loading challans...</p>
             ) : challans.length === 0 ? (
-              <p className="text-sm text-gray-400">No pending batch challans</p>
+              <p className="typo-empty">No pending batch challans</p>
             ) : (
               <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
                 {challans.map((c) => (
@@ -123,14 +121,14 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                     className="w-full text-left px-4 py-3 hover:bg-primary-50 transition-colors">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-mono font-semibold text-gray-800">{c.challan_no}</span>
+                        <span className="typo-data font-mono">{c.challan_no}</span>
                         {c.value_addition && (
-                          <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">+{c.value_addition.short_code}</span>
+                          <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 typo-badge text-violet-700">+{c.value_addition.short_code}</span>
                         )}
                       </div>
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Sent</span>
+                      <span className="typo-badge bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Sent</span>
                     </div>
-                    <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3">
+                    <div className="typo-caption mt-1 flex flex-wrap gap-x-3">
                       <span>{c.va_party?.name}</span>
                       <span>{c.total_pieces} pcs</span>
                       <span>{(c.batch_items || []).length} batches</span>
@@ -146,28 +144,28 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
             {/* Selected challan header */}
             <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
               <div>
-                <span className="font-mono font-semibold text-gray-800">{selectedChallan.challan_no}</span>
-                <span className="ml-2 text-sm text-gray-500">{selectedChallan.va_party?.name}</span>
+                <span className="typo-data font-mono">{selectedChallan.challan_no}</span>
+                <span className="ml-2 typo-body text-gray-500">{selectedChallan.va_party?.name}</span>
                 {selectedChallan.value_addition && (
-                  <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">
+                  <span className="ml-2 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 typo-badge text-violet-700">
                     +{selectedChallan.value_addition.short_code}
                   </span>
                 )}
               </div>
-              <button onClick={() => setSelectedChallan(null)} className="text-xs text-primary-600 hover:text-primary-800">Change</button>
+              <button onClick={() => setSelectedChallan(null)} className="typo-btn-sm text-primary-600 hover:text-primary-800">Change</button>
             </div>
 
             {/* Batch items — enter received pieces + cost */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Batch Items</label>
+              <label className="typo-label mb-2">Batch Items</label>
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500">
-                      <th className="text-left py-2 pl-3">Batch</th>
-                      <th className="text-center py-2">Sent</th>
-                      <th className="text-center py-2">Received</th>
-                      <th className="text-right py-2 pr-3">Cost (₹)</th>
+                    <tr className="bg-gray-50">
+                      <th className="typo-th text-left py-2 pl-3">Batch</th>
+                      <th className="typo-th text-center py-2">Sent</th>
+                      <th className="typo-th text-center py-2">Received</th>
+                      <th className="typo-th text-right py-2 pr-3">Cost (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -177,8 +175,8 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                       return (
                         <tr key={batchId}>
                           <td className="py-2 pl-3">
-                            <span className="font-mono font-semibold text-gray-800 text-xs">{item.batch?.batch_code || '—'}</span>
-                            {item.batch?.size && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded font-bold">{item.batch.size}</span>}
+                            <span className="typo-data font-mono text-xs">{item.batch?.batch_code || '—'}</span>
+                            {item.batch?.size && <span className="ml-1.5 typo-badge bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded">{item.batch.size}</span>}
                           </td>
                           <td className="py-2 text-center text-gray-600">{item.pieces_sent}</td>
                           <td className="py-2 text-center">
@@ -203,9 +201,9 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="typo-label">Notes</label>
               <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional notes" className={INPUT} />
+                placeholder="Optional notes" className="typo-input" />
             </div>
           </>
         )}

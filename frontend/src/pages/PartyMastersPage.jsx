@@ -156,17 +156,14 @@ const EMPTY_FORMS = {
 
 // ── Style Classes ────────────────────────────────────────
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm placeholder:text-xs placeholder:text-gray-300 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
 const HINT = 'text-xs text-gray-400 mt-0.5'
-const SECTION_TITLE = 'text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5'
 
 // ── Extracted Components (outside main to avoid re-mount) ──
 
 function Field({ label, name, type = 'text', hint, placeholder, required, maxLength, className = '', form, set, fieldErrors }) {
   return (
     <div className={className}>
-      <label className={LABEL}>
+      <label className="typo-label">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
@@ -175,7 +172,7 @@ function Field({ label, name, type = 'text', hint, placeholder, required, maxLen
         maxLength={maxLength}
         onChange={(e) => set(name, (type === 'text' && (name === 'gst_no' || name === 'pan_no')) ? e.target.value.toUpperCase() : e.target.value)}
         placeholder={placeholder}
-        className={`${INPUT} ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+        className={`typo-input ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
       />
       {fieldErrors[name]
         ? <p className="text-xs text-red-500 mt-0.5">{fieldErrors[name]}</p>
@@ -187,8 +184,8 @@ function Field({ label, name, type = 'text', hint, placeholder, required, maxLen
 function SelectField({ label, name, options, placeholder, form, set, className = '' }) {
   return (
     <div className={className}>
-      <label className={LABEL}>{label}</label>
-      <select value={form[name] ?? ''} onChange={(e) => set(name, e.target.value)} className={INPUT}>
+      <label className="typo-label">{label}</label>
+      <select value={form[name] ?? ''} onChange={(e) => set(name, e.target.value)} className="typo-input">
         <option value="">{placeholder || `Select ${label}`}</option>
         {options.map((o) => {
           const val = typeof o === 'string' ? o : o.value
@@ -564,7 +561,7 @@ export default function PartyMastersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Party Masters</h1>
+          <h1 className="typo-page-title">Party Masters</h1>
           <p className="text-xs text-gray-500">
             {labels.desc}
             {total > 0 && <span className="ml-2 text-gray-400">({total} total)</span>}
@@ -834,7 +831,7 @@ export default function PartyMastersPage() {
         <div className="space-y-0 -mx-6">
           {/* Row 1: Business Identity — 5 cols */}
           <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className={SECTION_TITLE}>Business Information</h3>
+            <h3 className="typo-label-sm mb-1.5">Business Information</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="name" label={`${labels.singular} Name`} required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="contact_person" label="Contact Person" placeholder="e.g. Krishna Sharma" form={form} set={set} fieldErrors={fieldErrors} />
@@ -846,7 +843,7 @@ export default function PartyMastersPage() {
 
           {/* Row 2: GST & Compliance — 5 cols */}
           <div className="px-6 py-1.5">
-            <h3 className={SECTION_TITLE}>GST & Compliance</h3>
+            <h3 className="typo-label-sm mb-1.5">GST & Compliance</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} hint={form.state_code ? `State: ${form.state_code} — ${GST_STATE_CODES[form.state_code] || ''}` : 'Auto-fills state from GSTIN'} form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="gst_type" label="GST Type" options={GST_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
@@ -862,7 +859,7 @@ export default function PartyMastersPage() {
 
           {/* Row 3: Address — 5 cols */}
           <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className={SECTION_TITLE}>Address</h3>
+            <h3 className="typo-label-sm mb-1.5">Address</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="state" label="State" options={INDIAN_STATES} placeholder="Select State" form={form} set={set} />
@@ -871,15 +868,15 @@ export default function PartyMastersPage() {
                 <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
               ) : <div />}
               <div className="md:col-span-1">
-                <label className={LABEL}>Address</label>
-                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={1} placeholder="Street address" className={INPUT} />
+                <label className="typo-label">Address</label>
+                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={1} placeholder="Street address" className="typo-input" />
               </div>
             </div>
           </div>
 
           {/* Row 4: Credit & Payment — 5 cols */}
           <div className="px-6 py-1.5">
-            <h3 className={SECTION_TITLE}>Credit & Payment</h3>
+            <h3 className="typo-label-sm mb-1.5">Credit & Payment</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="credit_limit" label="Credit Limit (Rs.)" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
@@ -891,17 +888,17 @@ export default function PartyMastersPage() {
 
           {/* Row 5: TDS + MSME + Notes — all inline 5 cols */}
           <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className={SECTION_TITLE}>TDS {showTCS ? '/ TCS ' : ''}/ MSME / Notes</h3>
+            <h3 className="typo-label-sm mb-1.5">TDS {showTCS ? '/ TCS ' : ''}/ MSME / Notes</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-start">
               <div>
-                <label className={LABEL}>&nbsp;</label>
+                <label className="typo-label">&nbsp;</label>
                 <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-1.5" />
               </div>
               {showMSME ? (
                 <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
               ) : (
                 <div>
-                  <label className={LABEL}>&nbsp;</label>
+                  <label className="typo-label">&nbsp;</label>
                   <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-1.5" />
                 </div>
               )}
@@ -909,8 +906,8 @@ export default function PartyMastersPage() {
                 <Field name="msme_reg_no" label="MSME Reg No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
               )}
               <div className={showMSME && form.msme_type && form.msme_type !== 'none' ? 'md:col-span-2' : 'md:col-span-3'}>
-                <label className={LABEL}>Notes</label>
-                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className={INPUT} />
+                <label className="typo-label">Notes</label>
+                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className="typo-input" />
               </div>
             </div>
             {/* TDS expanded fields */}

@@ -134,24 +134,24 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
         {/* Header */}
         <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-4 py-3 text-white flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-sm font-bold">{partyName}</h2>
-            <p className="text-xs opacity-80">{partyType.replace('_', ' ')} Ledger</p>
+            <h2 className="typo-data">{partyName}</h2>
+            <p className="typo-caption opacity-80">{partyType.replace('_', ' ')} Ledger</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowPayment(true)}
-              className="rounded bg-white/20 px-3 py-1 text-xs font-medium hover:bg-white/30">
+              className="rounded bg-white/20 px-3 py-1 typo-btn-sm hover:bg-white/30">
               Record Payment
             </button>
-            <button onClick={onClose} className="rounded bg-white/20 px-2 py-1 text-xs hover:bg-white/30">✕</button>
+            <button onClick={onClose} className="rounded bg-white/20 px-2 py-1 typo-btn-sm hover:bg-white/30">✕</button>
           </div>
         </div>
 
         {/* Balance summary */}
         {balance && (
-          <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 text-xs shrink-0">
-            <span className="text-gray-500">Debit: <strong className="text-gray-800">₹{fmt(balance.total_debit)}</strong></span>
-            <span className="text-gray-500">Credit: <strong className="text-gray-800">₹{fmt(balance.total_credit)}</strong></span>
-            <span className={`font-bold ${balance.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
+          <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 typo-caption shrink-0">
+            <span className="text-gray-500">Debit: <strong className="typo-data text-gray-800">₹{fmt(balance.total_debit)}</strong></span>
+            <span className="text-gray-500">Credit: <strong className="typo-data text-gray-800">₹{fmt(balance.total_credit)}</strong></span>
+            <span className={`typo-data ${balance.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
               Balance: ₹{fmt(balance.balance)} {balance.balance_type.toUpperCase()}
             </span>
           </div>
@@ -161,30 +161,30 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
         {showPayment && (
           <div className="px-4 py-3 bg-emerald-50 border-b shrink-0 space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-emerald-800">Record Payment</h3>
-              <button onClick={() => setShowPayment(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+              <h3 className="typo-badge text-emerald-800">Record Payment</h3>
+              <button onClick={() => setShowPayment(false)} className="typo-btn-sm text-gray-500 hover:text-gray-700">Cancel</button>
             </div>
             {payError && <p className="text-xs text-red-600">{payError}</p>}
             <div className="grid grid-cols-4 gap-2">
               <div>
-                <label className="block text-[10px] uppercase text-gray-500 font-semibold">Amount *</label>
+                <label className="typo-label-sm">Amount *</label>
                 <input type="number" value={payForm.amount} onChange={(e) => setPayForm(f => ({ ...f, amount: e.target.value }))}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="0.00" />
               </div>
               <div>
-                <label className="block text-[10px] uppercase text-gray-500 font-semibold">Date *</label>
+                <label className="typo-label-sm">Date *</label>
                 <input type="date" value={payForm.payment_date} onChange={(e) => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs" />
               </div>
               <div>
-                <label className="block text-[10px] uppercase text-gray-500 font-semibold">Mode</label>
+                <label className="typo-label-sm">Mode</label>
                 <select value={payForm.payment_mode} onChange={(e) => setPayForm(f => ({ ...f, payment_mode: e.target.value }))}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs">
                   {PAYMENT_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] uppercase text-gray-500 font-semibold">Ref No.</label>
+                <label className="typo-label-sm">Ref No.</label>
                 <input type="text" value={payForm.reference_no} onChange={(e) => setPayForm(f => ({ ...f, reference_no: e.target.value }))}
                   className="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="UTR / Cheque #" />
               </div>
@@ -229,7 +229,7 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
                 </>
               )}
               <button onClick={handlePayment} disabled={saving}
-                className="rounded bg-emerald-600 text-white px-3 py-1 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 col-start-4">
+                className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 col-start-4">
                 {saving ? 'Saving...' : 'Save Payment'}
               </button>
             </div>
@@ -243,16 +243,16 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
             </div>
           ) : entries.length === 0 ? (
-            <div className="text-center py-12 text-gray-400 text-sm">No ledger entries yet</div>
+            <div className="text-center py-12 typo-empty">No ledger entries yet</div>
           ) : (
             <table className="w-full text-xs">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Date</th>
-                  <th className="text-left px-3 py-2 text-gray-500 font-semibold">Particular</th>
-                  <th className="text-right px-3 py-2 text-gray-500 font-semibold">Debit</th>
-                  <th className="text-right px-3 py-2 text-gray-500 font-semibold">Credit</th>
-                  <th className="text-right px-3 py-2 text-gray-500 font-semibold">Balance</th>
+                  <th className="typo-th text-left px-3 py-2">Date</th>
+                  <th className="typo-th text-left px-3 py-2">Particular</th>
+                  <th className="typo-th text-right px-3 py-2">Debit</th>
+                  <th className="typo-th text-right px-3 py-2">Credit</th>
+                  <th className="typo-th text-right px-3 py-2">Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -262,14 +262,14 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
                       {new Date(e.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold mr-1 ${ENTRY_COLORS[e.entry_type] || 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`inline-block rounded px-1.5 py-0.5 typo-badge mr-1 ${ENTRY_COLORS[e.entry_type] || 'bg-gray-100 text-gray-600'}`}>
                         {e.entry_type.toUpperCase()}
                       </span>
-                      <span className="text-gray-800">{e.description}</span>
-                      {e.notes && <p className="text-[10px] text-gray-400 mt-0.5">{e.notes}</p>}
+                      <span className="typo-body text-gray-800">{e.description}</span>
+                      {e.notes && <p className="typo-caption text-gray-400 mt-0.5">{e.notes}</p>}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-medium text-gray-800">{fmt(e.debit)}</td>
-                    <td className="px-3 py-1.5 text-right font-medium text-gray-800">{fmt(e.credit)}</td>
+                    <td className="px-3 py-1.5 text-right typo-td">{fmt(e.debit)}</td>
+                    <td className="px-3 py-1.5 text-right typo-td">{fmt(e.credit)}</td>
                     <td className={`px-3 py-1.5 text-right font-bold ${e.running >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       ₹{fmt(Math.abs(e.running))} {e.running >= 0 ? (partyType === 'customer' ? 'Dr' : 'Cr') : (partyType === 'customer' ? 'Cr' : 'Dr')}
                     </td>

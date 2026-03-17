@@ -56,7 +56,7 @@ export default function NotificationBell() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 typo-badge text-white text-[10px]">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -67,11 +67,11 @@ export default function NotificationBell() {
         <div className="fixed right-2 left-2 top-14 sm:absolute sm:right-0 sm:left-auto sm:top-full sm:mt-2 sm:w-80 max-h-96 bg-white rounded-xl shadow-xl border border-gray-200 flex flex-col z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-            <span className="text-xs font-semibold text-gray-700">Notifications</span>
+            <span className="typo-badge text-gray-700">Notifications</span>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
-                className="text-[10px] font-medium text-primary-600 hover:text-primary-800"
+                className="typo-caption font-medium text-primary-600 hover:text-primary-800"
               >
                 Mark all read
               </button>
@@ -81,7 +81,7 @@ export default function NotificationBell() {
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="py-8 text-center text-xs text-gray-400">
+              <div className="py-8 text-center typo-caption text-gray-400">
                 No notifications yet
               </div>
             ) : (
@@ -95,10 +95,10 @@ export default function NotificationBell() {
                 >
                   <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${DOT_COLORS[n.color] || DOT_COLORS.gray}`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-xs leading-tight ${!n.read ? 'font-medium text-gray-800' : 'text-gray-600'}`}>
+                    <p className={`typo-caption leading-tight ${!n.read ? 'font-medium text-gray-800' : 'text-gray-600'}`}>
                       {n.message}
                     </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
+                    <p className="typo-caption text-gray-400 mt-0.5">
                       {n.actor} &middot; {timeAgo(n.timestamp)}
                     </p>
                   </div>
@@ -112,7 +112,7 @@ export default function NotificationBell() {
             <div className="border-t border-gray-100 px-3 py-1.5 flex justify-end">
               <button
                 onClick={clearAll}
-                className="text-[10px] font-medium text-gray-400 hover:text-red-500"
+                className="typo-caption font-medium text-gray-400 hover:text-red-500"
               >
                 Clear all
               </button>

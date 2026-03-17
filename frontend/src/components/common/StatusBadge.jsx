@@ -58,7 +58,7 @@ export default function StatusBadge({ status, label }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${colorClass}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 typo-badge capitalize ${colorClass}`}
     >
       {display}
     </span>

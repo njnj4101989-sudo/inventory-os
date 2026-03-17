@@ -101,8 +101,8 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-      <p className="mt-1 text-sm text-gray-500">Overview of your textile inventory operations</p>
+      <h1 className="typo-page-title">Dashboard</h1>
+      <p className="mt-1 typo-caption">Overview of your textile inventory operations</p>
 
       {/* Summary Cards */}
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -117,13 +117,13 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">{card.subLabel || card.label}</p>
-                  <p className="text-xl font-bold text-gray-800">
+                  <p className="typo-data-label">{card.subLabel || card.label}</p>
+                  <p className="typo-kpi-sm text-gray-800">
                     {card.value(sectionData, summary)}
                   </p>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-gray-400">
+              <p className="mt-3 typo-caption">
                 {card.format(sectionData, summary)}
               </p>
             </div>
@@ -142,18 +142,18 @@ export default function DashboardPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{card.label}</p>
-                <p className="text-xl font-bold text-gray-800">{card.value(summary)}</p>
+                <p className="typo-data-label">{card.label}</p>
+                <p className="typo-kpi-sm text-gray-800">{card.value(summary)}</p>
               </div>
             </div>
-            <p className="mt-3 text-xs text-gray-400">{card.format(summary)}</p>
+            <p className="mt-3 typo-caption">{card.format(summary)}</p>
           </div>
         ))}
       </div>
 
       {/* Batch Pipeline — 7 states */}
       <div className="mt-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h2 className="text-lg font-semibold text-gray-800">Batch Pipeline</h2>
+        <h2 className="typo-section-title">Batch Pipeline</h2>
         <div className="mt-4 grid grid-cols-7 gap-2">
           {[
             { label: 'Created', value: summary.batches.created, bg: 'bg-gray-100', accent: 'text-gray-800', muted: 'text-gray-500' },
@@ -165,12 +165,12 @@ export default function DashboardPage() {
             { label: 'Packed', value: summary.batches.packed || 0, bg: 'bg-green-100', accent: 'text-green-800', muted: 'text-green-600' },
           ].map((stage) => (
             <div key={stage.label} className={`rounded-lg p-3 text-center ${stage.bg}`}>
-              <p className={`text-2xl font-bold tabular-nums ${stage.accent}`}>{stage.value}</p>
+              <p className={`typo-kpi ${stage.accent}`}>{stage.value}</p>
               <p className={`mt-1 text-[11px] font-semibold uppercase tracking-wide ${stage.muted}`}>{stage.label}</p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex gap-4 text-xs text-gray-400">
+        <div className="mt-3 flex gap-4 typo-caption">
           <span>Checked today: {summary.batches.checked_today || 0}</span>
           <span>Packed today: {summary.batches.packed_today || 0}</span>
         </div>
@@ -179,15 +179,15 @@ export default function DashboardPage() {
       {/* Inventory + Orders side-by-side */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800">Inventory</h2>
+          <h2 className="typo-section-title">Inventory</h2>
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Total SKUs</span>
-              <span className="font-semibold text-gray-800">{summary.inventory.total_skus}</span>
+              <span className="typo-td-secondary">Total SKUs</span>
+              <span className="typo-data">{summary.inventory.total_skus}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Low Stock SKUs</span>
-              <span className={`font-semibold ${summary.inventory.low_stock_skus > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              <span className="typo-td-secondary">Low Stock SKUs</span>
+              <span className={`typo-data ${summary.inventory.low_stock_skus > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {summary.inventory.low_stock_skus}
               </span>
             </div>
@@ -195,15 +195,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800">Revenue</h2>
+          <h2 className="typo-section-title">Revenue</h2>
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">Today</span>
-              <span className="font-semibold text-gray-800">₹{summary.revenue_today.toLocaleString()}</span>
+              <span className="typo-td-secondary">Today</span>
+              <span className="typo-data">₹{summary.revenue_today.toLocaleString()}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">This Month</span>
-              <span className="font-semibold text-gray-800">₹{summary.revenue_month.toLocaleString()}</span>
+              <span className="typo-td-secondary">This Month</span>
+              <span className="typo-data">₹{summary.revenue_month.toLocaleString()}</span>
             </div>
           </div>
         </div>

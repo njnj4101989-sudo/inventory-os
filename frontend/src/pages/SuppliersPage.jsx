@@ -44,22 +44,20 @@ const EMPTY_FORM = {
   address: '', city: '', state: '', pin_code: '',
 }
 
-const INPUT_CLS = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL_CLS = 'block text-sm font-medium text-gray-700 mb-1'
 const HINT_CLS = 'text-xs text-gray-400 mt-0.5'
 
 // --- Extracted outside component to prevent re-mount on every keystroke ---
 function Field({ label, name, type = 'text', hint, placeholder, required, maxLength, className = '', form, set, fieldErrors }) {
   return (
     <div className={className}>
-      <label className={LABEL_CLS}>
+      <label className="typo-label">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
         type={type} value={form[name]} maxLength={maxLength}
         onChange={(e) => set(name, type === 'text' && (name === 'gst_no' || name === 'pan_no') ? e.target.value.toUpperCase() : e.target.value)}
         placeholder={placeholder}
-        className={`${INPUT_CLS} ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+        className={`typo-input ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
       />
       {fieldErrors[name] ? <p className="text-xs text-red-500 mt-0.5">{fieldErrors[name]}</p> : hint ? <p className={HINT_CLS}>{hint}</p> : null}
     </div>
@@ -69,8 +67,8 @@ function Field({ label, name, type = 'text', hint, placeholder, required, maxLen
 function InfoRow({ label, value }) {
   return (
     <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-800 text-right">{value || '—'}</span>
+      <span className="typo-td-secondary">{label}</span>
+      <span className="typo-data text-right">{value || '—'}</span>
     </div>
   )
 }
@@ -216,7 +214,7 @@ export default function SuppliersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Suppliers</h1>
+          <h1 className="typo-page-title">Suppliers</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage fabric and material suppliers
             {total > 0 && <span className="ml-2 text-gray-400">({total} total)</span>}
@@ -266,7 +264,7 @@ export default function SuppliersPage() {
           <div className="space-y-4">
             {/* Business Info */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Business Information</h3>
+              <h3 className="typo-label-sm mb-2">Business Information</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Company Name" value={selected.name} />
                 <InfoRow label="Broker" value={selected.broker} />
@@ -281,7 +279,7 @@ export default function SuppliersPage() {
             </div>
             {/* Contact */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Contact Details</h3>
+              <h3 className="typo-label-sm mb-2">Contact Details</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Contact Person" value={selected.contact_person} />
                 <InfoRow label="Phone" value={selected.phone} />
@@ -290,7 +288,7 @@ export default function SuppliersPage() {
             </div>
             {/* Address */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Address</h3>
+              <h3 className="typo-label-sm mb-2">Address</h3>
               <div className="bg-gray-50 rounded-lg p-3">
                 <InfoRow label="Address" value={selected.address} />
                 <InfoRow label="City" value={selected.city} />
@@ -325,7 +323,7 @@ export default function SuppliersPage() {
         <div className="space-y-5">
           {/* Section 1: Business Info */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Business Information</h3>
+            <h3 className="typo-label-sm mb-3">Business Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field name="name" label="Company Name" required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
@@ -339,7 +337,7 @@ export default function SuppliersPage() {
 
           {/* Section 2: Contact Details */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Contact Details</h3>
+            <h3 className="typo-label-sm mb-3">Contact Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Field name="contact_person" label="Contact Person" placeholder="e.g. Krishna Sharma" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="phone" label="Phone" type="tel" placeholder="e.g. 9876543210" hint="10-digit mobile" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
@@ -349,19 +347,19 @@ export default function SuppliersPage() {
 
           {/* Section 3: Address */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Address</h3>
+            <h3 className="typo-label-sm mb-3">Address</h3>
             <div className="space-y-4">
               <div>
-                <label className={LABEL_CLS}>Street Address</label>
+                <label className="typo-label">Street Address</label>
                 <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2}
                   placeholder="e.g. 45, Ring Road, Textile Market"
-                  className={INPUT_CLS} />
+                  className="typo-input" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
                 <div>
-                  <label className={LABEL_CLS}>State</label>
-                  <select value={form.state} onChange={(e) => set('state', e.target.value)} className={INPUT_CLS}>
+                  <label className="typo-label">State</label>
+                  <select value={form.state} onChange={(e) => set('state', e.target.value)} className="typo-input">
                     <option value="">Select State</option>
                     {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>

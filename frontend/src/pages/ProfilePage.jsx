@@ -26,8 +26,8 @@ export default function ProfilePage() {
           <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-500 mb-3">
             {user?.full_name?.[0]?.toUpperCase() || '?'}
           </div>
-          <h1 className="text-xl font-bold text-gray-900">{user?.full_name || 'User'}</h1>
-          <span className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-600'}`}>
+          <h1 className="typo-section-title text-gray-900">{user?.full_name || 'User'}</h1>
+          <span className={`mt-2 inline-block px-3 py-1 rounded-full typo-badge ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-600'}`}>
             {role?.charAt(0).toUpperCase() + role?.slice(1)}
           </span>
         </div>
@@ -42,7 +42,7 @@ export default function ProfilePage() {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          className="mt-6 w-full py-3 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 transition-colors"
+          className="mt-6 w-full py-3 bg-red-50 text-red-600 typo-btn rounded-xl hover:bg-red-100 transition-colors"
         >
           Sign Out
         </button>
@@ -54,8 +54,8 @@ export default function ProfilePage() {
 function InfoRow({ label, value }) {
   return (
     <div className="px-4 py-3 flex items-center justify-between">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-900">{value || '—'}</span>
+      <span className="typo-body text-gray-500">{label}</span>
+      <span className="typo-body text-gray-900 font-semibold">{value || '—'}</span>
     </div>
   )
 }

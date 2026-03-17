@@ -37,7 +37,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
         <div className={`relative z-10 w-full ${maxW} flex flex-col rounded-xl bg-white shadow-xl`}>
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-2 shrink-0">
-            <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+            <h3 className="typo-modal-title">{title}</h3>
             <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

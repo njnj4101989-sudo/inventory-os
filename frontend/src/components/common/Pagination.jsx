@@ -25,7 +25,7 @@ export default function Pagination({ page = 1, pages = 1, total, onChange }) {
   return (
     <div className="flex items-center justify-between py-3">
       {/* Info */}
-      <span className="text-sm text-gray-500">
+      <span className="typo-caption">
         Page {page} of {pages}
         {total !== undefined && ` (${total} items)`}
       </span>
@@ -36,7 +36,7 @@ export default function Pagination({ page = 1, pages = 1, total, onChange }) {
         <button
           onClick={() => onChange(page - 1)}
           disabled={page <= 1}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Prev
         </button>
@@ -52,7 +52,7 @@ export default function Pagination({ page = 1, pages = 1, total, onChange }) {
           <button
             key={p}
             onClick={() => onChange(p)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+            className={`rounded-lg px-3 py-1.5 typo-btn-sm ${
               p === page
                 ? 'bg-primary-600 text-white'
                 : 'text-gray-600 hover:bg-gray-50'
@@ -72,7 +72,7 @@ export default function Pagination({ page = 1, pages = 1, total, onChange }) {
         <button
           onClick={() => onChange(page + 1)}
           disabled={page >= pages}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Next
         </button>

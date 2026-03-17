@@ -244,7 +244,7 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Users & Roles</h1>
+          <h1 className="typo-page-title">Users & Roles</h1>
           <p className="mt-1 text-sm text-gray-500">Manage user accounts and role configuration</p>
         </div>
         {tab === 'users' && (
@@ -405,7 +405,7 @@ export default function UsersPage() {
         <div className="space-y-4">
           {/* Role name (only editable on create) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="typo-label">
               Role Name (system key)
             </label>
             {editingRole ? (
@@ -414,19 +414,19 @@ export default function UsersPage() {
               <input type="text" value={roleForm.name}
                 onChange={(e) => setRoleForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. floor_manager"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                className="typo-input" />
             )}
           </div>
 
           {/* Display name (alias) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="typo-label">
               Display Name (alias shown in UI)
             </label>
             <input type="text" value={roleForm.display_name}
               onChange={(e) => setRoleForm((f) => ({ ...f, display_name: e.target.value }))}
               placeholder={editingRole ? editingRole.name : 'e.g. Floor Manager'}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+              className="typo-input" />
             <p className="mt-1 text-xs text-gray-400">
               Leave blank to use the system name. This alias is what users see throughout the app.
             </p>
@@ -434,7 +434,7 @@ export default function UsersPage() {
 
           {/* Permissions checklist */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="typo-label mb-2">
               Permissions ({Object.values(roleForm.permissions).filter(Boolean).length} of {ALL_PERMISSIONS.length})
             </label>
             <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 p-3">

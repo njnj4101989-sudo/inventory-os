@@ -54,8 +54,8 @@ export default function Toast() {
               {ICON_MAP[color] || ICON_MAP.gray}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium leading-tight">{toast.message}</p>
-              <p className="text-[10px] opacity-70 mt-0.5">{toast.actor}</p>
+              <p className="typo-btn-sm leading-tight">{toast.message}</p>
+              <p className="typo-caption opacity-70 mt-0.5">{toast.actor}</p>
             </div>
             <button
               onClick={() => dismissToast(toast.id)}

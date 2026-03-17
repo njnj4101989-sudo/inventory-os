@@ -119,8 +119,6 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
     }
   }
 
-  const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-
   return (
     <>
     <Modal
@@ -130,9 +128,9 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
       wide
       actions={
         <>
-          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn text-gray-700 hover:bg-gray-50">Cancel</button>
           <button onClick={handleSubmit} disabled={saving || selectedCount === 0}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            className="rounded-lg bg-primary-600 px-4 py-2 typo-btn text-white hover:bg-primary-700 disabled:opacity-50">
             {saving ? 'Sending...' : `Send ${totalPieces} pcs (${selectedCount} batches)`}
           </button>
         </>
@@ -144,16 +142,16 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         {/* Challan Number Preview */}
         {nextChallanNo && (
           <div className="flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Challan No.</div>
-            <div className="font-mono font-bold text-amber-900 text-sm">{nextChallanNo}</div>
-            <div className="text-[10px] text-amber-500 ml-auto">Auto-generated</div>
+            <div className="typo-data-label uppercase tracking-wide text-amber-600">Challan No.</div>
+            <div className="typo-data font-mono text-amber-900">{nextChallanNo}</div>
+            <div className="typo-caption text-amber-500 ml-auto">Auto-generated</div>
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">VA Type <span className="text-red-500">*</span></label>
-            <select data-master="value_addition" value={selectedVA} onChange={(e) => setSelectedVA(e.target.value)} className={INPUT}>
+            <label className="typo-label">VA Type <span className="text-red-500">*</span></label>
+            <select data-master="value_addition" value={selectedVA} onChange={(e) => setSelectedVA(e.target.value)} className="typo-input">
               <option value="">Select value addition...</option>
               {vaList.map((va) => (
                 <option key={va.id} value={va.id}>{va.name} (+{va.short_code})</option>
@@ -161,8 +159,8 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">VA Party <span className="text-red-500">*</span></label>
-            <select data-master="va_party" value={vaPartyId} onChange={(e) => setVaPartyId(e.target.value)} className={INPUT}>
+            <label className="typo-label">VA Party <span className="text-red-500">*</span></label>
+            <select data-master="va_party" value={vaPartyId} onChange={(e) => setVaPartyId(e.target.value)} className="typo-input">
               <option value="">Select VA party...</option>
               {vaParties.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
@@ -172,17 +170,17 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <label className="typo-label">Notes</label>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional notes" className={INPUT} />
+            placeholder="Optional notes" className="typo-input" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="typo-label mb-2">
             Select Batches ({eligible.length} eligible)
           </label>
           {eligible.length === 0 ? (
-            <p className="text-sm text-gray-400">No batches in "In Progress" or "Checked" status</p>
+            <p className="typo-empty">No batches in "In Progress" or "Checked" status</p>
           ) : (
             <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
               {eligible.map((b) => {
@@ -192,17 +190,17 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
                     <input type="checkbox" checked={isSelected} onChange={() => toggleBatch(b.id)}
                       className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm font-mono font-semibold text-gray-800">{b.batch_code}</span>
-                      {b.size && <span className="ml-2 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{b.size}</span>}
-                      <span className="ml-2 text-xs text-gray-500 capitalize">{b.status.replace(/_/g, ' ')}</span>
+                      <span className="typo-data font-mono">{b.batch_code}</span>
+                      {b.size && <span className="ml-2 typo-badge bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{b.size}</span>}
+                      <span className="ml-2 typo-caption capitalize">{b.status.replace(/_/g, ' ')}</span>
                     </div>
                     {isSelected && (
                       <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-gray-500">Pcs:</label>
+                        <label className="typo-caption">Pcs:</label>
                         <input type="number" min="1" max={b.piece_count}
                           value={selectedBatches[b.id] || ''} onChange={(e) => setPieces(b.id, e.target.value)}
                           className="w-16 rounded border border-gray-300 px-2 py-1 text-xs text-center" />
-                        <span className="text-xs text-gray-400">/ {b.piece_count}</span>
+                        <span className="typo-caption text-gray-400">/ {b.piece_count}</span>
                       </div>
                     )}
                   </div>

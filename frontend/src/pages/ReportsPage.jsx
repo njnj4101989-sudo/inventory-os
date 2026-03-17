@@ -23,9 +23,9 @@ function KpiCard({ label, value, sub, color = 'bg-blue-500', icon }) {
     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-          {sub && <p className="mt-1 text-xs text-gray-400">{sub}</p>}
+          <p className="typo-kpi-label">{label}</p>
+          <p className="mt-1 typo-kpi">{value}</p>
+          {sub && <p className="mt-1 typo-caption">{sub}</p>}
         </div>
         {icon && (
           <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
@@ -75,7 +75,7 @@ function ProductionTab({ data }) {
 
       {/* Lot Breakdown Table */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="text-base font-semibold text-gray-800 mb-4">Lot-wise Production</h3>
+        <h3 className="typo-section-title mb-4">Lot-wise Production</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -128,7 +128,7 @@ function ProductionTab({ data }) {
 
       {/* Daily Production Trend */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="text-base font-semibold text-gray-800 mb-4">Daily Production (Pieces)</h3>
+        <h3 className="typo-section-title mb-4">Daily Production (Pieces)</h3>
         <div className="space-y-2">
           {data.by_period.map((d) => (
             <HBar
@@ -177,7 +177,7 @@ function InventoryTab({ data }) {
 
       {/* Movement Table */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="text-base font-semibold text-gray-800 mb-4">SKU-wise Movement</h3>
+        <h3 className="typo-section-title mb-4">SKU-wise Movement</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -279,7 +279,7 @@ function FinancialTab({ data }) {
 
       {/* Revenue by SKU */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="text-base font-semibold text-gray-800 mb-4">Revenue by SKU</h3>
+        <h3 className="typo-section-title mb-4">Revenue by SKU</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -319,7 +319,7 @@ function FinancialTab({ data }) {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Cost Breakdown */}
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-          <h3 className="text-base font-semibold text-gray-800 mb-4">Cost Breakdown</h3>
+          <h3 className="typo-section-title mb-4">Cost Breakdown</h3>
           <div className="space-y-3">
             {data.cost_breakdown.map((item, i) => (
               <div key={i}>
@@ -339,7 +339,7 @@ function FinancialTab({ data }) {
 
         {/* Revenue Trend */}
         <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-          <h3 className="text-base font-semibold text-gray-800 mb-4">Daily Revenue</h3>
+          <h3 className="typo-section-title mb-4">Daily Revenue</h3>
           <div className="space-y-2">
             {data.revenue_by_period.map((d) => (
               <HBar
@@ -408,8 +408,8 @@ function TailorTab({ data }) {
               {/* Efficiency bar */}
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-500">Efficiency Score</span>
-                  <span className="text-sm font-bold text-gray-900">{t.efficiency_score}/100</span>
+                  <span className="typo-data-label">Efficiency Score</span>
+                  <span className="typo-data">{t.efficiency_score}/100</span>
                 </div>
                 <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${effColor}`} style={{ width: `${t.efficiency_score}%` }} />
@@ -419,20 +419,20 @@ function TailorTab({ data }) {
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
                 <div>
-                  <p className="text-xs text-gray-500">Batches</p>
-                  <p className="text-sm font-semibold text-gray-900">{t.batches_completed}</p>
+                  <p className="typo-data-label">Batches</p>
+                  <p className="typo-data">{t.batches_completed}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Pieces</p>
-                  <p className="text-sm font-semibold text-gray-900">{t.pieces_completed.toLocaleString()}</p>
+                  <p className="typo-data-label">Pieces</p>
+                  <p className="typo-data">{t.pieces_completed.toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Avg Days</p>
-                  <p className="text-sm font-semibold text-gray-900">{t.avg_completion_days}d</p>
+                  <p className="typo-data-label">Avg Days</p>
+                  <p className="typo-data">{t.avg_completion_days}d</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Rejection</p>
-                  <p className={`text-sm font-semibold ${rejColor}`}>{t.rejection_rate}%</p>
+                  <p className="typo-data-label">Rejection</p>
+                  <p className={`typo-data ${rejColor}`}>{t.rejection_rate}%</p>
                 </div>
               </div>
 
@@ -495,8 +495,8 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="mt-1 text-sm text-gray-500">Production metrics, inventory analysis, financial summaries, and tailor performance</p>
+          <h1 className="typo-page-title">Reports</h1>
+          <p className="mt-1 typo-caption">Production metrics, inventory analysis, financial summaries, and tailor performance</p>
         </div>
       </div>
 

@@ -350,14 +350,14 @@ export default function InvoicesPage() {
             {/* Info cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Bill To</p>
-                <p className="text-sm font-bold text-gray-800">{o.customer?.name || o.customer_name || '—'}</p>
+                <p className="typo-label-sm">Bill To</p>
+                <p className="typo-data">{o.customer?.name || o.customer_name || '—'}</p>
                 {(o.customer?.phone || o.customer_phone) && <p className="text-xs text-gray-600 mt-0.5">Phone: {o.customer?.phone || o.customer_phone}</p>}
                 {(o.customer_address || o.customer?.city) && <p className="text-xs text-gray-600 mt-0.5">{o.customer_address || o.customer?.city}</p>}
                 {o.customer?.gst_no && <p className="text-xs text-gray-600 mt-0.5">GST: {o.customer.gst_no}</p>}
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="text-[11px] uppercase text-gray-500 font-semibold mb-1">Invoice Info</p>
+                <p className="typo-label-sm">Invoice Info</p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-gray-500">Issued:</span> <span className="font-medium">{inv.issued_at ? new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
                   <div><span className="text-gray-500">Status:</span> <StatusBadge status={inv.status} /></div>
@@ -459,8 +459,8 @@ export default function InvoicesPage() {
     <div>
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Invoices</h1>
-        <p className="mt-1 text-sm text-gray-500">Track billing and payment status</p>
+        <h1 className="typo-page-title">Invoices</h1>
+        <p className="mt-1 typo-caption">Track billing and payment status</p>
       </div>
 
       {/* KPI strip */}

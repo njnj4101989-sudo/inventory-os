@@ -15,8 +15,7 @@ import BatchLabelSheet from '../components/common/BatchLabelSheet'
 import useQuickMaster from '../hooks/useQuickMaster'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 
-const INPUT = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL = 'block text-sm font-medium text-gray-700 mb-1'
+// Typography: use typo-input and typo-label globally
 const DEFAULT_SIZE_PATTERN = { L: 2, XL: 6, XXL: 6, '3XL': 4 }
 
 const LOT_STATUS_FLOW = ['open', 'cutting', 'distributed']
@@ -562,7 +561,7 @@ export default function LotsPage() {
                 </h3>
                 <div className="relative w-64">
                   <input type="text" value={rollSearch} onChange={e => setRollSearch(e.target.value)}
-                    placeholder="Search code, color, fabric..." className={`${INPUT} pl-8 text-xs`} />
+                    placeholder="Search code, color, fabric..." className="typo-input pl-8 text-xs" />
                   <svg className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
@@ -820,9 +819,9 @@ export default function LotsPage() {
 
             {/* ── Notes ── */}
             <div className="rounded-xl border bg-white p-5 shadow-sm">
-              <label className={LABEL}>Notes</label>
+              <label className="typo-label">Notes</label>
               <textarea value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2}
-                placeholder="Special instructions..." className={INPUT} />
+                placeholder="Special instructions..." className="typo-input" />
             </div>
           </div>
         </div>
@@ -985,7 +984,7 @@ export default function LotsPage() {
               <div className="rounded-lg border bg-white p-4 shadow-sm">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Notes</label>
                 <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2}
-                  placeholder="Special instructions..." className={INPUT} />
+                  placeholder="Special instructions..." className="typo-input" />
               </div>
             )}
 
@@ -1082,7 +1081,7 @@ export default function LotsPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Lots</h1>
+          <h1 className="typo-page-title">Lots</h1>
           <p className="mt-1 text-sm text-gray-500">Cutting lots — group rolls, calculate pallas & pieces</p>
         </div>
         <button onClick={openCreate} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">

@@ -16,8 +16,7 @@ import RollForm from '../components/forms/RollForm'
 import useQuickMaster from '../hooks/useQuickMaster'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 
-const INPUT_CLS = 'w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500'
-const LABEL_CLS = 'block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5'
+// Typography: use typo-input-sm and typo-label-sm globally
 
 // Challan-style fast entry — no per-roll template needed
 
@@ -1502,7 +1501,7 @@ export default function RollsPage() {
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Rolls</h1>
+          <h1 className="typo-page-title">Rolls</h1>
           <p className="mt-1 text-sm text-gray-500">Raw material stock — fabric rolls</p>
         </div>
         <div className="flex items-center gap-2">
@@ -1794,20 +1793,20 @@ export default function RollsPage() {
             {!procLoading && procRolls.length > 0 && (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
-                  <div className="text-2xl font-bold text-orange-700">{procRolls.length}</div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-500">Rolls Out</div>
+                  <div className="typo-kpi text-orange-700">{procRolls.length}</div>
+                  <div className="typo-kpi-label text-orange-500">Rolls Out</div>
                 </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-                  <div className="text-2xl font-bold text-blue-700">{totalWeight.toFixed(3)} kg</div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-500">Total Weight</div>
+                  <div className="typo-kpi text-blue-700">{totalWeight.toFixed(3)} kg</div>
+                  <div className="typo-kpi-label text-blue-500">Total Weight</div>
                 </div>
                 <div className="rounded-lg bg-purple-50 border border-purple-100 p-3">
-                  <div className="text-2xl font-bold text-purple-700">{vendorCount}</div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-purple-500">Vendors</div>
+                  <div className="typo-kpi text-purple-700">{vendorCount}</div>
+                  <div className="typo-kpi-label text-purple-500">Vendors</div>
                 </div>
                 <div className="rounded-lg bg-red-50 border border-red-100 p-3">
-                  <div className="text-2xl font-bold text-red-700">{overdueCount}</div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-red-500">Overdue (&gt;14 days)</div>
+                  <div className="typo-kpi text-red-700">{overdueCount}</div>
+                  <div className="typo-kpi-label text-red-500">Overdue (&gt;14 days)</div>
                 </div>
               </div>
             )}
@@ -2392,7 +2391,7 @@ export default function RollsPage() {
                   className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
-                <h1 className="text-lg font-bold text-gray-800">
+                <h1 className="typo-modal-title">
                   {editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Stock In — Challan Entry'}
                 </h1>
               </div>
@@ -2444,38 +2443,38 @@ export default function RollsPage() {
                 </div>
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div>
-                    <label className={LABEL_CLS}>Sr. No.</label>
+                    <label className="typo-label-sm">Sr. No.</label>
                     <div className="relative">
                       <input type="text" tabIndex={-1} value={invoiceHeader.sr_no} onChange={(e) => setHeader('sr_no', e.target.value)}
-                        className={`${INPUT_CLS} font-bold text-primary-700 bg-primary-50`} />
+                        className="typo-input-sm font-bold text-primary-700 bg-primary-50" />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">Filing</span>
                     </div>
                   </div>
                   <div className="col-span-2 md:col-span-1">
-                    <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
-                    <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className={INPUT_CLS}>
+                    <label className="typo-label-sm">Supplier <span className="text-red-500">*</span></label>
+                    <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className="typo-input-sm">
                       <option value="">Select supplier</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Invoice No.</label>
+                    <label className="typo-label-sm">Invoice No.</label>
                     <input type="text" value={invoiceHeader.supplier_invoice_no} onChange={(e) => setHeader('supplier_invoice_no', e.target.value)}
-                      placeholder="Supplier inv." className={INPUT_CLS} />
+                      placeholder="Supplier inv." className="typo-input-sm" />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Challan No.</label>
+                    <label className="typo-label-sm">Challan No.</label>
                     <input type="text" value={invoiceHeader.supplier_challan_no} onChange={(e) => setHeader('supplier_challan_no', e.target.value)}
-                      placeholder="Supplier challan" className={INPUT_CLS} />
+                      placeholder="Supplier challan" className="typo-input-sm" />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Date</label>
+                    <label className="typo-label-sm">Date</label>
                     <input type="date" value={invoiceHeader.supplier_invoice_date} onChange={(e) => setHeader('supplier_invoice_date', e.target.value)}
-                      className={INPUT_CLS} />
+                      className="typo-input-sm" />
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>GST %</label>
-                    <select value={invoiceHeader.gst_percent} onChange={(e) => setHeader('gst_percent', e.target.value)} className={INPUT_CLS}>
+                    <label className="typo-label-sm">GST %</label>
+                    <select value={invoiceHeader.gst_percent} onChange={(e) => setHeader('gst_percent', e.target.value)} className="typo-input-sm">
                       <option value="">0%</option>
                       <option value="5">5%</option>
                       <option value="12">12%</option>
@@ -2522,38 +2521,38 @@ export default function RollsPage() {
                       {/* Fabric / Panna / GSM / Rate / Unit / Notes row */}
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                         <div>
-                          <label className={LABEL_CLS}>Fabric / Design <span className="text-red-500">*</span></label>
-                          <select data-master="fabric" data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className={INPUT_CLS}>
+                          <label className="typo-label-sm">Fabric / Design <span className="text-red-500">*</span></label>
+                          <select data-master="fabric" data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className="typo-input-sm">
                             <option value="">Select fabric</option>
                             {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className={LABEL_CLS}>Panna (″)</label>
+                          <label className="typo-label-sm">Panna (″)</label>
                           <input type="number" step="0.5" value={grp.panna} onChange={(e) => setGroupField(gIdx, 'panna', e.target.value)}
-                            placeholder="e.g. 44" className={INPUT_CLS} />
+                            placeholder="e.g. 44" className="typo-input-sm" />
                         </div>
                         <div>
-                          <label className={LABEL_CLS}>GSM</label>
+                          <label className="typo-label-sm">GSM</label>
                           <input type="number" step="1" value={grp.gsm} onChange={(e) => setGroupField(gIdx, 'gsm', e.target.value)}
-                            placeholder="e.g. 180" className={INPUT_CLS} />
+                            placeholder="e.g. 180" className="typo-input-sm" />
                         </div>
                         <div>
-                          <label className={LABEL_CLS}>Rate / {grp.unit} (₹)</label>
+                          <label className="typo-label-sm">Rate / {grp.unit} (₹)</label>
                           <input type="number" step="0.01" value={grp.cost_per_unit} onChange={(e) => setGroupField(gIdx, 'cost_per_unit', e.target.value)}
-                            placeholder="e.g. 221" className={INPUT_CLS} />
+                            placeholder="e.g. 221" className="typo-input-sm" />
                         </div>
                         <div>
-                          <label className={LABEL_CLS}>Unit</label>
-                          <select value={grp.unit} onChange={(e) => setGroupField(gIdx, 'unit', e.target.value)} className={INPUT_CLS}>
+                          <label className="typo-label-sm">Unit</label>
+                          <select value={grp.unit} onChange={(e) => setGroupField(gIdx, 'unit', e.target.value)} className="typo-input-sm">
                             <option value="kg">kg</option>
                             <option value="meters">meters</option>
                           </select>
                         </div>
                         <div>
-                          <label className={LABEL_CLS}>Notes</label>
+                          <label className="typo-label-sm">Notes</label>
                           <input type="text" value={grp.notes} onChange={(e) => setGroupField(gIdx, 'notes', e.target.value)}
-                            placeholder="Optional" className={INPUT_CLS} />
+                            placeholder="Optional" className="typo-input-sm" />
                         </div>
                       </div>
 
@@ -3217,12 +3216,12 @@ export default function RollsPage() {
 
         <div className="space-y-4">
           <div>
-            <label className={LABEL_CLS}>Weight to Send (kg) <span className="text-red-500">*</span></label>
+            <label className="typo-label-sm">Weight to Send (kg) <span className="text-red-500">*</span></label>
             <div className="flex items-center gap-3">
               <input type="number" step="0.001" min="0.001"
                 max={sendProcRoll ? (sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight) : undefined}
                 value={sendProcForm.weight_to_send} onChange={(e) => setSendProcForm((f) => ({ ...f, weight_to_send: e.target.value }))}
-                className={INPUT_CLS + ' max-w-[180px]'} />
+                className="typo-input-sm max-w-[180px]" />
               {sendProcRoll && (
                 <button type="button" onClick={() => setSendProcForm((f) => ({ ...f, weight_to_send: String(sendProcRoll.remaining_weight || sendProcRoll.current_weight) }))}
                   className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap">Send All</button>
@@ -3231,16 +3230,16 @@ export default function RollsPage() {
             {sendProcRoll && <p className="mt-1 text-xs text-gray-400">Max: {sendProcRoll.remaining_weight} kg (remaining). Send less to keep the roll in stock.</p>}
           </div>
           <div>
-            <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
-            <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+            <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
+            <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
               <option value="">Select value addition</option>
               {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
             </select>
             <p className="mt-1 text-xs text-gray-400">Adds to enhanced roll code after completion (e.g. +EMB, +DYE)</p>
           </div>
           <div>
-            <label className={LABEL_CLS}>VA Party <span className="text-red-500">*</span></label>
-            <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+            <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
+            <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
               <option value="">Select VA Party…</option>
               {vaParties.filter(p => p.is_active !== false).map(p => (
                 <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
@@ -3248,13 +3247,13 @@ export default function RollsPage() {
             </select>
           </div>
           <div className="max-w-xs">
-            <label className={LABEL_CLS}>Sent Date <span className="text-red-500">*</span></label>
-            <input type="date" value={sendProcForm.sent_date} onChange={(e) => setSendProcForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
+            <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
+            <input type="date" value={sendProcForm.sent_date} onChange={(e) => setSendProcForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
           </div>
           <div>
-            <label className={LABEL_CLS}>Notes</label>
+            <label className="typo-label-sm">Notes</label>
             <textarea value={sendProcForm.notes} onChange={(e) => setSendProcForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="e.g. Chikan embroidery work on full body" className={INPUT_CLS} />
+              rows={2} placeholder="e.g. Chikan embroidery work on full body" className="typo-input-sm" />
           </div>
         </div>
       </Modal>
@@ -3298,13 +3297,13 @@ export default function RollsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Received Date <span className="text-red-500">*</span></label>
-              <input type="date" value={recvProcForm.received_date} onChange={(e) => setRecvProcForm((f) => ({ ...f, received_date: e.target.value }))} className={INPUT_CLS} />
+              <label className="typo-label-sm">Received Date <span className="text-red-500">*</span></label>
+              <input type="date" value={recvProcForm.received_date} onChange={(e) => setRecvProcForm((f) => ({ ...f, received_date: e.target.value }))} className="typo-input-sm" />
             </div>
             <div>
-              <label className={LABEL_CLS}>Weight After (kg) <span className="text-red-500">*</span></label>
+              <label className="typo-label-sm">Weight After (kg) <span className="text-red-500">*</span></label>
               <input type="number" step="0.001" value={recvProcForm.weight_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, weight_after: e.target.value }))}
-                placeholder={recvProcLog ? `Was ${recvProcLog.weight_before} kg` : ''} className={INPUT_CLS} />
+                placeholder={recvProcLog ? `Was ${recvProcLog.weight_before} kg` : ''} className="typo-input-sm" />
               {recvProcForm.weight_after && recvProcLog && (
                 <p className={`mt-1 text-xs font-medium ${(parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   Change: {((parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? '+' : '')}
@@ -3315,14 +3314,14 @@ export default function RollsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Length After (m, optional)</label>
+              <label className="typo-label-sm">Length After (m, optional)</label>
               <input type="number" step="0.01" value={recvProcForm.length_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, length_after: e.target.value }))}
-                placeholder="If applicable" className={INPUT_CLS} />
+                placeholder="If applicable" className="typo-input-sm" />
             </div>
             <div>
-              <label className={LABEL_CLS}>Processing Cost (₹)</label>
+              <label className="typo-label-sm">Processing Cost (₹)</label>
               <input type="number" step="0.01" value={recvProcForm.processing_cost} onChange={(e) => setRecvProcForm((f) => ({ ...f, processing_cost: e.target.value }))}
-                placeholder="Total cost for this processing" className={INPUT_CLS} />
+                placeholder="Total cost for this processing" className="typo-input-sm" />
               {recvProcForm.processing_cost && recvProcForm.weight_after && (
                 <p className="mt-1 text-xs text-gray-500">
                   = ₹{(parseFloat(recvProcForm.processing_cost) / parseFloat(recvProcForm.weight_after)).toFixed(2)}/kg added to cost
@@ -3331,9 +3330,9 @@ export default function RollsPage() {
             </div>
           </div>
           <div>
-            <label className={LABEL_CLS}>Notes</label>
+            <label className="typo-label-sm">Notes</label>
             <textarea value={recvProcForm.notes} onChange={(e) => setRecvProcForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="Quality observations, shrinkage notes, etc." className={INPUT_CLS} />
+              rows={2} placeholder="Quality observations, shrinkage notes, etc." className="typo-input-sm" />
           </div>
         </div>
       </Modal>
@@ -3357,15 +3356,15 @@ export default function RollsPage() {
           {/* Row 1: Value Addition + VA Party */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Value Addition</label>
-              <select data-master="value_addition" value={editProcForm.value_addition_id} onChange={(e) => setEditProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+              <label className="typo-label-sm">Value Addition</label>
+              <select data-master="value_addition" value={editProcForm.value_addition_id} onChange={(e) => setEditProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
                 <option value="">Select value addition</option>
                 {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
               </select>
             </div>
             <div>
-              <label className={LABEL_CLS}>VA Party</label>
-              <select data-master="va_party" value={editProcForm.va_party_id} onChange={(e) => setEditProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+              <label className="typo-label-sm">VA Party</label>
+              <select data-master="va_party" value={editProcForm.va_party_id} onChange={(e) => setEditProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
                 <option value="">Select VA Party…</option>
                 {vaParties.filter(p => p.is_active !== false).map(p => (
                   <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
@@ -3377,30 +3376,30 @@ export default function RollsPage() {
           {/* Row 2: Sent Date */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Sent Date</label>
-              <input type="date" value={editProcForm.sent_date} onChange={(e) => setEditProcForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
+              <label className="typo-label-sm">Sent Date</label>
+              <input type="date" value={editProcForm.sent_date} onChange={(e) => setEditProcForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
             </div>
           </div>
 
           {/* Row 3: Received Date + Weight After (only if log is received or being filled now) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Received Date</label>
-              <input type="date" value={editProcForm.received_date} onChange={(e) => setEditProcForm((f) => ({ ...f, received_date: e.target.value }))} className={INPUT_CLS} />
+              <label className="typo-label-sm">Received Date</label>
+              <input type="date" value={editProcForm.received_date} onChange={(e) => setEditProcForm((f) => ({ ...f, received_date: e.target.value }))} className="typo-input-sm" />
             </div>
             <div>
-              <label className={LABEL_CLS}>Weight After (kg)</label>
+              <label className="typo-label-sm">Weight After (kg)</label>
               <input type="number" step="0.001" value={editProcForm.weight_after} onChange={(e) => setEditProcForm((f) => ({ ...f, weight_after: e.target.value }))}
-                placeholder={editProcLog?.weight_before ? `Was ${editProcLog.weight_before} kg before` : ''} className={INPUT_CLS} />
+                placeholder={editProcLog?.weight_before ? `Was ${editProcLog.weight_before} kg before` : ''} className="typo-input-sm" />
             </div>
           </div>
 
           {/* Row 4: Processing Cost + Length After */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL_CLS}>Processing Cost (₹)</label>
+              <label className="typo-label-sm">Processing Cost (₹)</label>
               <input type="number" step="0.01" value={editProcForm.processing_cost} onChange={(e) => setEditProcForm((f) => ({ ...f, processing_cost: e.target.value }))}
-                placeholder="Total cost for this step" className={INPUT_CLS} />
+                placeholder="Total cost for this step" className="typo-input-sm" />
               {editProcForm.processing_cost && editProcForm.weight_after && (
                 <p className="mt-1 text-xs text-gray-500">
                   = ₹{(parseFloat(editProcForm.processing_cost) / parseFloat(editProcForm.weight_after)).toFixed(2)}/kg
@@ -3408,17 +3407,17 @@ export default function RollsPage() {
               )}
             </div>
             <div>
-              <label className={LABEL_CLS}>Length After (m, optional)</label>
+              <label className="typo-label-sm">Length After (m, optional)</label>
               <input type="number" step="0.01" value={editProcForm.length_after} onChange={(e) => setEditProcForm((f) => ({ ...f, length_after: e.target.value }))}
-                placeholder="If applicable" className={INPUT_CLS} />
+                placeholder="If applicable" className="typo-input-sm" />
             </div>
           </div>
 
           {/* Notes */}
           <div>
-            <label className={LABEL_CLS}>Notes</label>
+            <label className="typo-label-sm">Notes</label>
             <textarea value={editProcForm.notes} onChange={(e) => setEditProcForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="Update notes for this processing step" className={INPUT_CLS} />
+              rows={2} placeholder="Update notes for this processing step" className="typo-input-sm" />
           </div>
         </div>
       </Modal>
@@ -3522,19 +3521,19 @@ export default function RollsPage() {
                   <h3 className="text-sm font-semibold text-gray-700">Processing Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className={LABEL_CLS}>Value Addition <span className="text-red-500">*</span></label>
-                      <select data-master="value_addition" value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className={INPUT_CLS}>
+                      <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
+                      <select data-master="value_addition" value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
                         <option value="">Select value addition</option>
                         {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className={LABEL_CLS}>Sent Date <span className="text-red-500">*</span></label>
-                      <input type="date" value={bulkSendForm.sent_date} onChange={(e) => setBulkSendForm((f) => ({ ...f, sent_date: e.target.value }))} className={INPUT_CLS} />
+                      <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
+                      <input type="date" value={bulkSendForm.sent_date} onChange={(e) => setBulkSendForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
                     </div>
                     <div>
-                      <label className={LABEL_CLS}>VA Party <span className="text-red-500">*</span></label>
-                      <select data-master="va_party" value={bulkSendForm.va_party_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, va_party_id: e.target.value }))} className={INPUT_CLS}>
+                      <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
+                      <select data-master="va_party" value={bulkSendForm.va_party_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
                         <option value="">Select VA Party…</option>
                         {vaParties.filter(p => p.is_active !== false).map(p => (
                           <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
@@ -3543,9 +3542,9 @@ export default function RollsPage() {
                     </div>
                   </div>
                   <div>
-                    <label className={LABEL_CLS}>Notes</label>
+                    <label className="typo-label-sm">Notes</label>
                     <textarea value={bulkSendForm.notes} onChange={(e) => setBulkSendForm((f) => ({ ...f, notes: e.target.value }))}
-                      rows={2} placeholder="Instructions for the vendor..." className={INPUT_CLS} />
+                      rows={2} placeholder="Instructions for the vendor..." className="typo-input-sm" />
                   </div>
                 </div>
               </div>
