@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,7 +20,7 @@ class Lot(Base):
     )
 
     lot_code: Mapped[str] = mapped_column(String(50), unique=True)
-    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
+    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id", ondelete="SET NULL"), nullable=True, index=True)
     lot_date: Mapped[datetime] = mapped_column(Date)
     design_no: Mapped[str] = mapped_column(String(50))
     product_type: Mapped[str] = mapped_column(String(10), default="BLS", server_default="'BLS'")
@@ -36,8 +36,11 @@ class Lot(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="open", server_default="'open'", index=True
     )
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
     notes: Mapped[str | None] = mapped_column(Text)
+    fy_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("financial_years.id"), nullable=True, index=True
+    )
 
     # Relationships
     sku: Mapped[SKU | None] = relationship(back_populates="lots")
@@ -48,6 +51,9 @@ class Lot(Base):
 
 class LotRoll(Base):
     __tablename__ = "lot_rolls"
+    __table_args__ = (
+        UniqueConstraint("lot_id", "roll_id", name="uq_lot_rolls_lot_roll"),
+    )
 
     lot_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("lots.id", ondelete="CASCADE"), index=True

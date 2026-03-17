@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate
 from app.services.lot_service import LotService
@@ -20,8 +20,9 @@ async def list_lots(
     current_user: User = require_permission("lot_manage"),
 ):
     """List lots with pagination. Filters: status, sku_id."""
+    fy_id = get_fy_id(current_user)
     svc = LotService(db)
-    result = await svc.get_lots(params)
+    result = await svc.get_lots(params, fy_id)
     return {"success": True, **result}
 
 
@@ -32,8 +33,9 @@ async def create_lot(
     current_user: User = require_permission("lot_manage"),
 ):
     """Create lot with rolls. Auto-calculates pallas and pieces."""
+    fy_id = get_fy_id(current_user)
     svc = LotService(db)
-    result = await svc.create_lot(req, current_user.id)
+    result = await svc.create_lot(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 
@@ -56,8 +58,9 @@ async def distribute_lot(
     current_user: User = require_permission("lot_manage"),
 ):
     """Distribute cutting lot — auto-creates batches from size pattern."""
+    fy_id = get_fy_id(current_user)
     svc = LotService(db)
-    result = await svc.distribute_lot(lot_id, current_user.id)
+    result = await svc.distribute_lot(lot_id, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.job_challan import (
     JobChallanCreate, JobChallanFilterParams, JobChallanReceive, JobChallanUpdate,
@@ -21,8 +21,9 @@ async def next_challan_number(
     current_user: User = require_permission("stock_in"),
 ):
     """Peek at the next auto-sequential job challan number."""
+    fy_id = get_fy_id(current_user)
     svc = JobChallanService(db)
-    next_no = await svc._next_challan_no()
+    next_no = await svc._next_challan_no(fy_id)
     return {"success": True, "data": {"next_challan_no": next_no}}
 
 
@@ -33,8 +34,9 @@ async def list_challans(
     current_user: User = require_permission("stock_in"),
 ):
     """List job challans with pagination."""
+    fy_id = get_fy_id(current_user)
     svc = JobChallanService(db)
-    result = await svc.get_challans(params)
+    result = await svc.get_challans(params, fy_id)
     return {"success": True, **result}
 
 
@@ -45,8 +47,9 @@ async def create_challan(
     current_user: User = require_permission("stock_in"),
 ):
     """Create a job challan and send all specified rolls for processing."""
+    fy_id = get_fy_id(current_user)
     svc = JobChallanService(db)
-    result = await svc.create_challan(req, current_user.id)
+    result = await svc.create_challan(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 
@@ -58,8 +61,9 @@ async def receive_challan(
     current_user: User = require_permission("stock_in"),
 ):
     """Receive rolls back from VA vendor — bulk, single transaction."""
+    fy_id = get_fy_id(current_user)
     svc = JobChallanService(db)
-    result = await svc.receive_challan(challan_id, req, current_user.id)
+    result = await svc.receive_challan(challan_id, req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 

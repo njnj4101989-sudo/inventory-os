@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission, require_any_permission
+from app.dependencies import get_db, require_permission, require_any_permission, get_fy_id
 from app.models.user import User
 from app.schemas.batch_challan import (
     BatchChallanCreate,
@@ -31,8 +31,9 @@ async def next_challan_number(
     current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
 ):
     """Peek at the next auto-sequential batch challan number."""
+    fy_id = get_fy_id(current_user)
     svc = BatchChallanService(db)
-    next_no = await svc._next_challan_no()
+    next_no = await svc._next_challan_no(fy_id)
     return {"success": True, "data": {"next_challan_no": next_no}}
 
 
@@ -43,8 +44,9 @@ async def create_batch_challan(
     current_user: User = require_permission("batch_send_va"),
 ):
     """Create a batch challan and send batches for VA (atomic)."""
+    fy_id = get_fy_id(current_user)
     svc = BatchChallanService(db)
-    result = await svc.create_challan(req, current_user.id)
+    result = await svc.create_challan(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 
@@ -55,8 +57,9 @@ async def list_batch_challans(
     current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
 ):
     """List batch challans with pagination and filters."""
+    fy_id = get_fy_id(current_user)
     svc = BatchChallanService(db)
-    result = await svc.get_challans(params)
+    result = await svc.get_challans(params, fy_id)
     return {"success": True, **result}
 
 
@@ -93,6 +96,7 @@ async def receive_batch_challan(
     current_user: User = require_permission("batch_receive_va"),
 ):
     """Receive all batches back from VA vendor."""
+    fy_id = get_fy_id(current_user)
     svc = BatchChallanService(db)
-    result = await svc.receive_challan(challan_id, req, current_user.id)
+    result = await svc.receive_challan(challan_id, req, current_user.id, fy_id)
     return {"success": True, "data": result}

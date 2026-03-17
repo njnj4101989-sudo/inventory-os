@@ -200,7 +200,7 @@ export default function InventoryPage() {
   useEffect(() => {
     getInventorySummary()
       .then((res) => setKpi(res.data.data))
-      .catch(() => {})
+      .catch((e) => console.error('Failed to load inventory KPI:', e.message))
   }, [])
 
   const handleRowClick = async (row) => {

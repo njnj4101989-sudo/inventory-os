@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -8,6 +8,9 @@ from app.database import Base
 
 class Fabric(Base):
     __tablename__ = "fabrics"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_fabrics_name"),
+    )
 
     name: Mapped[str] = mapped_column(String(100))
     code: Mapped[str] = mapped_column(String(3), unique=True, index=True)

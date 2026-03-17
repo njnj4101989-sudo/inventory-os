@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.services.dashboard_service import DashboardService
 
@@ -74,10 +74,11 @@ async def financial_report(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("report_view"),
 ):
-    """Financial report: revenue, costs, invoices."""
+    """Financial report: revenue, costs, invoices — scoped to current FY."""
+    fy_id = get_fy_id(current_user)
     fd, td = _resolve_period(period, from_date, to_date)
     svc = DashboardService(db)
-    result = await svc.get_financial_report(fd, td)
+    result = await svc.get_financial_report(fd, td, fy_id)
     return {"success": True, "data": result}
 
 

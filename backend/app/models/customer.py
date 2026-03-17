@@ -12,7 +12,7 @@ class Customer(Base):
     __tablename__ = "customers"
 
     # Core identity
-    name: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(200), index=True)
     contact_person: Mapped[str | None] = mapped_column(String(200))
     short_name: Mapped[str | None] = mapped_column(String(50))
     phone: Mapped[str | None] = mapped_column(String(20))
@@ -26,7 +26,7 @@ class Customer(Base):
     pin_code: Mapped[str | None] = mapped_column(String(10))
 
     # GST & Compliance
-    gst_no: Mapped[str | None] = mapped_column(String(15))
+    gst_no: Mapped[str | None] = mapped_column(String(15), index=True)
     gst_type: Mapped[str | None] = mapped_column(String(20))
     state_code: Mapped[str | None] = mapped_column(String(2))
     pan_no: Mapped[str | None] = mapped_column(String(10))

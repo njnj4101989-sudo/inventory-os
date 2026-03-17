@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { getPendingChecks } from '../api/mobile'
 import { checkBatch } from '../api/batches'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
@@ -40,7 +41,7 @@ export default function QCQueuePage() {
   const [checkedToday, setCheckedToday] = useState(0)
   const { enqueue, pendingCount, isOnline } = useOfflineQueue(executeOfflineAction)
 
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
+  const { user: currentUser } = useAuth()
 
   useEffect(() => { loadColorMap(); fetchQueue() }, [])
 

@@ -412,6 +412,10 @@ class FinancialYearService:
         from app.models.order import Order
         from app.models.invoice import Invoice
         from app.models.supplier_invoice import SupplierInvoice
+        from app.models.lot import Lot
+        from app.models.batch import Batch
+        from app.models.job_challan import JobChallan
+        from app.models.batch_challan import BatchChallan
 
         result = await self.db.execute(
             select(FinancialYear).where(FinancialYear.id == fy_id)
@@ -433,6 +437,10 @@ class FinancialYearService:
             (Order, "orders"),
             (Invoice, "invoices"),
             (SupplierInvoice, "supplier invoices"),
+            (Lot, "lots"),
+            (Batch, "batches"),
+            (JobChallan, "job challans"),
+            (BatchChallan, "batch challans"),
         ]:
             count_result = await self.db.execute(
                 select(func.count()).select_from(model).where(model.fy_id == fy_id)

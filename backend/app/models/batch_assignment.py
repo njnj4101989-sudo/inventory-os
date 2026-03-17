@@ -12,10 +12,10 @@ from app.database import Base
 class BatchAssignment(Base):
     __tablename__ = "batch_assignments"
 
-    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id"), index=True)
-    tailor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id"), index=True)
-    checker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
-    assigned_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id"))
+    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id", ondelete="CASCADE"), index=True)
+    tailor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"), index=True)
+    checker_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
+    assigned_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"))
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

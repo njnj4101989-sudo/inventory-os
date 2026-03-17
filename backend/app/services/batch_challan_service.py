@@ -8,7 +8,7 @@ import math
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,11 +34,12 @@ class BatchChallanService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _next_challan_no(self) -> str:
-        """Generate next sequential challan number: BC-001, BC-002, etc."""
+    async def _next_challan_no(self, fy_id: UUID) -> str:
+        """Generate next sequential challan number scoped to FY: BC-001, BC-002, etc."""
         stmt = (
             select(BatchChallan.challan_no)
             .where(BatchChallan.challan_no.like("BC-%"))
+            .where(BatchChallan.fy_id == fy_id)
             .order_by(BatchChallan.challan_no.desc())
             .limit(1)
             .with_for_update()
@@ -53,7 +54,7 @@ class BatchChallanService:
                 pass
         return "BC-001"
 
-    async def create_challan(self, req: BatchChallanCreate, created_by: UUID) -> dict:
+    async def create_challan(self, req: BatchChallanCreate, created_by: UUID, fy_id: UUID) -> dict:
         """Create a batch challan and send batches for VA in one transaction."""
         if not req.batches:
             raise BusinessRuleViolationError("At least one batch is required")
@@ -90,8 +91,8 @@ class BatchChallanService:
                 f"Batches must be in_progress or checked to send for VA: {', '.join(ineligible)}"
             )
 
-        # Generate challan number
-        challan_no = await self._next_challan_no()
+        # Generate challan number (scoped to FY)
+        challan_no = await self._next_challan_no(fy_id)
         total_pieces = sum(entry.pieces_to_send for entry in req.batches)
 
         challan = BatchChallan(
@@ -102,6 +103,7 @@ class BatchChallanService:
             status="sent",
             notes=req.notes,
             created_by_id=created_by,
+            fy_id=fy_id,
         )
         self.db.add(challan)
         await self.db.flush()
@@ -142,9 +144,24 @@ class BatchChallanService:
         # Return response
         return await self.get_challan(challan.id)
 
-    async def receive_challan(self, challan_id: UUID, req: BatchChallanReceive, received_by: UUID) -> dict:
+    async def receive_challan(self, challan_id: UUID, req: BatchChallanReceive, received_by: UUID, fy_id: UUID) -> dict:
         """Receive all batches back from VA vendor."""
-        challan = await self._get_or_404(challan_id)
+        # Lock challan + batch_items to prevent concurrent receive
+        stmt = (
+            select(BatchChallan)
+            .where(BatchChallan.id == challan_id)
+            .options(
+                selectinload(BatchChallan.value_addition),
+                selectinload(BatchChallan.va_party),
+                selectinload(BatchChallan.created_by_user),
+                selectinload(BatchChallan.batch_items).selectinload(BatchProcessing.batch),
+            )
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Batch challan {challan_id} not found")
         if challan.status == "received":
             raise BusinessRuleViolationError("Challan already received")
 
@@ -211,6 +228,7 @@ class BatchChallanService:
                     credit=total_cost,
                     description=f"{challan.challan_no} {va_name} — {pieces} pcs, ₹{total_cost:,.2f}",
                     created_by=received_by,
+                    fy_id=fy_id,
                 ))
             await self.db.flush()
 
@@ -224,9 +242,11 @@ class BatchChallanService:
 
         return await self.get_challan(challan_id)
 
-    async def get_challans(self, params: BatchChallanFilterParams) -> dict:
+    async def get_challans(self, params: BatchChallanFilterParams, fy_id: UUID) -> dict:
         """List batch challans with pagination and optional filters."""
-        conditions = []
+        # FY scoping: current FY records + open challans from any previous FY
+        _CHALLAN_ACTIVE = ("sent", "partially_received")
+        conditions = [or_(BatchChallan.fy_id == fy_id, BatchChallan.status.in_(_CHALLAN_ACTIVE))]
         if params.va_party_id:
             conditions.append(BatchChallan.va_party_id == params.va_party_id)
         if params.value_addition_id:

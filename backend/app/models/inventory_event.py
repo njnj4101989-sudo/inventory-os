@@ -18,13 +18,13 @@ class InventoryEvent(Base):
     reference_type: Mapped[str] = mapped_column(String(50))
     reference_id: Mapped[uuid.UUID] = mapped_column()
     sku_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("skus.id"), index=True
+        ForeignKey("skus.id", ondelete="SET NULL"), index=True
     )
-    roll_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rolls.id"), index=True)
+    roll_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rolls.id", ondelete="SET NULL"), index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     unit: Mapped[str | None] = mapped_column(String(20))
     reason: Mapped[str | None] = mapped_column(Text)
-    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     performed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

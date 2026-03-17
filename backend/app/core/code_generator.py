@@ -5,11 +5,15 @@ numeric suffix, increments it, and returns the next padded code.
 
 Uses ORDER BY DESC LIMIT 1 FOR UPDATE to lock the latest row
 and prevent concurrent code collisions.
+
+All sequential generators (LOT/BATCH/ORD/INV/RES) filter by fy_id so that
+codes reset to -0001 at the start of each financial year.
 """
 
 import re
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.roll import Roll
@@ -21,18 +25,32 @@ from app.models.reservation import Reservation
 
 
 def _extract_number(code: str | None, prefix: str) -> int:
-    """Extract the numeric part from a code like 'ROLL-0042' → 42."""
+    """Extract the numeric part from a code like 'LOT-0042' → 42."""
     if code is None:
         return 0
     match = re.search(rf"{re.escape(prefix)}(\d+)", code)
     return int(match.group(1)) if match else 0
 
 
-async def _max_code(db: AsyncSession, col, pattern: str | None = None) -> str | None:
-    """Get current max code with row-level locking (FOR UPDATE)."""
+async def _max_code(
+    db: AsyncSession,
+    col,
+    pattern: str | None = None,
+    extra_where=None,
+) -> str | None:
+    """Get current max code with row-level locking (FOR UPDATE).
+
+    Args:
+        db: Async database session.
+        col: The column to query (e.g. Lot.lot_code).
+        pattern: Optional LIKE pattern for prefix filtering.
+        extra_where: Optional SQLAlchemy where clause (e.g. Model.fy_id == uuid).
+    """
     stmt = select(col).order_by(col.desc()).limit(1).with_for_update()
     if pattern:
         stmt = select(col).where(col.like(pattern)).order_by(col.desc()).limit(1).with_for_update()
+    if extra_where is not None:
+        stmt = stmt.where(extra_where)
 
     result = await db.execute(stmt)
     return result.scalar()
@@ -82,10 +100,8 @@ async def next_roll_code(
 ) -> str:
     """Generate roll code: {SrNo}-{Fabric}-{Color/ColorNo}-{Seq}.
 
-    challan_no param receives the filing Sr. No. (internal serial written on
-    the physical invoice copy).  If fabric_code / color_code are provided
-    (from master DB), use them directly; otherwise fall back to abbreviation dicts.
-    color_no is the numeric color identifier (e.g. 04 for Pink).
+    Roll codes are scoped by prefix (SrNo+Fabric+Color), NOT by fy_id.
+    Each unique prefix gets its own sequence.
 
     Example: 1-COT-PINK/04-01, STOCK-SHK-RED/02-03
     """
@@ -105,31 +121,51 @@ async def next_roll_code(
     return f"{prefix}{seq + 1:02d}"
 
 
-async def next_lot_code(db: AsyncSession) -> str:
-    """Generate next LOT-XXXX code."""
-    current = _extract_number(await _max_code(db, Lot.lot_code), "LOT-")
+async def next_lot_code(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next LOT-XXXX code, scoped to financial year."""
+    current = _extract_number(
+        await _max_code(db, Lot.lot_code, extra_where=Lot.fy_id == fy_id),
+        "LOT-",
+    )
     return f"LOT-{current + 1:04d}"
 
 
-async def next_batch_code(db: AsyncSession) -> str:
-    """Generate next BATCH-XXXX code."""
-    current = _extract_number(await _max_code(db, Batch.batch_code), "BATCH-")
+async def next_batch_code(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next BATCH-XXXX code, scoped to financial year."""
+    current = _extract_number(
+        await _max_code(db, Batch.batch_code, extra_where=Batch.fy_id == fy_id),
+        "BATCH-",
+    )
     return f"BATCH-{current + 1:04d}"
 
 
-async def next_order_number(db: AsyncSession) -> str:
-    """Generate next ORD-XXXX code."""
-    current = _extract_number(await _max_code(db, Order.order_number), "ORD-")
+async def max_batch_number_for_fy(db: AsyncSession, fy_id: UUID) -> int:
+    """Get the current max batch number for a given FY (used by distribute_lot bulk creation)."""
+    return _extract_number(
+        await _max_code(db, Batch.batch_code, extra_where=Batch.fy_id == fy_id),
+        "BATCH-",
+    )
+
+
+async def next_order_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next ORD-XXXX code, scoped to financial year."""
+    current = _extract_number(
+        await _max_code(db, Order.order_number, extra_where=Order.fy_id == fy_id),
+        "ORD-",
+    )
     return f"ORD-{current + 1:04d}"
 
 
-async def next_invoice_number(db: AsyncSession) -> str:
-    """Generate next INV-XXXX code."""
-    current = _extract_number(await _max_code(db, Invoice.invoice_number), "INV-")
+async def next_invoice_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next INV-XXXX code, scoped to financial year."""
+    current = _extract_number(
+        await _max_code(db, Invoice.invoice_number, extra_where=Invoice.fy_id == fy_id),
+        "INV-",
+    )
     return f"INV-{current + 1:04d}"
 
 
 async def next_reservation_code(db: AsyncSession) -> str:
-    """Generate next RES-XXXX code."""
+    """Generate next RES-XXXX code (not FY-scoped — reservations are transient)."""
     current = _extract_number(await _max_code(db, Reservation.reservation_code), "RES-")
     return f"RES-{current + 1:04d}"

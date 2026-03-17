@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { QRCodeSVG } from 'qrcode.react'
 import { getBatch, checkBatch, readyForPacking, packBatch, updateBatch } from '../api/batches'
 import StatusBadge from '../components/common/StatusBadge'
@@ -59,9 +60,8 @@ export default function BatchDetailPage() {
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue] = useState('')
 
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
-  const perms = currentUser.permissions || {}
-  const isAdminOrSuper = ['admin', 'supervisor'].includes(currentUser.role)
+  const { permissions: perms, role } = useAuth()
+  const isAdminOrSuper = ['admin', 'supervisor'].includes(role)
 
   const fetchBatch = useCallback(async () => {
     setLoading(true)

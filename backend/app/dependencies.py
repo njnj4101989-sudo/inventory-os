@@ -15,10 +15,10 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db  # re-export so routes have a single import point
 from app.core.security import verify_token, ACCESS_COOKIE_NAME
-from app.core.exceptions import ForbiddenError, TokenExpiredError, UnauthorizedError
+from app.core.exceptions import ForbiddenError, TokenExpiredError, UnauthorizedError, ValidationError
 from app.models.user import User
 
-__all__ = ["get_db", "get_current_user", "require_permission", "require_role"]
+__all__ = ["get_db", "get_current_user", "require_permission", "require_role", "get_fy_id"]
 
 # Bearer header is now optional — cookies are primary
 _bearer = HTTPBearer(auto_error=False)
@@ -65,6 +65,16 @@ async def get_current_user(
     # Must be an access token, not a refresh token
     if payload.get("type") != "access":
         raise UnauthorizedError("Invalid token type")
+
+    # Check if token has been blacklisted (logout invalidation)
+    jti = payload.get("jti")
+    if jti:
+        from app.models.token_blacklist import TokenBlacklist
+        bl_check = await db.execute(
+            select(TokenBlacklist.id).where(TokenBlacklist.jti == jti).limit(1)
+        )
+        if bl_check.scalar_one_or_none() is not None:
+            raise UnauthorizedError("Token has been revoked. Please login again.")
 
     user_id_str = payload.get("sub")
     if not user_id_str:
@@ -128,6 +138,31 @@ def require_any_permission(*permissions: str):
         return current_user
 
     return Depends(_check)
+
+
+# ---------------------------------------------------------------------------
+# Financial Year extraction from JWT
+# ---------------------------------------------------------------------------
+
+def get_fy_id(user: User) -> PyUUID:
+    """Extract fy_id from JWT claims. Raises clear error if not set.
+
+    Call from routes as: fy_id = get_fy_id(current_user)
+    """
+    claims = getattr(user, "_token_claims", {})
+    fy_id_str = claims.get("fy_id")
+    if not fy_id_str:
+        raise ValidationError(
+            "No financial year selected. Please select a company with an active "
+            "financial year from the company switcher before performing this action."
+        )
+    try:
+        return PyUUID(fy_id_str)
+    except (ValueError, AttributeError):
+        raise ValidationError(
+            "Invalid financial year in session. Please re-login or switch company "
+            "to refresh your session."
+        )
 
 
 def require_role(*roles: str):

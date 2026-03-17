@@ -20,16 +20,17 @@ class BatchProcessing(Base):
     __tablename__ = "batch_processing"
     __table_args__ = (
         CheckConstraint("pieces_sent > 0", name="positive_pieces_sent"),
+        CheckConstraint("status IN ('sent', 'received')", name="bp_valid_status"),
     )
 
     batch_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("batches.id"), index=True
+        ForeignKey("batches.id", ondelete="CASCADE"), index=True
     )
     batch_challan_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("batch_challans.id"), index=True
+        ForeignKey("batch_challans.id", ondelete="CASCADE"), index=True
     )
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("value_additions.id"), index=True
+        ForeignKey("value_additions.id", ondelete="RESTRICT"), index=True
     )
     pieces_sent: Mapped[int] = mapped_column(Integer)
     pieces_received: Mapped[int | None] = mapped_column(Integer)
@@ -39,7 +40,7 @@ class BatchProcessing(Base):
     )
     phase: Mapped[str] = mapped_column(String(20))  # 'stitching' or 'post_qc'
     notes: Mapped[str | None] = mapped_column(Text)
-    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id"))
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"))
 
     # Relationships
     batch = relationship("Batch", back_populates="processing_logs")

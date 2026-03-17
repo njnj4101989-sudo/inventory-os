@@ -12,7 +12,7 @@ class VAParty(Base):
     __tablename__ = "va_parties"
 
     # Core identity
-    name: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(200), index=True)
     contact_person: Mapped[str | None] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(20))
     phone_alt: Mapped[str | None] = mapped_column(String(20))

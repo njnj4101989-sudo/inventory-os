@@ -274,15 +274,15 @@ Roll: 1-COT-PINK/07-01
 |----------|-------|
 | Response envelope | `{ success, data, message }` |
 | Pagination | `{ data: [...], total, page, pages }` |
-| Auth tokens | localStorage: `access_token`, `refresh_token`, `user` |
+| Auth tokens | HttpOnly cookies (`access_token` path=/, `refresh_token` path=/api/v1/auth). NO localStorage for auth. |
 | Mock switch | `VITE_USE_MOCK=true` in `.env` |
 | SKU pattern | `ProductType-DesignNo-Color-Size` (e.g. `BLS-101-Red-M`) |
 | Roll code | `{SrNo}-{Fabric3}-{Color5/ColorNo}-{Seq}` (e.g. `1-COT-GREEN/01-01`) |
 | Weight unit | kg (primary), meters (optional) |
 | LOT model | Groups rolls for cutting; no SKU at lot level |
 | Batch source | Created from LOT (lot_id FK), not directly from rolls |
-| DB (dev) | SQLite + aiosqlite |
-| DB (prod) | PostgreSQL + asyncpg (future) |
+| DB (dev) | PostgreSQL 18.3 local (`inventory_dev`) |
+| DB (prod) | PostgreSQL 16.6 AWS RDS |
 | CORS origins | `http://localhost:3000`, `http://localhost:5173` (in backend `.env`) |
 | Favicon | Inline SVG emoji in `index.html` (no file needed) |
 | Quick Master | `Shift+M` on any `<select data-master="...">` opens inline create modal |
@@ -329,6 +329,70 @@ Roll: 1-COT-PINK/07-01
 2. After create: refresh master list + auto-select new item + re-focus field
 3. No `data-master` = silent no-op (no error, no toast)
 4. QuickMasterModal shares API functions with MastersPage (single source of truth)
+
+---
+
+## Protocol 9: Multi-Tenant Alembic Migrations
+
+> **Read this before writing ANY Alembic migration that touches tenant tables (rolls, lots, batches, orders, invoices, challans, masters, etc.)**
+
+### Architecture
+
+- **Public tables** (5): `users`, `roles`, `companies`, `user_companies`, `token_blacklist` — live in `public` schema, have `schema="public"` in model
+- **Tenant tables** (28): everything else — live in `co_{slug}` schemas (e.g., `co_drs_blouse`)
+- **Alembic default**: runs against public schema only. It does NOT auto-iterate tenant schemas.
+
+### How New Companies Get Their Schema
+
+`create_tenant_tables()` in `database.py` → calls `Base.metadata.create_all()` → reads **model definitions**.
+So model files ARE the source of truth for new companies. Any constraint, index, or ondelete added to a model automatically applies to new companies.
+
+### How Existing Companies Get Schema Changes
+
+Alembic migrations must **explicitly iterate** tenant schemas using `tenant_utils.py`.
+
+**File:** `backend/migrations/tenant_utils.py`
+
+```python
+from migrations.tenant_utils import get_tenant_schemas, col_exists, constraint_exists, index_exists
+```
+
+**Helpers available:**
+| Function | Purpose |
+|----------|---------|
+| `get_tenant_schemas(conn)` | Returns list of `co_*` schema names |
+| `col_exists(conn, schema, table, column)` | Check if column exists before adding |
+| `constraint_exists(conn, schema, name)` | Check if constraint exists before adding |
+| `index_exists(conn, schema, name)` | Check if index exists before adding |
+
+### Migration Template (copy-paste for tenant table changes)
+
+```python
+from alembic import op
+from sqlalchemy import text
+from migrations.tenant_utils import get_tenant_schemas, col_exists
+
+def upgrade():
+    conn = op.get_bind()
+
+    # Public schema changes (if any)
+    # conn.execute(text('ALTER TABLE public.users ADD COLUMN ...'))
+
+    # Tenant schema changes
+    for s in get_tenant_schemas(conn):
+        if not col_exists(conn, s, 'rolls', 'new_column'):
+            conn.execute(text(f'ALTER TABLE {s}.rolls ADD COLUMN new_column VARCHAR(50)'))
+```
+
+### Rules
+
+1. **ALWAYS update the model file AND write a migration** — model for new companies, migration for existing
+2. **ALWAYS use schema-qualified table names** in migrations: `{schema}.{table}`, NOT bare `{table}`
+3. **ALWAYS use `col_exists` / `constraint_exists` guards** — makes migrations idempotent (safe to re-run)
+4. **NEVER use Alembic's `op.add_column()` for tenant tables** — it doesn't know about tenant schemas. Use raw SQL via `conn.execute(text(...))`
+5. **Check actual `__tablename__`** in models before writing SQL — e.g., it's `batch_roll_consumption` (singular), NOT `batch_roll_consumptions`
+
+
 
 
 
@@ -466,23 +530,23 @@ Roll: 1-COT-PINK/07-01
 
 
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-03-16 23:55:56_
+_Last sync: 2026-03-17 12:39:21_
 ```
 {
-  "summary": "Project has 17 tracked code files (~8605 lines total).",
+  "summary": "Project has 17 tracked code files (~8666 lines total).",
   "recent_files": [
-    "CLAUDE.md (670 lines)",
-    "MULTI_COMPANY_PLAN.md (348 lines)",
-    "API_REFERENCE.md (1935 lines)",
-    "guardian.md (486 lines)",
-    "project-context.json (17 lines)"
+    "CLAUDE.md (706 lines)",
+    ".claude\\settings.local.json (107 lines)",
+    "guardian.md (488 lines)",
+    "project-context.json (17 lines)",
+    "MULTI_COMPANY_PLAN.md (348 lines)"
   ],
   "language_breakdown": {
     ".md": 14,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 8605,
-  "last_updated": "2026-03-16 23:55:56"
+  "total_lines": 8666,
+  "last_updated": "2026-03-17 12:39:21"
 }
 ```

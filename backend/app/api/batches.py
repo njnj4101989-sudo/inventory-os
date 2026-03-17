@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, get_current_user, require_permission
+from app.dependencies import get_db, get_current_user, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.batch import BatchCreate, BatchAssign, BatchCheck, BatchPack, BatchUpdate, BatchFilterParams
 from app.services.batch_service import BatchService
@@ -45,8 +45,9 @@ async def list_batches(
     current_user: User = require_permission("inventory_view"),
 ):
     """List batches with pagination. Filters: status, sku_id, created_by."""
+    fy_id = get_fy_id(current_user)
     svc = BatchService(db)
-    result = await svc.get_batches(params)
+    result = await svc.get_batches(params, fy_id)
     return {"success": True, **result}
 
 
@@ -57,8 +58,9 @@ async def create_batch(
     current_user: User = require_permission("batch_create"),
 ):
     """Create batch + cut from rolls. Auto-generates batch_code + QR + STOCK_OUT events."""
+    fy_id = get_fy_id(current_user)
     svc = BatchService(db)
-    result = await svc.create_batch(req, current_user.id)
+    result = await svc.create_batch(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 

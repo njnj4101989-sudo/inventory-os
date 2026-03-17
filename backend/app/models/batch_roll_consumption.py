@@ -13,11 +13,11 @@ from app.database import Base
 class BatchRollConsumption(Base):
     __tablename__ = "batch_roll_consumption"
 
-    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id"), index=True)
-    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"), index=True)
+    batch_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("batches.id", ondelete="CASCADE"), index=True)
+    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id", ondelete="RESTRICT"), index=True)
     pieces_cut: Mapped[int] = mapped_column(Integer)
     length_used: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    cut_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
+    cut_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
     cut_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

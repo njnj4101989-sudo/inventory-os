@@ -1,6 +1,6 @@
 """Ledger service — journal entries, payment recording, balance computation.
 
-NOTE: fy_id is always None until Phase 4 (FinancialYear model).
+fy_id is set via auto-entries from stock-in, invoice, challan receive (S77).
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class LedgerService:
 
     # ── Record payment (with TDS/TCS) ──
 
-    async def record_payment(self, data: PaymentCreate, created_by: UUID | None = None) -> list[LedgerEntry]:
+    async def record_payment(self, data: PaymentCreate, fy_id: UUID, created_by: UUID | None = None) -> list[LedgerEntry]:
         """Record payment + optional TDS/TCS as separate entries. Returns all created entries."""
         entries = []
         amount = data.amount
@@ -68,6 +68,7 @@ class LedgerService:
                 net_amount=net_amount,
                 description=f"Payment received{mode_str}{ref_str}",
                 created_by=created_by,
+                fy_id=fy_id,
                 notes=data.notes,
             ))
         else:
@@ -83,6 +84,7 @@ class LedgerService:
                 net_amount=net_amount,
                 description=f"Payment made{mode_str}{ref_str}",
                 created_by=created_by,
+                fy_id=fy_id,
                 notes=data.notes,
             ))
         entries.append(entry)
@@ -101,6 +103,7 @@ class LedgerService:
                 tds_section=data.tds_section,
                 description=f"TDS @{data.tds_rate}% u/s {data.tds_section or '—'}",
                 created_by=created_by,
+                fy_id=fy_id,
             ))
             entries.append(tds_entry)
 
@@ -117,6 +120,7 @@ class LedgerService:
                 tcs_amount=tcs_amount,
                 description=f"TCS @{data.tcs_rate}% u/s {data.tcs_section or '—'}",
                 created_by=created_by,
+                fy_id=fy_id,
             ))
             entries.append(tcs_entry)
 
@@ -129,6 +133,7 @@ class LedgerService:
         self,
         party_type: str,
         party_id: UUID,
+        fy_id: UUID,
         page: int = 1,
         page_size: int = 50,
         entry_type: str | None = None,
@@ -138,10 +143,12 @@ class LedgerService:
         q = select(LedgerEntry).where(
             LedgerEntry.party_type == party_type,
             LedgerEntry.party_id == party_id,
+            LedgerEntry.fy_id == fy_id,
         )
         count_q = select(func.count()).select_from(LedgerEntry).where(
             LedgerEntry.party_type == party_type,
             LedgerEntry.party_id == party_id,
+            LedgerEntry.fy_id == fy_id,
         )
 
         if entry_type:
@@ -168,13 +175,14 @@ class LedgerService:
 
     # ── Balance for a single party ──
 
-    async def get_party_balance(self, party_type: str, party_id: UUID) -> dict:
+    async def get_party_balance(self, party_type: str, party_id: UUID, fy_id: UUID) -> dict:
         q = select(
             func.coalesce(func.sum(LedgerEntry.debit), 0).label("total_debit"),
             func.coalesce(func.sum(LedgerEntry.credit), 0).label("total_credit"),
         ).where(
             LedgerEntry.party_type == party_type,
             LedgerEntry.party_id == party_id,
+            LedgerEntry.fy_id == fy_id,
         )
         row = (await self.db.execute(q)).one()
         total_debit = Decimal(str(row.total_debit))
@@ -198,13 +206,14 @@ class LedgerService:
 
     # ── Balances for all parties of a type (for list view badges) ──
 
-    async def get_all_balances(self, party_type: str) -> list[dict]:
+    async def get_all_balances(self, party_type: str, fy_id: UUID) -> list[dict]:
         q = select(
             LedgerEntry.party_id,
             func.coalesce(func.sum(LedgerEntry.debit), 0).label("total_debit"),
             func.coalesce(func.sum(LedgerEntry.credit), 0).label("total_credit"),
         ).where(
             LedgerEntry.party_type == party_type,
+            LedgerEntry.fy_id == fy_id,
         ).group_by(LedgerEntry.party_id)
 
         rows = (await self.db.execute(q)).all()

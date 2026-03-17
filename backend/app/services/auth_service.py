@@ -80,7 +80,7 @@ class AuthService:
         # Restore to public (login runs in public context)
         await self.db.execute(text("SET search_path TO public"))
         if fy:
-            return {"id": str(fy.id), "code": fy.code}
+            return {"id": str(fy.id), "code": fy.code, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
         return None
 
     async def _get_all_fys(self, company_schema: str) -> list[dict]:
@@ -90,7 +90,7 @@ class AuthService:
             select(FinancialYear).order_by(FinancialYear.start_date.desc())
         )
         fys = [
-            {"id": str(fy.id), "code": fy.code, "is_current": fy.is_current, "status": fy.status}
+            {"id": str(fy.id), "code": fy.code, "is_current": fy.is_current, "status": fy.status, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
             for fy in result.scalars().all()
         ]
         await self.db.execute(text("SET search_path TO public"))
@@ -147,6 +147,8 @@ class AuthService:
                 company_name=company["name"],
                 fy_id=current_fy["id"] if current_fy else None,
                 fy_code=current_fy["code"] if current_fy else None,
+                fy_start_date=current_fy["start_date"] if current_fy else None,
+                fy_end_date=current_fy["end_date"] if current_fy else None,
             )
 
             return {
@@ -255,6 +257,8 @@ class AuthService:
             company_name=company.name,
             fy_id=selected_fy["id"] if selected_fy else None,
             fy_code=selected_fy["code"] if selected_fy else None,
+            fy_start_date=selected_fy.get("start_date") if selected_fy else None,
+            fy_end_date=selected_fy.get("end_date") if selected_fy else None,
         )
 
         user_brief = UserBriefAuth(
@@ -294,6 +298,16 @@ class AuthService:
         if payload.get("type") != "refresh":
             raise UnauthorizedError("Invalid token type — expected refresh token")
 
+        # Check if refresh token has been blacklisted (rotated or logged out)
+        old_jti = payload.get("jti")
+        if old_jti:
+            from app.models.token_blacklist import TokenBlacklist
+            bl_check = await self.db.execute(
+                select(TokenBlacklist.id).where(TokenBlacklist.jti == old_jti).limit(1)
+            )
+            if bl_check.scalar_one_or_none() is not None:
+                raise UnauthorizedError("Refresh token has been revoked. Please login again.")
+
         user_id_str = payload.get("sub")
         if not user_id_str:
             raise UnauthorizedError("Invalid token payload")
@@ -331,15 +345,59 @@ class AuthService:
             company_name=payload.get("company_name"),
             fy_id=payload.get("fy_id"),
             fy_code=payload.get("fy_code"),
+            fy_start_date=payload.get("fy_start_date"),
+            fy_end_date=payload.get("fy_end_date"),
         )
 
         access_token = create_access_token(new_payload)
+        new_refresh_token = create_refresh_token(new_payload)
+
+        # Blacklist old refresh token (rotation — old one can't be reused)
+        old_jti = payload.get("jti")
+        if old_jti:
+            from app.models.token_blacklist import TokenBlacklist
+            from datetime import datetime as dt_cls
+            exp = payload.get("exp")
+            expires_at = dt_cls.fromtimestamp(exp, tz=timezone.utc) if exp else dt_cls.now(timezone.utc)
+            self.db.add(TokenBlacklist(
+                jti=old_jti,
+                user_id=user_id,
+                token_type="refresh",
+                expires_at=expires_at,
+            ))
+            await self.db.flush()
 
         return RefreshResponse(
             access_token=access_token,
+            refresh_token=new_refresh_token,
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
-    async def logout(self, user_id: UUID) -> None:
-        # MVP: no-op. Future: add token jti to blacklist table/cache.
-        pass
+    async def logout(self, user_id: UUID, access_token: str | None = None, refresh_token: str | None = None) -> None:
+        """Blacklist both access + refresh tokens so they can't be reused after logout."""
+        from app.models.token_blacklist import TokenBlacklist
+
+        for token_str in [access_token, refresh_token]:
+            if not token_str:
+                continue
+            try:
+                payload = verify_token(token_str)
+                jti = payload.get("jti")
+                if not jti:
+                    continue
+                exp = payload.get("exp")
+                from datetime import datetime, timezone
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else datetime.now(timezone.utc)
+
+                bl = TokenBlacklist(
+                    jti=jti,
+                    user_id=user_id,
+                    token_type=payload.get("type", "unknown"),
+                    expires_at=expires_at,
+                )
+                self.db.add(bl)
+            except Exception:
+                # Token might be expired or invalid — still clear cookies, don't block logout
+                continue
+
+        await self.db.flush()

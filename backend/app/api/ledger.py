@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.services.ledger_service import LedgerService
 from app.schemas.ledger import PaymentCreate
@@ -26,8 +26,9 @@ async def get_ledger_entries(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    fy_id = get_fy_id(current_user)
     svc = LedgerService(db)
-    data = await svc.get_ledger(party_type, party_id, page, page_size, entry_type, date_from, date_to)
+    data = await svc.get_ledger(party_type, party_id, fy_id, page, page_size, entry_type, date_from, date_to)
     return {"success": True, "data": data}
 
 
@@ -38,8 +39,9 @@ async def get_party_balance(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    fy_id = get_fy_id(current_user)
     svc = LedgerService(db)
-    balance = await svc.get_party_balance(party_type, party_id)
+    balance = await svc.get_party_balance(party_type, party_id, fy_id)
     return {"success": True, "data": balance}
 
 
@@ -49,8 +51,9 @@ async def get_all_balances(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    fy_id = get_fy_id(current_user)
     svc = LedgerService(db)
-    balances = await svc.get_all_balances(party_type)
+    balances = await svc.get_all_balances(party_type, fy_id)
     return {"success": True, "data": balances}
 
 
@@ -60,8 +63,9 @@ async def record_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    fy_id = get_fy_id(current_user)
     svc = LedgerService(db)
-    entries = await svc.record_payment(req, created_by=current_user.id)
+    entries = await svc.record_payment(req, fy_id=fy_id, created_by=current_user.id)
     return {
         "success": True,
         "data": [e for e in entries],

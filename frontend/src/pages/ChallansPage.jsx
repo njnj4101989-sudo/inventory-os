@@ -63,8 +63,8 @@ export default function ChallansPage() {
   const [printChallan, setPrintChallan] = useState(null)
 
   useEffect(() => {
-    getAllValueAdditions().then(r => setVaTypes(r.data?.data || [])).catch(() => {})
-    getAllVAParties().then(r => setVaParties(r.data?.data || [])).catch(() => {})
+    getAllValueAdditions().then(r => setVaTypes(r.data?.data || [])).catch((e) => console.error('Failed to load VA types:', e.message))
+    getAllVAParties().then(r => setVaParties(r.data?.data || [])).catch((e) => console.error('Failed to load VA parties:', e.message))
   }, [])
 
   const fetchData = useCallback(async () => {

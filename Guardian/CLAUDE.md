@@ -31,498 +31,122 @@
 
 ---
 
-## Current State (Session 76 — 2026-03-17)
+## Current State (Session 77 — 2026-03-17)
+
+### S77: FY Counter Reset + FY Scoping + Auth Hardening + DB Hardening
+
+**Phase 4c — Counter Reset per FY:**
+- `fy_id` FK added to 4 models: Lot, Batch, JobChallan, BatchChallan (9 total now have fy_id)
+- Code generators filter by fy_id: LOT/BATCH/ORD/INV/JC/BC codes reset per FY
+- Roll codes unchanged (prefix-scoped, not FY-scoped)
+- `get_fy_id(user)` helper in dependencies.py — extracts from JWT, clear error if missing
+- All create endpoints set fy_id on records, all auto-ledger entries include fy_id
+
+**FY Scoping on List Endpoints:**
+- All 11 list endpoints filter by current FY + active items from previous FYs
+- Active-status carry-over: in_stock/remnant rolls, open lots, unpacked batches, pending orders, open challans visible across FY boundaries
+- Terminal-state records only visible in their creation FY
+- Dashboard financial-report FY-scoped
+
+**FY Expiry Banner:**
+- JWT now carries `fy_start_date` + `fy_end_date`
+- Layout.jsx: amber warning banner when current FY has ended
+- Admin gets "Go to Settings" button, non-admin sees message only
+
+**Auth Hardening:**
+- JWT `jti` (unique ID) on all tokens for blacklisting
+- `public.token_blacklist` table + migration
+- Logout: blacklists both access + refresh tokens server-side
+- Refresh: token rotation (old refresh blacklisted, new one issued)
+- `get_current_user()`: checks blacklist before processing request
+- JWT secret validation: production startup blocked with placeholder secrets
+- Background task: purges expired blacklist entries every 6h
+
+**Frontend Auth Migration:**
+- 5 pages migrated from dead `localStorage.getItem('user')` to `useAuth()` hook
+- BatchesPage, BatchDetailPage, MyWorkPage, QCQueuePage, ScanPage
+- Silent `.catch(() => {})` replaced with `console.error` on 5 pages
+- FY close success toast on SettingsPage
+
+**DB Hardening (migration `c6e9f4a3b2d1`):**
+- 52 FK ondelete rules added (SET NULL / RESTRICT / CASCADE as appropriate)
+- 19 missing indexes on FK columns + party master search columns
+- 6 CHECK constraints on status columns (RollProcessing, BatchProcessing, Order, Invoice, Reservation, FinancialYear)
+- 5 UNIQUE constraints (Color/Fabric/ProductType/ValueAddition name + LotRoll compound)
+- All model definitions updated to match (new companies inherit hardening)
+- `migrations/tenant_utils.py` — reusable helpers for future multi-tenant migrations
+- Protocol 9 added to guardian.md (multi-tenant migration rules)
+
+**Bug Fixes:**
+- Supplier `_to_response()` missing 14 fields (due_days, credit_limit, TDS, MSME, etc.) — switched to Pydantic `SupplierResponse.model_validate()`
+- `batch_challan_service.receive_challan()` missing FOR UPDATE (race condition)
+- guardian.md: auth section updated (was still saying localStorage), DB section updated (was saying SQLite)
+
+**Migrations:** `a4c7b2e1f3d9` (fy_id columns) → `b5d8e3f2a1c0` (token_blacklist) → `c6e9f4a3b2d1` (DB hardening)
+
+**TODO (next session — S78):**
+- [ ] Min Weight filter input — RollsPage invoice view, LotsPage cutting sheet roll picker, anywhere rolls are listed for selection. Auto-populate from palla weight where available
+- [ ] Invoice detail orange chips — improve VA suffix readability (proper badges instead of cramped text)
+- [ ] LotsPage focus fix verified (tabIndex removed from Palla Meter)
+- [ ] Invoice detail color_no display verified (added color_no from color_obj)
+- [ ] Supplier _to_response Pydantic fix verified
+- [ ] Deploy multi-company + auth + FY changes to production (EC2 + RDS)
+- [ ] Link prod users to company (UserCompany records)
+
+---
+
+## Previous State (Session 76 — 2026-03-17)
 
 ### S76: Multi-Company Schema-Per-Tenant + HttpOnly Cookie Auth + FY Closing
 
-**Phase 1 — PostgreSQL Only (drop SQLite):**
-- Local PG 18.3 (`inventory_dev` DB), `aiosqlite` removed, `is_postgresql()` removed
-- 4 public tables: `companies` (+ slug/schema_name), `users`, `roles`, `user_companies` (NEW)
-- 28 tenant tables: all business tables (rolls, lots, batches, orders, etc.)
-- All 17 tenant model FKs updated: `ForeignKey("public.users.id")`
-- Fresh Alembic baseline: `d5de97f3daf8` (32 tables) + `3e78791f67a1` (closing_snapshot)
-- Schema provisioning: `create_company()` → PG schema + 28 tables + seed/inherit masters
-- Master inheritance: copy item/party masters from source company (selective or all)
-
-**Phase 2 — Auth Migration (HttpOnly Cookies):**
-- JWT in HttpOnly cookies (no more localStorage tokens), `SameSite=None` in prod
-- `/auth/me` endpoint (server = single source of truth), `/auth/select-company`
-- TenantMiddleware: extracts `company_schema` from JWT → `request.state`
-- `get_db(request: Request)` — `SET search_path TO {schema}, public` per request
-- Extended JWT: `company_id`, `company_schema`, `company_name`, `fy_id`, `fy_code`
-- Login: 1 company → auto-select | N companies → picker | 0 → settings redirect
-- SSE: cookie-based auth (no more `?token=` query param)
-
-**Phase 3 — Frontend:**
-- Login company picker (radio cards, initial avatar, default badge)
-- Header: company switcher dropdown + FY badge switcher (both reload page on switch)
-- Settings → Companies tab: company cards grid + 2-step creation wizard (master inheritance checkboxes)
-- Settings → FY tab: edit (inline), delete (with linked-data check), validation (date range)
-- AuthContext: zero localStorage for auth, `/auth/me` on mount, `selectCompany()` for switching
-
-**Phase 4a — Year Closing:**
-- `FYClosingService`: validate → snapshot balances → close old FY → create new FY → opening entries
-- Atomic: validate-then-mutate, single transaction (route commits)
-- `/financial-years/{id}/close-preview` (warnings + balance snapshot)
-- `/financial-years/{id}/close` (execute closing)
-- UI: "Close Year" button on current FY → confirmation modal with balance summary + "What will happen"
-
-**Production Fixes (6 blockers from audit):**
-- `from __future__ import annotations` broke FastAPI Request injection in `get_db`
-- 401 interceptor infinite loop on auth endpoints (excluded `/auth/me`, `/auth/refresh`)
-- Company creation transactional (rollback drops schema on failure)
-- FY closing atomic (validate-then-mutate, single transaction)
-- Auth service reuses injected session (no extra pool connections per login)
-- 0-companies edge case → redirects to Settings
-
-**Decisions:**
-- Native PG 18 (not Docker — laptop can't run Docker Desktop/WSL2)
-- ONE Base class, `search_path` for routing (no PublicBase/TenantBase split)
-- `schema="public"` on 4 models, tenant models have no schema qualifier
-- `checkfirst=False` in `create_tenant_tables` (search_path fallthrough skips creation)
-- Party opening balances reset to null on master inheritance (fresh books per company)
-- FY closing carries forward party balances as opening ledger entries, stock untouched
+- Local PG 18.3 replaces SQLite, `aiosqlite` removed
+- 5 public tables: companies, users, roles, user_companies, token_blacklist
+- 28 tenant tables per company schema (`co_{slug}`)
+- Schema provisioning: `create_company()` → PG schema + 28 tables + master inheritance
+- HttpOnly cookie JWT (access_token path=/, refresh_token path=/api/v1/auth)
+- `/auth/me` single source of truth, `/auth/select-company` for switching
+- TenantMiddleware: `SET search_path TO {schema}, public` per request
+- FY closing: snapshot → close → create new FY → opening ledger entries (atomic)
+- Frontend: company picker, switcher, FY badge, Settings page (Company/FY/Companies tabs)
+- 6 production blockers fixed (annotations, 401 loop, transactional company create, etc.)
 
 **Commits:** `6ebcdc8` | 60 files, +3279/-958
 
-**TODO (next session — S77):**
-- [ ] Phase 4c: Counter reset — add `fy_id` filter to code generators (ORD/INV/JC/BC/LOT/BATCH)
-- [ ] Phase 4d: Production data migration script (move prod data → `co_drs_blouse` schema on AWS RDS)
-- [ ] Alembic multi-schema `env.py` (iterate tenant schemas for future model changes)
-- [ ] Link all prod users to company + create UserCompany records
-- [ ] Deploy multi-company + auth changes to production
-- [ ] Update API_REFERENCE.md with new auth endpoints + company/FY endpoints
+---
+
+## Previous Sessions (S65–S75) — Masters, Ledger, Party Detail
+
+- **S75:** Party detail UI (full-page overlay, 3-col cards, KPI strip), API_REFERENCE.md updated
+- **S74:** MASTERS_AND_FY_PLAN complete — TDS/TCS forms, customer picker, Ledger system (28th model), SKU enrichment, Company+FY models (29th, 30th)
+- **S73:** Color FK on rolls+SKUs, prod DB wiped, Customer model (27th), enriched Supplier+VAParty (+14/+19 cols), PartyMastersPage (3 tabs)
+- **S72:** Production hotfixes x3 — Decimal+float TypeError, lot distribute without batches, MissingGreenlet
+- **S71:** Bulk receive endpoint (1 call vs 62), 3-state challan, ChallansPage, print refactor
+- **S70:** VA receive hotfix — 5 missing selectinloads, pagination fix
+- **S69:** VA Party model (26th), va_party_id FK replaces vendor_name, challan edit, Shift+M fix
+- **S68:** Stock-in UX, SupplierInvoice model (25th), GST% dropdown, keyboard shortcuts
+- **S67:** VA diamond timeline, tailor/checker mobile glow-up, notification bell fix
+- **S66:** QC UX (All Pass/Mark Rejects), remnant roll status, bulk VA receive by challan
+- **S65:** Login UX — password eye toggle, CapsLock warning
 
 ---
 
-## Previous State (Session 74 — 2026-03-16)
+## Previous Sessions (S59–S64) — Backend Audit Sprint
 
-### S74: MASTERS_AND_FY_PLAN Complete — Phases 1b, 1c, 2, 3, 4
-
-**Phase 1b: TDS/TCS/MSME Form Enrichment + Modal UX**
-- GST auto-fill (GSTIN → state + state_code), TDS/TCS section dropdowns (194C/194H/194J/206C)
-- No-PAN warning, Aadhar hint, MSME 45-day Sec 43B(h) warning
-- Modal: auto-focus first input, Ctrl+S save, scrollable on zoom, compact padding
-- TDS + MSME + Notes inline in one 5-col row
-
-**Phase 1c: OrdersPage Customer Picker**
-- Customer dropdown picker (fetches `/customers/all`), Shift+M quick create
-- InvoicesPage: nested customer in table/detail/print (name, phone, GST)
-- QuickMasterModal: `customer` type added
-
-**Phase 2: Ledger System (28th model — LedgerEntry)**
-- LedgerService: payment recording with TDS/TCS, balance computation
-- 4 API endpoints: GET /ledger, GET /balance, GET /balances, POST /payment
-- Auto-entry wiring: stock-in→supplier, invoice→customer, JC/BC receive→VA party
-- LedgerPanel slide-out + inline payment form + balance column on PartyMasters
-
-**Phase 3: SKU Enrichment**
-- 5 columns added: hsn_code, gst_percent, mrp, sale_rate, unit
-- SKUsPage detail: 4-col grid editor
-
-**Phase 4: Company + Financial Year (29th Company, 30th FinancialYear)**
-- fy_id FK on rolls, orders, invoices, supplier_invoices, ledger_entries
-- SettingsPage: Company Profile tab + Financial Years tab
-- Sidebar: Settings entry (admin-only)
-
-**30 models total. MASTERS_AND_FY_PLAN.md fully completed.**
-
-**Commits:** `910735e`, `275d14d`, `ba308c1`, `c022b63`, `9fc2841`, `839a08a`
-
-**TODO (next session):**
-- [x] Update API_REFERENCE.md ✅ S75
-- [x] Counter prefix migration ❌ Not needed (client confirmed)
-- [ ] Year closing logic → moved to S76+
-- [ ] Auto-tag fy_id → moved to S76+
-- [ ] FY filter dropdown → moved to S76+
-- [ ] Deploy Phase 2-4 to production → moved to S76+
+- **S64:** Phase 4 Production Readiness — 9 fixes deployed. Audit COMPLETE.
+- **S63:** Phase 3 Data Flow — 9 fixes (FOR UPDATE, remaining_weight CHECK, lot state machine)
+- **S62:** Phase 2 Query Optimization — 14 fixes (~50% fewer DB round-trips)
+- **S61:** Phase 1 DB Structure — 26 fixes (indexes, CHECK constraints, ondelete rules)
+- **S60:** Bulk stock-in + supplier invoices endpoints + mock vs real audit
+- **S59:** Stock-in bug blitz — 7 bugs fixed + compact ERP UI
 
 ---
 
-## Previous State (Session 73 — 2026-03-16)
-
-### S73: Color FK + Production DB Wipe + Party Masters Phase 1a
-
-**Color Master Fixes (direct DB on prod):**
-- RED: code `` `ORG `` → `RED`
-- YELLOW → MUSTARD: name + code `YLOW` → `MSTRD`
-- BOTTEL GREEN → BOTTLE GREEN: name + code `B GRE` → `BTGRN`
-- CHIKKU: confirmed (user changed GOLDEN → CHIKKU via admin panel), code still `BEIGE`
-
-**Color FK (rolls + SKUs):**
-- `Roll.color_id` FK → `colors.id` (nullable, RESTRICT ondelete)
-- `SKU.color_id` FK → `colors.id` (nullable, RESTRICT ondelete)
-- Roll response: nested `color_obj` (id, name, code, color_no) via selectinload
-- All 11 roll query paths updated with `selectinload(Roll.color_obj)`
-- `ColorUpdate` schema: `code` now editable (with duplicate check)
-- Frontend: stock-in sends `color_id`, MastersPage color edit includes code field
-- Migration `ca193c1c4572`
-
-**Production DB Wiped (fresh start):**
-- All 17 transaction tables emptied (rolls, lots, batches, challans, orders, invoices, etc.)
-- 10 master tables intact (colors=11, fabrics=4, suppliers=1, users=5, roles=5, va_additions=11, va_parties=1)
-- SKUs + inventory_state also cleared (generated from transactions)
-- Test VA party "handStoneHouse" deleted
-
-**Phase 1a: Party Masters + Customer Model (27th model):**
-- Customer model: name, contact_person, short_name, phone, phone_alt, email, address, city, state, pin_code, gst_no, gst_type, state_code, pan_no, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, tcs_applicable, tcs_rate, tcs_section, broker, notes, is_active
-- Customer schema (Create/Update/Response/Brief), service (CRUD + search), API routes (`/customers`)
-- Supplier enriched: +14 columns (phone_alt, gst_type, state_code, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
-- VAParty enriched: +19 columns (contact_person, phone_alt, email, address, state, pin_code, gst_type, state_code, pan_no, aadhar_no, due_days, credit_limit, opening_balance, balance_type, tds_applicable, tds_rate, tds_section, msme_type, msme_reg_no, notes)
-- `Order.customer_id` FK (RESTRICT ondelete) + nested customer in response + selectinload
-- PartyMastersPage.jsx (NEW): 3 tabs (Suppliers, VA Parties, Customers), 8-section forms, full CRUD
-- Sidebar: "Suppliers" → "Party Masters" at `/parties`
-- MastersPage: removed VA Parties tab (4 tabs remain: PT, Color, Fabric, VA Types)
-- Routes: `/suppliers` → `/parties` (PartyMastersPage)
-- `api/customers.js`: CRUD API module
-- Migration `2f1ec3b945c7`
-- Planning doc: `MASTERS_AND_FY_PLAN.md` (Phases 1-4: Party Masters, Ledger, SKU Enrichment, FY)
-
-**Commits:** `f2ef490`, `d07c797` | All deployed to prod
-
-**TODO (next session):**
-- [ ] Phase 1b: TDS/TCS fields in party form UI (already in DB, enhance form sections)
-- [ ] Phase 1c: OrdersPage customer_id dropdown picker + QuickMasterModal customer config
-- [ ] Update API_REFERENCE.md with Customer endpoints, enriched Supplier/VAParty schemas, Order changes
-- [ ] Phase 2: Ledger system (LedgerEntry model, auto-entries, payment recording, ledger view)
-- [ ] Phase 3: SKU enrichment (hsn_code, gst_percent, mrp, sale_rate)
-- [ ] Phase 4: Financial Year (Company model, FY model, closing/opening, counter prefix)
-
----
-
-## Previous State (Session 72 — 2026-03-15)
-
-### S72: Production Hotfixes — 3 Bugs Fixed on Live
-
-**Bug 1: Bulk Receive 500 — Decimal+float TypeError (JC-001)**
-- `POST /job-challans/{id}/receive` crashed with `unsupported operand type(s) for +: 'decimal.Decimal' and 'float'`
-- PostgreSQL returns `Decimal` for numeric columns; code mixed `Decimal + float`
-- Fix: `float(roll.remaining_weight or 0)` and `float(roll.current_weight or 0)` in `job_challan_service.py`
-- Browser showed CORS error (500 crashes bypass CORS middleware headers)
-- 1 roll (MEHDI/14-01) test-received during diagnosis; 13 remaining received by user
-
-**Bug 2: Lot "Move to Distributed" — No Batches Created (LOT-0001)**
-- Status flow buttons included "Move to Distributed" which just PATCHed status without creating batches
-- User clicked that instead of "Distribute (18 Batches)" button (which calls `POST /lots/{id}/distribute`)
-- Fix: Filtered `distributed` out of status transition buttons — now only reachable via Distribute button
-- Reset LOT-0001 back to `cutting` via direct DB update so user could re-distribute properly
-
-**Bug 3: Batch GET 500 — MissingGreenlet after VA Send**
-- `_to_response()` accesses `challan.va_party` but 3 of 4 query paths missing `.selectinload(BatchChallan.va_party)`
-- Same class of bug as S70 (selectinload regression trap)
-- Fix: Added `.selectinload(BatchChallan.va_party)` to `get_batches_for_tailor`, `get_batch_by_code`, `_get_or_404`
-
-**Commits:** `96676b9`, `662395f`, `3aa7827` | All deployed to prod
-
-**TODO (next session):**
-- ~~S68 TODOs: obsolete — prod DB wiped in S73, GST deployed~~
-- [ ] Monitor lot distribution + batch VA flow end-to-end
-
----
-
-## Previous State (Session 71 — 2026-03-15)
-
-### S71: Bulk Receive Endpoint + Partial Challan Status + ChallansPage
-
-**Bulk Receive Endpoint (kills 62-call latency bomb):**
-- `POST /job-challans/{id}/receive` — single transaction bulk receive
-- Replicates `roll_service.receive_from_processing()` per-roll logic (weight math, multi-VA status check) but atomic
-- Supports partial receive: unchecked rolls stay `sent`, challan → `partially_received`
-- Frontend `handleBulkReceive` now sends 1 API call instead of N sequential calls
-- Legacy fallback for rolls without challan ID (old single sends)
-
-**Challan 3-State Machine (both JC + BC):**
-- `sent → partially_received → received`
-- JobChallan model: added `status` (String, default='sent', indexed) + `received_date` (Date, nullable)
-- BatchChallan: added `partially_received` to existing receive logic (was binary sent/received)
-- Alembic migration `a1b2c3d4e5f6` — applied on both SQLite + PostgreSQL
-
-**ChallansPage (new — `/challans`):**
-- Table list view with columns: Challan No, VA Party, VA Type, Rolls/Pieces, Weight/Cost, Sent Date, Status, Days Out, Actions
-- Two tabs: Job Challans (Rolls) + Batch Challans (Garments)
-- KPI row: Total, Sent, Partial, Received, Rolls/Pieces
-- Filters: status, VA type, VA party + search
-- Click row → detail overlay with roll/batch item table + notes
-- Print icon → fetches full detail then opens print overlay
-- Sidebar: Challans entry in Production section (between Batches and SKUs)
-
-**Print Component Refactor (single source of truth):**
-- `JobChallan.jsx` + `BatchChallan.jsx` now accept single `challan` prop (raw API response)
-- All 6 call sites (RollsPage x2, BatchesPage x2, ChallansPage, SendForVAModal) pass API response directly
-- Deleted all manual field remapping code (-56 lines net)
-- Change print layout once → works everywhere
-
-**Data Fixes:**
-- JC-002: backfilled `status='received'`, `received_date='2026-03-15'` (was stuck at 'sent' from S70 old receive)
-- Local SQLite DB: recreated fresh (S69 batch_alter_table had silently failed on old DB)
-- Production PostgreSQL: verified clean — all S69/S71 migrations applied correctly
-
-**API_REFERENCE.md Updated:**
-- JobChallan response: `status` + `received_date` fields
-- NEW: `POST /job-challans/{id}/receive` fully documented
-- `partially_received` on both JC + BC
-- Appendix B: `remnant` (Roll), Job Challan row, `partially_received`
-- Appendix C: `va_party` + expanded `value_addition` coverage
-
-**JC-001 Audit (14 rolls):** All clear — all logs have job_challan_id, weight_before, va_party_id, status=sent. Safe to receive via new bulk endpoint.
-
-**Deployed:** All changes live on prod. Commits: `06ba550`, `c7b2846`, `83e386c`, `b7bfe1d`, `b1fbbad`
-
-**TODO (next session):**
-- [ ] Monitor JC-001 receive via new bulk endpoint (user will test)
-- [ ] Check EC2 logs for any errors after receive
-- ~~S68 TODOs: obsolete — prod DB wiped in S73, GST deployed~~
-
----
-
-## Previous State (Session 70 — 2026-03-15)
-
-### S70: VA Receive Hotfix — MissingGreenlet + Pagination
-
-**Bug 1:** MissingGreenlet crash — 5 missing selectinloads in roll_service.py
-**Bug 2:** Pagination — page_size=20 silently dropped data, fixed with page_size=0
-**Deployed:** JC-002 (62 rolls) fully received. Commits: `b2e1917`, `a0fd022`, `446b9e3`
-
----
-
-## Previous State (Session 69 — 2026-03-12)
-
-### S69: VA Party Master + FK Wiring + Challan Edit + Migration Cleanup
-
-**VA Party Master (26th model — full stack):**
-- `backend/app/models/va_party.py`: name, phone, city, gst_no, hsn_code, is_active
-- Schema: Create/Update/Response in `master.py`
-- Service: CRUD in `master_service.py`
-- Routes: GET/GET-all/POST/PATCH in `masters.py`
-- Frontend: MastersPage "VA Parties" tab, QuickMasterModal config, `masters.js` API
-
-**VA Party FK — replaces free-text vendor_name/processor_name:**
-- Models: `job_challan.py`, `batch_challan.py`, `roll.py` (RollProcessing) — `va_party_id` FK + relationship
-- Schemas: All Create/Update/Response/Filter schemas updated
-- Services: `job_challan_service`, `batch_challan_service`, `roll_service`, `batch_service` — selectinload, nested `va_party` object in responses
-- Frontend (8 files): RollsPage, BatchesPage, BatchDetailPage, ScanPage, SendForVAModal, ReceiveFromVAModal, JobChallan print, BatchChallan print
-
-**Challan Edit (new):**
-- `PATCH /job-challans/{id}` — updates va_party_id, value_addition_id, sent_date, notes + cascades to linked processing logs
-- `PATCH /batch-challans/{id}` — updates va_party_id, value_addition_id, notes
-
-**Shift+M QuickMaster fix:**
-- `useQuickMaster.js`: Now searches parent modal/form container for `[data-master]` when focused element doesn't have it
-- Fixes "M" being typed in text inputs when pressing Shift+M
-
-**Tab rename:** "Value Additions" → "VA Types" (prevents users entering party names as VA types)
-
-**Migration cleanup:** Nuked 5 old migrations, created baseline `e86e3462e90c` + `9f88c9ee7c04` (va_party_id FK on challans)
-
-**Production:** VA test data deleted, wrong VA types cleaned, 11 proper VA types re-seeded
-
-**Deployed:** Yes — migration applied, backend restarted
-
----
-
-## Previous State (Session 68 — 2026-03-12)
-
-### S68: Stock-In UX Fixes + SupplierInvoice Table + GST
-
-**Keyboard Fixes (CapsLock-safe):**
-- `useQuickMaster.js`: Shift+M now case-insensitive (`e.key.toLowerCase() === 'm'`)
-- `RollsPage.jsx`: Ctrl+S save now case-insensitive
-- Color select: Enter opens dropdown naturally (was hijacked for new design group)
-- New shortcut: `Shift+G` on color select → new design group
-- New shortcut: `Delete` on color select → remove row (with confirmation if has data)
-
-**Delete Flow Fix (stale closure bug):**
-- `removeWeight()`: rollId lookup moved inside updater function (was reading stale `designGroups`)
-- `removeColorRow()`: same fix — reads from fresh updater state `(g) => {...}`
-- `trimEmptyWeight()`: now tracks `removedRollIds` in edit mode (was silently dropping)
-- `pendingDeleteRow` state: red highlight → Yes/Esc confirmation for rows with data
-
-**SupplierInvoice Table (new — 25th model):**
-- `backend/app/models/supplier_invoice.py`: id, supplier_id, invoice_no, challan_no, invoice_date, sr_no, gst_percent, received_by, received_at, notes
-- `Roll.supplier_invoice_id` FK (nullable) — old rolls keep working
-- `stock_in_bulk()`: creates SupplierInvoice first, links rolls via FK
-- `get_supplier_invoices()`: response now includes `gst_percent`, `gst_amount`, `total_with_gst`, `supplier_invoice_id`
-- `_to_response()`: includes `gst_percent`, `supplier_invoice_id` from linked SupplierInvoice
-- All `selectinload(Roll.supplier_invoice)` added to every Roll query
-- Alembic migration: `63ca51d7966a` (batch_alter_table for SQLite compat)
-
-**Frontend GST:**
-- GST% `<select>` dropdown (0/5/12/18/28%) inline in header row (7-col grid)
-- Sr. No. moved to first column (tabIndex=-1, auto-focus stays on Supplier)
-- `challanTotals`: computes `gstAmount`, `totalWithGst`
-- Sticky bar + bottom summary: Subtotal / GST / Total
-- Invoice detail modal: GST in header line + KPI badge + list table
-- Edit mode: `updateSupplierInvoice()` PATCH saves GST on SupplierInvoice record
-- `PATCH /rolls/supplier-invoices/{id}` — new endpoint for invoice-level updates
-- Keyboard hints bar: Enter/Backspace/Shift+G/Shift+M/Delete/Ctrl+S
-
-**NOT deployed yet.** Migration `63ca51d7966a` applied locally only.
-
-**TODO (next session):**
-- ~~Data migration script: obsolete — prod DB wiped in S73~~
-- [ ] Update `API_REFERENCE.md` + `mock.js`
-- [ ] Test full CRUD cycle (create/edit/delete with GST)
-- [ ] Deploy to prod (migration + restart)
-
----
-
-## Previous State (Session 67 — 2026-03-06)
-
-### S67: VA Diamond Timeline + Mobile UX Glow-up + Notification Fix
-
-**Desktop BatchDetailPage — VA Diamond Timeline:**
-- `timelineNodes[]` interleaves 7 STEPS with VA processing logs (in_progress + post_qc phases)
-- VA diamonds (w-5 h-5 rotate-45) between steps: amber pulsing (sent), green check (received)
-- Hover tooltip: VA name, processor, challan, pieces, dates, cost, status
-- Dynamic grid columns, center-to-center connecting lines
-
-**Mobile MyWorkPage (Tailor) — Glow-up:**
-- Backend: enriched `get_batches_for_tailor` with size, lot, color_breakdown, pending_va, timestamps
-- Frontend: personalized greeting, gradient KPI cards, grouped sections (Stitching/Ready/Awaiting QC), richer cards with color chips + VA alert pill + days-since badge, refresh button
-
-**Mobile QCQueuePage (Checker) — Glow-up:**
-- Backend: added `started_at` to pending checks
-- Frontend: personalized greeting, 3 KPI cards (Pending/Checked Today/Pieces), submitted-ago + stitch-duration badges, color dots, view-batch link, checked-today counter
-
-**NotificationBell — Mobile Clipping Fix:**
-- `fixed right-2 left-2 top-14` on mobile, `sm:absolute sm:right-0 sm:w-80` on desktop
-
-**Commits:** `36ebc27` | Pushed → Vercel + EC2 deployed
-
----
-
-## Previous State (Session 66 — 2026-03-06)
-
-### S66: QC UX Overhaul + Remnant Roll Status + Bulk VA Receive + Invoice Tab Fix
-
-**QC UX (QCQueuePage + ScanPage):**
-- "All Pass" button: builds `color_qc` from `color_breakdown` with all approved
-- "Mark Rejects" mode: reject-only (mark damaged colors, rest auto-approved)
-- Legacy flat fallback for batches without color_breakdown
-- SKU auto-gen on pack now works (was broken — `color_qc` never sent before)
-
-**Bulk VA Receive by Job Challan (RollsPage):**
-- In Processing tab: grouped by `job_challan_id` with challan_no, roll chips, days-out badges
-- Bulk Receive overlay: shared date, per-roll weight/cost, checkbox for partial receive
-
-**Invoice Tab Fix (RollsPage):**
-- Bulk send from Invoice tab now works — dedicated `bulkSendRolls` state instead of reading from Rolls tab selection
-
-**Remnant Roll Status (full stack):**
-- Backend: `remnant` added to Roll CHECK constraint + Alembic migration (`s66_remnant_status`)
-- `lot_service.py`: auto-marks rolls as `remnant` when waste < palla weight after lot creation
-- `job_challan_service.py`: allows `remnant` rolls for VA send
-- `roll_service.py`: allows `remnant` for single VA send
-- Frontend StatusBadge/ScanPage: amber `remnant` style
-- **RollsPage Remnant pill**: weight-based threshold (default 5 kg, adjustable input) — uses `max_remaining_weight` backend param instead of `status=remnant`
-- **LotsPage roll picker**: hides rolls below palla weight from All/Fresh/Processed; Remnant tab shows only sub-palla-weight rolls with REM badge; purple border for VA-processed rolls
-
-**Production DB cleanup:** Deleted all transactional data, kept masters/users/roles/suppliers. Assigned `color_no` to all colors.
-
-**Commits:** `731eb82`, `ff4b6b2`, `8fca444`, `9e8707e` | Pushed → Vercel + EC2 deployed
-
----
-
-## Previous State (Session 65 — 2026-03-06)
-
-### S65: Login UX — Password Eye Toggle + CapsLock Warning
-
-- Password show/hide eye icon, CapsLock warning, meta tag fix
-
-**Commits:** `06d7743`, `4bff892`
-
----
-
-## Previous State (Session 64 — 2026-03-06)
-
-### S64: Phase 4 Production Readiness — ALL 9 Fixes Deployed
-
-**Backend audit COMPLETE.** 4 phases, 59 findings, 58 fixed, 1 deferred (rate limiting).
-Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
-
----
-
-## Previous Sessions (S59–S63) — Backend Audit Sprint
-
-- **S63:** Phase 3 Data Flow — 9 fixes (FOR UPDATE race protection, remaining_weight CHECK, lot state machine, code generator locking)
-- **S62:** Phase 2 Query Optimization — 14 fixes (N+1 elimination, GROUP BY, batch fetches, ~50% fewer DB round-trips)
-- **S61:** Phase 1 DB Structure — 26 fixes (indexes, CHECK constraints, ondelete rules) + deployed to prod
-- **S60:** Bulk stock-in + supplier invoices endpoints + mock vs real audit (zero mismatches) + Phase 1 audit
-- **S59:** Stock-in bug blitz — 7 bugs fixed (page_size override root cause, NaN weight, orphan rolls) + compact ERP UI
-
----
-
-## Previous State (Session 58 — 2026-03-05)
-
-### S58: Quick Master (Shift+M) — Inline Master Create from Any Form
-
-- `useQuickMaster` hook + `QuickMasterModal` component
-- Integrated in: RollsPage, LotsPage, SendForVAModal
-- Protocol 8 added to guardian.md
-
----
-
-## Previous State (Session 56 — 2026-03-04)
-
-### S56: C4+C7 — AWS Backend LIVE + Production CORS
-
-**Full stack now in production.**
-
-- **C7 CORS:** Removed `trycloudflare.com` regex (security), added `https://inventory.drsblouse.com`
-- **C4 EC2:** `t3.micro` (free tier), Ubuntu 22.04, Elastic IP `43.204.66.254`
-  - SSH: `ssh -i drs-inventory-key.pem ubuntu@43.204.66.254`
-  - Key file: `C:\Users\HP\drs-inventory-key.pem`
-  - Gunicorn: 2 UvicornWorkers, systemd managed (`sudo systemctl restart fastapi`)
-  - Nginx: reverse proxy + SSE support (`proxy_buffering off`)
-  - SSL: Let's Encrypt, auto-renews, expires 2026-06-01
-- **C4 RDS:** `db.t3.micro` PostgreSQL 16.6, encrypted, EC2-only access
-  - Endpoint: `[see EC2 .env]`
-  - DB: `drs_inventory`, User: `postgres`, Pass: `[see EC2 .env]`
-  - 24 tables, seeded: 5 roles, 5 users, 5 product types, 30 colors, 10 VAs
-- **Fix:** `Base.created_at` → `DateTime(timezone=True)` for asyncpg compatibility
-- **Fix:** Mobile login failure — password `autoCapitalize="off"` on LoginPage
-- **Fix:** Service worker 5s timeout → changed `/api/` from `NetworkFirst(5s)` to `NetworkOnly`
-- **DNS:** GoDaddy A record `api-inventory` → `43.204.66.254` (propagated)
-- **IAM:** User `Nitish` with EC2/RDS/VPC FullAccess + Vercel policy
-- **Repo:** Made public for EC2 git clone
-
----
-
-## Previous State (Session 55 — 2026-03-04)
-
-### S55: C5 Vercel Frontend Deploy — LIVE
-
-- CLAUDE.md optimized: 44K → 12K chars (72% reduction)
-- Vercel project `inventory-os` created (same account as `fashion-ecommerce`/`drsblouse.com`)
-- Env vars: `VITE_API_URL=https://api-inventory.drsblouse.com/api/v1`, `VITE_USE_MOCK=false`
-- GoDaddy CNAME: `inventory` → `cname.vercel-dns.com`
-- **https://inventory.drsblouse.com** — LIVE, SSL active, login page rendering
-- Auto-deploy on push to `main` (Vercel built-in)
-- Vercel CLI authenticated for future domain/project management
-
----
-
-## Previous State (Session 54 — 2026-03-03)
-
-### S54: Batch VA Tracking — "Out for VA" Tab + Challan Print
-
-**Zero backend changes.** All data from existing endpoints.
-
-- **BatchChallan.jsx (New):** A4 print component mirroring `JobChallan.jsx` — title "BATCH CHALLAN", CSS prefix `bc-`, columns: # / Batch Code / Size / Pieces / Phase
-- **SendForVAModal.jsx:** +`onPrintChallan` prop — auto-opens print overlay after successful `createBatchChallan()`
-- **BatchesPage.jsx "Out for VA" tab:**
-  - Permission-gated (`canSendVA || canReceiveVA`), amber active state
-  - VA color map: 10 entries (EMB=purple, DYE=amber, DPT=sky, HWK=rose, SQN=pink, BTC=teal, HST=orange, BTN=indigo, LCW=lime, FIN=gray)
-  - State: `batchChallansData`, `bcLoading`, `bcVAFilter`, `bcProcessorFilter`, `bcSearch`, `showBatchChallan`, `batchChallanData`
-  - Fetch: `getBatchChallans({ status: 'sent', page_size: 200 })` on tab switch
-  - 4 KPIs: Challans Out / Total Pieces / Processors / Overdue >14d
-  - Filter bar: VA Type + Processor + Search + Clear
-  - 3-col challan cards with Print + Receive buttons, days-out badges
-  - Print chaining: SendForVAModal → auto-opens BatchChallan after send
-  - `visibleTabs` via `useMemo` (TABS + conditional VA tab)
-- **Batch Passport:** Already complete (ScanPage lines 381-434)
-
-**Files:** 1 created (BatchChallan.jsx), 2 modified (SendForVAModal.jsx, BatchesPage.jsx). **Build: 0 errors.**
+## Previous Sessions (S54–S58) — VA Tracking, Deploy, Quick Master
+
+- **S58:** Quick Master (Shift+M) — useQuickMaster hook + QuickMasterModal
+- **S56:** AWS Backend LIVE — EC2+RDS+Nginx+SSL+CORS, `api-inventory.drsblouse.com`
+- **S55:** Vercel Frontend Deploy — `inventory.drsblouse.com` LIVE
+- **S54:** Batch VA "Out for VA" tab + BatchChallan print
 
 ---
 
@@ -622,14 +246,16 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 - **Database:** AWS RDS PostgreSQL db.t3.micro (free 12 months)
 - **Cost:** ₹0 year 1, ~₹2,300/mo after. Guide: `Guardian/AWS_DEPLOYMENT.md`
 
-### Multi-Company + Auth (S76)
-- **Schema-per-tenant:** 4 public tables (companies, users, roles, user_companies) + 28 tenant tables per company
+### Multi-Company + Auth (S76-S77)
+- **Schema-per-tenant:** 5 public tables (companies, users, roles, user_companies, token_blacklist) + 28 tenant tables per company
 - **`SET search_path TO co_{slug}, public`** per request via TenantMiddleware + `get_db(request: Request)`
 - **HttpOnly cookie JWT:** access_token (path=/), refresh_token (path=/api/v1/auth), SameSite=None in prod
-- **No localStorage for auth:** `/auth/me` is single source of truth on page load
-- **Company creation:** schema provisioning + master inheritance (selective: colors/fabrics/PTs/VAs/suppliers/customers/VA parties)
-- **FY closing:** snapshot balances → close old FY → create new FY → opening ledger entries (atomic, single transaction)
-- **Login flow:** 1 company → auto-select | N companies → picker | 0 → settings redirect
+- **Token security (S77):** `jti` on all tokens, blacklist on logout, refresh rotation, JWT secret validation
+- **No localStorage for auth:** `/auth/me` is single source of truth on page load, `useAuth()` hook everywhere
+- **FY scoping (S77):** fy_id on 9 models, counter reset per FY, list queries filter by FY + active carry-over
+- **FY closing:** snapshot balances → close old FY → create new FY → opening ledger entries (atomic)
+- **FY expiry banner (S77):** amber warning when FY end_date < today, "Go to Settings" for admins
+- **Company creation:** schema provisioning + master inheritance (selective) + all hardening auto-applied via models
 - **Dev DB:** PostgreSQL 18.3 local (`inventory_dev`), SQLite fully removed
 
 ### PostgreSQL Migration (S53 → S76)
@@ -676,14 +302,15 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
-| S76 | Multi-Company + Auth + FY Closing | Schema-per-tenant (4 public + 28 tenant), HttpOnly cookie JWT (replaces localStorage), company picker/switcher, master inheritance, FY closing with balance carry-forward, 6 production blockers fixed |
-| S75 | Party Detail UI + API Docs | Full-page detail overlay (3-col cards, KPI strip, gradient header), API_REFERENCE.md updated (§18 Customers, §19 Ledger, §20 Company/FY, enriched Suppliers/VA/SKU/Orders). Counter prefix dropped (client: not needed) |
-| S74 | MASTERS_AND_FY_PLAN COMPLETE | 1b: GST→state, TDS/TCS dropdowns, modal UX. 1c: customer picker+Shift+M. P2: Ledger (28th model, auto-entries, LedgerPanel, payments). P3: SKU enrichment (5 cols). P4: Company (29th)+FY (30th), fy_id FK on 5 tables, SettingsPage |
-| S73 | Color FK + DB Wipe + Party Masters | color_id FK on rolls+SKUs, editable color code, prod DB wiped for fresh start, Customer model (27th), enriched Supplier+VAParty (+TDS/MSME/credit), PartyMastersPage (3 tabs), Order.customer_id FK, MASTERS_AND_FY_PLAN.md |
-| S72 | Production Hotfixes x3 | Decimal+float TypeError in bulk receive, "Move to Distributed" without batches, MissingGreenlet on batch GET after VA send |
-| S71 | Bulk Receive + ChallansPage | POST /job-challans/{id}/receive (1 call vs 62), 3-state challan (sent/partial/received), ChallansPage table list, print refactor (single `challan` prop), API_REFERENCE updated |
-| S70 | VA Receive Hotfix | MissingGreenlet crash (5 missing selectinloads), pagination fix (page_size=0 = no limit), JC-002 fully received |
-| S69 | VA Party Master + FK Wiring | 26th model, va_party_id FK replaces vendor_name/processor_name on 3 tables, PATCH challan endpoints, migration cleanup, Shift+M fix |
+| S77 | FY Counter Reset + Auth Hardening + DB Hardening | fy_id on 9 models, counter reset per FY, FY scoping on 11 list endpoints, active-status carry-over, token blacklist+JTI+rotation, JWT secret validation, 52 FK ondelete, 19 indexes, 6 CHECKs, 5 UNIQUEs, localStorage→useAuth migration, supplier response fix |
+| S76 | Multi-Company + Auth + FY Closing | Schema-per-tenant (5 public + 28 tenant), HttpOnly cookie JWT, company picker/switcher, master inheritance, FY closing with balance carry-forward |
+| S75 | Party Detail UI + API Docs | Full-page detail overlay, API_REFERENCE.md updated |
+| S74 | MASTERS_AND_FY_PLAN COMPLETE | TDS/TCS forms, customer picker, Ledger (28th model), SKU enrichment, Company+FY (29th, 30th) |
+| S73 | Color FK + DB Wipe + Party Masters | color_id FK, Customer model (27th), enriched Supplier+VAParty, PartyMastersPage |
+| S72 | Production Hotfixes x3 | Decimal+float, lot distribute, MissingGreenlet |
+| S71 | Bulk Receive + ChallansPage | Single-call bulk receive, 3-state challan, ChallansPage |
+| S70 | VA Receive Hotfix | 5 missing selectinloads, pagination fix |
+| S69 | VA Party Master + FK Wiring | 26th model, va_party_id FK replaces vendor_name |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
 
@@ -700,7 +327,7 @@ Full details: `Guardian/BACKEND_AUDIT_PLAN.md` ✅ COMPLETED
 ```
 inventory-os/
 ├── Guardian/           ← Docs (CLAUDE.md, guardian.md, API_REFERENCE.md, STEP1-6, AWS_DEPLOYMENT.md)
-├── backend/app/        ← FastAPI (models/32, schemas/21, services/19, api/18, core/, tasks/)
+├── backend/app/        ← FastAPI (models/33, schemas/21, services/19, api/18, core/, tasks/3)
 ├── frontend/src/       ← React+Tailwind (api/17, pages/14+Login, components/, context/, hooks/)
 └── mobile/             ← Phase 6C (future)
 ```

@@ -9,7 +9,7 @@ import math
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -63,8 +63,10 @@ class BatchService:
 
     # --- CRUD ---
 
-    async def get_batches(self, params: BatchFilterParams) -> dict:
-        conditions = []
+    async def get_batches(self, params: BatchFilterParams, fy_id: UUID) -> dict:
+        # FY scoping: current FY records + active batches from any previous FY
+        _BATCH_ACTIVE = ("created", "assigned", "in_progress", "submitted", "checked", "packing")
+        conditions = [or_(Batch.fy_id == fy_id, Batch.status.in_(_BATCH_ACTIVE))]
         if params.status:
             conditions.append(Batch.status == params.status)
         if params.lot_id:
@@ -135,8 +137,8 @@ class BatchService:
         await self.db.flush()
         return self._to_response(batch)
 
-    async def create_batch(self, req: BatchCreate, created_by: UUID) -> dict:
-        batch_code = await next_batch_code(self.db)
+    async def create_batch(self, req: BatchCreate, created_by: UUID, fy_id: UUID) -> dict:
+        batch_code = await next_batch_code(self.db, fy_id)
 
         lot_stmt = select(Lot).where(Lot.id == req.lot_id)
         lot_result = await self.db.execute(lot_stmt)
@@ -159,6 +161,7 @@ class BatchService:
             status="created",
             notes=req.notes,
             created_by=created_by,
+            fy_id=fy_id,
         )
         self.db.add(batch)
         await self.db.flush()

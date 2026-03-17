@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,8 +26,10 @@ class OrderService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_orders(self, params: OrderFilterParams) -> dict:
-        filters = []
+    async def get_orders(self, params: OrderFilterParams, fy_id: UUID) -> dict:
+        # FY scoping: current FY records + unfulfilled orders from any previous FY
+        _ORDER_ACTIVE = ("pending", "processing")
+        filters = [or_(Order.fy_id == fy_id, Order.status.in_(_ORDER_ACTIVE))]
         if params.status:
             filters.append(Order.status == params.status)
         if params.source:
@@ -75,8 +77,8 @@ class OrderService:
         order = await self._get_or_404(order_id)
         return self._to_response(order)
 
-    async def create_order(self, req: OrderCreate, created_by: UUID) -> dict:
-        order_number = await next_order_number(self.db)
+    async def create_order(self, req: OrderCreate, created_by: UUID, fy_id: UUID) -> dict:
+        order_number = await next_order_number(self.db, fy_id)
 
         total_amount = 0.0
         order_items = []
@@ -127,6 +129,7 @@ class OrderService:
             total_amount=total_amount,
             notes=req.notes,
             created_by=created_by,
+            fy_id=fy_id,
         )
         self.db.add(order)
         await self.db.flush()
@@ -138,7 +141,7 @@ class OrderService:
 
         return await self.get_order(order.id)
 
-    async def ship_order(self, order_id: UUID, user_id: UUID) -> dict:
+    async def ship_order(self, order_id: UUID, user_id: UUID, fy_id: UUID) -> dict:
         order = await self._get_or_404(order_id)
         if order.status not in ("pending", "processing"):
             raise InvalidStateTransitionError(
@@ -170,7 +173,7 @@ class OrderService:
         # Create invoice
         from app.services.invoice_service import InvoiceService
         inv_service = InvoiceService(self.db)
-        invoice = await inv_service.create_invoice(order.id, user_id)
+        invoice = await inv_service.create_invoice(order.id, user_id, fy_id)
 
         result = await self.get_order(order_id)
         result["invoice"] = invoice

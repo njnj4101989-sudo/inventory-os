@@ -90,20 +90,24 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     svc = AuthService(db)
     result = await svc.refresh_from_token(refresh_token)
 
-    set_access_cookie(response, result.access_token)
+    # Set both cookies — refresh token rotated (old one blacklisted)
+    set_auth_cookies(response, result.access_token, result.refresh_token)
 
     return {"success": True, "data": {"expires_in": result.expires_in}}
 
 
 @router.post("/logout", response_model=None)
 async def logout(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Clear auth cookies."""
+    """Blacklist tokens + clear auth cookies."""
+    access_token = request.cookies.get("access_token")
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
     svc = AuthService(db)
-    await svc.logout(current_user.id)
+    await svc.logout(current_user.id, access_token, refresh_token)
     clear_auth_cookies(response)
     return {"success": True, "message": "Logged out"}
 
@@ -137,6 +141,8 @@ async def get_me(current_user: User = Depends(get_current_user)):
         data["fy"] = {
             "id": claims["fy_id"],
             "code": claims.get("fy_code"),
+            "start_date": claims.get("fy_start_date"),
+            "end_date": claims.get("fy_end_date"),
         }
 
     return {"success": True, "data": data}

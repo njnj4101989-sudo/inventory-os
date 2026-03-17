@@ -21,6 +21,8 @@ from app.tasks import (
     stop_reservation_expiry,
     start_backup_sync,
     stop_backup_sync,
+    start_token_cleanup,
+    stop_token_cleanup,
 )
 
 settings = get_settings()
@@ -38,9 +40,11 @@ async def lifespan(_app: FastAPI):
     """Startup / shutdown lifecycle."""
     start_reservation_expiry()
     start_backup_sync()
+    start_token_cleanup()
     yield
     stop_reservation_expiry()
     stop_backup_sync()
+    stop_token_cleanup()
     event_bus.close_all()
     await engine.dispose()
 

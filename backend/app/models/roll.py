@@ -69,13 +69,16 @@ class Roll(Base):
 
 class RollProcessing(Base):
     __tablename__ = "roll_processing"
+    __table_args__ = (
+        CheckConstraint("status IN ('sent', 'received')", name="rp_valid_status"),
+    )
 
-    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id"), index=True)
+    roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id", ondelete="RESTRICT"), index=True)
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("value_additions.id")
+        ForeignKey("value_additions.id", ondelete="RESTRICT"), index=True
     )
     va_party_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("va_parties.id"), index=True
+        ForeignKey("va_parties.id", ondelete="RESTRICT"), index=True
     )
     sent_date: Mapped[datetime] = mapped_column(Date)
     received_date: Mapped[datetime | None] = mapped_column(Date)
@@ -84,10 +87,10 @@ class RollProcessing(Base):
     length_before: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     length_after: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     processing_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'")
+    status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'", index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     job_challan_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("job_challans.id"), nullable=True, index=True
+        ForeignKey("job_challans.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships

@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 17 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-16 (Session 75 — Customers, Ledger, Company, FY, enriched Suppliers/VA Parties/SKUs/Orders)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-17 (Session 77 — HttpOnly cookie auth, FY scoping on all endpoints, counter reset per FY, token blacklist, FY closing endpoints)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -24,15 +24,37 @@ Paginated endpoints return:
 
 ---
 
+## Financial Year Scoping (S77)
+
+All transactional endpoints are scoped to the current financial year from the JWT.
+
+**FY-tagged models:** Roll, Lot, Batch, Order, Invoice, SupplierInvoice, JobChallan, BatchChallan, LedgerEntry — all have `fy_id` column (non-nullable for new records).
+
+**Create endpoints:** `fy_id` is extracted from the JWT via `get_fy_id(request)`. The caller never sends `fy_id` in the request body. If no FY is in the JWT, returns `400 "No financial year selected. Please select a company with an active financial year."`.
+
+**List endpoints:** Filter by current FY by default. Items from previous FYs that are still "active" (e.g., rolls `in_stock`, orders `pending`) are included via cross-FY visibility rules.
+
+**Counter reset per FY:** The following auto-increment codes reset to 001/0001 at the start of each FY:
+- `LOT-XXXX`, `BATCH-XXXX`, `ORD-XXXX`, `INV-XXXX` — reset to 0001
+- `JC-XXX`, `BC-XXX` — reset to 001
+- Roll codes are **NOT** FY-scoped (prefix-based, unchanged)
+
+**Response:** All create responses include `fy_id` on the created record.
+
+---
+
 ## 1. Auth (`/api/v1/auth`)
+
+> **S77 update:** Auth migrated to HttpOnly cookies. Tokens are no longer in response bodies or localStorage.
+> Access token: `Set-Cookie: access_token=jwt...; HttpOnly; Path=/; SameSite=None; Secure` (prod) / `SameSite=Lax` (dev).
+> Refresh token: `Set-Cookie: refresh_token=jwt...; HttpOnly; Path=/api/v1/auth; SameSite=None; Secure` (prod).
+> All tokens carry a `jti` (JWT ID) claim for server-side blacklisting.
 
 ### POST `/auth/login`
 **Request:** `{ username: string, password: string }`
-**Response:**
+**Response (body):**
 ```json
 {
-  "access_token": "jwt...",
-  "refresh_token": "jwt...",
   "user": {
     "id": "uuid",
     "username": "admin1",
@@ -44,17 +66,60 @@ Paginated endpoints return:
     },
     "phone": "9999900001",
     "is_active": true
-  }
+  },
+  "company": {
+    "id": "uuid",
+    "name": "Dr's Blouse",
+    "slug": "drs_blouse",
+    "schema_name": "co_drs_blouse"
+  },
+  "fy": {
+    "id": "uuid",
+    "code": "FY2026-27",
+    "start_date": "2026-04-01",
+    "end_date": "2027-03-31"
+  },
+  "fys": [
+    { "id": "uuid", "code": "FY2025-26", "is_current": false, "status": "closed", "start_date": "2025-04-01", "end_date": "2026-03-31" },
+    { "id": "uuid", "code": "FY2026-27", "is_current": true, "status": "open", "start_date": "2026-04-01", "end_date": "2027-03-31" }
+  ]
 }
 ```
+**Cookies set:** `access_token` (HttpOnly) + `refresh_token` (HttpOnly, path=/api/v1/auth).
+**Login flow:** 1 company -> auto-select (response includes company/fy). N companies -> `companies` array returned, frontend shows picker, then calls `/auth/select-company`. 0 companies -> redirects to Settings.
+
+### POST `/auth/select-company`
+**Request:** `{ company_id: "uuid", fy_id?: "uuid" }`
+**Response:** Same shape as login (user + company + fy + fys). Sets new cookies with company_schema/fy_id in JWT claims.
+
+### GET `/auth/me`
+**Auth:** Required (reads `access_token` cookie)
+**Response:**
+```json
+{
+  "user": { "id": "uuid", "username": "admin1", "full_name": "Nitish Admin", "role": { "id": "uuid", "name": "admin", "display_name": null }, "phone": "9999900001", "is_active": true },
+  "company": { "id": "uuid", "name": "Dr's Blouse", "slug": "drs_blouse", "schema_name": "co_drs_blouse" },
+  "fy": { "id": "uuid", "code": "FY2026-27", "start_date": "2026-04-01", "end_date": "2027-03-31" }
+}
+```
+**Note:** This is the single source of truth on page load. Frontend calls this on mount instead of reading localStorage.
 
 ### POST `/auth/refresh`
-**Request:** `{ refresh_token: string }`
-**Response:** `{ access_token: "jwt..." }`
+**Request:** No body needed (reads `refresh_token` cookie).
+**Response:** `{ message: "Tokens refreshed" }`
+**Cookies set:** New `access_token` + new `refresh_token` (rotation -- old refresh token is blacklisted).
 
 ### POST `/auth/logout`
-**Request:** `{}`
+**Request:** No body needed.
 **Response:** `{ message: "Logged out" }`
+**Effect:** Both `access_token` and `refresh_token` cookies cleared. Token `jti` values added to `public.token_blacklist` table (server-side invalidation).
+
+### Token Blacklist
+- Table: `public.token_blacklist` (columns: `jti`, `expires_at`, `created_at`)
+- On logout: both access + refresh token JTIs are blacklisted
+- On refresh: old refresh token JTI is blacklisted (rotation)
+- Middleware checks blacklist on every authenticated request
+- Error: `401 "Token has been revoked. Please login again."`
 
 ---
 
@@ -1766,7 +1831,7 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
   "tcs_amount": null,
   "net_amount": 11100.00,
   "description": "Stock-in: 5 rolls, Invoice KT-2026-0451",
-  "fy_id": "uuid | null",
+  "fy_id": "uuid",
   "created_by": "uuid | null",
   "notes": null,
   "created_at": "2026-03-16T10:00:00Z"
@@ -1877,10 +1942,50 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 
 ### PATCH `/financial-years/{fy_id}`
 **Auth:** `supplier_manage` permission
-**Request:** `{ status? ("open"|"closed"), is_current? }`
+**Request:** `{ code?, start_date?, end_date?, is_current? }`
 **Response:** Updated FY object
 
-**Note:** `fy_id` FK exists on rolls, orders, invoices, supplier_invoices, ledger_entries (all nullable). Auto-tagging and year closing logic planned for future session.
+### DELETE `/financial-years/{fy_id}`
+**Auth:** `supplier_manage` permission
+**Validation:** Rejects if FY has linked data (rolls, orders, invoices, ledger entries, etc.)
+**Response:** `{ message: "Financial year deleted" }`
+
+### GET `/financial-years/{id}/close-preview`
+**Auth:** `supplier_manage` permission
+**Response:**
+```json
+{
+  "fy": { "id": "uuid", "code": "FY2025-26", "start_date": "2025-04-01", "end_date": "2026-03-31" },
+  "warnings": ["3 rolls still in_stock from this FY", "1 order still pending"],
+  "balances": [
+    { "party_type": "supplier", "party_id": "uuid", "party_name": "Krishna Textiles", "balance": 25000.00, "balance_type": "dr" },
+    { "party_type": "customer", "party_id": "uuid", "party_name": "Mehta Stores", "balance": 12000.00, "balance_type": "cr" }
+  ],
+  "new_fy": { "code": "FY2026-27", "start_date": "2026-04-01", "end_date": "2027-03-31" }
+}
+```
+**Purpose:** Preview what will happen before committing. Shows balance snapshot + warnings about open items.
+
+### POST `/financial-years/{id}/close`
+**Auth:** `supplier_manage` permission
+**Request:** `{}` (no body needed -- preview must be reviewed first via UI)
+**Response:**
+```json
+{
+  "closed_fy": { "id": "uuid", "code": "FY2025-26", "status": "closed", "closed_at": "2026-03-17T10:00:00Z" },
+  "new_fy": { "id": "uuid", "code": "FY2026-27", "status": "open", "is_current": true, "start_date": "2026-04-01", "end_date": "2027-03-31" },
+  "opening_entries_count": 5
+}
+```
+**Effect (atomic, single transaction):**
+1. Validates FY is `open` and `is_current`
+2. Snapshots all party balances (stored in `closing_snapshot` table)
+3. Sets old FY `status = 'closed'`, `closed_by`, `closed_at`
+4. Creates new FY (next year dates, `is_current = true`)
+5. Creates opening ledger entries in new FY carrying forward party balances
+6. Stock quantities are NOT carried forward (they persist across FYs naturally)
+
+**Note:** `fy_id` FK exists on Roll, Lot, Batch, Order, Invoice, SupplierInvoice, JobChallan, BatchChallan, LedgerEntry. See "Financial Year Scoping" section above for counter reset and cross-FY visibility rules.
 
 ---
 
@@ -1907,7 +2012,7 @@ invoice_manage, report_view
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
 | Financial Year | `open`, `closed` |
-| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `va_receive`, `tds`, `tcs`, `adjustment` |
+| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `va_receive`, `tds`, `tcs`, `adjustment`, `opening` |
 
 ## Appendix C: Nested Object Patterns
 
@@ -1933,3 +2038,15 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `va_party` | RollProcessing, JobChallan, BatchChallan | `{ id, name, phone, city }` |
 | `batch` | BatchChallan items | `{ id, batch_code, size }` |
 | `color_obj` | Rolls, SKUs | `{ id, name, code, color_no }` |
+| `company` | Auth login/me/select-company | `{ id, name, slug, schema_name }` |
+| `fy` | Auth login/me/select-company | `{ id, code, start_date, end_date }` |
+
+## Appendix D: Auth & FY Error Responses (S77)
+
+| Status | Message | When |
+|--------|---------|------|
+| 400 | `No financial year selected. Please select a company with an active financial year.` | Any create endpoint when JWT has no `fy_id` |
+| 401 | `Token has been revoked. Please login again.` | Token `jti` found in `public.token_blacklist` |
+| 401 | `Token expired` | Access token past expiry (frontend should call `/auth/refresh`) |
+| 401 | `Refresh token expired` | Refresh token past expiry (user must re-login) |
+| 401 | `Invalid token` | Malformed or tampered JWT |

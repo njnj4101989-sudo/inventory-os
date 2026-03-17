@@ -467,20 +467,29 @@ class DashboardService:
             "by_period": by_period,
         }
 
-    async def get_financial_report(self, from_date: date, to_date: date) -> dict:
-        """Financial report — matches API_REFERENCE.md §12 financial-report."""
+    async def get_financial_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """Financial report — scoped to FY + date range."""
+        from uuid import UUID as _UUID
+
+        # Build FY conditions per model
+        inv_fy = [Invoice.fy_id == fy_id] if fy_id else []
+        ord_fy = [Order.fy_id == fy_id] if fy_id else []
+        roll_fy = [Roll.fy_id == fy_id] if fy_id else []
+
         # Revenue from paid invoices in range
         invoices_paid_total = (await self.db.execute(
             select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
                 Invoice.status == "paid",
                 func.date(Invoice.paid_at) >= from_date,
                 func.date(Invoice.paid_at) <= to_date,
+                *inv_fy,
             )
         )).scalar() or 0
 
         invoices_pending_total = (await self.db.execute(
             select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
                 Invoice.status == "issued",
+                *inv_fy,
             )
         )).scalar() or 0
 
@@ -489,6 +498,7 @@ class DashboardService:
             select(func.coalesce(func.sum(Order.total_amount), 0)).where(
                 func.date(Order.created_at) >= from_date,
                 func.date(Order.created_at) <= to_date,
+                *ord_fy,
             )
         )).scalar() or 0
 
@@ -497,6 +507,7 @@ class DashboardService:
             select(func.count()).select_from(Order).where(
                 func.date(Order.created_at) >= from_date,
                 func.date(Order.created_at) <= to_date,
+                *ord_fy,
             )
         )).scalar() or 0
         avg_order_value = round(float(orders_total) / order_count, 2) if order_count > 0 else 0.0
@@ -508,6 +519,7 @@ class DashboardService:
             )).where(
                 func.date(Roll.received_at) >= from_date,
                 func.date(Roll.received_at) <= to_date,
+                *roll_fy,
             )
         )).scalar() or 0
 
@@ -529,6 +541,7 @@ class DashboardService:
             .where(
                 func.date(Order.created_at) >= from_date,
                 func.date(Order.created_at) <= to_date,
+                *ord_fy,
             )
             .group_by(SKU.sku_code, SKU.product_name)
         )
@@ -568,6 +581,7 @@ class DashboardService:
                 Invoice.status == "paid",
                 func.date(Invoice.paid_at) >= from_date,
                 func.date(Invoice.paid_at) <= to_date,
+                *inv_fy,
             )
             .group_by(func.date(Invoice.paid_at))
         )

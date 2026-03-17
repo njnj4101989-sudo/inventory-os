@@ -31,9 +31,10 @@ class RollService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_rolls(self, params: RollFilterParams) -> dict:
-        # Build filter conditions
-        conditions = []
+    async def get_rolls(self, params: RollFilterParams, fy_id: UUID) -> dict:
+        # FY scoping: current FY records + active rolls from any previous FY
+        _ROLL_ACTIVE = ("in_stock", "remnant", "sent_for_processing")
+        conditions = [or_(Roll.fy_id == fy_id, Roll.status.in_(_ROLL_ACTIVE))]
 
         if params.status:
             conditions.append(Roll.status == params.status)
@@ -246,7 +247,7 @@ class RollService:
         })
         return passport
 
-    async def bulk_stock_in(self, req: BulkStockIn, received_by: UUID) -> dict:
+    async def bulk_stock_in(self, req: BulkStockIn, received_by: UUID, fy_id: UUID) -> dict:
         """Atomic bulk stock-in: create all rolls in a single transaction.
 
         All-or-nothing — if any roll fails validation, entire batch rolls back.
@@ -305,6 +306,7 @@ class RollService:
             gst_percent=req.gst_percent,
             received_by=received_by,
             received_at=now,
+            fy_id=fy_id,
         )
         self.db.add(supplier_inv)
         await self.db.flush()  # get supplier_inv.id
@@ -348,6 +350,7 @@ class RollService:
                 received_at=now,
                 status="in_stock",
                 notes=entry.notes,
+                fy_id=fy_id,
             )
             self.db.add(roll)
             created_rolls.append(roll)
@@ -377,6 +380,7 @@ class RollService:
                 credit=total,
                 description=f"Stock-in {req.supplier_invoice_no or 'N/A'} — {len(created_rolls)} rolls, ₹{total:,.2f}",
                 created_by=received_by,
+                fy_id=fy_id,
             ))
             await self.db.flush()
 
@@ -412,7 +416,7 @@ class RollService:
             "count": len(rolls),
         }
 
-    async def get_supplier_invoices(self, params: SupplierInvoiceParams) -> dict:
+    async def get_supplier_invoices(self, params: SupplierInvoiceParams, fy_id: UUID) -> dict:
         """Server-side grouping of rolls by (supplier_invoice_no, supplier_id).
 
         Two-phase approach:
@@ -423,7 +427,12 @@ class RollService:
         page_size = params.page_size
 
         # --- Phase 1: SQL GROUP BY with optional search + pagination ---
-        base_where = [Roll.supplier_invoice_no.isnot(None)]
+        # Supplier invoices: show current FY + any invoice with active (unconsumed) rolls
+        _ROLL_ACTIVE = ("in_stock", "remnant", "sent_for_processing")
+        base_where = [
+            Roll.supplier_invoice_no.isnot(None),
+            or_(Roll.fy_id == fy_id, Roll.status.in_(_ROLL_ACTIVE)),
+        ]
 
         if params.search:
             q = f"%{params.search}%"
@@ -556,7 +565,7 @@ class RollService:
 
         return {"data": data, "total": total, "page": page, "pages": pages}
 
-    async def stock_in(self, req: RollCreate, received_by: UUID) -> dict:
+    async def stock_in(self, req: RollCreate, received_by: UUID, fy_id: UUID) -> dict:
         roll_code = await next_roll_code(
             self.db,
             challan_no=req.sr_no or "STOCK",
@@ -589,6 +598,7 @@ class RollService:
             received_at=datetime.now(timezone.utc),
             status="in_stock",
             notes=req.notes,
+            fy_id=fy_id,
         )
         self.db.add(roll)
         await self.db.flush()

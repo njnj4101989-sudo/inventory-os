@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
@@ -24,8 +24,9 @@ async def list_rolls(
     current_user: User = require_permission("stock_in"),
 ):
     """List rolls with pagination. Filters: fabric_type, color, has_remaining, supplier_id."""
+    fy_id = get_fy_id(current_user)
     svc = RollService(db)
-    result = await svc.get_rolls(params)
+    result = await svc.get_rolls(params, fy_id)
     return {"success": True, **result}
 
 
@@ -36,8 +37,9 @@ async def stock_in(
     current_user: User = require_permission("stock_in"),
 ):
     """Register a new roll (stock-in). Auto-generates roll_code + STOCK_IN event."""
+    fy_id = get_fy_id(current_user)
     svc = RollService(db)
-    result = await svc.stock_in(req, current_user.id)
+    result = await svc.stock_in(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 
@@ -48,8 +50,9 @@ async def bulk_stock_in(
     current_user: User = require_permission("stock_in"),
 ):
     """Atomic bulk stock-in: all rolls in a single transaction. All-or-nothing."""
+    fy_id = get_fy_id(current_user)
     svc = RollService(db)
-    result = await svc.bulk_stock_in(req, current_user.id)
+    result = await svc.bulk_stock_in(req, current_user.id, fy_id)
     return {"success": True, "data": result, "message": f"{result['count']} rolls stocked in"}
 
 
@@ -60,8 +63,9 @@ async def list_supplier_invoices(
     current_user: User = require_permission("stock_in"),
 ):
     """Server-side grouping of rolls by supplier invoice. Search + pagination."""
+    fy_id = get_fy_id(current_user)
     svc = RollService(db)
-    result = await svc.get_supplier_invoices(params)
+    result = await svc.get_supplier_invoices(params, fy_id)
     return {"success": True, **result}
 
 

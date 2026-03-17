@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { getBatches } from '../api/batches'
 import { getBatchChallans, getBatchChallan } from '../api/batchChallans'
 import { useNotifications } from '../context/NotificationContext'
@@ -312,9 +313,8 @@ export default function BatchesPage() {
   const [showReceiveVA, setShowReceiveVA] = useState(false)
   const [locationFilter, setLocationFilter] = useState('all')
 
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
-  const perms = currentUser.permissions || {}
-  const isAdminOrSuper = ['admin', 'supervisor'].includes(currentUser.role)
+  const { permissions: perms, role } = useAuth()
+  const isAdminOrSuper = ['admin', 'supervisor'].includes(role)
   const canSendVA = !!perms.batch_send_va || isAdminOrSuper
   const canReceiveVA = !!perms.batch_receive_va || isAdminOrSuper
 

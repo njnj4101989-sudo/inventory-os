@@ -1,5 +1,10 @@
+import logging
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+_PLACEHOLDER_SECRETS = {"change-me-in-production", "your-super-secret-key-change-in-production", "change-me"}
 
 
 class Settings(BaseSettings):
@@ -25,6 +30,21 @@ class Settings(BaseSettings):
 
     # App
     APP_ENV: str = "development"
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self):
+        if self.APP_ENV == "production":
+            if self.JWT_SECRET in _PLACEHOLDER_SECRETS or len(self.JWT_SECRET) < 32:
+                raise ValueError(
+                    "PRODUCTION STARTUP BLOCKED: JWT_SECRET is a placeholder or too short (min 32 chars). "
+                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+        elif self.JWT_SECRET in _PLACEHOLDER_SECRETS:
+            logging.warning(
+                "JWT_SECRET is a placeholder — acceptable for development, "
+                "but must be changed before production deployment."
+            )
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

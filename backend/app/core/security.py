@@ -4,6 +4,7 @@ Uses python-jose (HS256) and passlib (bcrypt).
 Config values sourced from app.config.Settings.
 """
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Response
@@ -59,7 +60,7 @@ def create_access_token(
         if expires_delta is not None
         else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "access"})
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "access", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -67,7 +68,7 @@ def create_refresh_token(data: dict) -> str:
     """Create a long-lived refresh token (default: REFRESH_TOKEN_EXPIRE_DAYS)."""
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "refresh"})
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "refresh", "jti": str(uuid.uuid4())})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -86,6 +87,8 @@ def build_token_payload(
     company_name: str | None = None,
     fy_id: str | None = None,
     fy_code: str | None = None,
+    fy_start_date: str | None = None,
+    fy_end_date: str | None = None,
 ) -> dict:
     """Build the standard JWT claim set (without exp/iat — added by create_*)."""
     payload = {
@@ -101,6 +104,8 @@ def build_token_payload(
     if fy_id:
         payload["fy_id"] = fy_id
         payload["fy_code"] = fy_code
+        payload["fy_start_date"] = fy_start_date
+        payload["fy_end_date"] = fy_end_date
     return payload
 
 

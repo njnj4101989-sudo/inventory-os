@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
@@ -42,10 +43,7 @@ export default function ScanPage() {
     `,
   })
 
-  const isLoggedIn = !!localStorage.getItem('user')
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
-  const userRole = currentUser.role || null
-  const perms = currentUser.permissions || {}
+  const { user: currentUser, isAuthenticated: isLoggedIn, role: userRole, permissions: perms } = useAuth()
 
   useEffect(() => { loadColorMap() }, [])
   useEffect(() => {

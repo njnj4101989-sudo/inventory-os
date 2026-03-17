@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest
 from app.services.order_service import OrderService
@@ -20,8 +20,9 @@ async def list_orders(
     current_user: User = require_permission("order_manage"),
 ):
     """List orders with pagination. Filters: status, source, search."""
+    fy_id = get_fy_id(current_user)
     svc = OrderService(db)
-    result = await svc.get_orders(params)
+    result = await svc.get_orders(params, fy_id)
     return {"success": True, **result}
 
 
@@ -44,8 +45,9 @@ async def create_order(
     current_user: User = require_permission("order_manage"),
 ):
     """Create order + reserve stock. Auto-generates order_number."""
+    fy_id = get_fy_id(current_user)
     svc = OrderService(db)
-    result = await svc.create_order(req, current_user.id)
+    result = await svc.create_order(req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 
@@ -56,8 +58,9 @@ async def ship_order(
     current_user: User = require_permission("order_manage"),
 ):
     """Ship order → confirm reservations + STOCK_OUT events + auto-invoice."""
+    fy_id = get_fy_id(current_user)
     svc = OrderService(db)
-    result = await svc.ship_order(order_id, current_user.id)
+    result = await svc.ship_order(order_id, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 

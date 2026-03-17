@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.invoice import InvoiceFilterParams
 from app.services.invoice_service import InvoiceService
@@ -21,8 +21,9 @@ async def list_invoices(
     current_user: User = require_permission("invoice_manage"),
 ):
     """List invoices with pagination. Filters: status, search."""
+    fy_id = get_fy_id(current_user)
     svc = InvoiceService(db)
-    result = await svc.get_invoices(params)
+    result = await svc.get_invoices(params, fy_id)
     return {"success": True, **result}
 
 

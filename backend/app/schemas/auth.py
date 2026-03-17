@@ -40,4 +40,5 @@ class TokenResponse(BaseSchema):
 class RefreshResponse(BaseSchema):
     """Internal response from AuthService.refresh_from_token()."""
     access_token: str
+    refresh_token: str
     expires_in: int

@@ -499,6 +499,7 @@ export default function RollsPage() {
   // Invoice detail modal
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [selectedInvRolls, setSelectedInvRolls] = useState(new Set())
+  const [invMinWeight, setInvMinWeight] = useState('')
   const [lotDesignPicker, setLotDesignPicker] = useState(null)
 
   // Individual roll detail/edit modal
@@ -544,11 +545,11 @@ export default function RollsPage() {
 
   // ── Shift+M Quick Master ──
   const refreshMasters = useCallback(() => {
-    getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch(() => {})
-    getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch(() => {})
-    getAllColors().then((res) => setMasterColors(res.data.data)).catch(() => {})
-    getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch(() => {})
-    getAllVAParties().then((r) => setVAParties(r?.data?.data || r?.data || [])).catch(() => {})
+    getSuppliers({ is_active: true }).then((res) => setSuppliers(res.data.data)).catch((e) => console.error('Failed to load suppliers:', e.message))
+    getAllFabrics().then((res) => setMasterFabrics(res.data.data)).catch((e) => console.error('Failed to load fabrics:', e.message))
+    getAllColors().then((res) => setMasterColors(res.data.data)).catch((e) => console.error('Failed to load colors:', e.message))
+    getAllValueAdditions().then((res) => setMasterValueAdditions(res.data.data)).catch((e) => console.error('Failed to load VAs:', e.message))
+    getAllVAParties().then((r) => setVAParties(r?.data?.data || r?.data || [])).catch((e) => console.error('Failed to load VA parties:', e.message))
   }, [])
 
   const handleQuickMasterCreated = useCallback((masterType, newItem, triggerEl) => {
@@ -1047,7 +1048,7 @@ export default function RollsPage() {
   }, [stockInOpen])
 
   // ── Invoice Detail ──
-  const openInvoiceDetail = (inv) => { setSelectedInvoice(inv); setSelectedInvRolls(new Set()) }
+  const openInvoiceDetail = (inv) => { setSelectedInvoice(inv); setSelectedInvRolls(new Set()); setInvMinWeight('') }
   const lastFocusedRollRef = useRef(null)
   const openRollFromInvoice = (roll) => {
     lastFocusedRollRef.current = roll.id
@@ -2127,7 +2128,7 @@ export default function RollsPage() {
                 </span>
               </div>
 
-              {/* ── Shift+Click hint + Select All ── */}
+              {/* ── Filter + Shift+Click hint + Select All ── */}
               {selectableInvRolls.length > 0 && (
                 <div className="flex items-center gap-3 text-xs text-gray-400">
                   <span>Shift+Click to select rolls for lot creation</span>
@@ -2143,6 +2144,17 @@ export default function RollsPage() {
                   }} className="text-blue-500 hover:text-blue-700 underline">
                     {selectedInvRolls.size === selectableInvRolls.length ? 'Deselect All' : 'Select All Available'}
                   </button>
+                  <span className="mx-1 text-gray-200">|</span>
+                  <label className="text-[11px] font-medium text-gray-500">Min Wt</label>
+                  <input
+                    type="number" step="0.1" value={invMinWeight}
+                    onChange={e => setInvMinWeight(e.target.value)}
+                    placeholder="e.g. 6.7"
+                    className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs tabular-nums focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  />
+                  {invMinWeight && (
+                    <button onClick={() => setInvMinWeight('')} className="text-gray-400 hover:text-red-500">&times;</button>
+                  )}
                 </div>
               )}
 
@@ -2150,7 +2162,10 @@ export default function RollsPage() {
               {fabricGroups.map((grp, gIdx) => {
                 const grpWeight = grp.rolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0), 0)
                 const grpValue = grp.rolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0) * (parseFloat(r.cost_per_unit) || 0), 0)
+                const minWt = parseFloat(invMinWeight) || 0
                 const colorEntries = Object.entries(grp.colorMap)
+                  .map(([color, rolls]) => [color, minWt > 0 ? rolls.filter(r => parseFloat(r.remaining_weight) >= minWt) : rolls])
+                  .filter(([, rolls]) => rolls.length > 0)
 
                 return (
                   <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -2185,8 +2200,13 @@ export default function RollsPage() {
                           const colorWeight = colorRolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0), 0)
                           return (
                             <div key={color} className="px-4 py-2.5 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center hover:bg-gray-50/50">
-                              {/* Color name */}
-                              <span className="text-sm font-medium text-gray-800">{color}</span>
+                              {/* Color name + number */}
+                              <span className="text-sm font-medium text-gray-800">
+                                {color}
+                                {colorRolls[0]?.color_obj?.color_no != null && (
+                                  <span className="ml-1 text-xs text-gray-400">({String(colorRolls[0].color_obj.color_no).padStart(2, '0')})</span>
+                                )}
+                              </span>
 
                               {/* Individual roll weight cells — clickable */}
                               <div className="flex flex-wrap items-center gap-1.5">
@@ -2228,13 +2248,13 @@ export default function RollsPage() {
                                         <svg className="absolute -top-1 -right-1 h-3.5 w-3.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                                       )}
                                       {wt.toFixed(3)}
-                                      {hasVA && !isProcessing && !isUsed && (
-                                        <span className="ml-1 text-[10px] font-bold text-purple-600">+{vaSuffixes}</span>
+                                      {hasVA && !isProcessing && (
+                                        <span className="ml-1 text-[10px] font-semibold opacity-70">+{vaSuffixes}</span>
                                       )}
                                       {isProcessing && (
                                         <span className="ml-1 h-1.5 w-1.5 rounded-full bg-orange-500 inline-block" />
                                       )}
-                                      {isUsed && !isProcessing && (
+                                      {isUsed && !isProcessing && !hasVA && (
                                         <span className="ml-1 h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
                                       )}
                                     </button>

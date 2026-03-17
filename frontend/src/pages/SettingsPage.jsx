@@ -75,11 +75,11 @@ export default function SettingsPage() {
           Object.keys(company).forEach((k) => { c[k] = d[k] ?? '' })
           setCompany(c)
         }
-      }).catch(() => {})
+      }).catch((err) => setError(err.response?.data?.detail || 'Failed to load company profile'))
     } else if (tab === 'fy') {
-      getFinancialYears().then((res) => setFYs(res.data.data || [])).catch(() => {})
+      getFinancialYears().then((res) => setFYs(res.data.data || [])).catch((err) => setError(err.response?.data?.detail || 'Failed to load financial years'))
     } else if (tab === 'companies') {
-      getCompanies().then((res) => setAllCompanies(res.data.data || [])).catch(() => {})
+      getCompanies().then((res) => setAllCompanies(res.data.data || [])).catch((err) => setError(err.response?.data?.detail || 'Failed to load companies'))
     }
   }, [tab])
 
@@ -227,6 +227,7 @@ export default function SettingsPage() {
       setFYs(res.data.data || [])
       setShowCloseModal(false)
       setClosePreview(null)
+      setCompanyMsg(`Year closed successfully. New financial year ${closeForm.new_fy_code} created. Please re-login to switch.`)
     } catch (err) { setError(err.response?.data?.detail || 'Failed to close FY') }
     finally { setClosing(false) }
   }

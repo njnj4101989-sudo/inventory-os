@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,8 +21,10 @@ class InvoiceService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_invoices(self, params: InvoiceFilterParams) -> dict:
-        filters = []
+    async def get_invoices(self, params: InvoiceFilterParams, fy_id: UUID) -> dict:
+        # FY scoping: current FY records + unpaid invoices from any previous FY
+        _INVOICE_ACTIVE = ("issued",)
+        filters = [or_(Invoice.fy_id == fy_id, Invoice.status.in_(_INVOICE_ACTIVE))]
         if params.status:
             filters.append(Invoice.status == params.status)
         if params.search:
@@ -70,8 +72,8 @@ class InvoiceService:
         invoice = await self._get_or_404(invoice_id)
         return self._to_response(invoice)
 
-    async def create_invoice(self, order_id: UUID, created_by: UUID) -> dict:
-        invoice_number = await next_invoice_number(self.db)
+    async def create_invoice(self, order_id: UUID, created_by: UUID, fy_id: UUID) -> dict:
+        invoice_number = await next_invoice_number(self.db, fy_id)
 
         # Load order with items
         order_stmt = (
@@ -102,6 +104,7 @@ class InvoiceService:
             total_amount=total_amount,
             status="issued",
             issued_at=datetime.now(timezone.utc),
+            fy_id=fy_id,
         )
         self.db.add(invoice)
         await self.db.flush()
@@ -133,6 +136,7 @@ class InvoiceService:
                 debit=total_amount,
                 credit=0,
                 description=f"Invoice {invoice_number} — ₹{total_amount:,.2f}",
+                fy_id=fy_id,
             ))
             await self.db.flush()
 

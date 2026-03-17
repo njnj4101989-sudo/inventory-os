@@ -137,7 +137,7 @@ export default function LotsPage() {
 
   // ── Shift+M Quick Master ──
   const refreshProductTypes = useCallback(() => {
-    getAllProductTypes().then((res) => setMasterProductTypes(res.data.data)).catch(() => {})
+    getAllProductTypes().then((res) => setMasterProductTypes(res.data.data)).catch((e) => console.error('Failed to load product types:', e.message))
   }, [])
 
   const handleQuickMasterCreated = useCallback((masterType, newItem) => {
@@ -529,7 +529,6 @@ export default function LotsPage() {
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
                     onChange={e => setField('standard_palla_meter', e.target.value)}
-                    tabIndex={-1}
                     placeholder="5.50" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />

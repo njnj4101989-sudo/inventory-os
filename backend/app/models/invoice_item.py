@@ -12,9 +12,9 @@ from app.database import Base
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
 
-    invoice_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("invoices.id"), index=True)
-    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id"))
-    batch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("batches.id"))
+    invoice_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), index=True)
+    sku_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("skus.id", ondelete="RESTRICT"), index=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("batches.id", ondelete="SET NULL"), index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { getMyBatches } from '../api/mobile'
 import { startBatch, submitBatch } from '../api/batches'
 import { useOfflineQueue } from '../hooks/useOfflineQueue'
@@ -26,7 +27,7 @@ export default function MyWorkPage() {
   const [actionLoading, setActionLoading] = useState(null)
   const { enqueue, pendingCount, isOnline } = useOfflineQueue(executeOfflineAction)
 
-  const currentUser = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}') } catch { return {} } })()
+  const { user: currentUser } = useAuth()
 
   useEffect(() => { fetchBatches() }, [])
 

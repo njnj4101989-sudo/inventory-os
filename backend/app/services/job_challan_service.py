@@ -4,7 +4,7 @@ import math
 from datetime import date, datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,11 +22,12 @@ class JobChallanService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _next_challan_no(self) -> str:
-        """Generate next sequential challan number: JC-001, JC-002, etc."""
+    async def _next_challan_no(self, fy_id: UUID) -> str:
+        """Generate next sequential challan number scoped to FY: JC-001, JC-002, etc."""
         stmt = (
             select(JobChallan.challan_no)
             .where(JobChallan.challan_no.like("JC-%"))
+            .where(JobChallan.fy_id == fy_id)
             .order_by(JobChallan.challan_no.desc())
             .limit(1)
             .with_for_update()
@@ -41,7 +42,7 @@ class JobChallanService:
                 pass
         return "JC-001"
 
-    async def create_challan(self, req: JobChallanCreate, created_by: UUID) -> dict:
+    async def create_challan(self, req: JobChallanCreate, created_by: UUID, fy_id: UUID) -> dict:
         """Create a job challan and send all specified rolls for processing in one transaction."""
         if not req.rolls:
             raise BusinessRuleViolationError("At least one roll is required")
@@ -86,8 +87,8 @@ class JobChallanService:
                     f"Weight to send ({wts}) exceeds remaining ({roll.remaining_weight}) for roll {roll.roll_code}"
                 )
 
-        # Generate challan number
-        challan_no = await self._next_challan_no()
+        # Generate challan number (scoped to FY)
+        challan_no = await self._next_challan_no(fy_id)
 
         # Create challan
         challan = JobChallan(
@@ -97,6 +98,7 @@ class JobChallanService:
             sent_date=req.sent_date,
             notes=req.notes,
             created_by_id=created_by,
+            fy_id=fy_id,
         )
         self.db.add(challan)
         await self.db.flush()
@@ -148,9 +150,11 @@ class JobChallanService:
         # Reload challan with relationships
         return await self._get_challan_response(challan.id, rolls, weight_sent_map)
 
-    async def get_challans(self, params: JobChallanFilterParams) -> dict:
+    async def get_challans(self, params: JobChallanFilterParams, fy_id: UUID) -> dict:
         """List challans with pagination and optional filters."""
-        conditions = []
+        # FY scoping: current FY records + open challans from any previous FY
+        _CHALLAN_ACTIVE = ("sent", "partially_received")
+        conditions = [or_(JobChallan.fy_id == fy_id, JobChallan.status.in_(_CHALLAN_ACTIVE))]
         if params.va_party_id:
             conditions.append(JobChallan.va_party_id == params.va_party_id)
         if params.value_addition_id:
@@ -236,7 +240,7 @@ class JobChallanService:
             raise NotFoundError(f"Job challan '{challan_no}' not found")
         return self._to_response(challan)
 
-    async def receive_challan(self, challan_id: UUID, req: JobChallanReceive, received_by: UUID) -> dict:
+    async def receive_challan(self, challan_id: UUID, req: JobChallanReceive, received_by: UUID, fy_id: UUID) -> dict:
         """Receive rolls back from VA vendor — bulk, single transaction.
 
         Replicates roll_service.receive_from_processing() logic per roll but
@@ -390,6 +394,7 @@ class JobChallanService:
                     credit=total_cost,
                     description=f"{challan.challan_no} {va_name_str} — {received_count} rolls, ₹{total_cost:,.2f}",
                     created_by=received_by,
+                    fy_id=fy_id,
                 ))
             await self.db.flush()
 

@@ -8,7 +8,7 @@ from math import floor
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,7 @@ from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll
 from app.models.batch import Batch
 from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate, LotResponse
-from app.core.code_generator import next_lot_code, _extract_number, next_batch_code
+from app.core.code_generator import next_lot_code, max_batch_number_for_fy
 from app.core.exceptions import (
     NotFoundError,
     InsufficientStockError,
@@ -31,9 +31,10 @@ class LotService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_lots(self, params: LotFilterParams) -> dict:
-        # Build filter conditions
-        conditions = []
+    async def get_lots(self, params: LotFilterParams, fy_id: UUID) -> dict:
+        # FY scoping: current FY records + active lots from any previous FY
+        _LOT_ACTIVE = ("open", "cutting")
+        conditions = [or_(Lot.fy_id == fy_id, Lot.status.in_(_LOT_ACTIVE))]
         if params.status:
             conditions.append(Lot.status == params.status)
         if params.design_no:
@@ -74,8 +75,8 @@ class LotService:
         lot = await self._get_or_404(lot_id)
         return self._to_response(lot)
 
-    async def create_lot(self, req: LotCreate, created_by: UUID) -> dict:
-        lot_code = await next_lot_code(self.db)
+    async def create_lot(self, req: LotCreate, created_by: UUID, fy_id: UUID) -> dict:
+        lot_code = await next_lot_code(self.db, fy_id)
 
         # Compute pieces_per_palla from size pattern
         size_pattern = req.default_size_pattern or {}
@@ -159,6 +160,7 @@ class LotService:
             status="open",
             notes=req.notes,
             created_by=created_by,
+            fy_id=fy_id,
         )
         self.db.add(lot)
         await self.db.flush()
@@ -274,7 +276,7 @@ class LotService:
         await self.db.flush()
         return await self.get_lot(lot_id)
 
-    async def distribute_lot(self, lot_id: UUID, created_by: UUID) -> dict:
+    async def distribute_lot(self, lot_id: UUID, created_by: UUID, fy_id: UUID) -> dict:
         """Auto-create batches from lot size pattern, set lot status to distributed."""
         lot = await self._get_or_404(lot_id)
         if lot.status != "cutting":
@@ -292,12 +294,8 @@ class LotService:
             color = lr.roll.color if lr.roll else "Unknown"
             color_breakdown[color] = (color_breakdown.get(color, 0) + (lr.num_pallas or 0))
 
-        # Get current max batch code once, generate all sequentially
-        from sqlalchemy import select as sa_select
-        result = await self.db.execute(
-            sa_select(Batch.batch_code).order_by(Batch.batch_code.desc()).limit(1).with_for_update()
-        )
-        current_max = _extract_number(result.scalar(), "BATCH-")
+        # Get current max batch code for this FY, generate all sequentially
+        current_max = await max_batch_number_for_fy(self.db, fy_id)
 
         batch_objects = []
         seq = current_max
@@ -319,6 +317,7 @@ class LotService:
                     status="created",
                     qr_code_data=qr_url,
                     created_by=created_by,
+                    fy_id=fy_id,
                 )
                 self.db.add(batch)
                 batch_objects.append(batch)
