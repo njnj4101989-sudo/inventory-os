@@ -392,6 +392,33 @@ def upgrade():
 4. **NEVER use Alembic's `op.add_column()` for tenant tables** — it doesn't know about tenant schemas. Use raw SQL via `conn.execute(text(...))`
 5. **Check actual `__tablename__`** in models before writing SQL — e.g., it's `batch_roll_consumption` (singular), NOT `batch_roll_consumptions`
 
+---
+
+## Protocol 10: Global Typography System (S79)
+
+> **Read this before ANY UI work. Source of truth: `frontend/src/index.css`**
+
+**24 `.typo-*` classes control ALL typography across 47 files. Change `index.css` → entire app updates.**
+
+### Quick Reference
+
+| Page/Layout | Form | Table | KPI/Data | Controls |
+|-------------|------|-------|----------|----------|
+| `typo-page-title` | `typo-label` | `typo-th` | `typo-kpi` | `typo-btn` |
+| `typo-section-title` | `typo-label-sm` | `typo-td` | `typo-kpi-sm` | `typo-btn-sm` |
+| `typo-card-title` | `typo-input` | `typo-td-secondary` | `typo-kpi-label` | `typo-badge` |
+| `typo-modal-title` | `typo-input-sm` | | `typo-data` | `typo-tab` |
+| `typo-body` | | | `typo-data-label` | `typo-nav` |
+| `typo-caption` / `typo-empty` | | | | `typo-nav-section` |
+
+### Rules
+
+1. **No raw Tailwind typography** — use `typo-*` classes, not `text-sm font-medium text-gray-700`
+2. **No per-file constants** — no `const LABEL = ...` or `const INPUT_CLS = ...`
+3. **Colored KPIs** — `typo-kpi-sm` (no color) + color class: `className="typo-kpi-sm text-amber-600"`
+4. **Block vs inline** — `typo-label` has `block mb-1`. For inline labels use `typo-data-label`
+5. **Print exempt** — JobChallan, BatchChallan, CuttingSheet, LabelSheet keep inline `style={{}}`
+
 
 
 

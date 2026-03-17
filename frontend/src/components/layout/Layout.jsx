@@ -24,7 +24,7 @@ export default function Layout() {
       {/* Main content area — shifts based on sidebar width */}
       <div
         className={`transition-all duration-300 ${
-          collapsed ? 'ml-16' : 'ml-60'
+          collapsed ? 'ml-[68px]' : 'ml-60'
         }`}
       >
         <Header />

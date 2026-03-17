@@ -31,7 +31,21 @@
 
 ---
 
-## Current State (Session 78 — 2026-03-18)
+## Current State (Session 79 — 2026-03-18)
+
+### S79: Global Typography System
+
+**24 `.typo-*` classes in `index.css`, 47 files migrated:**
+- Page titles, section headers, modal titles, table headers/cells, KPI values/labels
+- Form labels, inputs, data displays, badges, buttons, nav, tabs, captions, empty states
+- All per-file `LABEL`/`INPUT_CLS`/`SECTION_TITLE` constants removed
+- Print components (JobChallan, BatchChallan, CuttingSheet, LabelSheet) untouched — inline styles required
+- Font weights upgraded: labels now `font-semibold` (was `font-medium`), text colors darker
+- Protocol 10 added to `guardian.md`
+
+---
+
+## Previous State (Session 78 — 2026-03-18)
 
 ### S78: Multi-Company UX + Company Picker Keyboard + DB Stability
 
@@ -277,7 +291,7 @@
 
 ### UI Patterns
 - **Print:** `react-to-print` + `useReactToPrint({ contentRef })` + fixed overlay `z-50`, A4 inline styles
-- **Typography:** Inter font (400-800), `.typo-label`/`.typo-data` CSS classes, DataTable `<th>` text-gray-600
+- **Typography (S79):** 24 `.typo-*` classes in `index.css` control ALL text across 47 files. Inter font (400-800). See guardian.md Protocol 10 for class reference. No raw Tailwind typography, no per-file constants.
 - **Roll code:** `{SrNo}-{Fabric3}-{Color5/ColorNo}-{Seq}` (Sr. No. = internal filing serial)
 - **SKU pattern:** `ProductType-DesignNo-Color-Size` (e.g. `BLS-101-Red-M`)
 - **Response shapes:** All FK UUIDs return nested objects. Authority: `mock.js → API_REFERENCE.md → backend`
@@ -349,6 +363,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S79 | Global Typography System | 24 typo-* classes in index.css, 47 files migrated, all per-file constants removed, font weights upgraded, Protocol 10 added |
 | S78 | Multi-Company UX + Picker Keyboard + DB Stability | Auto-refresh JWT after company creation, company profile uses JWT company_id, default company logic fix, set-default endpoint+UI, company picker keyboard nav, FY tab company indicator, asyncpg prepared_statement_cache_size=0, deleted SQLite backup |
 | S77 | FY Counter Reset + Auth Hardening + DB Hardening | fy_id on 9 models, counter reset per FY, FY scoping on 11 list endpoints, active-status carry-over, token blacklist+JTI+rotation, JWT secret validation, 52 FK ondelete, 19 indexes, 6 CHECKs, 5 UNIQUEs, localStorage→useAuth migration, supplier response fix |
 | S76 | Multi-Company + Auth + FY Closing | Schema-per-tenant (5 public + 28 tenant), HttpOnly cookie JWT, company picker/switcher, master inheritance, FY closing with balance carry-forward |

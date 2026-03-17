@@ -1,10 +1,7 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
 const NAV_ITEMS = [
-  // ── Overview
-  { path: '/dashboard',  label: 'Dashboard',     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4', roles: ['admin', 'supervisor', 'billing'] },
-
   // ── Commerce (admin's daily driver)
   { section: 'Commerce', roles: ['admin', 'supervisor', 'billing'] },
   { path: '/orders',     label: 'Orders',        icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01', roles: ['admin', 'billing'] },
@@ -34,68 +31,145 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   const { role } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const isHome = location.pathname === '/dashboard'
 
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role))
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-30 flex flex-col bg-gray-900 text-white transition-all duration-300 ${
-        collapsed ? 'w-16' : 'w-60'
+      className={`fixed inset-y-0 left-0 z-30 flex flex-col transition-all duration-300 ${
+        collapsed ? 'w-[68px]' : 'w-60'
       }`}
+      style={{
+        background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+      }}
     >
-      {/* Logo / Brand */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-gray-800">
-        {!collapsed && (
-          <span className="typo-section-title text-primary-400">Inventory-OS</span>
+      {/* ── Brand → Dashboard ── */}
+      <div className={`flex h-14 items-center border-b border-white/[0.06] ${
+        collapsed ? 'justify-center px-0' : 'justify-between px-4'
+      }`}>
+        {collapsed ? (
+          <div className="group relative flex items-center justify-center">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-900/30 transition-transform hover:scale-105 ${
+                isHome ? 'ring-2 ring-primary-400/50' : ''
+              }`}
+            >
+              <span className="text-sm font-black text-white tracking-tighter">IO</span>
+            </button>
+            <span className="nav-tooltip">Dashboard</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => navigate('/dashboard')}
+            className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.06] ${
+              isHome ? 'bg-white/[0.06]' : ''
+            }`}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-900/30 shrink-0">
+              <span className="text-xs font-black text-white tracking-tighter">IO</span>
+            </div>
+            <span className="text-sm font-bold text-white tracking-tight">Inventory-OS</span>
+          </button>
         )}
-        <button
-          onClick={onToggle}
-          className="p-1 rounded hover:bg-gray-800 text-gray-400 hover:text-white"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
-        {visibleItems.map((item) =>
-          item.section ? (
-            !collapsed && (
-              <div key={item.section} className="px-3 pt-2.5 pb-0.5">
-                <span className="typo-nav-section">
+      {/* ── Navigation ── */}
+      <nav className={`flex-1 py-2 ${collapsed ? 'px-2 overflow-visible' : 'px-3 sidebar-scroll overflow-y-auto'}`}>
+        {visibleItems.map((item, idx) => {
+          if (item.section) {
+            // Section header
+            if (collapsed) {
+              return (
+                <div key={item.section} className="my-1.5 mx-2 border-t border-white/[0.06]" />
+              )
+            }
+            return (
+              <div key={item.section} className={`px-3 ${idx === 0 ? 'pt-0.5' : 'pt-3'} pb-1`}>
+                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
                   {item.section}
                 </span>
               </div>
             )
-          ) : (
+          }
+
+          const isActive = location.pathname === item.path
+
+          if (collapsed) {
+            // Collapsed: icon + tooltip on hover
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className="group relative flex items-center justify-center"
+              >
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25'
+                    : 'text-gray-400 hover:bg-white/[0.08] hover:text-white'
+                }`}>
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d={item.icon} />
+                  </svg>
+                </div>
+                {/* Tooltip */}
+                <span className="nav-tooltip">{item.label}</span>
+              </NavLink>
+            )
+          }
+
+          // Expanded: full nav item
+          return (
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-1.5 rounded-lg typo-nav transition-colors ${
-                  isActive
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`
-              }
+              className="group relative flex items-center"
             >
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
-              </svg>
-              {!collapsed && <span>{item.label}</span>}
+              {/* Active accent bar */}
+              {isActive && (
+                <div className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary-400" />
+              )}
+              <div className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] transition-all duration-200 ${
+                isActive
+                  ? 'bg-white/[0.1] text-white'
+                  : 'text-gray-400 hover:bg-white/[0.06] hover:text-gray-200'
+              }`}>
+                <div className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0 ${
+                  isActive
+                    ? 'bg-primary-600/80 text-white shadow-sm shadow-primary-600/20'
+                    : 'bg-white/[0.04] text-inherit group-hover:bg-white/[0.08]'
+                }`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d={item.icon} />
+                  </svg>
+                </div>
+                <span className={`text-[13px] font-medium transition-colors ${
+                  isActive ? 'font-semibold text-white' : ''
+                }`}>{item.label}</span>
+              </div>
             </NavLink>
           )
-        )}
+        })}
       </nav>
 
-      {/* Footer */}
-      {!collapsed && (
-        <div className="px-4 py-2 border-t border-gray-800 typo-caption">
-          v1.0.0
-        </div>
-      )}
+      {/* ── Footer — toggle always here ── */}
+      <div className="border-t border-white/[0.06] px-3 py-2.5">
+        <button
+          onClick={onToggle}
+          className={`flex items-center rounded-lg text-gray-500 transition-colors hover:bg-white/[0.08] hover:text-gray-300 ${
+            collapsed ? 'w-full justify-center p-1.5' : 'w-full gap-2 px-2.5 py-1.5'
+          }`}
+        >
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d={collapsed ? 'M13 5l7 7-7 7M5 5l7 7-7 7' : 'M11 19l-7-7 7-7m8 14l-7-7 7-7'} />
+          </svg>
+          {!collapsed && <span className="text-[11px] font-medium">Collapse</span>}
+        </button>
+      </div>
     </aside>
   )
 }
