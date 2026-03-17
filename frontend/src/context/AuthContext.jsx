@@ -56,10 +56,10 @@ export function AuthProvider({ children }) {
       return { ...data.user, _needsCompanySelect: true, _companies: data.companies }
     }
 
-    // Single company — auto-selected
+    // Single company — auto-selected (or 0 companies — admin setup)
     setCompany(data.company || null)
     setFy(data.fy || null)
-    return data.user
+    return { ...data.user, _noCompany: !data.company }
   }, [])
 
   const selectCompany = useCallback(async (companyId, fyId = null) => {

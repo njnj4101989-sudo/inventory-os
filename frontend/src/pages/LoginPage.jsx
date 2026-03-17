@@ -55,6 +55,9 @@ export default function LoginPage() {
         setPickerCompanies(result._companies || [])
         setSelectedCompanyId(result._companies?.find((c) => c.is_default)?.id || result._companies?.[0]?.id)
         setShowPicker(true)
+      } else if (result._noCompany) {
+        // No company exists — redirect admin to Settings to create one
+        navigate('/settings', { replace: true })
       } else {
         navigate(getLandingPath(result.role), { replace: true })
       }

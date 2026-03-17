@@ -13,8 +13,19 @@ from app.services.company_service import CompanyService, FinancialYearService
 from app.services.fy_closing_service import FYClosingService
 from app.schemas.company import CompanyUpdate, CompanyCreate
 from app.schemas.financial_year import FinancialYearCreate, FinancialYearUpdate
+from app.core.exceptions import ValidationError
 
 router = APIRouter(tags=["company"])
+
+
+def _require_company_context(current_user: User) -> None:
+    """Raise clear error if JWT has no company selected."""
+    claims = getattr(current_user, "_token_claims", {})
+    if not claims.get("company_schema"):
+        raise ValidationError(
+            "No company selected. Please logout, login again, and select a company first. "
+            "If you just created a company, you must logout and login again to activate it."
+        )
 
 
 # ── Companies (multi-company) ──
@@ -63,6 +74,7 @@ async def get_company(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = CompanyService(db)
     company = await svc.get_company()
     return {"success": True, "data": company}
@@ -74,6 +86,7 @@ async def update_company(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = CompanyService(db)
     company = await svc.upsert_company(req)
     return {"success": True, "data": company, "message": "Company updated"}
@@ -86,6 +99,7 @@ async def list_financial_years(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = FinancialYearService(db)
     years = await svc.get_all()
     return {"success": True, "data": years}
@@ -96,6 +110,7 @@ async def get_current_fy(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = FinancialYearService(db)
     fy = await svc.get_current()
     return {"success": True, "data": fy}
@@ -107,6 +122,7 @@ async def create_financial_year(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = FinancialYearService(db)
     fy = await svc.create(req)
     return {"success": True, "data": fy, "message": f"Financial year {fy.code} created"}
@@ -119,6 +135,7 @@ async def update_financial_year(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("supplier_manage"),
 ):
+    _require_company_context(current_user)
     svc = FinancialYearService(db)
     fy = await svc.update(fy_id, req)
     return {"success": True, "data": fy, "message": f"Financial year {fy.code} updated"}
@@ -130,6 +147,7 @@ async def delete_financial_year(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("user_manage"),
 ):
+    _require_company_context(current_user)
     svc = FinancialYearService(db)
     await svc.delete(fy_id)
     return {"success": True, "message": "Financial year deleted"}
@@ -150,8 +168,8 @@ async def close_preview(
     current_user: User = require_permission("user_manage"),
 ):
     """Preview year closing — warnings, party balance snapshot."""
+    _require_company_context(current_user)
     svc = FYClosingService(db)
-    result = await svc.validate_closing(fy_id)
     return {"success": True, "data": result}
 
 
@@ -163,6 +181,7 @@ async def close_fy(
     current_user: User = require_permission("user_manage"),
 ):
     """Close the current FY — snapshot balances, create new FY, carry forward."""
+    _require_company_context(current_user)
     from datetime import date as date_cls
     svc = FYClosingService(db)
     result = await svc.close_fy(
