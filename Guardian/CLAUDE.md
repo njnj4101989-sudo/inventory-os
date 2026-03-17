@@ -31,7 +31,49 @@
 
 ---
 
-## Current State (Session 77 — 2026-03-17)
+## Current State (Session 78 — 2026-03-18)
+
+### S78: Multi-Company UX + Company Picker Keyboard + DB Stability
+
+**Auto-refresh JWT after company creation:**
+- `selectCompany(newCompany.id)` called after `createNewCompany()` — JWT gets company context immediately, no double logout
+- Conditional success messages: "you're all set" (if FY exists) or "create a Financial Year to start working" (auto-switches to FY tab)
+- FY creation success toast added
+
+**Company Profile fix:**
+- `GET /company` and `PATCH /company` now use `company_id` from JWT (was `SELECT ... LIMIT 1` — always returned first company)
+
+**Default company logic fix:**
+- Creating a new company no longer steals `is_default` from existing company
+- First company = default, subsequent companies = `is_default=False`
+- `POST /companies/set-default` endpoint + "Set as Default" button on Companies tab
+- "Default" badge on company cards
+
+**Company picker keyboard navigation:**
+- Arrow Up/Down to move selection, Enter to continue
+- Auto-focus on default company, `stopPropagation` to prevent double-submit
+- Form wrapper for native Enter submission
+
+**FY tab company context:**
+- "Managing financial years for {company name}" indicator
+
+**Companies list fix:**
+- `GET /companies` now returns `is_active`, `city`, `gst_no`, `is_default` per user (was missing, caused "Inactive" badge)
+
+**DB stability (asyncpg):**
+- `prepared_statement_cache_size=0` on engine — eliminates `InvalidCachedStatementError` after schema creation
+- Correct fix for multi-tenant apps that create schemas dynamically
+
+**Cleanup:**
+- Deleted `backend/inventory_os.db.bak` (old SQLite backup from S76)
+
+**TODO (next session — S79):**
+- [ ] Remnant roll UX improvements (needs spec)
+- [ ] Deploy S78 changes to production
+
+---
+
+## Previous State (Session 77 — 2026-03-17)
 
 ### S77: FY Counter Reset + FY Scoping + Auth Hardening + DB Hardening
 
@@ -84,14 +126,19 @@
 
 **Migrations:** `a4c7b2e1f3d9` (fy_id columns) → `b5d8e3f2a1c0` (token_blacklist) → `c6e9f4a3b2d1` (DB hardening)
 
+**Production Deployment Fixes (post-commit):**
+- `upsert_company` no longer creates bare company without schema — raises error
+- Company context guard on all FY + company-profile endpoints
+- Login redirects admin to Settings when no company exists
+- Settings auto-opens Companies tab when no company
+- Deployed to prod: DB wiped, recreated from models, 5 users seeded + linked
+
 **TODO (next session — S78):**
-- [ ] Min Weight filter input — RollsPage invoice view, LotsPage cutting sheet roll picker, anywhere rolls are listed for selection. Auto-populate from palla weight where available
-- [ ] Invoice detail orange chips — improve VA suffix readability (proper badges instead of cramped text)
-- [ ] LotsPage focus fix verified (tabIndex removed from Palla Meter)
-- [ ] Invoice detail color_no display verified (added color_no from color_obj)
-- [ ] Supplier _to_response Pydantic fix verified
-- [ ] Deploy multi-company + auth + FY changes to production (EC2 + RDS)
-- [ ] Link prod users to company (UserCompany records)
+- [ ] Auto-refresh JWT after company creation (avoid double logout)
+- [ ] Success messages on company + FY creation
+- [ ] Link other users to company on company creation (currently only creator is linked)
+- [ ] Min Weight filter on RollsPage invoice view (cutting sheet already has palla-weight filter)
+- [ ] Remnant roll UX improvements
 
 ---
 
@@ -302,6 +349,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S78 | Multi-Company UX + Picker Keyboard + DB Stability | Auto-refresh JWT after company creation, company profile uses JWT company_id, default company logic fix, set-default endpoint+UI, company picker keyboard nav, FY tab company indicator, asyncpg prepared_statement_cache_size=0, deleted SQLite backup |
 | S77 | FY Counter Reset + Auth Hardening + DB Hardening | fy_id on 9 models, counter reset per FY, FY scoping on 11 list endpoints, active-status carry-over, token blacklist+JTI+rotation, JWT secret validation, 52 FK ondelete, 19 indexes, 6 CHECKs, 5 UNIQUEs, localStorage→useAuth migration, supplier response fix |
 | S76 | Multi-Company + Auth + FY Closing | Schema-per-tenant (5 public + 28 tenant), HttpOnly cookie JWT, company picker/switcher, master inheritance, FY closing with balance carry-forward |
 | S75 | Party Detail UI + API Docs | Full-page detail overlay, API_REFERENCE.md updated |

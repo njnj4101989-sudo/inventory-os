@@ -75,14 +75,14 @@ export default function LoginPage() {
   }
 
   const handleCompanySelect = async () => {
-    if (!selectedCompanyId) return
+    if (!selectedCompanyId || loading) return
     setError('')
     setLoading(true)
     try {
       await selectCompany(selectedCompanyId)
       navigate(getLandingPath(role), { replace: true })
     } catch (err) {
-      setError('Failed to select company. Please try again.')
+      setError(err.response?.data?.detail || 'Failed to select company. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -98,7 +98,24 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-gray-500">Select your workspace</p>
           </div>
 
-          <div className="rounded-xl bg-white p-8 shadow-lg">
+          <form className="rounded-xl bg-white p-8 shadow-lg" onSubmit={(e) => { e.preventDefault(); handleCompanySelect() }}
+            onKeyDown={(e) => {
+              if (!pickerCompanies.length) return
+              const idx = pickerCompanies.findIndex((c) => c.id === selectedCompanyId)
+              let nextIdx = -1
+              if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                e.preventDefault()
+                nextIdx = (idx + 1) % pickerCompanies.length
+              } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault()
+                nextIdx = (idx - 1 + pickerCompanies.length) % pickerCompanies.length
+              }
+              if (nextIdx >= 0) {
+                setSelectedCompanyId(pickerCompanies[nextIdx].id)
+                // Focus moves via the ref callback on re-render
+              }
+            }}
+          >
             <h2 className="mb-2 text-lg font-semibold text-gray-800">Choose Company</h2>
             <p className="mb-6 text-sm text-gray-500">You have access to multiple companies</p>
 
@@ -111,7 +128,9 @@ export default function LoginPage() {
                 <button
                   key={c.id}
                   type="button"
+                  ref={c.id === selectedCompanyId ? (el) => { if (el) requestAnimationFrame(() => el.focus()) } : undefined}
                   onClick={() => setSelectedCompanyId(c.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleCompanySelect() } }}
                   className={`w-full flex items-center gap-3 rounded-lg border-2 px-4 py-3 text-left transition-all ${
                     selectedCompanyId === c.id
                       ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500'
@@ -144,13 +163,13 @@ export default function LoginPage() {
             </div>
 
             <button
-              onClick={handleCompanySelect}
+              type="submit"
               disabled={loading || !selectedCompanyId}
               className="mt-6 w-full rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Loading...' : 'Continue'}
             </button>
-          </div>
+          </form>
         </div>
       </div>
     )

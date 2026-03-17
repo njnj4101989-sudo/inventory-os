@@ -35,10 +35,26 @@ async def list_companies(
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("user_manage"),
 ):
-    """List all companies (admin only)."""
+    """List all companies with is_default for current user."""
     svc = CompanyService(db)
-    companies = await svc.get_companies()
+    companies = await svc.get_user_companies(current_user.id)
     return {"success": True, "data": companies}
+
+
+class SetDefaultRequest(PydanticBase):
+    company_id: UUID
+
+
+@router.post("/companies/set-default")
+async def set_default_company(
+    req: SetDefaultRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("user_manage"),
+):
+    """Set a company as the user's default."""
+    svc = CompanyService(db)
+    await svc.set_default_company(current_user.id, req.company_id)
+    return {"success": True, "message": "Default company updated"}
 
 
 @router.post("/companies")
@@ -75,8 +91,10 @@ async def get_company(
     current_user: User = require_permission("supplier_manage"),
 ):
     _require_company_context(current_user)
+    claims = getattr(current_user, "_token_claims", {})
+    company_id = claims.get("company_id")
     svc = CompanyService(db)
-    company = await svc.get_company()
+    company = await svc.get_company(company_id=company_id)
     return {"success": True, "data": company}
 
 
@@ -87,8 +105,10 @@ async def update_company(
     current_user: User = require_permission("supplier_manage"),
 ):
     _require_company_context(current_user)
+    claims = getattr(current_user, "_token_claims", {})
+    company_id = claims.get("company_id")
     svc = CompanyService(db)
-    company = await svc.upsert_company(req)
+    company = await svc.upsert_company(req, company_id=company_id)
     return {"success": True, "data": company, "message": "Company updated"}
 
 

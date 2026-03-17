@@ -27,12 +27,15 @@ class CompanyService:
 
     # --- Single-company (legacy Settings page) ---
 
-    async def get_company(self) -> Company | None:
-        result = await self.db.execute(select(Company).limit(1))
+    async def get_company(self, company_id: str | None = None) -> Company | None:
+        if company_id:
+            result = await self.db.execute(select(Company).where(Company.id == company_id))
+        else:
+            result = await self.db.execute(select(Company).limit(1))
         return result.scalar_one_or_none()
 
-    async def upsert_company(self, data: CompanyUpdate) -> Company:
-        company = await self.get_company()
+    async def upsert_company(self, data: CompanyUpdate, company_id: str | None = None) -> Company:
+        company = await self.get_company(company_id=company_id)
         if not company:
             raise ValidationError(
                 "No company exists yet. Please create one from Settings → Companies tab first."
@@ -133,19 +136,19 @@ class CompanyService:
             self.db.add(company)
             await self.db.flush()
 
-            # 4. Link creating user (unset previous default first)
-            existing_defaults = await self.db.execute(
+            # 4. Link creating user (keep existing default untouched)
+            has_default = await self.db.execute(
                 select(UserCompany)
                 .where(UserCompany.user_id == created_by_user_id, UserCompany.is_default == True)
+                .limit(1)
             )
-            for uc in existing_defaults.scalars().all():
-                uc.is_default = False
+            first_company = has_default.scalar_one_or_none() is None
 
-            # 4a. Link creating user as default
+            # 4a. Link creating user — only default if this is their first company
             user_company = UserCompany(
                 user_id=created_by_user_id,
                 company_id=company.id,
-                is_default=True,
+                is_default=first_company,
             )
             self.db.add(user_company)
 
@@ -318,10 +321,39 @@ class CompanyService:
                 "name": company.name,
                 "slug": company.slug,
                 "schema_name": company.schema_name,
+                "is_active": company.is_active,
+                "city": company.city,
+                "gst_no": company.gst_no,
                 "is_default": is_default,
             }
             for company, is_default in result.all()
         ]
+
+    async def set_default_company(self, user_id: UUID, company_id: UUID) -> None:
+        """Set a company as the user's default (unset all others)."""
+        # Verify link exists
+        result = await self.db.execute(
+            select(UserCompany).where(
+                UserCompany.user_id == user_id,
+                UserCompany.company_id == company_id,
+            )
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            raise ValidationError("User is not linked to this company")
+
+        # Unset all defaults for this user
+        all_links = await self.db.execute(
+            select(UserCompany).where(
+                UserCompany.user_id == user_id,
+                UserCompany.is_default == True,
+            )
+        )
+        for uc in all_links.scalars().all():
+            uc.is_default = False
+
+        target.is_default = True
+        await self.db.flush()
 
     async def link_user_to_company(
         self, user_id: UUID, company_id: UUID, is_default: bool = False

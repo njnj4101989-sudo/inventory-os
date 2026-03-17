@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getCompany, updateCompany, getFinancialYears, createFinancialYear, updateFinancialYear, deleteFinancialYear, getCompanies, createNewCompany, closeFYPreview, closeFY } from '../api/company'
+import { getCompany, updateCompany, getFinancialYears, createFinancialYear, updateFinancialYear, deleteFinancialYear, getCompanies, createNewCompany, setDefaultCompany, closeFYPreview, closeFY } from '../api/company'
 import { useAuth } from '../hooks/useAuth'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
@@ -29,6 +29,8 @@ export default function SettingsPage() {
 
   const [tab, setTab] = useState(activeCompany ? 'company' : 'companies')
   const [error, setError] = useState(null)
+  const [successMsg, setSuccessMsg] = useState(null)
+  const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(null), 5000) }
 
   // Company Profile
   const [company, setCompany] = useState({
@@ -81,7 +83,7 @@ export default function SettingsPage() {
     } else if (tab === 'companies') {
       getCompanies().then((res) => setAllCompanies(res.data.data || [])).catch((err) => setError(err.response?.data?.detail || 'Failed to load companies'))
     }
-  }, [tab])
+  }, [tab, activeCompany?.id])
 
   const handleCompanySave = async () => {
     setCompanySaving(true); setError(null); setCompanyMsg(null)
@@ -113,6 +115,7 @@ export default function SettingsPage() {
     try {
       await createFinancialYear(fyForm)
       await refreshFYContext()
+      showSuccess(`Financial Year "${fyForm.code}" created — you're all set`)
       setFYForm({ code: '', start_date: '', end_date: '', is_current: false })
     } catch (err) { setError(err.response?.data?.detail || 'Failed to create FY') }
     finally { setFYCreating(false) }
@@ -145,6 +148,16 @@ export default function SettingsPage() {
     }))
   }
 
+  const handleSetDefault = async (companyId) => {
+    setError(null)
+    try {
+      await setDefaultCompany(companyId)
+      const res = await getCompanies()
+      setAllCompanies(res.data.data || [])
+      showSuccess('Default company updated')
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to set default') }
+  }
+
   const handleWizardCreate = async () => {
     if (!wizardData.name.trim()) return
     setWizardCreating(true); setError(null)
@@ -163,7 +176,13 @@ export default function SettingsPage() {
         body.copy_from_company_id = wizardData.copy_from_company_id
         body.inherit_masters = wizardData.inherit_masters.length > 0 ? wizardData.inherit_masters : null
       }
-      await createNewCompany(body)
+      const createRes = await createNewCompany(body)
+      const newCompany = createRes.data.data
+      // Auto-select the new company so JWT gets company context immediately (no logout needed)
+      let selectedData = null
+      if (newCompany?.id) {
+        selectedData = await selectCompany(newCompany.id)
+      }
       const res = await getCompanies()
       setAllCompanies(res.data.data || [])
       setShowWizard(false)
@@ -172,6 +191,12 @@ export default function SettingsPage() {
         name: '', city: '', gst_no: '', state_code: '', pan_no: '', phone: '', email: '', address: '',
         copy_from_company_id: null, inherit_masters: [...MASTER_OPTIONS.map((m) => m.key)],
       })
+      if (selectedData?.fy) {
+        showSuccess(`"${newCompany.name}" created successfully — you're all set`)
+      } else {
+        showSuccess(`"${newCompany.name}" created — create a Financial Year to start working`)
+        setTab('fy')
+      }
     } catch (err) { setError(err.response?.data?.detail || 'Failed to create company') }
     finally { setWizardCreating(false) }
   }
@@ -251,6 +276,14 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      {successMsg && (
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {successMsg}
+        </div>
+      )}
       {error && <div className="mt-2"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
 
       {/* ── Company Profile Tab ── */}
@@ -301,6 +334,9 @@ export default function SettingsPage() {
       {/* ── Financial Years Tab ── */}
       {tab === 'fy' && (
         <div className="mt-3 max-w-3xl space-y-4">
+          {activeCompany && (
+            <p className="text-xs text-gray-500">Managing financial years for <span className="font-semibold text-gray-700">{activeCompany.name}</span></p>
+          )}
           <div className="bg-gray-50 rounded-lg p-3">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Create Financial Year</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
@@ -491,7 +527,15 @@ export default function SettingsPage() {
                       ) : (
                         <span className="inline-flex items-center rounded bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">Inactive</span>
                       )}
+                      {c.is_default && (
+                        <span className="inline-flex items-center rounded bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700">Default</span>
+                      )}
                     </div>
+                    {!c.is_default && (
+                      <button onClick={() => handleSetDefault(c.id)} className="mt-1 text-[10px] text-gray-400 hover:text-primary-600 font-medium transition-colors">
+                        Set as Default
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

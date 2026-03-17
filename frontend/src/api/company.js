@@ -9,6 +9,10 @@ export async function createNewCompany(data) {
   return client.post('/companies', data)
 }
 
+export async function setDefaultCompany(companyId) {
+  return client.post('/companies/set-default', { company_id: companyId })
+}
+
 // Company (current — settings profile)
 export async function getCompany() {
   return client.get('/company')
