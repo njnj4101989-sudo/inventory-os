@@ -13,6 +13,7 @@ from app.database import (
     validate_schema_name,
 )
 from app.models.company import Company, slugify
+from app.models.user import User
 from app.models.user_company import UserCompany
 from app.models.financial_year import FinancialYear
 from app.schemas.company import CompanyUpdate
@@ -140,12 +141,24 @@ class CompanyService:
             for uc in existing_defaults.scalars().all():
                 uc.is_default = False
 
+            # 4a. Link creating user as default
             user_company = UserCompany(
                 user_id=created_by_user_id,
                 company_id=company.id,
                 is_default=True,
             )
             self.db.add(user_company)
+
+            # 4b. Link ALL other active users to this company
+            all_users = await self.db.execute(
+                select(User).where(User.is_active == True, User.id != created_by_user_id)
+            )
+            for user in all_users.scalars().all():
+                self.db.add(UserCompany(
+                    user_id=user.id,
+                    company_id=company.id,
+                    is_default=False,
+                ))
 
             return company
 
