@@ -27,7 +27,7 @@ export default function SettingsPage() {
     ...(isAdmin ? [{ key: 'companies', label: 'Companies' }] : []),
   ]
 
-  const [tab, setTab] = useState('company')
+  const [tab, setTab] = useState(activeCompany ? 'company' : 'companies')
   const [error, setError] = useState(null)
 
   // Company Profile
