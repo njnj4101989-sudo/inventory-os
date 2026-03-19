@@ -649,6 +649,9 @@ class RollService:
         allowed = {"gst_percent", "invoice_no", "challan_no", "invoice_date", "sr_no", "notes"}
         for field, value in updates.items():
             if field in allowed:
+                if field == "invoice_date" and isinstance(value, str):
+                    from datetime import date as date_cls
+                    value = date_cls.fromisoformat(value)
                 setattr(si, field, value)
 
         await self.db.flush()
