@@ -62,15 +62,6 @@ app = FastAPI(
     openapi_url=None if _is_prod else "/api/v1/openapi.json",
 )
 
-# CORS — explicit origins for dev + production
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # --- Tenant middleware — extract company_schema from JWT cookie ---
 _mw_logger = logging.getLogger("tenant_middleware")
 
@@ -85,13 +76,21 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 if schema:
                     request.state.company_schema = schema
             except Exception as e:
-                # Don't block the request — auth dependency will reject invalid tokens.
-                # But log so we can diagnose stale-cookie issues.
                 _mw_logger.debug("JWT decode skipped in middleware: %s", e)
         response = await call_next(request)
         return response
 
 app.add_middleware(TenantMiddleware)
+
+# CORS — added LAST so it's the OUTERMOST middleware.
+# This ensures CORS headers are on ALL responses including 401/500 errors.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Exception handlers
 register_exception_handlers(app)
