@@ -933,7 +933,12 @@ export default function RollsPage() {
             }
           }
         }
-        if (newRolls.length > 0) await stockInBulk(invoiceHeader, newRolls)
+        if (newRolls.length > 0) {
+          await stockInBulk(
+            { ...invoiceHeader, supplier_invoice_id: editingInvoice.supplier_invoice_id },
+            newRolls
+          )
+        }
 
         // Delete rolls that were removed from the invoice during edit
         if (removedRollIds.length > 0) {

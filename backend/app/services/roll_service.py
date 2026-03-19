@@ -260,56 +260,64 @@ class RollService:
         created_rolls = []
         now = datetime.now(timezone.utc)
 
-        # Duplicate check: same supplier + invoice_no (+ challan_no if provided)
-        if req.supplier_id and req.supplier_invoice_no:
-            dup_conditions = [
-                SupplierInvoice.supplier_id == req.supplier_id,
-                SupplierInvoice.invoice_no == req.supplier_invoice_no,
-            ]
-            if req.supplier_challan_no:
-                dup_conditions.append(SupplierInvoice.challan_no == req.supplier_challan_no)
-            else:
-                dup_conditions.append(
-                    or_(SupplierInvoice.challan_no == None, SupplierInvoice.challan_no == "")
-                )
+        # If adding rolls to an existing invoice (edit flow), use that invoice directly
+        if req.supplier_invoice_id:
+            si_stmt = select(SupplierInvoice).where(SupplierInvoice.id == req.supplier_invoice_id)
+            si_result = await self.db.execute(si_stmt)
+            supplier_inv = si_result.scalar_one_or_none()
+            if not supplier_inv:
+                raise NotFoundError(f"Supplier invoice {req.supplier_invoice_id} not found")
+        else:
+            # Duplicate check: same supplier + invoice_no (+ challan_no if provided)
+            if req.supplier_id and req.supplier_invoice_no:
+                dup_conditions = [
+                    SupplierInvoice.supplier_id == req.supplier_id,
+                    SupplierInvoice.invoice_no == req.supplier_invoice_no,
+                ]
+                if req.supplier_challan_no:
+                    dup_conditions.append(SupplierInvoice.challan_no == req.supplier_challan_no)
+                else:
+                    dup_conditions.append(
+                        or_(SupplierInvoice.challan_no == None, SupplierInvoice.challan_no == "")
+                    )
 
-            dup_stmt = (
-                select(SupplierInvoice)
-                .where(and_(*dup_conditions))
-                .options(selectinload(SupplierInvoice.supplier))
-                .limit(1)
+                dup_stmt = (
+                    select(SupplierInvoice)
+                    .where(and_(*dup_conditions))
+                    .options(selectinload(SupplierInvoice.supplier))
+                    .limit(1)
+                )
+                dup_result = await self.db.execute(dup_stmt)
+                existing = dup_result.scalar_one_or_none()
+
+                if existing:
+                    supplier_name = existing.supplier.name if existing.supplier else "Unknown"
+                    roll_count = (await self.db.execute(
+                        select(func.count()).select_from(Roll)
+                        .where(Roll.supplier_invoice_id == existing.id)
+                    )).scalar() or 0
+                    challan_part = f" / Challan: {req.supplier_challan_no}" if req.supplier_challan_no else ""
+                    raise BusinessRuleViolationError(
+                        f"Invoice '{req.supplier_invoice_no}'{challan_part} from '{supplier_name}' "
+                        f"is already in stock with {roll_count} roll(s) "
+                        f"(entered on {existing.received_at.strftime('%d-%b-%Y') if existing.received_at else '—'}). "
+                        f"Please verify before re-entering."
+                    )
+
+            # Create new SupplierInvoice record
+            supplier_inv = SupplierInvoice(
+                supplier_id=req.supplier_id,
+                invoice_no=req.supplier_invoice_no,
+                challan_no=req.supplier_challan_no,
+                invoice_date=req.supplier_invoice_date,
+                sr_no=req.sr_no,
+                gst_percent=req.gst_percent,
+                received_by=received_by,
+                received_at=now,
+                fy_id=fy_id,
             )
-            dup_result = await self.db.execute(dup_stmt)
-            existing = dup_result.scalar_one_or_none()
-
-            if existing:
-                supplier_name = existing.supplier.name if existing.supplier else "Unknown"
-                roll_count = (await self.db.execute(
-                    select(func.count()).select_from(Roll)
-                    .where(Roll.supplier_invoice_id == existing.id)
-                )).scalar() or 0
-                challan_part = f" / Challan: {req.supplier_challan_no}" if req.supplier_challan_no else ""
-                raise BusinessRuleViolationError(
-                    f"Invoice '{req.supplier_invoice_no}'{challan_part} from '{supplier_name}' "
-                    f"is already in stock with {roll_count} roll(s) "
-                    f"(entered on {existing.received_at.strftime('%d-%b-%Y') if existing.received_at else '—'}). "
-                    f"Please verify before re-entering."
-                )
-
-        # Create SupplierInvoice record first — invoice-level data lives here
-        supplier_inv = SupplierInvoice(
-            supplier_id=req.supplier_id,
-            invoice_no=req.supplier_invoice_no,
-            challan_no=req.supplier_challan_no,
-            invoice_date=req.supplier_invoice_date,
-            sr_no=req.sr_no,
-            gst_percent=req.gst_percent,
-            received_by=received_by,
-            received_at=now,
-            fy_id=fy_id,
-        )
-        self.db.add(supplier_inv)
-        await self.db.flush()  # get supplier_inv.id
+            self.db.add(supplier_inv)
+            await self.db.flush()
 
         for entry in req.rolls:
             if entry.total_weight <= 0:
@@ -720,8 +728,23 @@ class RollService:
             raise NotFoundError(f"Roll {roll_id} not found")
         if roll.remaining_weight != roll.total_weight:
             raise BusinessRuleViolationError("Cannot delete a roll that has been used in lots or processing")
+        invoice_id = roll.supplier_invoice_id
         await self.db.delete(roll)
         await self.db.flush()
+
+        # Clean up orphan SupplierInvoice if no rolls remain
+        if invoice_id:
+            remaining = (await self.db.execute(
+                select(func.count()).select_from(Roll)
+                .where(Roll.supplier_invoice_id == invoice_id)
+            )).scalar() or 0
+            if remaining == 0:
+                si = (await self.db.execute(
+                    select(SupplierInvoice).where(SupplierInvoice.id == invoice_id)
+                )).scalar_one_or_none()
+                if si:
+                    await self.db.delete(si)
+                    await self.db.flush()
 
     async def get_consumption_history(self, roll_id: UUID) -> list:
         stmt = (

@@ -81,6 +81,7 @@ class BulkStockIn(BaseModel):
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
     gst_percent: Decimal = Decimal("0")
+    supplier_invoice_id: UUID | None = None  # existing invoice — skip dup check, link rolls to it
     rolls: list[BulkRollEntry]
 
 

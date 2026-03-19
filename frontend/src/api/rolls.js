@@ -148,6 +148,7 @@ export async function stockInBulk(header, rollEntries) {
     supplier_invoice_date: header.supplier_invoice_date || null,
     sr_no: header.sr_no || null,
     gst_percent: header.gst_percent ? parseFloat(header.gst_percent) : 0,
+    supplier_invoice_id: header.supplier_invoice_id || null,
     rolls: rollEntries.map(entry => ({
       fabric_type: entry.fabric_type,
       color: entry.color,

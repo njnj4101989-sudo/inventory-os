@@ -1,12 +1,9 @@
 """Roll routes — stock-in, listing, detail with consumption history."""
 
-import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
-_logger = logging.getLogger(__name__)
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
@@ -48,19 +45,11 @@ async def stock_in(
 
 @router.post("/bulk-stock-in", response_model=None, status_code=201)
 async def bulk_stock_in(
-    request: Request,
+    req: BulkStockIn,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("stock_in"),
 ):
     """Atomic bulk stock-in: all rolls in a single transaction. All-or-nothing."""
-    body = await request.json()
-    _logger.warning("DEBUG bulk-stock-in payload: %s", body)
-    try:
-        req = BulkStockIn(**body)
-    except Exception as e:
-        _logger.error("DEBUG bulk-stock-in VALIDATION FAILED: %s", e)
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=422, content={"detail": str(e)})
     fy_id = get_fy_id(current_user)
     svc = RollService(db)
     result = await svc.bulk_stock_in(req, current_user.id, fy_id)

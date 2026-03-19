@@ -7,7 +7,6 @@ Register these in main.py (6A-10) via:
 import logging
 
 from fastapi import Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AppException
@@ -44,17 +43,7 @@ async def generic_exception_handler(_request: Request, exc: Exception) -> JSONRe
     )
 
 
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    """Log validation errors so we can debug 422s from production logs."""
-    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
-    return JSONResponse(
-        status_code=422,
-        content={"detail": exc.errors()},
-    )
-
-
 def register_exception_handlers(app) -> None:
     """Register all exception handlers on the FastAPI app instance."""
     app.add_exception_handler(AppException, app_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
