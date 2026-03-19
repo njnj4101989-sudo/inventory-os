@@ -37,11 +37,7 @@ client.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // Treat network errors (CORS-masked 401) and actual 401s the same way
-    const is401 = error.response?.status === 401
-    const isNetworkError = !error.response && error.message === 'Network Error'
-
-    if ((is401 || isNetworkError) && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
