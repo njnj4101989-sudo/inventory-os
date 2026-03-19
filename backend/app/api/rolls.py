@@ -10,7 +10,7 @@ from app.models.user import User
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
     SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
-    BulkStockIn, SupplierInvoiceParams,
+    BulkStockIn, SupplierInvoiceParams, SupplierInvoiceUpdate,
 )
 from app.services.roll_service import RollService
 
@@ -72,7 +72,7 @@ async def list_supplier_invoices(
 @router.patch("/supplier-invoices/{invoice_id}", response_model=None)
 async def update_supplier_invoice(
     invoice_id: UUID,
-    updates: dict,
+    updates: SupplierInvoiceUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("stock_in"),
 ):

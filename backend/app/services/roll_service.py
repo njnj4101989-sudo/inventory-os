@@ -634,7 +634,7 @@ class RollService:
 
         return self._to_response(roll)
 
-    async def update_supplier_invoice(self, invoice_id: UUID, updates: dict) -> dict:
+    async def update_supplier_invoice(self, invoice_id: UUID, updates) -> dict:
         """Update a SupplierInvoice record (e.g. gst_percent, invoice_no, etc.)."""
         stmt = (
             select(SupplierInvoice)
@@ -646,13 +646,8 @@ class RollService:
         if not si:
             raise NotFoundError(f"Supplier invoice {invoice_id} not found")
 
-        allowed = {"gst_percent", "invoice_no", "challan_no", "invoice_date", "sr_no", "notes"}
-        for field, value in updates.items():
-            if field in allowed:
-                if field == "invoice_date" and isinstance(value, str):
-                    from datetime import date as date_cls
-                    value = date_cls.fromisoformat(value)
-                setattr(si, field, value)
+        for field, value in updates.model_dump(exclude_unset=True).items():
+            setattr(si, field, value)
 
         await self.db.flush()
         return {

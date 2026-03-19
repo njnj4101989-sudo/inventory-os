@@ -91,6 +91,17 @@ class SupplierInvoiceParams(PaginatedParams):
     search: str | None = None
 
 
+class SupplierInvoiceUpdate(BaseModel):
+    """PATCH /rolls/supplier-invoices/{id} — update invoice-level fields."""
+
+    gst_percent: Decimal | None = None
+    invoice_no: str | None = None
+    challan_no: str | None = None
+    invoice_date: date | None = None
+    sr_no: str | None = None
+    notes: str | None = None
+
+
 class RollUpdate(BaseModel):
     """PATCH /rolls/{id} — update an unused roll."""
 
