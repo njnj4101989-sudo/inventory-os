@@ -102,6 +102,13 @@ class MasterService:
         await MasterService._check_code(db, Color, code, "Color")
         # Auto-assign color_no if not provided
         color_no = data.color_no if data.color_no else await MasterService._next_color_no(db)
+        # Check for duplicate color_no
+        existing = await db.execute(
+            select(Color).where(Color.color_no == color_no)
+        )
+        if existing.scalar_one_or_none():
+            next_no = await MasterService._next_color_no(db)
+            raise DuplicateError(f"Color No. {color_no} is already taken. Next available: {next_no}")
         obj = Color(
             name=data.name.strip(),
             code=code,
@@ -122,7 +129,12 @@ class MasterService:
             if new_code != obj.code:
                 await MasterService._check_code(db, Color, new_code, "Color")
                 obj.code = new_code
-        if data.color_no is not None:
+        if data.color_no is not None and data.color_no != obj.color_no:
+            existing = await db.execute(
+                select(Color).where(Color.color_no == data.color_no)
+            )
+            if existing.scalar_one_or_none():
+                raise DuplicateError(f"Color No. {data.color_no} is already taken")
             obj.color_no = data.color_no
         if data.hex_code is not None:
             obj.hex_code = data.hex_code
