@@ -82,11 +82,14 @@ class MasterService:
 
     @staticmethod
     async def get_colors(db: AsyncSession):
-        return await MasterService._list(db, Color)
+        result = await db.execute(select(Color).order_by(Color.color_no))
+        return result.scalars().all()
 
     @staticmethod
     async def get_active_colors(db: AsyncSession):
-        return await MasterService._list(db, Color, active_only=True)
+        stmt = select(Color).where(Color.is_active == True).order_by(Color.color_no)  # noqa: E712
+        result = await db.execute(stmt)
+        return result.scalars().all()
 
     @staticmethod
     async def _next_color_no(db: AsyncSession) -> int:
