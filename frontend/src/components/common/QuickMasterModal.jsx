@@ -10,7 +10,7 @@ const MASTER_CONFIG = {
     fields: [
       { key: 'name', label: 'Color Name', required: true, placeholder: 'e.g. Watermelon', autoFocus: true },
       { key: 'code', label: 'Code (max 5)', required: true, placeholder: 'e.g. WTMLN', maxLength: 5, uppercase: true },
-      { key: 'color_no', label: 'Color No.', type: 'number', placeholder: 'e.g. 31' },
+      { key: 'color_no', label: 'Color No.', type: 'number', placeholder: 'Auto (leave blank)' },
       { key: 'hex_code', label: 'Color', type: 'color', placeholder: '#FFB800' },
     ],
     create: createColor,
