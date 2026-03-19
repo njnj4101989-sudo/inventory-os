@@ -858,6 +858,26 @@ export default function RollsPage() {
     return null
   }
 
+  // Shared builder — single source of truth for roll entry shape
+  const buildRollEntry = (grp, row, wt) => {
+    const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
+    const colorMatch = masterColors.find((c) => c.name === row.color)
+    return {
+      fabric_type: grp.fabric_type.trim(),
+      color: row.color.trim(),
+      quantity: String(wt),
+      unit: grp.unit,
+      cost_per_unit: grp.cost_per_unit || '',
+      panna: grp.panna || '',
+      gsm: grp.gsm || '',
+      weight: '', length: '', notes: grp.notes || '',
+      fabric_code: fabricMatch?.code || null,
+      color_code: colorMatch?.code || null,
+      color_no: colorMatch?.color_no || null,
+      color_id: colorMatch?.id || null,
+    }
+  }
+
   const handleStockIn = async () => {
     const err = validateStockIn()
     if (err) { setFormError(err); return }
@@ -867,27 +887,10 @@ export default function RollsPage() {
       // Flatten all design groups → individual roll entries
       const flatRolls = []
       for (const grp of designGroups) {
-        const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
         for (const row of grp.colorRows) {
-          const colorMatch = masterColors.find((c) => c.name === row.color)
           for (const w of row.weights) {
             const wt = parseFloat(w)
-            if (wt > 0) {
-              flatRolls.push({
-                fabric_type: grp.fabric_type.trim(),
-                color: row.color.trim(),
-                quantity: String(wt),
-                unit: grp.unit,
-                cost_per_unit: grp.cost_per_unit || '',
-                panna: grp.panna || '',
-                gsm: grp.gsm || '',
-                weight: '', length: '', notes: grp.notes || '',
-                fabric_code: fabricMatch?.code || null,
-                color_code: colorMatch?.code || null,
-                color_no: colorMatch?.color_no || null,
-                color_id: colorMatch?.id || null,
-              })
-            }
+            if (wt > 0) flatRolls.push(buildRollEntry(grp, row, wt))
           }
         }
       }
@@ -897,21 +900,23 @@ export default function RollsPage() {
         const updateErrors = []
         const stringifyDetail = (d) => typeof d === 'string' ? d : d ? JSON.stringify(d) : null
         for (const grp of designGroups) {
-          const fabricMatch = masterFabrics.find((f) => f.name === grp.fabric_type)
           for (const row of grp.colorRows) {
-            const colorMatch = masterColors.find((c) => c.name === row.color)
             for (let wI = 0; wI < row.weights.length; wI++) {
               const wt = parseFloat(row.weights[wI])
               if (!(wt > 0)) continue // skip empty, NaN, zero, negative
               const existingId = row.rollIds?.[wI]
               if (existingId) {
                 try {
+                  const colorMatch = masterColors.find((c) => c.name === row.color)
                   await updateRoll(existingId, {
                     fabric_type: grp.fabric_type.trim(),
                     color: row.color.trim(),
+                    color_id: colorMatch?.id || null,
                     total_weight: wt,
                     unit: grp.unit,
                     cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : null,
+                    panna: grp.panna ? parseFloat(grp.panna) : null,
+                    gsm: grp.gsm ? parseFloat(grp.gsm) : null,
                     supplier_id: invoiceHeader.supplier_id || null,
                     supplier_invoice_no: invoiceHeader.supplier_invoice_no || null,
                     supplier_challan_no: invoiceHeader.supplier_challan_no || null,
@@ -923,19 +928,7 @@ export default function RollsPage() {
                   updateErrors.push(`${row.color} (${wt} kg): ${stringifyDetail(err.response?.data?.detail) || 'Update failed'}`)
                 }
               } else {
-                newRolls.push({
-                  fabric_type: grp.fabric_type.trim(),
-                  color: row.color.trim(),
-                  quantity: String(wt),
-                  unit: grp.unit,
-                  cost_per_unit: grp.cost_per_unit || '',
-                  panna: grp.panna || '',
-                  gsm: grp.gsm || '',
-                  weight: '', length: '', notes: grp.notes || '',
-                  fabric_code: fabricMatch?.code || null,
-                  color_code: colorMatch?.code || null,
-                  color_no: colorMatch?.color_no || null,
-                })
+                newRolls.push(buildRollEntry(grp, row, wt))
               }
             }
           }
@@ -1004,7 +997,11 @@ export default function RollsPage() {
       } else {
         const detail = err.response?.data?.detail
         if (err.response?.status === 422) {
-          setFormError('Validation error — please check all fields are filled correctly')
+          // Surface actual Pydantic validation detail instead of generic message
+          const validationMsg = Array.isArray(detail)
+            ? detail.map(e => `${e.loc?.slice(-1)?.[0] || 'field'}: ${e.msg}`).join(', ')
+            : typeof detail === 'string' ? detail : null
+          setFormError(validationMsg || 'Validation error — please check all fields are filled correctly')
         } else if (err.response?.status === 409) {
           setFormError('Duplicate entry detected — a roll with this data may already exist')
         } else if (err.response?.status >= 500) {

@@ -1,5 +1,6 @@
 """Authentication service — login, company select, token refresh, logout."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -356,9 +357,8 @@ class AuthService:
         old_jti = payload.get("jti")
         if old_jti:
             from app.models.token_blacklist import TokenBlacklist
-            from datetime import datetime as dt_cls
             exp = payload.get("exp")
-            expires_at = dt_cls.fromtimestamp(exp, tz=timezone.utc) if exp else dt_cls.now(timezone.utc)
+            expires_at = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else datetime.now(timezone.utc)
             self.db.add(TokenBlacklist(
                 jti=old_jti,
                 user_id=user_id,
@@ -386,7 +386,6 @@ class AuthService:
                 if not jti:
                     continue
                 exp = payload.get("exp")
-                from datetime import datetime, timezone
                 expires_at = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else datetime.now(timezone.utc)
 
                 bl = TokenBlacklist(
