@@ -262,7 +262,7 @@ class CompanyService:
 
             for pt in [
                 {"code": "FBL", "name": "Fancy Blouse", "description": "Fancy blouse designs (meter rolls)", "palla_mode": "meter"},
-                {"code": "SBL", "name": "Stretchable Blouse", "description": "Stretchable blouse designs (weight rolls)", "palla_mode": "weight"},
+                {"code": "SBL", "name": "Stretchable Blouse", "description": "Stretchable blouse designs", "palla_mode": "both"},
                 {"code": "LHG", "name": "Lehenga", "description": "Lehenga designs (weight or meter)", "palla_mode": "both"},
                 {"code": "SAR", "name": "Saree", "description": "Saree pieces (meter rolls)", "palla_mode": "meter"},
             ]:
