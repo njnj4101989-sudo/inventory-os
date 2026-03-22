@@ -250,6 +250,11 @@ export default function LotsPage() {
     weight: rollCalcs.reduce((s, c) => s + c.rem, 0),
     waste: rollCalcs.reduce((s, c) => s + c.waste, 0),
   }
+  const rollUnit = (() => {
+    const units = [...new Set(rollCalcs.map(c => c.roll?.unit).filter(Boolean))]
+    if (units.length === 1) return units[0] === 'meters' ? 'm' : 'kg'
+    return units.length > 1 ? 'kg/m' : 'kg'
+  })()
 
   // Filter options — computed from available rolls
   const filterOptions = useMemo(() => {
@@ -932,8 +937,8 @@ export default function LotsPage() {
                   <div><div className="text-xl font-bold text-gray-600">{form.rolls.length}</div><div className="typo-label">Rolls</div></div>
                   <div><div className="text-xl font-bold text-blue-700">{totals.pallas}</div><div className="typo-label">Pallas</div></div>
                   <div><div className="text-xl font-bold text-emerald-700">{totals.pieces}</div><div className="typo-label">Pieces</div></div>
-                  <div><div className="text-xl font-bold text-purple-700">{totals.weight.toFixed(3)}</div><div className="typo-label">Weight (kg)</div></div>
-                  <div><div className="text-xl font-bold text-red-500">{totals.waste.toFixed(3)}</div><div className="typo-label">Waste (kg)</div></div>
+                  <div><div className="text-xl font-bold text-purple-700">{totals.weight.toFixed(3)}</div><div className="typo-label">Weight ({rollUnit})</div></div>
+                  <div><div className="text-xl font-bold text-red-500">{totals.waste.toFixed(3)}</div><div className="typo-label">Waste ({rollUnit})</div></div>
                 </div>
               </div>
             )}
@@ -959,6 +964,11 @@ export default function LotsPage() {
     const detailPiecesPerPalla = (detailLot.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
     const totalWaste = (detailLot.lot_rolls || []).reduce((s, r) => s + parseFloat(r.waste_weight || 0), 0)
     const colorCount = [...new Set((detailLot.lot_rolls || []).map(r => r.color).filter(Boolean))].length
+    const detailUnit = (() => {
+      const units = [...new Set((detailLot.lot_rolls || []).map(r => r.unit).filter(Boolean))]
+      if (units.length === 1) return units[0] === 'meters' ? 'm' : 'kg'
+      return units.length > 1 ? 'kg/m' : 'kg'
+    })()
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
@@ -1186,8 +1196,8 @@ export default function LotsPage() {
                   <tr className="bg-gray-800 text-white font-semibold text-sm">
                     <td className="py-2 px-3 border-r border-gray-700" colSpan={5}>Totals</td>
                     <td className="py-2 px-3 text-right border-r border-gray-700">{detailLot.total_pallas}</td>
-                    <td className="py-2 px-3 text-right border-r border-gray-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)} kg</td>
-                    <td className="py-2 px-3 text-right text-red-300 border-r border-gray-700">{totalWaste.toFixed(3)} kg</td>
+                    <td className="py-2 px-3 text-right border-r border-gray-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)} {detailUnit}</td>
+                    <td className="py-2 px-3 text-right text-red-300 border-r border-gray-700">{totalWaste.toFixed(3)} {detailUnit}</td>
                     <td className="py-2 px-3 text-right text-emerald-300">{detailLot.total_pieces}</td>
                   </tr>
                 </tfoot>
@@ -1201,8 +1211,8 @@ export default function LotsPage() {
                 { value: (detailLot.lot_rolls || []).length, label: 'Rolls', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
                 { value: detailLot.total_pallas, label: 'Pallas', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
                 { value: detailLot.total_pieces, label: 'Pieces', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
-                { value: parseFloat(detailLot.total_weight || 0).toFixed(3), label: 'Weight (kg)', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
-                { value: totalWaste.toFixed(3), label: 'Waste (kg)', color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
+                { value: parseFloat(detailLot.total_weight || 0).toFixed(3), label: `Weight (${detailUnit})`, color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
+                { value: totalWaste.toFixed(3), label: `Waste (${detailUnit})`, color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
               ].map((kpi, i) => (
                 <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
                   <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
