@@ -31,7 +31,75 @@
 
 ---
 
-## Current State (Session 80 — 2026-03-22)
+## Current State (Session 82 — 2026-03-23)
+
+### S82: Full Audit — 7 Critical + 23 Warnings Fixed
+
+**Tier 1 (critical):** close_preview crash, BLS→FBL defaults (16 refs across model/schemas/services/frontend), InventoryPage+SKUsPage filters, FY closing FOR UPDATE lock
+**Tier 2 (edge cases):** Pydantic date validation on CloseFYRequest, palla_mode CHECK constraint + migration `g1a2b3c4d5e6`, 21 model ondelete/index gaps synced with DB hardening, zero-size design rejection, batch claim/assign FOR UPDATE
+**Tier 3 (polish):** auth search_path try/finally, roles HTTPException→AppException, MastersPage BLS placeholder, MyWorkPage alert→inline banner
+
+**Files:** 28 changed across 2 commits. Migration applied on prod. All deployed.
+
+**NEXT:** Test full cutting sheet flow end-to-end on prod with new product types. Remnant roll UX (needs spec).
+
+---
+
+## Previous State (Session 81 — 2026-03-22)
+
+### S81: Deploy S80 + Palla Unit Logic + Product Type Overhaul + UX Fixes
+
+**Deployed S80 to production:**
+- Committed + pushed all S80 changes (31 files, +873/-245)
+- CI/CD auto-deployed backend (migration `d7f3a1b4c5e2`) + Vercel frontend
+
+**Lot create CORS/500 fix:**
+- Root cause: `lots.design_no` NOT NULL on prod DB — new code no longer sets it (uses `designs` JSON)
+- Migration `e8a4b2c6d9f1`: makes `design_no` + `default_size_pattern` nullable on existing schemas
+- Browser showed CORS error but actual issue was 500 from DB constraint violation
+
+**Product Type overhaul:**
+- 4 product types: FBL (Fancy Blouse), SBL (Stretchable Blouse), LHG (Lehenga), SAR (Saree)
+- Old codes removed: BLS→FBL, KRT→SBL, DRS→LHG, OTH deleted
+- `palla_mode` column on ProductType: `weight` | `meter` | `both`
+- FBL=meter, SBL=both, LHG=both, SAR=meter
+- Migration `f9b5c3d7e2a4`: adds column, renames codes, updates existing lots
+- Seed data updated for new companies
+- Frontend: Palla Wt / Palla Mtr inputs show/hide based on selected type's palla_mode
+- Type field moved before Lot No. in cutting sheet, autoFocus on Type
+
+**Palla calculation per roll unit (kg vs meters):**
+- Backend: `lot_service` checks `roll.unit` — meter rolls divide by `standard_palla_meter`, kg rolls by `standard_palla_weight`
+- Frontend: `getPallaForRoll()` assigns correct palla value per roll's unit
+- Palla Wt input propagates only to kg rolls, Palla Mtr only to meter rolls
+- Remnant/usable filter uses unit-aware palla threshold
+
+**QR Label compact:**
+- Replaced long supplier name with `Sr / Inv` (e.g. `19 / 431`) — fits label width
+
+**CuttingSheet dynamic unit:**
+- Headers show `Roll Wt (m)` / `Palla Wt (m)` for meter rolls, `kg` for kg rolls
+- Totals use dynamic unit, `lot_rolls` response now includes `roll.unit`
+
+**Roll picker unit display:**
+- Roll chips show actual unit (`28.5 m` or `45.2 kg`) instead of hardcoded kg
+- Group header totals show correct unit
+
+**LotsPage full-width + typography:**
+- Removed `max-w-5xl` from create and detail overlays — uses full viewport
+- All `text-[10px]`/`text-[11px]` replaced with `typo-label-sm`, `typo-th`, `text-xs`
+- Size inputs widened, labels darker, filter buttons/dropdowns bumped
+
+**Prod data cleanup:**
+- Deleted downstream data (lots, batches, SKUs, ledger entries) with old product type codes
+- Kept rolls (340), supplier invoices, suppliers, masters untouched
+- Deleted extra manually-created product types (FBLS, LYCRABLS, STRETCHABL)
+
+**Migrations:** `d7f3a1b4c5e2` (S80) → `e8a4b2c6d9f1` (nullable legacy cols) → `f9b5c3d7e2a4` (product type palla_mode)
+
+---
+
+## Previous State (Session 80 — 2026-03-22)
 
 ### S80: Multi-Design Lots + Print Components + Stock-In Auto-Fill
 
@@ -405,6 +473,8 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S82 | Full Audit — 3 Tiers | 7 critical + 23 warnings fixed: close_preview crash, BLS→FBL (16 refs), FY/batch FOR UPDATE, model ondelete/index sync (21 gaps), palla_mode CHECK, zero-size guard, Pydantic dates, auth try/finally, roles AppException, MyWorkPage banner |
+| S81 | Deploy S80 + Product Type Overhaul | Deployed S80+S81, 4 product types (FBL/SBL/LHG/SAR), palla_mode, palla unit logic, QR compact, CuttingSheet dynamic unit, LotsPage full-width |
 | S80 | Multi-Design Lots + Print + Auto-Fill | designs JSON replaces design_no+default_size_pattern, batch.design_no, lot code LT-{PT}-XXXX, 7 sizes, OrderPrint+PackingSlip, stock-in auto-fill, unit filter+label fix |
 | S79 | Global Typography System | 24 typo-* classes in index.css, 47 files migrated, all per-file constants removed, font weights upgraded, Protocol 10 added |
 | S78 | Multi-Company UX + Picker Keyboard + DB Stability | Auto-refresh JWT after company creation, company profile uses JWT company_id, default company logic fix, set-default endpoint+UI, company picker keyboard nav, FY tab company indicator, asyncpg prepared_statement_cache_size=0, deleted SQLite backup |
