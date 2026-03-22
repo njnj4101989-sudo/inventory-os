@@ -501,32 +501,32 @@ export default function LotsPage() {
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-5xl space-y-3 px-6 py-4">
+          <div className="space-y-3 px-6 py-4">
             {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
             {/* ── Lot Details (tight toolbar) ── */}
             <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
               <div className="flex items-end gap-3">
                 <div className="shrink-0">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
+                  <label className="typo-label-sm">Lot No.</label>
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
                     LT-{form.product_type || 'BLS'}-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
                 <div className="w-20">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Type</label>
+                  <label className="typo-label-sm">Type</label>
                   <select data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
                     {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
                   </select>
                 </div>
                 <div className="w-[130px]">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
+                  <label className="typo-label-sm">Date</label>
                   <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
+                  <label className="typo-label-sm">Palla Wt</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
@@ -535,7 +535,7 @@ export default function LotsPage() {
                     placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
+                  <label className="typo-label-sm">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
                     onChange={e => setField('standard_palla_meter', e.target.value)}
                     placeholder="5.50" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
@@ -552,7 +552,7 @@ export default function LotsPage() {
             {/* ── Design Rows (multi-design) ── */}
             <div className="rounded-lg border bg-white px-4 py-3 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Designs <span className="font-normal normal-case text-gray-400 ml-1">(Enter on last size = new design, Enter on empty = go to rolls)</span></span>
+                <span className="typo-th">Designs <span className="font-normal normal-case text-gray-400 ml-2">(Enter on last size = new design, Enter on empty = go to rolls)</span></span>
                 <button onClick={addDesign} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                   Add Design
@@ -562,10 +562,10 @@ export default function LotsPage() {
                 const sizeKeys = Object.keys(d.size_pattern || {})
                 return (
                 <div key={dIdx} className="flex items-end gap-2 rounded-lg bg-gray-50 px-3 py-2" data-design-row={dIdx}>
-                  <div className="w-24">
-                    <label className="text-[10px] font-semibold text-gray-400">Design {dIdx + 1} *</label>
+                  <div className="w-28">
+                    <label className="typo-label-sm">Design {dIdx + 1} *</label>
                     <input ref={dIdx === 0 ? designRef : undefined} type="text" value={d.design_no} onChange={e => setDesignField(dIdx, 'design_no', e.target.value)}
-                      placeholder="e.g. 702" className="w-full h-[32px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      placeholder="e.g. 702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       data-design-no="true"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
@@ -587,11 +587,11 @@ export default function LotsPage() {
                   </div>
                   <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
                   {sizeKeys.map((size, sIdx) => (
-                    <div key={size} className="flex items-center gap-0.5">
-                      <label className="text-[10px] font-bold text-gray-400">{size}</label>
+                    <div key={size} className="flex items-center gap-1">
+                      <label className="text-xs font-bold text-gray-500">{size}</label>
                       <input type="number" value={d.size_pattern[size]} onChange={e => setDesignSizeKey(dIdx, size, e.target.value)}
                         data-size-input="true"
-                        className="w-11 h-[32px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        className="w-12 h-[34px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                             e.preventDefault()
@@ -614,7 +614,7 @@ export default function LotsPage() {
                       />
                     </div>
                   ))}
-                  <span className="text-xs font-semibold text-emerald-600">
+                  <span className="text-sm font-bold text-emerald-600 ml-1">
                     = {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs
                   </span>
                   {form.designs.length > 1 && (
@@ -639,7 +639,7 @@ export default function LotsPage() {
             {/* ── Rolls Section ── */}
             <div className="rounded-xl border bg-white shadow-sm">
               <div className="flex items-center justify-between border-b px-5 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                <h3 className="typo-th">
                   Rolls <span className="ml-1 text-emerald-600">({form.rolls.length})</span>
                 </h3>
                 <div className="relative w-64">
@@ -660,7 +660,7 @@ export default function LotsPage() {
                   { key: 'remnant', label: 'Remnant' },
                 ].map(p => (
                   <button key={p.key} onClick={() => { setRollFilterStatus(p.key); if (p.key !== 'processed') setRollFilterVA('') }}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                       rollFilterStatus === p.key ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                     }`}>
                     {p.label}
@@ -668,37 +668,37 @@ export default function LotsPage() {
                 ))}
                 {rollFilterStatus === 'processed' && filterOptions.vaTypes.length > 0 && (
                   <select value={rollFilterVA} onChange={e => setRollFilterVA(e.target.value)}
-                    className="rounded border border-purple-300 bg-purple-50 px-2 py-1 text-[11px] font-medium text-purple-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500">
+                    className="rounded border border-purple-300 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500">
                     <option value="">All VA Types</option>
                     {filterOptions.vaTypes.map(va => <option key={va} value={va}>{va}</option>)}
                   </select>
                 )}
                 <div className="h-4 w-px bg-gray-300 mx-1" />
                 <select value={rollFilterFabric} onChange={e => setRollFilterFabric(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">All Fabrics</option>
                   {filterOptions.fabrics.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
                 <select value={rollFilterColor} onChange={e => setRollFilterColor(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">All Colors</option>
                   {filterOptions.colors.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={rollFilterSupplier} onChange={e => setRollFilterSupplier(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">All Suppliers</option>
                   {filterOptions.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <select value={rollFilterUnit} onChange={e => setRollFilterUnit(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  className="rounded border border-gray-300 px-2.5 py-1 text-xs font-medium bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">All Units</option>
                   <option value="kg">kg</option>
                   <option value="meters">meters</option>
                 </select>
-                <span className="ml-auto text-[11px] text-gray-400">{addableRolls.length} available</span>
+                <span className="ml-auto text-xs font-semibold text-gray-500">{addableRolls.length} available</span>
                 <div className="h-4 w-px bg-gray-300 mx-1" />
                 <select value={rollGroupBy} onChange={e => setRollGroupBy(e.target.value)}
-                  className="rounded bg-gray-100 border-0 px-2 py-1 text-[11px] font-medium text-gray-600 focus:ring-1 focus:ring-emerald-500 cursor-pointer">
+                  className="rounded bg-gray-100 border-0 px-2.5 py-1 text-xs font-semibold text-gray-600 focus:ring-1 focus:ring-emerald-500 cursor-pointer">
                   <option value="sr_no">Group: Sr. No.</option>
                   <option value="fabric">Group: Fabric</option>
                   <option value="color">Group: Color</option>
@@ -743,17 +743,17 @@ export default function LotsPage() {
                         const totalWeight = grp.rolls.reduce((s, r) => s + parseFloat(r.remaining_weight || 0), 0)
                         return (
                           <div key={grp.key} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-100 px-3 py-1.5">
+                            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-100 px-3 py-2">
                               <div className="flex items-center gap-2 min-w-0">
-                                {rollGroupBy === 'color' && <span className="inline-block h-3 w-3 rounded-full flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: colorHex(grp.label) }} />}
-                                <span className={`inline-flex items-center justify-center rounded px-1.5 text-[10px] font-bold flex-shrink-0 ${rollGroupBy === 'sr_no' ? 'h-5 w-5 ' : 'h-5 px-2 '}${badgeStyle[rollGroupBy]}`}>{rollGroupBy === 'sr_no' ? grp.label : ''}</span>
-                                {rollGroupBy !== 'sr_no' && <span className="text-[11px] font-semibold text-gray-700 truncate">{grp.label}</span>}
-                                {grp.sublabel && <span className="text-[10px] text-gray-400 truncate">{grp.sublabel}</span>}
+                                {rollGroupBy === 'color' && <span className="inline-block h-3.5 w-3.5 rounded-full flex-shrink-0 ring-1 ring-gray-200" style={{ backgroundColor: colorHex(grp.label) }} />}
+                                <span className={`inline-flex items-center justify-center rounded px-1.5 text-xs font-bold flex-shrink-0 ${rollGroupBy === 'sr_no' ? 'h-5 w-5 ' : 'h-5 px-2 '}${badgeStyle[rollGroupBy]}`}>{rollGroupBy === 'sr_no' ? grp.label : ''}</span>
+                                {rollGroupBy !== 'sr_no' && <span className="text-xs font-semibold text-gray-700 truncate">{grp.label}</span>}
+                                {grp.sublabel && <span className="text-xs text-gray-500 truncate">{grp.sublabel}</span>}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="text-[10px] text-gray-400">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} kg</span>
+                                <span className="text-xs text-gray-500">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} kg</span>
                                 <button onClick={() => addRollsBulk(grp.rolls.map(r => r.id))}
-                                  className="rounded px-2 py-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors">
+                                  className="rounded px-2.5 py-0.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors">
                                   + All
                                 </button>
                               </div>
@@ -761,11 +761,11 @@ export default function LotsPage() {
                             <div className="flex flex-wrap gap-1.5 px-3 py-2">
                               {grp.rolls.map(r => (
                                 <button key={r.id} onClick={() => addRoll(r.id)}
-                                  className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-2 border-purple-400 bg-purple-50/40' : 'border border-gray-200 bg-white'}`}>
-                                  <span className="inline-block h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
-                                  <span className="text-[11px] text-gray-600 truncate max-w-[60px]">{r.color || '—'}</span>
-                                  <span className="text-[11px] font-semibold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
-                                  {r.status === 'remnant' && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 rounded px-1">REM</span>}
+                                  className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-2 border-purple-400 bg-purple-50/40' : 'border border-gray-200 bg-white'}`}>
+                                  <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
+                                  <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">{r.color || '—'}</span>
+                                  <span className="text-xs font-bold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
+                                  {r.status === 'remnant' && <span className="text-[10px] font-bold text-amber-600 bg-amber-100 rounded px-1">REM</span>}
                                 </button>
                               ))}
                             </div>
@@ -789,7 +789,7 @@ export default function LotsPage() {
                 <div>
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                      <tr className="border-b text-left typo-th">
                         <th className="py-2.5 px-4 w-8">#</th>
                         <th className="px-3">Roll Code</th>
                         <th className="px-3">Color</th>
@@ -883,7 +883,7 @@ export default function LotsPage() {
                   })()}
 
                   {/* Keyboard hint */}
-                  <div className="hidden md:flex items-center gap-4 px-4 py-1.5 text-[10px] text-gray-400 border-t">
+                  <div className="hidden md:flex items-center gap-4 px-4 py-1.5 text-xs text-gray-400 border-t">
                     <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Tab</kbd> / <kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Enter</kbd> Next row</span>
                     <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Shift+Tab</kbd> Prev row</span>
                     <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Delete</kbd> Remove roll</span>
@@ -996,7 +996,7 @@ export default function LotsPage() {
 
         {/* ── SCROLLABLE BODY ── */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-5xl space-y-3 px-6 py-4">
+          <div className="space-y-3 px-6 py-4">
             {editError && <ErrorAlert message={editError} onDismiss={() => setEditError(null)} />}
 
             {/* ── Lot Details toolbar ── */}
@@ -1005,35 +1005,35 @@ export default function LotsPage() {
                 <div className="space-y-2">
                   <div className="flex items-end gap-3">
                     <div className="w-24">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
+                      <label className="typo-label-sm">Palla Wt</label>
                       <input type="number" step="0.001" value={editForm.standard_palla_weight}
                         onChange={e => setEditForm(f => ({ ...f, standard_palla_weight: e.target.value }))}
-                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" autoFocus />
+                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" autoFocus />
                     </div>
                     <div className="w-24">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
+                      <label className="typo-label-sm">Palla Mtr</label>
                       <input type="number" step="0.01" value={editForm.standard_palla_meter || ''}
                         onChange={e => setEditForm(f => ({ ...f, standard_palla_meter: e.target.value }))}
-                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                     </div>
                   </div>
                   {(editForm.designs || []).map((d, dIdx) => (
                     <div key={dIdx} className="flex items-end gap-2 rounded bg-gray-50 px-3 py-2">
-                      <div className="w-24">
-                        <label className="text-[10px] font-semibold text-gray-400">Design {dIdx + 1} *</label>
+                      <div className="w-28">
+                        <label className="typo-label-sm">Design {dIdx + 1} *</label>
                         <input type="text" value={d.design_no}
                           onChange={e => setEditForm(f => ({ ...f, designs: f.designs.map((dd, i) => i === dIdx ? { ...dd, design_no: e.target.value } : dd) }))}
-                          className="w-full h-[32px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                          className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                       </div>
                       {Object.entries(d.size_pattern || {}).map(([size, count]) => (
-                        <div key={size} className="flex items-center gap-0.5">
-                          <label className="text-[10px] font-bold text-gray-400">{size}</label>
+                        <div key={size} className="flex items-center gap-1">
+                          <label className="text-xs font-bold text-gray-500">{size}</label>
                           <input type="number" value={count}
                             onChange={e => setEditForm(f => ({ ...f, designs: f.designs.map((dd, i) => i === dIdx ? { ...dd, size_pattern: { ...dd.size_pattern, [size]: parseInt(e.target.value) || 0 } } : dd) }))}
-                            className="w-11 h-[32px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                            className="w-12 h-[34px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
                         </div>
                       ))}
-                      <span className="text-xs font-semibold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
+                      <span className="text-sm font-bold text-emerald-600 ml-1">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
                       {editForm.designs.length > 1 && (
                         <button onClick={() => setEditForm(f => ({ ...f, designs: f.designs.filter((_, i) => i !== dIdx) }))} className="ml-auto text-gray-400 hover:text-red-500 p-1">
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -1048,37 +1048,37 @@ export default function LotsPage() {
                 <div className="space-y-2">
                   <div className="flex items-end gap-4">
                     <div>
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
-                      <div className="h-[34px] flex items-center text-sm font-semibold text-primary-700">{detailLot.lot_code}</div>
+                      <label className="typo-label-sm">Lot No.</label>
+                      <div className="h-[34px] flex items-center typo-data text-primary-700">{detailLot.lot_code}</div>
                     </div>
                     <div>
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
-                      <div className="h-[34px] flex items-center text-sm">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
+                      <label className="typo-label-sm">Date</label>
+                      <div className="h-[34px] flex items-center typo-data">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
                     </div>
                     {detailLot.standard_palla_weight && (
                       <div>
-                        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
-                        <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.standard_palla_weight} kg</div>
+                        <label className="typo-label-sm">Palla Wt</label>
+                        <div className="h-[34px] flex items-center typo-data">{detailLot.standard_palla_weight} kg</div>
                       </div>
                     )}
                     {detailLot.standard_palla_meter && (
                       <div>
-                        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
-                        <div className="h-[34px] flex items-center text-sm">{detailLot.standard_palla_meter} m</div>
+                        <label className="typo-label-sm">Palla Mtr</label>
+                        <div className="h-[34px] flex items-center typo-data">{detailLot.standard_palla_meter} m</div>
                       </div>
                     )}
-                    <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                    <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-sm font-bold text-emerald-700">
                       = {detailPiecesPerPalla} pcs
                     </span>
                   </div>
                   {(detailLot.designs || []).map((d, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded bg-gray-50 px-3 py-1.5">
-                      <span className="text-xs font-semibold text-gray-600">Design {d.design_no}</span>
-                      <span className="text-xs text-gray-400">|</span>
+                    <div key={i} className="flex items-center gap-3 rounded bg-gray-50 px-3 py-2">
+                      <span className="text-sm font-semibold text-gray-700">Design {d.design_no}</span>
+                      <span className="text-sm text-gray-400">|</span>
                       {Object.entries(d.size_pattern || {}).map(([size, count]) => (
-                        <span key={size} className="text-xs"><span className="font-bold text-gray-400">{size}</span> <span className="font-bold">{count}</span></span>
+                        <span key={size} className="text-sm"><span className="font-bold text-gray-500">{size}</span> <span className="font-bold text-gray-800">{count}</span></span>
                       ))}
-                      <span className="text-xs font-semibold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
+                      <span className="text-sm font-bold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
                     </div>
                   ))}
                 </div>
@@ -1088,7 +1088,7 @@ export default function LotsPage() {
             {/* ── Notes (edit mode) ── */}
             {editing && (
               <div className="rounded-lg border bg-white p-4 shadow-sm">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Notes</label>
+                <label className="typo-label-sm">Notes</label>
                 <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2}
                   placeholder="Special instructions..." className="typo-input" />
               </div>
