@@ -521,29 +521,30 @@ export default function LotsPage() {
             {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
             {/* ── Lot Details (tight toolbar) ── */}
-            <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
-              <div className="flex items-end gap-3">
-                <div className="w-20">
-                  <label className="typo-label-sm">Type</label>
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              {/* Top bar — Type, Lot, Date, Palla */}
+              <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                <div className="px-3 py-2 border-r border-gray-200">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Type</label>
                   <select autoFocus data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
-                    className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                    className="w-20 h-[32px] rounded border border-gray-300 px-1.5 text-sm font-bold bg-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
                     {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
                   </select>
                 </div>
-                <div className="shrink-0">
-                  <label className="typo-label-sm">Lot No.</label>
-                  <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
+                <div className="px-3 py-2 border-r border-gray-200">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</label>
+                  <div className="flex items-center h-[32px] text-sm font-bold text-primary-700">
                     LT-{form.product_type || 'FBL'}-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
-                <div className="w-[130px]">
-                  <label className="typo-label-sm">Date</label>
+                <div className="px-3 py-2 border-r border-gray-200">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</label>
                   <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
-                    className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    className="w-[130px] h-[32px] rounded border border-gray-300 px-2 text-sm bg-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 {(pallaMode === 'weight' || pallaMode === 'both') && (
-                <div className="w-24">
-                  <label className="typo-label-sm">Palla Wt</label>
+                <div className="px-3 py-2 border-r border-gray-200">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
@@ -552,12 +553,12 @@ export default function LotsPage() {
                         return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
                       }) }))
                     }}
-                    placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    placeholder="6.700" className="w-24 h-[32px] rounded border border-gray-300 px-2.5 text-sm bg-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 )}
                 {(pallaMode === 'meter' || pallaMode === 'both') && (
-                <div className="w-24">
-                  <label className="typo-label-sm">Palla Mtr</label>
+                <div className="px-3 py-2 border-r border-gray-200">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
                     onChange={e => {
                       const v = e.target.value
@@ -566,33 +567,34 @@ export default function LotsPage() {
                         return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
                       }) }))
                     }}
-                    placeholder="1.35" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    placeholder="1.35" className="w-24 h-[32px] rounded border border-gray-300 px-2.5 text-sm bg-white focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 )}
-                <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                  {(form.designs || []).length > 1
-                    ? `${(form.designs || []).map(d => Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)).join(' + ')} = `
-                    : '= '
-                  }{piecesPerPalla} pcs / {piecesPerPalla} batches
-                </span>
+                <div className="ml-auto px-3 py-2 flex items-end">
+                  <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                    {(form.designs || []).length > 1
+                      ? `${(form.designs || []).map(d => Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)).join(' + ')} = `
+                      : ''
+                    }{piecesPerPalla} pcs / {piecesPerPalla} batches
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* ── Design Rows (multi-design) ── */}
-            <div className="rounded-lg border bg-white px-4 py-3 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="typo-th">Designs <span className="font-normal normal-case text-gray-400 ml-2">(Enter on last size = new design, Enter on empty = go to rolls)</span></span>
-                <button onClick={addDesign} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  Add Design
-                </button>
-              </div>
-              {(form.designs || []).map((d, dIdx) => {
-                const sizeKeys = Object.keys(d.size_pattern || {})
-                return (
-                <div key={dIdx} className="flex items-end gap-2 rounded-lg bg-gray-50 px-3 py-2" data-design-row={dIdx}>
-                  <div className="w-28">
-                    <label className="typo-label-sm">Design {dIdx + 1} *</label>
+              {/* Design rows */}
+              <div className="px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Designs <span className="normal-case font-normal text-gray-300 ml-1">Enter on last size = new design · Enter on empty = rolls</span></span>
+                  <button onClick={addDesign} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add
+                  </button>
+                </div>
+                {(form.designs || []).map((d, dIdx) => {
+                  const sizeKeys = Object.keys(d.size_pattern || {})
+                  return (
+                  <div key={dIdx} className="flex items-end gap-2 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-1.5" data-design-row={dIdx}>
+                    <div className="w-28">
+                      <label className="text-[10px] font-semibold text-indigo-600">Design {dIdx + 1}</label>
                     <input ref={dIdx === 0 ? designRef : undefined} type="text" value={d.design_no} onChange={e => setDesignField(dIdx, 'design_no', e.target.value)}
                       placeholder="e.g. 702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       data-design-no="true"
@@ -643,17 +645,18 @@ export default function LotsPage() {
                       />
                     </div>
                   ))}
-                  <span className="text-sm font-bold text-emerald-600 ml-1">
-                    = {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs
+                  <span className="text-xs font-bold text-emerald-700 ml-auto">
+                    {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs
                   </span>
                   {form.designs.length > 1 && (
-                    <button onClick={() => removeDesign(dIdx)} className="ml-auto text-gray-400 hover:text-red-500 p-1">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    <button onClick={() => removeDesign(dIdx)} className="text-gray-300 hover:text-red-500 p-0.5">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   )}
                 </div>
                 )
               })}
+              </div>
             </div>
 
             {/* ── Pre-selected banner ── */}
@@ -816,18 +819,18 @@ export default function LotsPage() {
                 </div>
               ) : (
                 <div>
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b text-left typo-th">
-                        <th className="py-2.5 px-4 w-8">#</th>
-                        <th className="px-3">Roll Code</th>
-                        <th className="px-3">Color</th>
-                        <th className="px-3 text-right">Avail.</th>
-                        <th className="px-3 text-right w-28">Palla Val</th>
-                        <th className="px-3 text-right">Pallas</th>
-                        <th className="px-3 text-right">Pieces</th>
-                        <th className="px-3 text-right">Waste</th>
-                        <th className="px-3 w-8"></th>
+                      <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                        <th className="py-2 px-3 text-left w-8 border-r border-emerald-500">#</th>
+                        <th className="py-2 px-3 text-left border-r border-emerald-500">Roll Code</th>
+                        <th className="py-2 px-3 text-left border-r border-emerald-500">Color</th>
+                        <th className="py-2 px-3 text-right border-r border-emerald-500">Avail.</th>
+                        <th className="py-2 px-3 text-right w-28 border-r border-emerald-500">Palla Val</th>
+                        <th className="py-2 px-3 text-right border-r border-emerald-500">Pallas</th>
+                        <th className="py-2 px-3 text-right border-r border-emerald-500">Pieces</th>
+                        <th className="py-2 px-3 text-right border-r border-emerald-500">Waste</th>
+                        <th className="py-2 px-3 w-8"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -835,12 +838,12 @@ export default function LotsPage() {
                         const c = rollCalcs[i]
                         const isDeletePending = pendingDeleteRow === i
                         return (
-                          <tr key={r.roll_id} className={`border-b ${isDeletePending ? 'bg-red-50' : 'hover:bg-gray-50/50'}`}>
-                            <td className="py-2 px-4 text-xs text-gray-400">{i + 1}</td>
-                            <td className="px-3"><RollCodeDisplay roll={c.roll} /></td>
-                            <td className="px-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{c.roll?.color || '—'}</span></td>
-                            <td className="px-3 text-right tabular-nums">{c.rem.toFixed(3)} <span className="text-xs text-gray-400">{c.roll?.unit === 'meters' ? 'm' : 'kg'}</span></td>
-                            <td className="px-3 text-right">
+                          <tr key={r.roll_id} className={`border-b border-gray-200 ${isDeletePending ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}`}>
+                            <td className="py-1.5 px-3 text-xs text-gray-400 border-r border-gray-100">{i + 1}</td>
+                            <td className="py-1.5 px-3 border-r border-gray-100"><RollCodeDisplay roll={c.roll} /></td>
+                            <td className="py-1.5 px-3 border-r border-gray-100"><span className="rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-xs font-medium">{c.roll?.color || '—'}</span></td>
+                            <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{c.rem.toFixed(3)} <span className="text-xs text-gray-400">{c.roll?.unit === 'meters' ? 'm' : 'kg'}</span></td>
+                            <td className="py-1.5 px-3 text-right border-r border-gray-100">
                               <input type="number" step="0.001" value={r.palla_weight}
                                 data-pw-row={i}
                                 onChange={e => setRollPw(i, e.target.value)}
@@ -863,10 +866,10 @@ export default function LotsPage() {
                                 }}
                                 className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                             </td>
-                            <td className="px-3 text-right font-bold tabular-nums">{c.pallas}</td>
-                            <td className="px-3 text-right font-bold text-emerald-700 tabular-nums">{c.pcs}</td>
-                            <td className="px-3 text-right text-red-400 tabular-nums">{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
-                            <td className="px-3">
+                            <td className="py-1.5 px-3 text-right font-bold tabular-nums border-r border-gray-100">{c.pallas}</td>
+                            <td className="py-1.5 px-3 text-right font-bold text-emerald-700 tabular-nums border-r border-gray-100">{c.pcs}</td>
+                            <td className="py-1.5 px-3 text-right text-red-500 tabular-nums border-r border-gray-100">{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
+                            <td className="py-1.5 px-3">
                               <button tabIndex={-1} onClick={() => removeRoll(i)} className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors">
                                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
