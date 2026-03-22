@@ -566,7 +566,6 @@ export default function LotsPage() {
                     placeholder="1.35" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 )}
-                </div>
                 <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
                   {(form.designs || []).length > 1
                     ? `${(form.designs || []).map(d => Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)).join(' + ')} = `
