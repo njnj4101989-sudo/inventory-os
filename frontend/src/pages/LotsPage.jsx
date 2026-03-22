@@ -142,7 +142,11 @@ export default function LotsPage() {
 
   // ── Shift+M Quick Master ──
   const refreshProductTypes = useCallback(() => {
-    getAllProductTypes().then((res) => setMasterProductTypes(res.data.data)).catch((e) => console.error('Failed to load product types:', e.message))
+    const PT_ORDER = { FBL: 0, SBL: 1, LHG: 2, SAR: 3 }
+    getAllProductTypes().then((res) => {
+      const sorted = [...(res.data.data || [])].sort((a, b) => (PT_ORDER[a.code] ?? 99) - (PT_ORDER[b.code] ?? 99))
+      setMasterProductTypes(sorted)
+    }).catch(() => {})
   }, [])
 
   const handleQuickMasterCreated = useCallback((masterType, newItem) => {
