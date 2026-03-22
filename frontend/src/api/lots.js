@@ -25,7 +25,7 @@ export async function getLot(id) {
 
 export async function createLot(data) {
   if (USE_MOCK) {
-    const pt = (data.product_type || 'BLS').toUpperCase()
+    const pt = (data.product_type || 'FBL').toUpperCase()
     const prefix = `LT-${pt}-`
     const existing = lots.filter((l) => l.lot_code.startsWith(prefix)).length
     const nextCode = `${prefix}${String(existing + 1).padStart(4, '0')}`

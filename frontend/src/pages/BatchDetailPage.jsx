@@ -532,7 +532,7 @@ export default function BatchDetailPage() {
                 </div>
                 <div>
                   <span className="text-gray-400">Type: </span>
-                  <span className="typo-data">{lot.product_type || 'BLS'}</span>
+                  <span className="typo-data">{lot.product_type || 'FBL'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400">Total: </span>

@@ -23,13 +23,13 @@ class SupplierInvoice(Base):
     gst_percent: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"
     )
-    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
+    received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("financial_years.id"), nullable=True, index=True
+        ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships

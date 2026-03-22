@@ -180,7 +180,7 @@ class BatchService:
     # --- State Transitions ---
 
     async def assign_batch(self, batch_id: UUID, req: BatchAssign) -> dict:
-        batch = await self._get_or_404(batch_id)
+        batch = await self._get_or_404(batch_id, for_update=True)
         if batch.status != "created":
             raise InvalidStateTransitionError(
                 f"Cannot assign batch in '{batch.status}' status (expected 'created')"
@@ -351,7 +351,7 @@ class BatchService:
 
             sku_svc = SKUService(self.db)
             inv_svc = InventoryService(self.db)
-            product_type = lot.product_type or "BLS"
+            product_type = lot.product_type or "FBL"
             design_no = batch.design_no or (lot.designs[0]["design_no"] if lot.designs else "")
 
             # VA names for product_name
@@ -662,6 +662,7 @@ class BatchService:
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
             )
+            .with_for_update()
         )
         result = await self.db.execute(stmt)
         batch = result.scalar_one_or_none()
@@ -693,7 +694,7 @@ class BatchService:
 
     # --- Internal ---
 
-    async def _get_or_404(self, batch_id: UUID) -> Batch:
+    async def _get_or_404(self, batch_id: UUID, for_update: bool = False) -> Batch:
         stmt = (
             select(Batch)
             .where(Batch.id == batch_id)
@@ -712,6 +713,8 @@ class BatchService:
                 ).selectinload(BatchChallan.va_party),
             )
         )
+        if for_update:
+            stmt = stmt.with_for_update()
         result = await self.db.execute(stmt)
         batch = result.scalar_one_or_none()
         if not batch:
@@ -761,7 +764,7 @@ class BatchService:
                 "id": str(b.lot.id),
                 "lot_code": b.lot.lot_code,
                 "designs": b.lot.designs or [],
-                "product_type": b.lot.product_type or "BLS",
+                "product_type": b.lot.product_type or "FBL",
                 "total_pieces": b.lot.total_pieces,
                 "status": b.lot.status,
             }

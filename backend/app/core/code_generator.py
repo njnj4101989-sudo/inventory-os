@@ -121,12 +121,12 @@ async def next_roll_code(
     return f"{prefix}{seq + 1:02d}"
 
 
-async def next_lot_code(db: AsyncSession, fy_id: UUID, product_type: str = "BLS") -> str:
+async def next_lot_code(db: AsyncSession, fy_id: UUID, product_type: str = "FBL") -> str:
     """Generate next LT-{PT}-XXXX code, scoped to product_type + financial year.
 
-    Each product_type gets its own counter: LT-BLS-0001, LT-KRT-0001, etc.
+    Each product_type gets its own counter: LT-FBL-0001, LT-SBL-0001, etc.
     """
-    pt = (product_type or "BLS").upper()
+    pt = (product_type or "FBL").upper()
     prefix = f"LT-{pt}-"
     current = _extract_number(
         await _max_code(db, Lot.lot_code, f"{prefix}%", extra_where=Lot.fy_id == fy_id),

@@ -103,6 +103,8 @@ class LotService:
         # Serialize designs to dicts
         designs_data = [{"design_no": d.design_no, "size_pattern": d.size_pattern} for d in req.designs]
         pieces_per_palla = _compute_pieces_per_palla(designs_data)
+        if pieces_per_palla <= 0:
+            raise InvalidStateTransitionError("At least one design must have non-zero size quantities")
 
         lot_code = await next_lot_code(self.db, fy_id, req.product_type)
 
@@ -330,6 +332,10 @@ class LotService:
         if not designs:
             raise InvalidStateTransitionError("Lot has no designs — cannot distribute")
 
+        total_pieces = _compute_pieces_per_palla(designs)
+        if total_pieces <= 0:
+            raise InvalidStateTransitionError("All designs have zero size quantities — nothing to distribute")
+
         # Compute color_breakdown from lot_rolls
         color_breakdown = {}
         for lr in (lot.lot_rolls or []):
@@ -401,7 +407,7 @@ class LotService:
             "lot_id": str(lot.id),
             "lot_code": lot.lot_code,
             "designs": designs,
-            "product_type": lot.product_type or "BLS",
+            "product_type": lot.product_type or "FBL",
             "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
             "batches_created": len(batch_responses),
             "batches": batch_responses,
@@ -428,7 +434,7 @@ class LotService:
             "lot_code": lot.lot_code,
             "sku_id": str(lot.sku_id) if lot.sku_id else None,
             "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
-            "product_type": lot.product_type or "BLS",
+            "product_type": lot.product_type or "FBL",
             "standard_palla_weight": float(lot.standard_palla_weight) if lot.standard_palla_weight else None,
             "standard_palla_meter": float(lot.standard_palla_meter) if lot.standard_palla_meter else None,
             "designs": lot.designs or [],

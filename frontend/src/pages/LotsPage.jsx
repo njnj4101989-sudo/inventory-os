@@ -381,7 +381,7 @@ export default function LotsPage() {
     setSaving(true); setFormError(null)
     try {
       await createLot({
-        lot_date: form.lot_date, product_type: form.product_type || 'BLS',
+        lot_date: form.lot_date, product_type: form.product_type || 'FBL',
         standard_palla_weight: hasWeight ? parseFloat(form.standard_palla_weight) : null,
         standard_palla_meter: hasMeter ? parseFloat(form.standard_palla_meter) : null,
         designs: validDesigns.map(d => ({ design_no: d.design_no.trim(), size_pattern: d.size_pattern })),

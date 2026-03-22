@@ -113,8 +113,8 @@ const COLUMNS = [
   },
 ]
 
-const PRODUCT_TYPES = ['BLS', 'KRT', 'SAR', 'DRS', 'OTH']
-const EMPTY_FORM = { product_type: 'BLS', design_no: '', product_name: '', color: '', size: '', description: '', base_price: '' }
+const PRODUCT_TYPES = ['FBL', 'SBL', 'LHG', 'SAR']
+const EMPTY_FORM = { product_type: 'FBL', design_no: '', product_name: '', color: '', size: '', description: '', base_price: '' }
 
 export default function SKUsPage() {
   const [skus, setSKUs] = useState([])

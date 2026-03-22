@@ -1,5 +1,6 @@
 """Company + Financial Year API routes."""
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -177,8 +178,8 @@ async def delete_financial_year(
 
 class CloseFYRequest(PydanticBase):
     new_fy_code: str          # e.g. "FY2026-27"
-    new_start_date: str       # "2026-04-01"
-    new_end_date: str         # "2027-03-31"
+    new_start_date: date      # "2026-04-01"
+    new_end_date: date        # "2027-03-31"
 
 
 @router.get("/financial-years/{fy_id}/close-preview")
@@ -190,6 +191,7 @@ async def close_preview(
     """Preview year closing — warnings, party balance snapshot."""
     _require_company_context(current_user)
     svc = FYClosingService(db)
+    result = await svc.validate_closing(fy_id)
     return {"success": True, "data": result}
 
 
@@ -202,13 +204,12 @@ async def close_fy(
 ):
     """Close the current FY — snapshot balances, create new FY, carry forward."""
     _require_company_context(current_user)
-    from datetime import date as date_cls
     svc = FYClosingService(db)
     result = await svc.close_fy(
         fy_id=fy_id,
         new_fy_code=req.new_fy_code,
-        new_start_date=date_cls.fromisoformat(req.new_start_date),
-        new_end_date=date_cls.fromisoformat(req.new_end_date),
+        new_start_date=req.new_start_date,
+        new_end_date=req.new_end_date,
         closed_by_user_id=current_user.id,
     )
     return {"success": True, "data": result, "message": f"FY closed. New FY: {req.new_fy_code}"}

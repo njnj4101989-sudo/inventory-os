@@ -20,7 +20,7 @@ class JobChallan(Base):
 
     challan_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     value_addition_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("value_additions.id", ondelete="RESTRICT")
+        ForeignKey("value_additions.id", ondelete="RESTRICT"), index=True
     )
     va_party_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("va_parties.id", ondelete="RESTRICT"), index=True
@@ -33,7 +33,7 @@ class JobChallan(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"))
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("financial_years.id"), nullable=True, index=True
+        ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships

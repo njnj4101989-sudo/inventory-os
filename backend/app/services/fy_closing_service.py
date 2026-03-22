@@ -80,8 +80,8 @@ class FYClosingService:
         5. Create opening balance ledger entries
         6. Return (route commits all at once)
         """
-        # === VALIDATION PHASE (read-only, no mutations) ===
-        old_fy = await self._get_fy(fy_id)
+        # === VALIDATION PHASE (lock row to prevent concurrent close) ===
+        old_fy = await self._get_fy(fy_id, for_update=True)
 
         if old_fy.status == "closed":
             raise ValidationError(f"{old_fy.code} is already closed")
@@ -137,10 +137,11 @@ class FYClosingService:
             "snapshot": closing_snapshot,
         }
 
-    async def _get_fy(self, fy_id: UUID) -> FinancialYear:
-        result = await self.db.execute(
-            select(FinancialYear).where(FinancialYear.id == fy_id)
-        )
+    async def _get_fy(self, fy_id: UUID, for_update: bool = False) -> FinancialYear:
+        stmt = select(FinancialYear).where(FinancialYear.id == fy_id)
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
         fy = result.scalar_one_or_none()
         if not fy:
             raise NotFoundError("Financial year not found")

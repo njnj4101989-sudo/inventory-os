@@ -20,9 +20,9 @@ class Lot(Base):
     )
 
     lot_code: Mapped[str] = mapped_column(String(50), unique=True)
-    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id", ondelete="SET NULL"), nullable=True, index=True)
+    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id", ondelete="RESTRICT"), nullable=True, index=True)
     lot_date: Mapped[datetime] = mapped_column(Date)
-    product_type: Mapped[str] = mapped_column(String(10), default="BLS", server_default="'BLS'")
+    product_type: Mapped[str] = mapped_column(String(10), default="FBL", server_default="'FBL'")
     standard_palla_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     standard_palla_meter: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     # Multi-design: [{"design_no": "101", "size_pattern": {"L": 4, "XL": 4}}, ...]
@@ -36,10 +36,10 @@ class Lot(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="open", server_default="'open'", index=True
     )
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("financial_years.id"), nullable=True, index=True
+        ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships

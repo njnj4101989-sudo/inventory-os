@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -10,6 +10,10 @@ class ProductType(Base):
     __tablename__ = "product_types"
     __table_args__ = (
         UniqueConstraint("name", name="uq_product_types_name"),
+        CheckConstraint(
+            "palla_mode IN ('weight', 'meter', 'both')",
+            name="valid_palla_mode",
+        ),
     )
 
     code: Mapped[str] = mapped_column(String(10), unique=True, index=True)

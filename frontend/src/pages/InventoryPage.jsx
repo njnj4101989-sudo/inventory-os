@@ -35,11 +35,10 @@ const STOCK_FILTERS = [
 
 const PRODUCT_TYPES = [
   { key: '', label: 'All Types' },
-  { key: 'BLS', label: 'Blouse (BLS)' },
-  { key: 'KRT', label: 'Kurta (KRT)' },
+  { key: 'FBL', label: 'Fancy Blouse (FBL)' },
+  { key: 'SBL', label: 'Stretchable Blouse (SBL)' },
+  { key: 'LHG', label: 'Lehenga (LHG)' },
   { key: 'SAR', label: 'Saree (SAR)' },
-  { key: 'DRS', label: 'Dress (DRS)' },
-  { key: 'OTH', label: 'Other (OTH)' },
 ]
 
 // ── Table columns ─────────────────────────────────────

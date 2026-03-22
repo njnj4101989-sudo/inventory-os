@@ -61,7 +61,7 @@ class LotBrief(BaseSchema):
 
     id: UUID
     lot_code: str
-    product_type: str = "BLS"
+    product_type: str = "FBL"
     designs: list[dict] = []
     total_pieces: int
     status: str
@@ -75,7 +75,7 @@ class LotCreate(BaseModel):
 
     sku_id: UUID | None = None
     lot_date: date
-    product_type: str = "BLS"
+    product_type: str = "FBL"
     standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
     designs: list[DesignEntry]  # At least one design required
@@ -101,7 +101,7 @@ class LotResponse(BaseSchema):
     lot_code: str
     sku: SKUBrief | None = None
     lot_date: date
-    product_type: str = "BLS"
+    product_type: str = "FBL"
     standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
     designs: list[dict] = []

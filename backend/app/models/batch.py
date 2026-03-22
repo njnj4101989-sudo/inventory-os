@@ -23,7 +23,7 @@ class Batch(Base):
     lot_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("lots.id", ondelete="RESTRICT"), index=True
     )
-    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
+    sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id", ondelete="RESTRICT"), nullable=True, index=True)
     design_no: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     size: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer)
@@ -31,7 +31,7 @@ class Batch(Base):
     color_breakdown: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), index=True)
     qr_code_data: Mapped[str] = mapped_column(Text)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -43,13 +43,13 @@ class Batch(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Packing fields (S42 — Batch VA + Packing)
-    checked_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
-    packed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id"))
+    checked_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
+    packed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     packed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     pack_reference: Mapped[str | None] = mapped_column(String(50))
     color_qc: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("financial_years.id"), nullable=True, index=True
+        ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships

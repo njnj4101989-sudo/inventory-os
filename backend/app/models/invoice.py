@@ -33,10 +33,10 @@ class Invoice(Base):
     status: Mapped[str] = mapped_column(String(20), index=True)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("financial_years.id"), nullable=True, index=True
+        ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     # Relationships
