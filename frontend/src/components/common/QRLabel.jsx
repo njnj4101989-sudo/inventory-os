@@ -38,8 +38,8 @@ export default function QRLabel({ roll, appBaseUrl }) {
           <span className="qr-label__val">{fmt(roll?.total_weight)} {roll?.unit || 'kg'}</span>
         </div>
         <div className="qr-label__row">
-          <span className="qr-label__key">Supplier</span>
-          <span className="qr-label__val qr-label__val--sm">{roll?.supplier?.name || '—'}</span>
+          <span className="qr-label__key">Sr / Inv</span>
+          <span className="qr-label__val">{roll?.sr_no || '—'} / {roll?.supplier_invoice_no || '—'}</span>
         </div>
         <div className="qr-label__row">
           <span className="qr-label__key">Date</span>

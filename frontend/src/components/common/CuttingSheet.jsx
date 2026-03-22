@@ -30,6 +30,9 @@ export default function CuttingSheet({ lot, onClose }) {
   const piecesPerPalla = (lot.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
   const totalWaste = lotRolls.reduce((s, r) => s + parseFloat(r.waste_weight || 0), 0)
   const colorCount = [...new Set(lotRolls.map(r => r.color).filter(Boolean))].length
+  // Determine unit from rolls — if any roll is meters, show meters
+  const unit = lotRolls.some(r => r.unit === 'meters') ? 'meters' : 'kg'
+  const unitShort = unit === 'meters' ? 'm' : 'kg'
   const dateStr = lot.lot_date
     ? new Date(lot.lot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
     : '—'
@@ -78,7 +81,7 @@ export default function CuttingSheet({ lot, onClose }) {
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</div>
             <div style={{ fontWeight: 600 }}>{dateStr}</div>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Weight</div>
-            <div style={{ fontWeight: 600 }}>{lot.standard_palla_weight} kg</div>
+            <div style={{ fontWeight: 600 }}>{lot.standard_palla_weight} {unitShort}</div>
             {lot.standard_palla_meter && (
               <>
                 <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Meter</div>
@@ -107,7 +110,7 @@ export default function CuttingSheet({ lot, onClose }) {
         <table className="cs-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px' }}>
           <thead>
             <tr>
-              {['#', 'Roll Code', 'Color', 'Roll Wt', 'Palla Wt', 'Pallas', 'Used', 'Waste', 'Pieces'].map((h, i) => (
+              {['#', 'Roll Code', 'Color', `Roll Wt (${unitShort})`, `Palla Wt (${unitShort})`, 'Pallas', 'Used', 'Waste', 'Pieces'].map((h, i) => (
                 <th key={h} style={{
                   background: '#222', color: '#fff', fontSize: '8pt', fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 8px',
@@ -139,8 +142,8 @@ export default function CuttingSheet({ lot, onClose }) {
           <span>{colorCount} Colors &bull; {lotRolls.length} Rolls</span>
           <span>Pallas: {lot.total_pallas}</span>
           <span>Pieces: {lot.total_pieces}</span>
-          <span>Weight: {parseFloat(lot.total_weight || 0).toFixed(3)} kg</span>
-          <span style={{ color: '#b91c1c' }}>Waste: {totalWaste.toFixed(3)} kg</span>
+          <span>Weight: {parseFloat(lot.total_weight || 0).toFixed(3)} {unitShort}</span>
+          <span style={{ color: '#b91c1c' }}>Waste: {totalWaste.toFixed(3)} {unitShort}</span>
         </div>
 
         {/* Notes */}

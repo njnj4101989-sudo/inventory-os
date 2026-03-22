@@ -443,6 +443,7 @@ class LotService:
                     "roll_id": str(lr.roll_id),
                     "roll_code": lr.roll.roll_code if lr.roll else None,
                     "color": lr.roll.color if lr.roll else None,
+                    "unit": lr.roll.unit if lr.roll else "kg",
                     "roll_weight": float(lr.roll.total_weight) if lr.roll and lr.roll.total_weight else 0,
                     "palla_weight": float(lr.palla_weight) if lr.palla_weight else None,
                     "num_pallas": lr.num_pallas,
