@@ -442,6 +442,10 @@ class LotService:
             "total_pallas": lot.total_pallas,
             "total_pieces": lot.total_pieces,
             "total_weight": float(lot.total_weight) if lot.total_weight else 0,
+            "unit": next(
+                (lr.roll.unit for lr in (lot.lot_rolls or []) if lr.roll and lr.roll.unit),
+                "kg",
+            ),
             "status": lot.status,
             "notes": lot.notes,
             "created_by_user": {

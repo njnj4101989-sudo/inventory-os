@@ -74,11 +74,7 @@ const COLUMNS = [
   },
   { key: 'total_pallas', label: 'Pallas', render: (v) => <span className="font-medium">{v}</span> },
   { key: 'total_pieces', label: 'Pieces', render: (v) => <span className="font-semibold text-primary-700">{v}</span> },
-  { key: 'total_weight', label: 'Weight', render: (v, row) => {
-    const units = [...new Set((row.lot_rolls || []).map(r => r.unit).filter(Boolean))]
-    const u = units.length === 1 && units[0] === 'meters' ? 'm' : units.length > 1 ? 'kg/m' : 'kg'
-    return `${parseFloat(v || 0).toFixed(2)} ${u}`
-  }},
+  { key: 'total_weight', label: 'Weight', render: (v, row) => `${parseFloat(v || 0).toFixed(2)} ${row.unit === 'meters' ? 'm' : 'kg'}` },
   {
     key: 'status', label: 'Status',
     render: (v) => {
@@ -254,11 +250,7 @@ export default function LotsPage() {
     weight: rollCalcs.reduce((s, c) => s + c.rem, 0),
     waste: rollCalcs.reduce((s, c) => s + c.waste, 0),
   }
-  const rollUnit = (() => {
-    const units = [...new Set(rollCalcs.map(c => c.roll?.unit).filter(Boolean))]
-    if (units.length === 1) return units[0] === 'meters' ? 'm' : 'kg'
-    return units.length > 1 ? 'kg/m' : 'kg'
-  })()
+  const rollUnit = rollCalcs.some(c => c.roll?.unit === 'meters') ? 'm' : 'kg'
 
   // Filter options — computed from available rolls
   const filterOptions = useMemo(() => {
@@ -968,11 +960,7 @@ export default function LotsPage() {
     const detailPiecesPerPalla = (detailLot.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
     const totalWaste = (detailLot.lot_rolls || []).reduce((s, r) => s + parseFloat(r.waste_weight || 0), 0)
     const colorCount = [...new Set((detailLot.lot_rolls || []).map(r => r.color).filter(Boolean))].length
-    const detailUnit = (() => {
-      const units = [...new Set((detailLot.lot_rolls || []).map(r => r.unit).filter(Boolean))]
-      if (units.length === 1) return units[0] === 'meters' ? 'm' : 'kg'
-      return units.length > 1 ? 'kg/m' : 'kg'
-    })()
+    const detailUnit = detailLot.unit === 'meters' ? 'm' : 'kg'
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
