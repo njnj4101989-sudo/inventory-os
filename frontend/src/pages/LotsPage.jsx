@@ -210,7 +210,7 @@ export default function LotsPage() {
       if (matchedIds.length > 0) {
         setForm(f => ({
           ...f,
-          rolls: matchedIds.map(id => ({ roll_id: id, palla_weight: f.standard_palla_weight || '' }))
+          rolls: matchedIds.map(id => ({ roll_id: id, palla_weight: getPallaForRoll(id, f) }))
         }))
         setPreselectedBanner(matchedIds.length)
         setTimeout(() => setPreselectedBanner(0), 5000)
@@ -263,20 +263,22 @@ export default function LotsPage() {
     const used = new Set(form.rolls.map(r => r.roll_id))
     let list = availableRolls.filter(r => !used.has(r.id))
     const pallaWt = parseFloat(form.standard_palla_weight) || 0
+    const pallaMtr = parseFloat(form.standard_palla_meter) || 0
+    // Get palla threshold per roll based on unit
+    const pallaFor = (r) => r.unit === 'meters' ? pallaMtr : pallaWt
 
     // Status filter
     if (rollFilterStatus === 'remnant') {
-      // Show only rolls whose weight is below palla weight (true remnants for this lot)
-      if (pallaWt > 0) {
-        list = list.filter(r => parseFloat(r.remaining_weight) < pallaWt)
-      } else {
-        list = list.filter(r => r.status === 'remnant')
-      }
+      list = list.filter(r => {
+        const pv = pallaFor(r)
+        return pv > 0 ? parseFloat(r.remaining_weight) < pv : r.status === 'remnant'
+      })
     } else {
-      // All / Fresh / Processed — hide rolls below palla weight (unusable for this lot)
-      if (pallaWt > 0) {
-        list = list.filter(r => parseFloat(r.remaining_weight) >= pallaWt)
-      }
+      // All / Fresh / Processed — hide rolls below palla value (unusable for this lot)
+      list = list.filter(r => {
+        const pv = pallaFor(r)
+        return pv > 0 ? parseFloat(r.remaining_weight) >= pv : true
+      })
       if (rollFilterStatus === 'fresh') {
         list = list.filter(r => !hasVA(r))
       } else if (rollFilterStatus === 'processed') {
@@ -312,7 +314,7 @@ export default function LotsPage() {
       )
     }
     return list
-  }, [availableRolls, form.rolls, form.standard_palla_weight, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterUnit, rollFilterVA])
+  }, [availableRolls, form.rolls, form.standard_palla_weight, form.standard_palla_meter, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterUnit, rollFilterVA])
 
   // ══════════════════════════════════════
   // CREATE OVERLAY — Actions
@@ -329,16 +331,22 @@ export default function LotsPage() {
   const addDesign = () => setForm(f => ({ ...f, designs: [...f.designs, { design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }] }))
   const removeDesign = (dIdx) => setForm(f => ({ ...f, designs: f.designs.filter((_, i) => i !== dIdx) }))
 
+  // Get correct palla value for a roll based on its unit
+  const getPallaForRoll = (rollId, f) => {
+    const roll = availableRolls.find(r => r.id === rollId)
+    return roll?.unit === 'meters' ? (f.standard_palla_meter || '') : (f.standard_palla_weight || '')
+  }
+
   const addRoll = (id) => {
     if (!id || form.rolls.some(r => r.roll_id === id)) return
-    setForm(f => ({ ...f, rolls: [...f.rolls, { roll_id: id, palla_weight: f.standard_palla_weight || '' }] }))
+    setForm(f => ({ ...f, rolls: [...f.rolls, { roll_id: id, palla_weight: getPallaForRoll(id, f) }] }))
   }
 
   const addRollsBulk = (ids) => {
     if (!ids || ids.length === 0) return
     setForm(f => {
       const existing = new Set(f.rolls.map(r => r.roll_id))
-      const newEntries = ids.filter(id => !existing.has(id)).map(id => ({ roll_id: id, palla_weight: f.standard_palla_weight || '' }))
+      const newEntries = ids.filter(id => !existing.has(id)).map(id => ({ roll_id: id, palla_weight: getPallaForRoll(id, f) }))
       return { ...f, rolls: [...f.rolls, ...newEntries] }
     })
   }
@@ -530,15 +538,24 @@ export default function LotsPage() {
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
-                      setForm(f => ({ ...f, standard_palla_weight: v, rolls: f.rolls.map(r => ({ ...r, palla_weight: v })) }))
+                      setForm(f => ({ ...f, standard_palla_weight: v, rolls: f.rolls.map(r => {
+                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                        return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
+                      }) }))
                     }}
                     placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
                   <label className="typo-label-sm">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
-                    onChange={e => setField('standard_palla_meter', e.target.value)}
-                    placeholder="5.50" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    onChange={e => {
+                      const v = e.target.value
+                      setForm(f => ({ ...f, standard_palla_meter: v, rolls: f.rolls.map(r => {
+                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                        return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
+                      }) }))
+                    }}
+                    placeholder="1.35" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
                   {(form.designs || []).length > 1
@@ -793,8 +810,8 @@ export default function LotsPage() {
                         <th className="py-2.5 px-4 w-8">#</th>
                         <th className="px-3">Roll Code</th>
                         <th className="px-3">Color</th>
-                        <th className="px-3 text-right">Avail. Wt</th>
-                        <th className="px-3 text-right w-28">Palla Wt</th>
+                        <th className="px-3 text-right">Avail.</th>
+                        <th className="px-3 text-right w-28">Palla Val</th>
                         <th className="px-3 text-right">Pallas</th>
                         <th className="px-3 text-right">Pieces</th>
                         <th className="px-3 text-right">Waste</th>
@@ -810,7 +827,7 @@ export default function LotsPage() {
                             <td className="py-2 px-4 text-xs text-gray-400">{i + 1}</td>
                             <td className="px-3"><RollCodeDisplay roll={c.roll} /></td>
                             <td className="px-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{c.roll?.color || '—'}</span></td>
-                            <td className="px-3 text-right tabular-nums">{c.rem.toFixed(3)}</td>
+                            <td className="px-3 text-right tabular-nums">{c.rem.toFixed(3)} <span className="text-xs text-gray-400">{c.roll?.unit === 'meters' ? 'm' : 'kg'}</span></td>
                             <td className="px-3 text-right">
                               <input type="number" step="0.001" value={r.palla_weight}
                                 data-pw-row={i}

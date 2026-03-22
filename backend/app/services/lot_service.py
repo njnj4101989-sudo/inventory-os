@@ -125,9 +125,15 @@ class LotService:
             if roll.status not in ("in_stock", "remnant"):
                 raise InvalidStateTransitionError(f"Roll {roll.roll_code} is not available (status: {roll.status})")
 
-            palla_weight = float(roll_input.palla_weight or req.standard_palla_weight or 0)
+            # Use palla_meter for meter rolls, palla_weight for kg rolls
+            if roll.unit == "meters":
+                palla_weight = float(roll_input.palla_weight or req.standard_palla_meter or 0)
+            else:
+                palla_weight = float(roll_input.palla_weight or req.standard_palla_weight or 0)
             if not palla_weight or palla_weight <= 0:
-                raise InvalidStateTransitionError("Palla weight must be positive")
+                raise InvalidStateTransitionError(
+                    f"Palla value must be positive for roll {roll.roll_code} (unit: {roll.unit})"
+                )
 
             remaining = float(roll.remaining_weight or 0)
             if remaining <= 0:
@@ -136,8 +142,8 @@ class LotService:
             num_pallas = floor(remaining / palla_weight)
             if num_pallas <= 0:
                 raise InsufficientStockError(
-                    f"Roll {roll.roll_code} remaining weight ({remaining} kg) "
-                    f"is less than palla weight ({palla_weight} kg)"
+                    f"Roll {roll.roll_code} remaining ({remaining} {roll.unit}) "
+                    f"is less than palla value ({palla_weight} {roll.unit})"
                 )
 
             weight_used = num_pallas * palla_weight
