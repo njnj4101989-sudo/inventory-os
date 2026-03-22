@@ -261,11 +261,10 @@ class CompanyService:
             await session.execute(text(f"SET search_path TO {schema_name}, public"))
 
             for pt in [
-                {"code": "BLS", "name": "Blouse", "description": "Traditional and modern blouse designs"},
-                {"code": "KRT", "name": "Kurti", "description": "Kurti and kurta designs"},
-                {"code": "SAR", "name": "Saree", "description": "Saree blouse and saree pieces"},
-                {"code": "DRS", "name": "Dress", "description": "Western and Indo-western dresses"},
-                {"code": "OTH", "name": "Other", "description": "Other garment types"},
+                {"code": "FBL", "name": "Fancy Blouse", "description": "Fancy blouse designs (meter rolls)", "palla_mode": "meter"},
+                {"code": "SBL", "name": "Stretchable Blouse", "description": "Stretchable blouse designs (weight rolls)", "palla_mode": "weight"},
+                {"code": "LHG", "name": "Lehenga", "description": "Lehenga designs (weight or meter)", "palla_mode": "both"},
+                {"code": "SAR", "name": "Saree", "description": "Saree pieces (meter rolls)", "palla_mode": "meter"},
             ]:
                 session.add(ProductType(**pt))
 

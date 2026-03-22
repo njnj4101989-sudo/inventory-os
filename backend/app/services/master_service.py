@@ -61,6 +61,7 @@ class MasterService:
             code=code,
             name=data.name.strip(),
             description=data.description,
+            palla_mode=getattr(data, 'palla_mode', 'weight') or 'weight',
         )
         db.add(obj)
         await db.flush()
@@ -73,6 +74,8 @@ class MasterService:
             obj.name = data.name.strip()
         if data.description is not None:
             obj.description = data.description
+        if data.palla_mode is not None:
+            obj.palla_mode = data.palla_mode
         if data.is_active is not None:
             obj.is_active = data.is_active
         await db.flush()

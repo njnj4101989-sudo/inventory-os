@@ -15,4 +15,6 @@ class ProductType(Base):
     code: Mapped[str] = mapped_column(String(10), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text)
+    # weight = only palla_weight, meter = only palla_meter, both = either
+    palla_mode: Mapped[str] = mapped_column(String(10), default="weight", server_default="'weight'")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")

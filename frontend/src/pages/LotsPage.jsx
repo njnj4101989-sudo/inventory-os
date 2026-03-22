@@ -123,11 +123,16 @@ export default function LotsPage() {
   const [rollGroupBy, setRollGroupBy] = useState('sr_no')
   const [form, setForm] = useState({
     lot_date: new Date().toISOString().split('T')[0],
-    product_type: 'BLS',
+    product_type: 'FBL',
     standard_palla_weight: '', standard_palla_meter: '',
     designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }],
     rolls: [], notes: '',
   })
+  // Derive palla mode from selected product type
+  const pallaMode = useMemo(() => {
+    const pt = masterProductTypes.find(p => p.code === form.product_type)
+    return pt?.palla_mode || 'both'
+  }, [form.product_type, masterProductTypes])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
@@ -197,7 +202,7 @@ export default function LotsPage() {
       navigate('/lots', { replace: true, state: {} })
       setFormError(null); setRollSearch('')
       setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
+      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
       setShowCreate(true)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -360,7 +365,7 @@ export default function LotsPage() {
   const openCreate = () => {
     setFormError(null); setRollSearch('')
     setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
+    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
     setShowCreate(true)
   }
 
@@ -518,7 +523,7 @@ export default function LotsPage() {
                 <div className="shrink-0">
                   <label className="typo-label-sm">Lot No.</label>
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
-                    LT-{form.product_type || 'BLS'}-{String(total + 1).padStart(4, '0')}
+                    LT-{form.product_type || 'FBL'}-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
                 <div className="w-20">
@@ -533,6 +538,7 @@ export default function LotsPage() {
                   <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
+                {(pallaMode === 'weight' || pallaMode === 'both') && (
                 <div className="w-24">
                   <label className="typo-label-sm">Palla Wt</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
@@ -545,6 +551,8 @@ export default function LotsPage() {
                     }}
                     placeholder="6.700" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
+                )}
+                {(pallaMode === 'meter' || pallaMode === 'both') && (
                 <div className="w-24">
                   <label className="typo-label-sm">Palla Mtr</label>
                   <input type="number" step="0.01" value={form.standard_palla_meter}
@@ -556,6 +564,8 @@ export default function LotsPage() {
                       }) }))
                     }}
                     placeholder="1.35" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                </div>
+                )}
                 </div>
                 <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
                   {(form.designs || []).length > 1
