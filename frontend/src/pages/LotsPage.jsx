@@ -194,7 +194,6 @@ export default function LotsPage() {
   useEffect(() => {
     if (showCreate) {
       fetchRolls()
-      setTimeout(() => designRef.current?.focus(), 100)
     }
   }, [showCreate, fetchRolls])
 
