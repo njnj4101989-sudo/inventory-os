@@ -768,7 +768,7 @@ export default function LotsPage() {
                                 {grp.sublabel && <span className="text-xs text-gray-500 truncate">{grp.sublabel}</span>}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
-                                <span className="text-xs text-gray-500">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} kg</span>
+                                <span className="text-xs text-gray-500">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {totalWeight.toFixed(1)} {grp.rolls[0]?.unit === 'meters' ? 'm' : 'kg'}</span>
                                 <button onClick={() => addRollsBulk(grp.rolls.map(r => r.id))}
                                   className="rounded px-2.5 py-0.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors">
                                   + All
@@ -781,7 +781,7 @@ export default function LotsPage() {
                                   className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-left transition-all hover:border-emerald-400 hover:bg-emerald-50 ${hasVA(r) ? 'border-2 border-purple-400 bg-purple-50/40' : 'border border-gray-200 bg-white'}`}>
                                   <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorHex(r.color) }} />
                                   <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">{r.color || '—'}</span>
-                                  <span className="text-xs font-bold text-emerald-600 tabular-nums">{r.remaining_weight} kg</span>
+                                  <span className="text-xs font-bold text-emerald-600 tabular-nums">{r.remaining_weight} {r.unit === 'meters' ? 'm' : 'kg'}</span>
                                   {r.status === 'remnant' && <span className="text-[10px] font-bold text-amber-600 bg-amber-100 rounded px-1">REM</span>}
                                 </button>
                               ))}
