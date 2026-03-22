@@ -520,18 +520,18 @@ export default function LotsPage() {
             {/* ── Lot Details (tight toolbar) ── */}
             <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
               <div className="flex items-end gap-3">
+                <div className="w-20">
+                  <label className="typo-label-sm">Type</label>
+                  <select autoFocus data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
+                    className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+                    {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
+                  </select>
+                </div>
                 <div className="shrink-0">
                   <label className="typo-label-sm">Lot No.</label>
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
                     LT-{form.product_type || 'FBL'}-{String(total + 1).padStart(4, '0')}
                   </div>
-                </div>
-                <div className="w-20">
-                  <label className="typo-label-sm">Type</label>
-                  <select data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
-                    className="w-full h-[34px] rounded border border-gray-300 px-1.5 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                    {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
-                  </select>
                 </div>
                 <div className="w-[130px]">
                   <label className="typo-label-sm">Date</label>
