@@ -1074,42 +1074,55 @@ export default function LotsPage() {
                     className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Add Design</button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-end gap-4">
-                    <div>
-                      <label className="typo-label-sm">Lot No.</label>
-                      <div className="h-[34px] flex items-center typo-data text-primary-700">{detailLot.lot_code}</div>
+                <div className="space-y-3">
+                  {/* Info cards row */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</div>
+                      <div className="text-sm font-bold text-primary-700 mt-0.5">{detailLot.lot_code}</div>
                     </div>
-                    <div>
-                      <label className="typo-label-sm">Date</label>
-                      <div className="h-[34px] flex items-center typo-data">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</div>
+                      <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</div>
                     </div>
                     {detailLot.standard_palla_weight && (
-                      <div>
-                        <label className="typo-label-sm">Palla Wt</label>
-                        <div className="h-[34px] flex items-center typo-data">{detailLot.standard_palla_weight} kg</div>
+                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt</div>
+                        <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.standard_palla_weight} kg</div>
                       </div>
                     )}
                     {detailLot.standard_palla_meter && (
-                      <div>
-                        <label className="typo-label-sm">Palla Mtr</label>
-                        <div className="h-[34px] flex items-center typo-data">{detailLot.standard_palla_meter} m</div>
+                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</div>
+                        <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.standard_palla_meter} m</div>
                       </div>
                     )}
-                    <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-sm font-bold text-emerald-700">
-                      = {detailPiecesPerPalla} pcs
-                    </span>
-                  </div>
-                  {(detailLot.designs || []).map((d, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded bg-gray-50 px-3 py-2">
-                      <span className="text-sm font-semibold text-gray-700">Design {d.design_no}</span>
-                      <span className="text-sm text-gray-400">|</span>
-                      {Object.entries(d.size_pattern || {}).map(([size, count]) => (
-                        <span key={size} className="text-sm"><span className="font-bold text-gray-500">{size}</span> <span className="font-bold text-gray-800">{count}</span></span>
-                      ))}
-                      <span className="text-sm font-bold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
+                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">Per Palla</div>
+                      <div className="text-sm font-bold text-emerald-700 mt-0.5">{detailPiecesPerPalla} pcs</div>
                     </div>
-                  ))}
+                  </div>
+                  {/* Design rows */}
+                  {(detailLot.designs || []).map((d, i) => {
+                    const nonZero = Object.entries(d.size_pattern || {}).filter(([, v]) => parseInt(v) > 0)
+                    const totalPcs = Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)
+                    return (
+                      <div key={i} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                        <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700">
+                          {d.design_no}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {nonZero.map(([size, count]) => (
+                            <span key={size} className="inline-flex items-center gap-0.5 rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-xs">
+                              <span className="font-medium text-gray-500">{size}</span>
+                              <span className="font-bold text-gray-800">{count}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <span className="ml-auto text-xs font-bold text-emerald-600">{totalPcs} pcs</span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1124,63 +1137,63 @@ export default function LotsPage() {
             )}
 
             {/* ── Rolls Table (read-only) ── */}
-            <div className="rounded-xl border bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b px-5 py-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Rolls <span className="ml-1 text-emerald-600">({(detailLot.lot_rolls || []).length})</span>
-                </h3>
-              </div>
-              <table className="w-full text-sm">
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-                    <th className="py-2.5 px-4 w-8">#</th>
-                    <th className="px-3">Roll Code</th>
-                    <th className="px-3">Color</th>
-                    <th className="px-3 text-right">Roll Wt</th>
-                    <th className="px-3 text-right">Palla Wt</th>
-                    <th className="px-3 text-right">Pallas</th>
-                    <th className="px-3 text-right">Used</th>
-                    <th className="px-3 text-right">Waste</th>
-                    <th className="px-3 text-right">Pieces</th>
+                  <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                    <th className="py-2 px-3 text-left w-8 border-r border-emerald-500">#</th>
+                    <th className="py-2 px-3 text-left border-r border-emerald-500">Roll Code</th>
+                    <th className="py-2 px-3 text-left border-r border-emerald-500">Color</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Roll Wt</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Palla Wt</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Pallas</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Used</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Waste</th>
+                    <th className="py-2 px-3 text-right">Pieces</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(detailLot.lot_rolls || []).map((lr, i) => (
-                    <tr key={lr.id} className="border-b hover:bg-gray-50/50">
-                      <td className="py-2 px-4 text-xs text-gray-400">{i + 1}</td>
-                      <td className="px-3 font-medium">{lr.roll_code}</td>
-                      <td className="px-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{lr.color}</span></td>
-                      <td className="px-3 text-right tabular-nums">{parseFloat(lr.roll_weight || 0).toFixed(3)}</td>
-                      <td className="px-3 text-right tabular-nums">{parseFloat(lr.palla_weight || 0).toFixed(3)}</td>
-                      <td className="px-3 text-right font-bold tabular-nums">{lr.num_pallas}</td>
-                      <td className="px-3 text-right tabular-nums">{parseFloat(lr.weight_used || 0).toFixed(3)}</td>
-                      <td className="px-3 text-right text-red-400 tabular-nums">{parseFloat(lr.waste_weight || 0) > 0 ? parseFloat(lr.waste_weight).toFixed(3) : '—'}</td>
-                      <td className="px-3 text-right font-bold text-primary-700 tabular-nums">{lr.pieces_from_roll}</td>
+                    <tr key={lr.id} className={`border-b border-gray-200 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}`}>
+                      <td className="py-1.5 px-3 text-xs text-gray-400 border-r border-gray-100">{i + 1}</td>
+                      <td className="py-1.5 px-3 font-medium border-r border-gray-100">{lr.roll_code}</td>
+                      <td className="py-1.5 px-3 border-r border-gray-100"><span className="rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-xs font-medium">{lr.color}</span></td>
+                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.roll_weight || 0).toFixed(3)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.palla_weight || 0).toFixed(3)}</td>
+                      <td className="py-1.5 px-3 text-right font-bold tabular-nums border-r border-gray-100">{lr.num_pallas}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.weight_used || 0).toFixed(3)}</td>
+                      <td className="py-1.5 px-3 text-right text-red-500 tabular-nums border-r border-gray-100">{parseFloat(lr.waste_weight || 0) > 0 ? parseFloat(lr.waste_weight).toFixed(3) : '—'}</td>
+                      <td className="py-1.5 px-3 text-right font-bold text-emerald-700 tabular-nums">{lr.pieces_from_roll}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 bg-gray-50 font-semibold">
-                    <td className="py-2 px-3" colSpan={5}>Totals</td>
-                    <td className="px-3 text-right">{detailLot.total_pallas}</td>
-                    <td className="px-3 text-right">{parseFloat(detailLot.total_weight || 0).toFixed(3)} kg</td>
-                    <td className="px-3 text-right text-red-500">{totalWaste.toFixed(3)} kg</td>
-                    <td className="px-3 text-right text-primary-700">{detailLot.total_pieces}</td>
+                  <tr className="bg-gray-800 text-white font-semibold text-sm">
+                    <td className="py-2 px-3 border-r border-gray-700" colSpan={5}>Totals</td>
+                    <td className="py-2 px-3 text-right border-r border-gray-700">{detailLot.total_pallas}</td>
+                    <td className="py-2 px-3 text-right border-r border-gray-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)} kg</td>
+                    <td className="py-2 px-3 text-right text-red-300 border-r border-gray-700">{totalWaste.toFixed(3)} kg</td>
+                    <td className="py-2 px-3 text-right text-emerald-300">{detailLot.total_pieces}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
             {/* ── Summary KPIs ── */}
-            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4">
-              <div className="grid grid-cols-6 gap-3 text-center">
-                <div><div className="text-xl font-bold text-amber-600">{colorCount}</div><div className="typo-label">Colors</div></div>
-                <div><div className="text-xl font-bold text-gray-600">{(detailLot.lot_rolls || []).length}</div><div className="typo-label">Rolls</div></div>
-                <div><div className="text-xl font-bold text-blue-700">{detailLot.total_pallas}</div><div className="typo-label">Pallas</div></div>
-                <div><div className="text-xl font-bold text-emerald-700">{detailLot.total_pieces}</div><div className="typo-label">Pieces</div></div>
-                <div><div className="text-xl font-bold text-purple-700">{parseFloat(detailLot.total_weight || 0).toFixed(3)}</div><div className="typo-label">Weight (kg)</div></div>
-                <div><div className="text-xl font-bold text-red-500">{totalWaste.toFixed(3)}</div><div className="typo-label">Waste (kg)</div></div>
-              </div>
+            <div className="grid grid-cols-6 gap-2">
+              {[
+                { value: colorCount, label: 'Colors', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+                { value: (detailLot.lot_rolls || []).length, label: 'Rolls', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
+                { value: detailLot.total_pallas, label: 'Pallas', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+                { value: detailLot.total_pieces, label: 'Pieces', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                { value: parseFloat(detailLot.total_weight || 0).toFixed(3), label: 'Weight (kg)', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
+                { value: totalWaste.toFixed(3), label: 'Waste (kg)', color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
+              ].map((kpi, i) => (
+                <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
+                  <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{kpi.label}</div>
+                </div>
+              ))}
             </div>
 
             {/* ── Notes (read mode) ── */}
