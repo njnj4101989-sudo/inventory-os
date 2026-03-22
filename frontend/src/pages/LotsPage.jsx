@@ -1074,55 +1074,67 @@ export default function LotsPage() {
                     className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Add Design</button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {/* Info cards row */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Lot No.</div>
-                      <div className="text-sm font-bold text-primary-700 mt-0.5">{detailLot.lot_code}</div>
+                <div>
+                  {/* Lot info bar */}
+                  <div className="flex items-center gap-5 border-b border-gray-200 pb-3 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-gray-400 uppercase">Lot</span>
+                      <span className="text-sm font-bold text-primary-700">{detailLot.lot_code}</span>
                     </div>
-                    <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</div>
-                      <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-gray-400 uppercase">Date</span>
+                      <span className="text-sm font-bold text-gray-800">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}</span>
                     </div>
                     {detailLot.standard_palla_weight && (
-                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Wt</div>
-                        <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.standard_palla_weight} kg</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-gray-400 uppercase">Palla Wt</span>
+                        <span className="text-sm font-bold text-gray-800">{detailLot.standard_palla_weight} kg</span>
                       </div>
                     )}
                     {detailLot.standard_palla_meter && (
-                      <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Palla Mtr</div>
-                        <div className="text-sm font-bold text-gray-800 mt-0.5">{detailLot.standard_palla_meter} m</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-gray-400 uppercase">Palla Mtr</span>
+                        <span className="text-sm font-bold text-gray-800">{detailLot.standard_palla_meter} m</span>
                       </div>
                     )}
-                    <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">Per Palla</div>
-                      <div className="text-sm font-bold text-emerald-700 mt-0.5">{detailPiecesPerPalla} pcs</div>
+                    <div className="ml-auto rounded-full bg-emerald-600 px-3 py-0.5 text-xs font-bold text-white">
+                      {detailPiecesPerPalla} pcs / palla
                     </div>
                   </div>
-                  {/* Design rows */}
-                  {(detailLot.designs || []).map((d, i) => {
-                    const nonZero = Object.entries(d.size_pattern || {}).filter(([, v]) => parseInt(v) > 0)
-                    const totalPcs = Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)
-                    return (
-                      <div key={i} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                        <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700">
-                          {d.design_no}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          {nonZero.map(([size, count]) => (
-                            <span key={size} className="inline-flex items-center gap-0.5 rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 text-xs">
-                              <span className="font-medium text-gray-500">{size}</span>
-                              <span className="font-bold text-gray-800">{count}</span>
-                            </span>
-                          ))}
-                        </div>
-                        <span className="ml-auto text-xs font-bold text-emerald-600">{totalPcs} pcs</span>
-                      </div>
-                    )
-                  })}
+                  {/* Design breakdown table */}
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-200">
+                        <th className="pb-1.5 pr-3">Design</th>
+                        <th className="pb-1.5">Size Breakdown</th>
+                        <th className="pb-1.5 text-right">Pieces</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(detailLot.designs || []).map((d, i) => {
+                        const nonZero = Object.entries(d.size_pattern || {}).filter(([, v]) => parseInt(v) > 0)
+                        const totalPcs = Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)
+                        return (
+                          <tr key={i} className={i < (detailLot.designs || []).length - 1 ? 'border-b border-gray-100' : ''}>
+                            <td className="py-2 pr-3">
+                              <span className="inline-flex items-center rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">{d.design_no}</span>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center gap-1">
+                                {nonZero.map(([size, count]) => (
+                                  <span key={size} className="inline-flex items-center rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-xs">
+                                    <span className="font-medium text-gray-500 mr-0.5">{size}</span>
+                                    <span className="font-bold text-gray-800">{count}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right font-bold text-emerald-700">{totalPcs}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
