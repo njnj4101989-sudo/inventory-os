@@ -402,7 +402,7 @@ class DashboardService:
 
             by_lot.append({
                 "lot_code": lot.lot_code,
-                "design_no": lot.design_no,
+                "designs": lot.designs or [],
                 "lot_date": lot.lot_date.isoformat() if hasattr(lot.lot_date, 'isoformat') else str(lot.lot_date),
                 "rolls_used": rolls_used,
                 "total_weight": float(lot.total_weight),

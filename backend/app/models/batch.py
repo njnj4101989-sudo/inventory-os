@@ -24,6 +24,7 @@ class Batch(Base):
         ForeignKey("lots.id", ondelete="RESTRICT"), index=True
     )
     sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id"), nullable=True, index=True)
+    design_no: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     size: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     piece_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

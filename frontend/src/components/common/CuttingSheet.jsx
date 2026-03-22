@@ -27,7 +27,7 @@ export default function CuttingSheet({ lot, onClose }) {
   if (!lot) return null
 
   const lotRolls = lot.lot_rolls || []
-  const piecesPerPalla = Object.values(lot.default_size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)
+  const piecesPerPalla = (lot.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
   const totalWaste = lotRolls.reduce((s, r) => s + parseFloat(r.waste_weight || 0), 0)
   const colorCount = [...new Set(lotRolls.map(r => r.color).filter(Boolean))].length
   const dateStr = lot.lot_date
@@ -41,7 +41,7 @@ export default function CuttingSheet({ lot, onClose }) {
         <div>
           <h2 className="text-lg font-bold text-gray-900">Cutting Sheet</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {lot.lot_code} &bull; Design {lot.design_no} &bull; {lotRolls.length} roll{lotRolls.length !== 1 ? 's' : ''}
+            {lot.lot_code} &bull; Design {(lot.designs || []).map(d => d.design_no).join(', ') || '—'} &bull; {lotRolls.length} roll{lotRolls.length !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex gap-3">
@@ -72,7 +72,7 @@ export default function CuttingSheet({ lot, onClose }) {
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lot No.</div>
             <div style={{ fontWeight: 700, fontSize: '14pt' }}>{lot.lot_code}</div>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Design No.</div>
-            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{lot.design_no}</div>
+            <div style={{ fontWeight: 700, fontSize: '12pt' }}>{(lot.designs || []).map(d => d.design_no).join(', ') || '—'}</div>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</div>
@@ -88,12 +88,20 @@ export default function CuttingSheet({ lot, onClose }) {
           </div>
         </div>
 
-        {/* Size Pattern bar */}
-        <div style={{ background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', marginBottom: '14px', fontSize: '11pt' }}>
-          <strong>Size Pattern:</strong>{' '}
-          {Object.entries(lot.default_size_pattern || {}).map(([k, v]) => `${k}: ${v}`).join(' + ')}{' '}
-          = <strong>{piecesPerPalla} pcs/palla</strong>
-        </div>
+        {/* Designs & Size Pattern */}
+        {(lot.designs || []).map((d, i) => (
+          <div key={i} style={{ background: '#f0f0f0', border: '1px solid #ccc', borderRadius: '4px', padding: '8px 12px', marginBottom: '6px', fontSize: '11pt' }}>
+            <strong>Design {d.design_no}:</strong>{' '}
+            {Object.entries(d.size_pattern || {}).map(([k, v]) => `${k}: ${v}`).join(' + ')}{' '}
+            = <strong>{Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs/palla</strong>
+          </div>
+        ))}
+        {(lot.designs || []).length > 1 && (
+          <div style={{ textAlign: 'right', fontSize: '10pt', fontWeight: 800, marginBottom: '14px' }}>
+            Total: {piecesPerPalla} pcs/palla
+          </div>
+        )}
+        {(lot.designs || []).length <= 1 && <div style={{ marginBottom: '8px' }} />}
 
         {/* Rolls table */}
         <table className="cs-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px' }}>

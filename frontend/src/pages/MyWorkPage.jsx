@@ -247,7 +247,7 @@ function BatchCard({ batch, actionLoading, onStart, onSubmit, onTap }) {
   const colors = batch.color_breakdown || {}
   const colorEntries = Object.entries(colors)
   const assigned = daysAgo(batch.assigned_at)
-  const design = batch.lot?.design_no || batch.design_no
+  const design = batch.design_no || '—'
   const lotCode = batch.lot?.lot_code
 
   return (

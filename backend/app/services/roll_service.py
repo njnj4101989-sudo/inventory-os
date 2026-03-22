@@ -182,7 +182,7 @@ class RollService:
                 "id": str(lot.id),
                 "lot_code": lot.lot_code,
                 "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
-                "design_no": lot.design_no,
+                "designs": lot.designs or [],
                 "weight_used": float(lot_roll.weight_used) if lot_roll.weight_used else None,
                 "waste_weight": float(lot_roll.waste_weight) if lot_roll.waste_weight else None,
                 "pieces_from_roll": lot_roll.pieces_from_roll,

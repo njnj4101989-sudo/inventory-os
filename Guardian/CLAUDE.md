@@ -31,7 +31,44 @@
 
 ---
 
-## Current State (Session 79 — 2026-03-18)
+## Current State (Session 80 — 2026-03-22)
+
+### S80: Multi-Design Lots + Print Components + Stock-In Auto-Fill
+
+**Multi-Design Lots (structural change):**
+- Lot model: `design_no` + `default_size_pattern` → `designs` JSON array `[{design_no, size_pattern}, ...]`
+- One lot = one set of rolls, but **multiple designs** with independent size patterns (real-world: cutting master marks 2+ designs on same palla to minimize waste)
+- `standard_palla_weight` now nullable — either weight or meter required
+- Batch model: `design_no` column added — set during distribute, no longer derived from lot
+- Lot code: `LOT-XXXX` → `LT-{ProductType}-XXXX` (e.g. `LT-BLS-0001`) — counter per product_type per FY
+- Size chart: S, M, L, XL, XXL, 3XL, 4XL (was L, XL, XXL, 3XL)
+- Distribute: iterates each design's size_pattern, creates batches per design with `design_no` set
+- SKU auto-gen at pack: uses `batch.design_no` (was `lot.design_no`)
+- ~20 files updated, ~50 references migrated
+- Migration `d7f3a1b4c5e2`: adds `designs` JSON to lots, `design_no` to batches, backfills existing data
+- API_REFERENCE.md fully updated
+
+**LotsPage multi-design UX:**
+- Repeatable design rows with add/remove in create form
+- Keyboard nav: Enter/Tab through design_no → size fields → auto-add new design → Enter on empty skips to rolls
+- Badge shows per-design breakdown: `2 + 10 = 12 pcs / 12 batches`
+- Unit filter added to roll selection (kg/meters)
+- Detail overlay and edit form show multiple designs
+- CuttingSheet print shows per-design size breakdowns
+
+**Print Components (new):**
+- `OrderPrint.jsx` — A4 order confirmation sheet (wired into OrdersPage detail → Print button)
+- `PackingSlip.jsx` — A4 packing slip for packed batches (wired into BatchDetailPage → Print Packing Slip)
+
+**Stock-In Auto-Fill:**
+- When fabric/design is selected in stock-in form, auto-fills Panna/GSM/Rate/Unit from most recent roll for that fabric
+
+**RollsPage unit label fix:**
+- "WEIGHTS (kg)" and "Roll Weights (kg)" labels now dynamically show the selected unit
+
+---
+
+## Previous State (Session 79 — 2026-03-18)
 
 ### S79: Global Typography System
 
@@ -262,11 +299,16 @@
 - Partial send: `weight_before` = amount sent (not full weight). Roll stays `in_stock` if `remaining_weight > 0`
 - `JobChallanCreate.rolls` = `list[{roll_id, weight_to_send}]`
 
-### Lot System
+### Lot System (S80 — Multi-Design)
 - Statuses: open → cutting → distributed (forward-only)
-- Fields: `standard_palla_weight`, `standard_palla_meter`, `default_size_pattern` (JSON)
-- `POST /lots/{id}/distribute` auto-creates batches from size pattern. `sku_id` nullable on batches
+- **Multi-design:** `designs` JSON array `[{design_no, size_pattern}, ...]` — one lot, multiple designs
+- Both `standard_palla_weight` and `standard_palla_meter` nullable — at least one required
+- Lot code: `LT-{PT}-XXXX` per product_type per FY (e.g. `LT-BLS-0001`)
+- Batch has its own `design_no` — set during distribute from parent design entry
+- `POST /lots/{id}/distribute` iterates each design's size_pattern → creates batches per design
+- Size chart: S, M, L, XL, XXL, 3XL, 4XL (all default 0)
 - Lot create overlay: full-page `fixed inset-0 z-50`, emerald gradient header
+- Keyboard nav: Enter/Tab through design fields, Enter on empty design_no → jump to rolls
 
 ### QR & Scan System
 - **Static QR, Dynamic Passport** — QR printed once, scan shows live DB data
@@ -363,6 +405,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S80 | Multi-Design Lots + Print + Auto-Fill | designs JSON replaces design_no+default_size_pattern, batch.design_no, lot code LT-{PT}-XXXX, 7 sizes, OrderPrint+PackingSlip, stock-in auto-fill, unit filter+label fix |
 | S79 | Global Typography System | 24 typo-* classes in index.css, 47 files migrated, all per-file constants removed, font weights upgraded, Protocol 10 added |
 | S78 | Multi-Company UX + Picker Keyboard + DB Stability | Auto-refresh JWT after company creation, company profile uses JWT company_id, default company logic fix, set-default endpoint+UI, company picker keyboard nav, FY tab company indicator, asyncpg prepared_statement_cache_size=0, deleted SQLite backup |
 | S77 | FY Counter Reset + Auth Hardening + DB Hardening | fy_id on 9 models, counter reset per FY, FY scoping on 11 list endpoints, active-status carry-over, token blacklist+JTI+rotation, JWT secret validation, 52 FK ondelete, 19 indexes, 6 CHECKs, 5 UNIQUEs, localStorage→useAuth migration, supplier response fix |

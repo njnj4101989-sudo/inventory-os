@@ -549,7 +549,7 @@ function BatchCard({ batch }) {
       {b.lot && (
         <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
           <span>Lot: <span className="font-medium text-gray-700">{b.lot.lot_code}</span></span>
-          <span>Design: <span className="font-medium text-gray-700">{b.lot.design_no}</span></span>
+          <span>Design: <span className="font-medium text-gray-700">{b.design_no}</span></span>
         </div>
       )}
 

@@ -8,7 +8,7 @@ from math import floor
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,6 +27,24 @@ from app.core.exceptions import (
 LOT_STATUS_FLOW = ("open", "cutting", "distributed")
 
 
+def _compute_pieces_per_palla(designs: list[dict]) -> int:
+    """Sum of all size counts across all designs = total pieces cut per palla."""
+    total = 0
+    for d in (designs or []):
+        sp = d.get("size_pattern") or {}
+        total += sum(sp.values())
+    return total
+
+
+def _merged_size_pattern(designs: list[dict]) -> dict:
+    """Merge all designs' size patterns into one combined pattern (for roll calculation)."""
+    merged = {}
+    for d in (designs or []):
+        for size, count in (d.get("size_pattern") or {}).items():
+            merged[size] = merged.get(size, 0) + int(count)
+    return merged
+
+
 class LotService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -38,7 +56,8 @@ class LotService:
         if params.status:
             conditions.append(Lot.status == params.status)
         if params.design_no:
-            conditions.append(Lot.design_no.ilike(f"%{params.design_no}%"))
+            # Search within designs JSON — cast to text and search
+            conditions.append(func.cast(Lot.designs, String).ilike(f"%{params.design_no}%"))
 
         count_stmt = select(func.count()).select_from(Lot)
         if conditions:
@@ -76,11 +95,16 @@ class LotService:
         return self._to_response(lot)
 
     async def create_lot(self, req: LotCreate, created_by: UUID, fy_id: UUID) -> dict:
-        lot_code = await next_lot_code(self.db, fy_id)
+        if not req.designs:
+            raise InvalidStateTransitionError("At least one design is required")
+        if req.standard_palla_weight is None and req.standard_palla_meter is None:
+            raise InvalidStateTransitionError("Either palla weight or palla meter is required")
 
-        # Compute pieces_per_palla from size pattern
-        size_pattern = req.default_size_pattern or {}
-        pieces_per_palla = sum(size_pattern.values())
+        # Serialize designs to dicts
+        designs_data = [{"design_no": d.design_no, "size_pattern": d.size_pattern} for d in req.designs]
+        pieces_per_palla = _compute_pieces_per_palla(designs_data)
+
+        lot_code = await next_lot_code(self.db, fy_id, req.product_type)
 
         total_pallas = 0
         total_pieces = 0
@@ -120,7 +144,9 @@ class LotService:
             waste_weight = remaining - weight_used
             pieces_from_roll = num_pallas * pieces_per_palla
 
-            roll_size_pattern = roll_input.size_pattern or size_pattern
+            # Merged size pattern for lot_roll (backward compat)
+            merged_sp = _merged_size_pattern(designs_data)
+            roll_size_pattern = roll_input.size_pattern or merged_sp
 
             lot_roll = LotRoll(
                 roll_id=roll.id,
@@ -148,11 +174,10 @@ class LotService:
             lot_code=lot_code,
             sku_id=req.sku_id,
             lot_date=req.lot_date,
-            design_no=req.design_no,
             product_type=req.product_type,
             standard_palla_weight=req.standard_palla_weight,
             standard_palla_meter=req.standard_palla_meter,
-            default_size_pattern=size_pattern,
+            designs=designs_data,
             pieces_per_palla=pieces_per_palla,
             total_pallas=total_pallas,
             total_pieces=total_pieces,
@@ -188,6 +213,13 @@ class LotService:
                 raise InvalidStateTransitionError(
                     f"Cannot move lot from '{lot.status}' to '{new_status}'"
                 )
+
+        # Handle designs update — recalculate pieces_per_palla
+        if "designs" in update_data and update_data["designs"] is not None:
+            designs_raw = update_data.pop("designs")
+            designs_data = [{"design_no": d.design_no, "size_pattern": d.size_pattern} for d in designs_raw]
+            lot.designs = designs_data
+            lot.pieces_per_palla = _compute_pieces_per_palla(designs_data)
 
         for field, value in update_data.items():
             setattr(lot, field, value)
@@ -228,7 +260,7 @@ class LotService:
             num_pallas=num_pallas,
             weight_used=weight_used,
             waste_weight=waste_weight,
-            size_pattern=lot.default_size_pattern,
+            size_pattern=_merged_size_pattern(lot.designs or []),
             pieces_from_roll=pieces_from_roll,
         )
         self.db.add(lot_roll)
@@ -277,16 +309,20 @@ class LotService:
         return await self.get_lot(lot_id)
 
     async def distribute_lot(self, lot_id: UUID, created_by: UUID, fy_id: UUID) -> dict:
-        """Auto-create batches from lot size pattern, set lot status to distributed."""
+        """Auto-create batches from lot designs, set lot status to distributed.
+
+        Iterates each design in lot.designs, creates batches per design's
+        size pattern. Each batch gets design_no from its parent design.
+        """
         lot = await self._get_or_404(lot_id)
         if lot.status != "cutting":
             raise InvalidStateTransitionError(
                 f"Lot {lot.lot_code} must be in 'cutting' status to distribute (current: '{lot.status}')"
             )
 
-        size_pattern = lot.default_size_pattern or {}
-        if not size_pattern:
-            raise InvalidStateTransitionError("Lot has no size pattern — cannot distribute")
+        designs = lot.designs or []
+        if not designs:
+            raise InvalidStateTransitionError("Lot has no designs — cannot distribute")
 
         # Compute color_breakdown from lot_rolls
         color_breakdown = {}
@@ -300,27 +336,32 @@ class LotService:
         batch_objects = []
         seq = current_max
 
-        for size_name, count in size_pattern.items():
-            for _ in range(int(count)):
-                seq += 1
-                batch_code = f"BATCH-{seq:04d}"
-                qr_url = f"/scan/batch/{batch_code}"
+        for design in designs:
+            design_no = design.get("design_no", "")
+            size_pattern = design.get("size_pattern", {})
 
-                batch = Batch(
-                    batch_code=batch_code,
-                    lot_id=lot.id,
-                    sku_id=None,
-                    size=size_name,
-                    quantity=lot.total_pallas or 0,
-                    piece_count=lot.total_pallas or 0,
-                    color_breakdown=color_breakdown,
-                    status="created",
-                    qr_code_data=qr_url,
-                    created_by=created_by,
-                    fy_id=fy_id,
-                )
-                self.db.add(batch)
-                batch_objects.append(batch)
+            for size_name, count in size_pattern.items():
+                for _ in range(int(count)):
+                    seq += 1
+                    batch_code = f"BATCH-{seq:04d}"
+                    qr_url = f"/scan/batch/{batch_code}"
+
+                    batch = Batch(
+                        batch_code=batch_code,
+                        lot_id=lot.id,
+                        sku_id=None,
+                        design_no=design_no,
+                        size=size_name,
+                        quantity=lot.total_pallas or 0,
+                        piece_count=lot.total_pallas or 0,
+                        color_breakdown=color_breakdown,
+                        status="created",
+                        qr_code_data=qr_url,
+                        created_by=created_by,
+                        fy_id=fy_id,
+                    )
+                    self.db.add(batch)
+                    batch_objects.append(batch)
 
         # Set lot status to distributed
         lot.status = "distributed"
@@ -331,6 +372,7 @@ class LotService:
             {
                 "id": str(b.id),
                 "batch_code": b.batch_code,
+                "design_no": b.design_no,
                 "size": b.size,
                 "piece_count": b.piece_count,
                 "color_breakdown": b.color_breakdown,
@@ -339,17 +381,20 @@ class LotService:
             for b in batch_objects
         ]
 
+        # Build display design_no string for event
+        design_nos = ", ".join(d.get("design_no", "") for d in designs)
+
         from app.core.event_bus import event_bus
         await event_bus.emit("lot_distributed", {
             "lot_code": lot.lot_code,
-            "design_no": lot.design_no,
+            "design_no": design_nos,
             "batch_count": len(batch_responses),
         }, str(created_by))
 
         return {
             "lot_id": str(lot.id),
             "lot_code": lot.lot_code,
-            "design_no": lot.design_no,
+            "designs": designs,
             "product_type": lot.product_type or "BLS",
             "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
             "batches_created": len(batch_responses),
@@ -377,11 +422,10 @@ class LotService:
             "lot_code": lot.lot_code,
             "sku_id": str(lot.sku_id) if lot.sku_id else None,
             "lot_date": lot.lot_date.isoformat() if lot.lot_date else None,
-            "design_no": lot.design_no,
             "product_type": lot.product_type or "BLS",
             "standard_palla_weight": float(lot.standard_palla_weight) if lot.standard_palla_weight else None,
             "standard_palla_meter": float(lot.standard_palla_meter) if lot.standard_palla_meter else None,
-            "default_size_pattern": lot.default_size_pattern,
+            "designs": lot.designs or [],
             "pieces_per_palla": lot.pieces_per_palla,
             "total_pallas": lot.total_pallas,
             "total_pieces": lot.total_pieces,

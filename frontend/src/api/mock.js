@@ -209,9 +209,8 @@ export const lots = [
     id: uid('d1'), lot_code: 'LOT-0001',
     lot_date: '2026-02-07',
     product_type: 'BLS',
-    design_no: '702',
+    designs: [{ design_no: '702', size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 } }],
     standard_palla_weight: 3.60,
-    default_size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 },
     pieces_per_palla: 18,
     total_pallas: 24,
     total_pieces: 432,
@@ -249,7 +248,8 @@ export const lots = [
 export const batches = [
   {
     id: uid('f'), batch_code: 'BATCH-0001',
-    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', product_type: 'BLS', total_pieces: 432, status: 'distributed' },
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', designs: [{ design_no: '702', size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 } }], product_type: 'BLS', total_pieces: 432, status: 'distributed' },
+    design_no: '702',
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 200, piece_count: 200,
     color_breakdown: { Green: 108, Red: 92 },
@@ -290,7 +290,8 @@ export const batches = [
   },
   {
     id: uid('10'), batch_code: 'BATCH-0002',
-    lot: { id: uid('d1'), lot_code: 'LOT-0001', design_no: '702', product_type: 'BLS', total_pieces: 432, status: 'distributed' },
+    lot: { id: uid('d1'), lot_code: 'LOT-0001', designs: [{ design_no: '702', size_pattern: { L: 2, XL: 6, XXL: 6, '3XL': 4 } }], product_type: 'BLS', total_pieces: 432, status: 'distributed' },
+    design_no: '702',
     sku: { id: uid('c'), sku_code: 'BLS-101-Red-M', product_name: 'Design 101 Red Medium' },
     quantity: 232, piece_count: 232,
     color_breakdown: { Green: 162, Red: 70 },
@@ -523,7 +524,7 @@ export const productionReport = {
   },
   by_lot: [
     {
-      lot_code: 'LOT-0001', design_no: '702', lot_date: '2026-02-07',
+      lot_code: 'LOT-0001', designs: [{ design_no: '702' }], lot_date: '2026-02-07',
       rolls_used: 4, total_weight: 113.270, weight_used: 108.690,
       waste_weight: 4.580, waste_pct: 4.04,
       total_pallas: 24, total_pieces: 432, status: 'distributed',

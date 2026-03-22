@@ -577,7 +577,7 @@ Same as `GET /rolls` with status filter pre-applied.
 **S74 enrichment:** +5 fields (hsn_code, gst_percent, mrp, sale_rate, unit) — all nullable.
 **IMPORTANT:** `stock` is a nested object with 3 fields. Backend must JOIN with `InventoryState` to produce this.
 
-**S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{design_no}-{color}-{size}+{VA1}+{VA2}...`, and fires `ready_stock_in` inventory event per color.
+**S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{batch.design_no}-{color}-{size}+{VA1}+{VA2}...` (design_no now comes from batch, not lot), and fires `ready_stock_in` inventory event per color.
 
 ### GET `/skus/{id}`
 **Response:** Single SKU object (same fields as list) + `source_batches` array:
@@ -594,7 +594,7 @@ Same as `GET /rolls` with status filter pre-applied.
       "color_qc": { "Green": { "expected": 108, "approved": 106, "rejected": 2, "reason": "..." } },
       "approved_qty": 196,
       "rejected_qty": 4,
-      "lot": { "id": "uuid", "lot_code": "LOT-0001", "design_no": "702" },
+      "lot": { "id": "uuid", "lot_code": "LT-BLS-0001", "designs": [{"design_no": "702", "size_pattern": {"L": 4, "XL": 4}}] },
       "tailor": { "id": "uuid", "full_name": "Amit Singh" },
       "packed_at": "2026-02-07T18:00:00Z",
       "processing_logs": [
@@ -629,18 +629,20 @@ Same as `GET /rolls` with status filter pre-applied.
 ## 7. Lots (`/api/v1/lots`)
 
 ### GET `/lots`
-**Query:** `status`, `design_no`, `page`, `page_size`
+**Query:** `status`, `design_no` (searches within designs JSON), `page`, `page_size`
 **Response:** Paginated array of:
 ```json
 {
   "id": "uuid",
-  "lot_code": "LOT-0001",
+  "lot_code": "LT-BLS-0001",
   "lot_date": "2026-02-07",
   "product_type": "BLS",
-  "design_no": "702",
   "standard_palla_weight": 3.60,
   "standard_palla_meter": null,
-  "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
+  "designs": [
+    { "design_no": "101", "size_pattern": { "L": 4, "XL": 4 } },
+    { "design_no": "102", "size_pattern": { "XXL": 6, "3XL": 4 } }
+  ],
   "pieces_per_palla": 18,
   "total_pallas": 24,
   "total_pieces": 432,
@@ -666,7 +668,7 @@ Same as `GET /rolls` with status filter pre-applied.
     }
   ],
   "created_at": "2026-02-07T10:00:00Z",
-  "notes": "First lot - Design 702"
+  "notes": "First lot"
 }
 ```
 
@@ -679,20 +681,22 @@ Same as `GET /rolls` with status filter pre-applied.
 {
   "lot_date": "2026-02-07",
   "product_type": "BLS",
-  "design_no": "702",
   "standard_palla_weight": 3.60,
   "standard_palla_meter": null,
-  "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
+  "designs": [
+    { "design_no": "101", "size_pattern": { "L": 4, "XL": 4 } },
+    { "design_no": "102", "size_pattern": { "XXL": 6, "3XL": 4 } }
+  ],
   "rolls": [
     { "roll_id": "uuid", "palla_weight": 2.860, "size_pattern": null }
   ],
-  "notes": "First lot - Design 702"
+  "notes": "Multi-design lot"
 }
 ```
-**Response:** Created lot object (backend auto-computes: `pieces_per_palla`, `total_pallas`, `total_pieces`, `total_weight`, `lot_code`, `lot_rolls[].num_pallas`, `lot_rolls[].weight_used`, `lot_rolls[].waste_weight`, `lot_rolls[].pieces_from_roll`)
+**Response:** Created lot object (backend auto-computes: `pieces_per_palla`, `total_pallas`, `total_pieces`, `total_weight`, `lot_code` as `LT-{PT}-XXXX`, `lot_rolls[].num_pallas`, `lot_rolls[].weight_used`, `lot_rolls[].waste_weight`, `lot_rolls[].pieces_from_roll`)
 
 ### PATCH `/lots/{id}`
-**Request:** `{ status?, notes?, ...updatable fields }`
+**Request:** `{ status?, standard_palla_weight?, standard_palla_meter?, designs?: [{design_no, size_pattern}], notes? }`
 **Response:** Updated lot object
 
 ---
@@ -725,10 +729,11 @@ created → assigned → in_progress → submitted → checked → packing → p
 {
   "id": "uuid",
   "batch_code": "BATCH-0001",
+  "design_no": "702",
   "lot": {
     "id": "uuid",
-    "lot_code": "LOT-0001",
-    "design_no": "702",
+    "lot_code": "LT-BLS-0001",
+    "designs": [{"design_no": "101", "size_pattern": {"L": 4}}, {"design_no": "102", "size_pattern": {"XXL": 6}}],
     "product_type": "BLS",
     "total_pieces": 432,
     "status": "distributed"
@@ -829,10 +834,10 @@ When `sku` is present:
   "status": "in_progress",
   "has_pending_va": true,
   "color_breakdown": { "Green": 6, "Red": 3 },
-  "lot": { "id": "uuid", "lot_code": "LOT-0003", "design_no": "1009", "status": "distributed" },
+  "lot": { "id": "uuid", "lot_code": "LT-BLS-0003", "designs": [{"design_no": "1009", "size_pattern": {"L": 2, "XL": 6, "XXL": 6, "3XL": 4}}], "status": "distributed" },
   "design_no": "1009",
   "lot_date": "2026-02-24",
-  "default_size_pattern": { "L": 2, "XL": 6, "XXL": 6, "3XL": 4 },
+  "designs": [{"design_no": "1009", "size_pattern": {"L": 2, "XL": 6, "XXL": 6, "3XL": 4}}],
   "assignment": {
     "tailor": { "id": "uuid", "full_name": "Amit Singh" },
     "assigned_at": "2026-02-24T11:00:00Z"
@@ -900,7 +905,7 @@ When `sku` is present:
 ### POST `/lots/{id}/distribute` (Lot Distribution → Batch Auto-Creation)
 **Auth:** Required (`lot_manage` permission)
 **Validates:** Lot must have `status = 'cutting'`.
-**Effect:** Auto-creates N batches from `default_size_pattern`. Each batch gets `size`, `piece_count = total_pallas`, `color_breakdown` from lot_rolls, `qr_code_data = /scan/batch/{code}`. Lot status → `distributed`.
+**Effect:** Auto-creates batches from each design's `size_pattern`. Each batch gets `design_no` from its parent design, `size`, `piece_count = total_pallas`, `color_breakdown` from lot_rolls, `qr_code_data = /scan/batch/{code}`. Lot status → `distributed`.
 **Response:** Array of created batch objects
 
 > **Note:** Route ordering in FastAPI: `/passport/{code}`, `/claim/{code}`, `/ready-for-packing`, `/pack` MUST be defined BEFORE `/{batch_id}` — otherwise FastAPI parses path as UUID → 422.
@@ -1192,8 +1197,8 @@ When `sku` is present:
   },
   "by_lot": [
     {
-      "lot_code": "LOT-0001",
-      "design_no": "702",
+      "lot_code": "LT-BLS-0001",
+      "designs": [{"design_no": "702", "size_pattern": {"L": 2, "XL": 6}}],
       "lot_date": "2026-02-07",
       "rolls_used": 4,
       "total_weight": 113.270,
@@ -1370,9 +1375,9 @@ When `sku` is present:
   "lots": [
     {
       "id": "uuid",
-      "lot_code": "LOT-001",
+      "lot_code": "LT-BLS-0001",
       "lot_date": "2026-02-20",
-      "design_no": "101",
+      "designs": [{"design_no": "101", "size_pattern": {"L": 4, "XL": 4}}],
       "weight_used": 10.5,
       "waste_weight": 0.5,
       "pieces_from_roll": 200,
@@ -2025,7 +2030,7 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `received_by_user` | Rolls | `{ id, full_name }` |
 | `created_by_user` | Lots, Batches | `{ id, full_name }` |
 | `tailor` | Batches (inside `assignment`) | `{ id, full_name }` |
-| `lot` | Batches | `{ id, lot_code, design_no, total_pieces, status }` |
+| `lot` | Batches | `{ id, lot_code, designs, product_type, total_pieces, status }` |
 | `sku` | Batches, Inventory, Orders, Invoices | varies — see each section |
 | `order` | Invoices | `{ order_number, customer_name }` |
 | `customer` | Orders | `{ id, name, phone, gst_no }` |

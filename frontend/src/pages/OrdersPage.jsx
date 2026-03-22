@@ -9,7 +9,9 @@ import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
+import OrderPrint from '../components/common/OrderPrint'
 import useQuickMaster from '../hooks/useQuickMaster'
+import { useAuth } from '../hooks/useAuth'
 
 /* ── Module-level helpers (re-declared, not imported cross-page) ── */
 
@@ -143,6 +145,7 @@ const SOURCE_OPTIONS = [
 ]
 
 export default function OrdersPage() {
+  const { company } = useAuth()
   const [ordersList, setOrdersList] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -157,6 +160,7 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
+  const [printOrder, setPrintOrder] = useState(null)
 
   // Create overlay
   const [createMode, setCreateMode] = useState(false)
@@ -523,7 +527,13 @@ export default function OrdersPage() {
             <h1 className="text-lg font-bold leading-tight">{o.customer?.name || o.customer_name || 'Walk-in'}</h1>
             <p className="text-xs opacity-80">{o.order_number} &middot; <StatusBadge status={o.status} /></p>
           </div>
-          <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Close</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setPrintOrder(detailOrder); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors flex items-center gap-1">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Print
+            </button>
+            <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Close</button>
+          </div>
         </div>
 
         {detailLoading ? (
@@ -1010,6 +1020,9 @@ export default function OrdersPage() {
       </div>
 
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+
+      {/* Order Print Overlay */}
+      {printOrder && <OrderPrint order={printOrder} companyName={company?.name} onClose={() => setPrintOrder(null)} />}
     </div>
   )
 }

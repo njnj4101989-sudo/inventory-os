@@ -16,7 +16,7 @@ import useQuickMaster from '../hooks/useQuickMaster'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 
 // Typography: use typo-input and typo-label globally
-const DEFAULT_SIZE_PATTERN = { L: 2, XL: 6, XXL: 6, '3XL': 4 }
+const DEFAULT_SIZE_PATTERN = { S: 0, M: 0, L: 0, XL: 0, XXL: 0, '3XL': 0, '4XL': 0 }
 
 const LOT_STATUS_FLOW = ['open', 'cutting', 'distributed']
 const LOT_STATUS_COLORS = {
@@ -67,7 +67,7 @@ function hasVA(roll) {
 
 const COLUMNS = [
   { key: 'lot_code', label: 'Lot Code', render: (v) => <span className="font-semibold text-primary-700">{v}</span> },
-  { key: 'design_no', label: 'Design' },
+  { key: 'designs', label: 'Design(s)', render: (v) => (v || []).map(d => d.design_no).join(', ') || '—' },
   {
     key: 'lot_rolls', label: 'Colors',
     render: (v) => [...new Set((v || []).map(r => r.color).filter(Boolean))].length,
@@ -118,13 +118,14 @@ export default function LotsPage() {
   const [rollFilterFabric, setRollFilterFabric] = useState('')
   const [rollFilterColor, setRollFilterColor] = useState('')
   const [rollFilterSupplier, setRollFilterSupplier] = useState('')
+  const [rollFilterUnit, setRollFilterUnit] = useState('')
   const [rollFilterVA, setRollFilterVA] = useState('')
   const [rollGroupBy, setRollGroupBy] = useState('sr_no')
   const [form, setForm] = useState({
     lot_date: new Date().toISOString().split('T')[0],
     product_type: 'BLS',
-    design_no: '', standard_palla_weight: '', standard_palla_meter: '',
-    size_pattern: { ...DEFAULT_SIZE_PATTERN },
+    standard_palla_weight: '', standard_palla_meter: '',
+    designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }],
     rolls: [], notes: '',
   })
   const [saving, setSaving] = useState(false)
@@ -195,8 +196,8 @@ export default function LotsPage() {
       pendingPreselect.current = pre
       navigate('/lots', { replace: true, state: {} })
       setFormError(null); setRollSearch('')
-      setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
+      setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
+      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
       setShowCreate(true)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -221,7 +222,7 @@ export default function LotsPage() {
   // CREATE OVERLAY — Calculations & Filters
   // ══════════════════════════════════════
 
-  const piecesPerPalla = Object.values(form.size_pattern).reduce((s, v) => s + (parseInt(v) || 0), 0)
+  const piecesPerPalla = (form.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
 
   const rollCalcs = form.rolls.map(r => {
     const roll = availableRolls.find(rl => rl.id === r.roll_id)
@@ -297,6 +298,9 @@ export default function LotsPage() {
     // Supplier filter
     if (rollFilterSupplier) list = list.filter(r => r.supplier?.name === rollFilterSupplier)
 
+    // Unit filter
+    if (rollFilterUnit) list = list.filter(r => (r.unit || 'kg') === rollFilterUnit)
+
     // Text search
     if (rollSearch.trim()) {
       const q = rollSearch.toLowerCase()
@@ -308,14 +312,22 @@ export default function LotsPage() {
       )
     }
     return list
-  }, [availableRolls, form.rolls, form.standard_palla_weight, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterVA])
+  }, [availableRolls, form.rolls, form.standard_palla_weight, rollSearch, rollFilterStatus, rollFilterFabric, rollFilterColor, rollFilterSupplier, rollFilterUnit, rollFilterVA])
 
   // ══════════════════════════════════════
   // CREATE OVERLAY — Actions
   // ══════════════════════════════════════
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const setSizeKey = (k, v) => setForm(f => ({ ...f, size_pattern: { ...f.size_pattern, [k]: parseInt(v) || 0 } }))
+  // Design helpers for multi-design
+  const setDesignField = (dIdx, k, v) => setForm(f => ({
+    ...f, designs: f.designs.map((d, i) => i === dIdx ? { ...d, [k]: v } : d)
+  }))
+  const setDesignSizeKey = (dIdx, size, v) => setForm(f => ({
+    ...f, designs: f.designs.map((d, i) => i === dIdx ? { ...d, size_pattern: { ...d.size_pattern, [size]: parseInt(v) || 0 } } : d)
+  }))
+  const addDesign = () => setForm(f => ({ ...f, designs: [...f.designs, { design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }] }))
+  const removeDesign = (dIdx) => setForm(f => ({ ...f, designs: f.designs.filter((_, i) => i !== dIdx) }))
 
   const addRoll = (id) => {
     if (!id || form.rolls.some(r => r.roll_id === id)) return
@@ -339,22 +351,27 @@ export default function LotsPage() {
 
   const openCreate = () => {
     setFormError(null); setRollSearch('')
-    setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', design_no: '', standard_palla_weight: '', standard_palla_meter: '', size_pattern: { ...DEFAULT_SIZE_PATTERN }, rolls: [], notes: '' })
+    setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
+    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: 'BLS', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
     setShowCreate(true)
   }
 
   const handleCreate = async () => {
-    if (!form.design_no.trim()) return setFormError('Design No. is required')
-    if (!form.standard_palla_weight || parseFloat(form.standard_palla_weight) <= 0) return setFormError('Palla Weight is required')
+    // Validate at least one design with design_no
+    const validDesigns = (form.designs || []).filter(d => d.design_no.trim())
+    if (validDesigns.length === 0) return setFormError('At least one Design No. is required')
+    // At least one palla field
+    const hasWeight = form.standard_palla_weight && parseFloat(form.standard_palla_weight) > 0
+    const hasMeter = form.standard_palla_meter && parseFloat(form.standard_palla_meter) > 0
+    if (!hasWeight && !hasMeter) return setFormError('Either Palla Weight or Palla Meter is required')
     if (form.rolls.length === 0) return setFormError('Add at least one roll')
     setSaving(true); setFormError(null)
     try {
       await createLot({
-        lot_date: form.lot_date, product_type: form.product_type || 'BLS', design_no: form.design_no,
-        standard_palla_weight: parseFloat(form.standard_palla_weight),
-        standard_palla_meter: form.standard_palla_meter ? parseFloat(form.standard_palla_meter) : null,
-        default_size_pattern: form.size_pattern,
+        lot_date: form.lot_date, product_type: form.product_type || 'BLS',
+        standard_palla_weight: hasWeight ? parseFloat(form.standard_palla_weight) : null,
+        standard_palla_meter: hasMeter ? parseFloat(form.standard_palla_meter) : null,
+        designs: validDesigns.map(d => ({ design_no: d.design_no.trim(), size_pattern: d.size_pattern })),
         rolls: form.rolls.map(r => ({ roll_id: r.roll_id, palla_weight: parseFloat(r.palla_weight) })),
         notes: form.notes || null,
       })
@@ -394,10 +411,9 @@ export default function LotsPage() {
 
   const startEditing = () => {
     setEditForm({
-      design_no: detailLot.design_no || '',
       standard_palla_weight: detailLot.standard_palla_weight ?? '',
       standard_palla_meter: detailLot.standard_palla_meter ?? '',
-      size_pattern: { ...(detailLot.default_size_pattern || DEFAULT_SIZE_PATTERN) },
+      designs: (detailLot.designs || []).map(d => ({ design_no: d.design_no || '', size_pattern: { ...DEFAULT_SIZE_PATTERN, ...(d.size_pattern || {}) } })),
       notes: detailLot.notes || '',
     })
     setEditError(null); setEditing(true)
@@ -409,10 +425,9 @@ export default function LotsPage() {
     setEditSaving(true); setEditError(null)
     try {
       const payload = {
-        design_no: editForm.design_no,
-        standard_palla_weight: parseFloat(editForm.standard_palla_weight) || undefined,
+        standard_palla_weight: editForm.standard_palla_weight ? parseFloat(editForm.standard_palla_weight) : null,
         standard_palla_meter: editForm.standard_palla_meter ? parseFloat(editForm.standard_palla_meter) : null,
-        default_size_pattern: editForm.size_pattern,
+        designs: (editForm.designs || []).filter(d => d.design_no.trim()).map(d => ({ design_no: d.design_no.trim(), size_pattern: d.size_pattern })),
         notes: editForm.notes || null,
       }
       const res = await updateLot(detailLot.id, payload)
@@ -449,7 +464,7 @@ export default function LotsPage() {
       setShowBatchLabels({
         batches: data.batches || [],
         lotCode: data.lot_code || detailLot.lot_code,
-        designNo: data.design_no || detailLot.design_no,
+        designNo: (data.designs || detailLot.designs || []).map(d => d.design_no).join(', '),
         lotDate: data.lot_date || detailLot.lot_date,
       })
     } catch (err) {
@@ -495,7 +510,7 @@ export default function LotsPage() {
                 <div className="shrink-0">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
                   <div className="flex items-center h-[34px] rounded border border-dashed border-gray-300 bg-gray-50 px-2.5 text-sm font-semibold text-primary-700">
-                    LOT-{String(total + 1).padStart(4, '0')}
+                    LT-{form.product_type || 'BLS'}-{String(total + 1).padStart(4, '0')}
                   </div>
                 </div>
                 <div className="w-20">
@@ -505,18 +520,13 @@ export default function LotsPage() {
                     {masterProductTypes.map((pt) => <option key={pt.id} value={pt.code}>{pt.code}</option>)}
                   </select>
                 </div>
-                <div className="w-24">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design *</label>
-                  <input ref={designRef} type="text" value={form.design_no} onChange={e => setField('design_no', e.target.value)}
-                    placeholder="702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-                </div>
                 <div className="w-[130px]">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
                   <input type="date" value={form.lot_date} onChange={e => setField('lot_date', e.target.value)}
                     className="w-full h-[34px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
                 <div className="w-24">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
@@ -530,18 +540,91 @@ export default function LotsPage() {
                     onChange={e => setField('standard_palla_meter', e.target.value)}
                     placeholder="5.50" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                 </div>
-                <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
-                {Object.entries(form.size_pattern).map(([size, count]) => (
-                  <div key={size} className="flex items-center gap-0.5">
-                    <label className="text-[10px] font-bold text-gray-400">{size}</label>
-                    <input type="number" value={count} onChange={e => setSizeKey(size, e.target.value)}
-                      className="w-11 h-[34px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
-                  </div>
-                ))}
                 <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                  = {piecesPerPalla} pcs
+                  {(form.designs || []).length > 1
+                    ? `${(form.designs || []).map(d => Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)).join(' + ')} = `
+                    : '= '
+                  }{piecesPerPalla} pcs / {piecesPerPalla} batches
                 </span>
               </div>
+            </div>
+
+            {/* ── Design Rows (multi-design) ── */}
+            <div className="rounded-lg border bg-white px-4 py-3 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Designs <span className="font-normal normal-case text-gray-400 ml-1">(Enter on last size = new design, Enter on empty = go to rolls)</span></span>
+                <button onClick={addDesign} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add Design
+                </button>
+              </div>
+              {(form.designs || []).map((d, dIdx) => {
+                const sizeKeys = Object.keys(d.size_pattern || {})
+                return (
+                <div key={dIdx} className="flex items-end gap-2 rounded-lg bg-gray-50 px-3 py-2" data-design-row={dIdx}>
+                  <div className="w-24">
+                    <label className="text-[10px] font-semibold text-gray-400">Design {dIdx + 1} *</label>
+                    <input ref={dIdx === 0 ? designRef : undefined} type="text" value={d.design_no} onChange={e => setDesignField(dIdx, 'design_no', e.target.value)}
+                      placeholder="e.g. 702" className="w-full h-[32px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      data-design-no="true"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                          e.preventDefault()
+                          // Empty design_no on non-first row → remove it, jump to rolls
+                          if (!d.design_no.trim() && dIdx > 0) {
+                            removeDesign(dIdx)
+                            setTimeout(() => document.querySelector('[data-roll-search]')?.focus(), 60)
+                            return
+                          }
+                          // Focus first size input in this row
+                          if (d.design_no.trim()) {
+                            const row = e.target.closest('[data-design-row]')
+                            row?.querySelector('[data-size-input]')?.focus()
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
+                  {sizeKeys.map((size, sIdx) => (
+                    <div key={size} className="flex items-center gap-0.5">
+                      <label className="text-[10px] font-bold text-gray-400">{size}</label>
+                      <input type="number" value={d.size_pattern[size]} onChange={e => setDesignSizeKey(dIdx, size, e.target.value)}
+                        data-size-input="true"
+                        className="w-11 h-[32px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                            e.preventDefault()
+                            if (sIdx < sizeKeys.length - 1) {
+                              // Next size in this row
+                              const allSizes = e.target.closest('[data-design-row]')?.querySelectorAll('[data-size-input]')
+                              allSizes?.[sIdx + 1]?.focus()
+                              allSizes?.[sIdx + 1]?.select()
+                            } else {
+                              // Last size → add new design row, focus its design_no
+                              addDesign()
+                              setTimeout(() => {
+                                const allRows = document.querySelectorAll('[data-design-row]')
+                                const lastRow = allRows[allRows.length - 1]
+                                lastRow?.querySelector('[data-design-no]')?.focus()
+                              }, 60)
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <span className="text-xs font-semibold text-emerald-600">
+                    = {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs
+                  </span>
+                  {form.designs.length > 1 && (
+                    <button onClick={() => removeDesign(dIdx)} className="ml-auto text-gray-400 hover:text-red-500 p-1">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  )}
+                </div>
+                )
+              })}
             </div>
 
             {/* ── Pre-selected banner ── */}
@@ -560,7 +643,7 @@ export default function LotsPage() {
                   Rolls <span className="ml-1 text-emerald-600">({form.rolls.length})</span>
                 </h3>
                 <div className="relative w-64">
-                  <input type="text" value={rollSearch} onChange={e => setRollSearch(e.target.value)}
+                  <input type="text" data-roll-search="true" value={rollSearch} onChange={e => setRollSearch(e.target.value)}
                     placeholder="Search code, color, fabric..." className="typo-input pl-8 text-xs" />
                   <svg className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -605,6 +688,12 @@ export default function LotsPage() {
                   className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">All Suppliers</option>
                   {filterOptions.suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={rollFilterUnit} onChange={e => setRollFilterUnit(e.target.value)}
+                  className="rounded border border-gray-300 px-2 py-1 text-[11px] bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  <option value="">All Units</option>
+                  <option value="kg">kg</option>
+                  <option value="meters">meters</option>
                 </select>
                 <span className="ml-auto text-[11px] text-gray-400">{addableRolls.length} available</span>
                 <div className="h-4 w-px bg-gray-300 mx-1" />
@@ -835,7 +924,7 @@ export default function LotsPage() {
   if (detailLot) {
     const isOpen = detailLot.status === 'open'
     const statusInfo = LOT_STATUS_COLORS[detailLot.status] || LOT_STATUS_COLORS.open
-    const detailPiecesPerPalla = Object.values(detailLot.default_size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)
+    const detailPiecesPerPalla = (detailLot.designs || []).reduce((total, d) => total + Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0), 0)
     const totalWaste = (detailLot.lot_rolls || []).reduce((s, r) => s + parseFloat(r.waste_weight || 0), 0)
     const colorCount = [...new Set((detailLot.lot_rolls || []).map(r => r.color).filter(Boolean))].length
 
@@ -851,7 +940,7 @@ export default function LotsPage() {
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold tracking-tight">{detailLot.lot_code}</h2>
                 <span className="text-emerald-200">—</span>
-                <span className="text-emerald-100">Design {detailLot.design_no}</span>
+                <span className="text-emerald-100">Design {(detailLot.designs || []).map(d => d.design_no).join(', ')}</span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusInfo.bg} ${statusInfo.text}`}>{statusInfo.label}</span>
@@ -881,7 +970,7 @@ export default function LotsPage() {
             {detailLot.status === 'cutting' && (
               <button onClick={handleDistribute} disabled={distributing}
                 className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-white disabled:opacity-50 transition-colors">
-                {distributing ? 'Distributing...' : `Distribute (${Object.values(detailLot.default_size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} Batches)`}
+                {distributing ? 'Distributing...' : `Distribute (${detailPiecesPerPalla} Batches)`}
               </button>
             )}
             {/* Edit (open status only) */}
@@ -913,68 +1002,85 @@ export default function LotsPage() {
             {/* ── Lot Details toolbar ── */}
             <div className="rounded-lg border bg-white px-4 py-3 shadow-sm">
               {editing ? (
-                <div className="flex items-end gap-3 flex-wrap">
-                  <div className="w-24">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design *</label>
-                    <input type="text" value={editForm.design_no} onChange={e => setEditForm(f => ({ ...f, design_no: e.target.value }))}
-                      className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" autoFocus />
+                <div className="space-y-2">
+                  <div className="flex items-end gap-3">
+                    <div className="w-24">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
+                      <input type="number" step="0.001" value={editForm.standard_palla_weight}
+                        onChange={e => setEditForm(f => ({ ...f, standard_palla_weight: e.target.value }))}
+                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" autoFocus />
+                    </div>
+                    <div className="w-24">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
+                      <input type="number" step="0.01" value={editForm.standard_palla_meter || ''}
+                        onChange={e => setEditForm(f => ({ ...f, standard_palla_meter: e.target.value }))}
+                        className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    </div>
                   </div>
-                  <div className="w-24">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
-                    <input type="number" step="0.001" value={editForm.standard_palla_weight}
-                      onChange={e => setEditForm(f => ({ ...f, standard_palla_weight: e.target.value }))}
-                      className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-                  </div>
-                  <div className="w-24">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
-                    <input type="number" step="0.01" value={editForm.standard_palla_meter || ''}
-                      onChange={e => setEditForm(f => ({ ...f, standard_palla_meter: e.target.value }))}
-                      className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-                  </div>
-                  <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
-                  {Object.entries(editForm.size_pattern).map(([size, count]) => (
-                    <div key={size} className="flex items-center gap-0.5">
-                      <label className="text-[10px] font-bold text-gray-400">{size}</label>
-                      <input type="number" value={count}
-                        onChange={e => setEditForm(f => ({ ...f, size_pattern: { ...f.size_pattern, [size]: parseInt(e.target.value) || 0 } }))}
-                        className="w-11 h-[34px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                  {(editForm.designs || []).map((d, dIdx) => (
+                    <div key={dIdx} className="flex items-end gap-2 rounded bg-gray-50 px-3 py-2">
+                      <div className="w-24">
+                        <label className="text-[10px] font-semibold text-gray-400">Design {dIdx + 1} *</label>
+                        <input type="text" value={d.design_no}
+                          onChange={e => setEditForm(f => ({ ...f, designs: f.designs.map((dd, i) => i === dIdx ? { ...dd, design_no: e.target.value } : dd) }))}
+                          className="w-full h-[32px] rounded border border-gray-300 px-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                      </div>
+                      {Object.entries(d.size_pattern || {}).map(([size, count]) => (
+                        <div key={size} className="flex items-center gap-0.5">
+                          <label className="text-[10px] font-bold text-gray-400">{size}</label>
+                          <input type="number" value={count}
+                            onChange={e => setEditForm(f => ({ ...f, designs: f.designs.map((dd, i) => i === dIdx ? { ...dd, size_pattern: { ...dd.size_pattern, [size]: parseInt(e.target.value) || 0 } } : dd) }))}
+                            className="w-11 h-[32px] rounded border border-gray-300 px-1 text-center text-sm font-bold focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                        </div>
+                      ))}
+                      <span className="text-xs font-semibold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
+                      {editForm.designs.length > 1 && (
+                        <button onClick={() => setEditForm(f => ({ ...f, designs: f.designs.filter((_, i) => i !== dIdx) }))} className="ml-auto text-gray-400 hover:text-red-500 p-1">
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
                     </div>
                   ))}
+                  <button onClick={() => setEditForm(f => ({ ...f, designs: [...f.designs, { design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }] }))}
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Add Design</button>
                 </div>
               ) : (
-                <div className="flex items-end gap-4">
-                  <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
-                    <div className="h-[34px] flex items-center text-sm font-semibold text-primary-700">{detailLot.lot_code}</div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Design</label>
-                    <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.design_no}</div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
-                    <div className="h-[34px] flex items-center text-sm">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
-                    <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.standard_palla_weight} kg</div>
-                  </div>
-                  {detailLot.standard_palla_meter && (
+                <div className="space-y-2">
+                  <div className="flex items-end gap-4">
                     <div>
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
-                      <div className="h-[34px] flex items-center text-sm">{detailLot.standard_palla_meter} m</div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Lot No.</label>
+                      <div className="h-[34px] flex items-center text-sm font-semibold text-primary-700">{detailLot.lot_code}</div>
                     </div>
-                  )}
-                  <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
-                  {Object.entries(detailLot.default_size_pattern || {}).map(([size, count]) => (
-                    <div key={size} className="flex items-center gap-0.5">
-                      <span className="text-[10px] font-bold text-gray-400">{size}</span>
-                      <span className="text-sm font-bold">{count}</span>
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Date</label>
+                      <div className="h-[34px] flex items-center text-sm">{detailLot.lot_date ? new Date(detailLot.lot_date).toLocaleDateString('en-IN') : '—'}</div>
+                    </div>
+                    {detailLot.standard_palla_weight && (
+                      <div>
+                        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Wt</label>
+                        <div className="h-[34px] flex items-center text-sm font-semibold">{detailLot.standard_palla_weight} kg</div>
+                      </div>
+                    )}
+                    {detailLot.standard_palla_meter && (
+                      <div>
+                        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Palla Mtr</label>
+                        <div className="h-[34px] flex items-center text-sm">{detailLot.standard_palla_meter} m</div>
+                      </div>
+                    )}
+                    <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                      = {detailPiecesPerPalla} pcs
+                    </span>
+                  </div>
+                  {(detailLot.designs || []).map((d, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded bg-gray-50 px-3 py-1.5">
+                      <span className="text-xs font-semibold text-gray-600">Design {d.design_no}</span>
+                      <span className="text-xs text-gray-400">|</span>
+                      {Object.entries(d.size_pattern || {}).map(([size, count]) => (
+                        <span key={size} className="text-xs"><span className="font-bold text-gray-400">{size}</span> <span className="font-bold">{count}</span></span>
+                      ))}
+                      <span className="text-xs font-semibold text-emerald-600">= {Object.values(d.size_pattern || {}).reduce((s, v) => s + (parseInt(v) || 0), 0)} pcs</span>
                     </div>
                   ))}
-                  <span className="shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                    = {detailPiecesPerPalla} pcs
-                  </span>
                 </div>
               )}
             </div>

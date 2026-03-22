@@ -7,7 +7,9 @@ export async function getLots(params = {}) {
   if (USE_MOCK) {
     let filtered = [...lots]
     if (params.status) filtered = filtered.filter((l) => l.status === params.status)
-    if (params.design_no) filtered = filtered.filter((l) => l.design_no === params.design_no)
+    if (params.design_no) filtered = filtered.filter((l) =>
+      (l.designs || []).some((d) => d.design_no === params.design_no)
+    )
     return mockPaginated(filtered, params.page, params.page_size)
   }
   return client.get('/lots', { params })
@@ -23,8 +25,13 @@ export async function getLot(id) {
 
 export async function createLot(data) {
   if (USE_MOCK) {
-    const nextCode = `LOT-${String(lots.length + 1).padStart(4, '0')}`
-    const piecesPerPalla = Object.values(data.default_size_pattern).reduce((s, v) => s + v, 0)
+    const pt = (data.product_type || 'BLS').toUpperCase()
+    const prefix = `LT-${pt}-`
+    const existing = lots.filter((l) => l.lot_code.startsWith(prefix)).length
+    const nextCode = `${prefix}${String(existing + 1).padStart(4, '0')}`
+
+    const designs = data.designs || []
+    const piecesPerPalla = designs.reduce((s, d) => s + Object.values(d.size_pattern || {}).reduce((a, v) => a + v, 0), 0)
 
     const lotRolls = (data.rolls || []).map((r) => {
       const roll = rolls.find((rl) => rl.id === r.roll_id)
@@ -34,7 +41,6 @@ export async function createLot(data) {
       const wasteWeight = +(remaining - weightUsed).toFixed(3)
       const piecesFromRoll = numPallas * piecesPerPalla
 
-      // Deduct remaining weight on roll (match backend behavior)
       if (roll) {
         roll.remaining_weight = wasteWeight
         if (wasteWeight <= 0) roll.status = 'in_cutting'
@@ -63,10 +69,10 @@ export async function createLot(data) {
       id: crypto.randomUUID(),
       lot_code: nextCode,
       lot_date: data.lot_date,
-      design_no: data.design_no,
+      product_type: pt,
       standard_palla_weight: data.standard_palla_weight,
       standard_palla_meter: data.standard_palla_meter || null,
-      default_size_pattern: data.default_size_pattern,
+      designs: designs,
       pieces_per_palla: piecesPerPalla,
       total_pallas: totalPallas,
       total_pieces: totalPieces,

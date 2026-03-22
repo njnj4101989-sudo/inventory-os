@@ -206,7 +206,7 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, hi
   const firstBatch = batches[0]
   const lot = firstBatch?.lot
   const lotCode = lot?.lot_code || '—'
-  const designNo = lot?.design_no || '—'
+  const designNo = batches[0]?.design_no || '—'
   const createdAt = firstBatch?.created_at
   const dateStr = createdAt
     ? new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
@@ -451,7 +451,7 @@ export default function BatchesPage() {
       entries = entries.filter(([, batches]) => {
         const lot = batches[0]?.lot
         const lotCode = (lot?.lot_code || '').toLowerCase()
-        const designNo = (lot?.design_no || '').toLowerCase()
+        const designNo = batches.map((b) => (b.design_no || '').toLowerCase()).join(' ')
         const batchCodes = batches.map((b) => (b.batch_code || '').toLowerCase()).join(' ')
         return lotCode.includes(q) || designNo.includes(q) || batchCodes.includes(q)
       })
@@ -547,7 +547,7 @@ export default function BatchesPage() {
     const lot = batches[0]?.lot
     setLabelBatches(batches)
     setLabelLotCode(lot?.lot_code || '—')
-    setLabelDesignNo(lot?.design_no || '—')
+    setLabelDesignNo(batches[0]?.design_no || '—')
     setLabelLotDate(batches[0]?.created_at || '')
   }
 

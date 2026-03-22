@@ -9,7 +9,7 @@ export async function distributeLot(lotId) {
     if (!lot) throw { response: { data: { detail: 'Lot not found' } } }
     if (lot.status !== 'cutting') throw { response: { data: { detail: `Lot must be in 'cutting' status` } } }
 
-    const pattern = lot.default_size_pattern || {}
+    const pattern = lot.designs?.[0]?.size_pattern || {}
     const colorBreakdown = {}
     ;(lot.lot_rolls || []).forEach((lr) => {
       const color = lr.color || 'Unknown'
@@ -26,7 +26,8 @@ export async function distributeLot(lotId) {
           id: crypto.randomUUID(),
           batch_code: batchCode,
           size,
-          lot: { id: lot.id, lot_code: lot.lot_code, design_no: lot.design_no, total_pieces: lot.total_pieces, status: 'distributed' },
+          lot: { id: lot.id, lot_code: lot.lot_code, designs: lot.designs, product_type: lot.product_type, total_pieces: lot.total_pieces, status: 'distributed' },
+          design_no: lot.designs?.[0]?.design_no || null,
           sku: null,
           quantity: lot.total_pallas || 0,
           piece_count: lot.total_pallas || 0,
@@ -51,7 +52,7 @@ export async function distributeLot(lotId) {
     return mockResponse({
       lot_id: lot.id,
       lot_code: lot.lot_code,
-      design_no: lot.design_no,
+      designs: lot.designs,
       lot_date: lot.lot_date,
       batches_created: created.length,
       batches: created,
@@ -66,9 +67,8 @@ export async function getBatchPassport(batchCode) {
     if (!batch) throw { response: { data: { detail: `Batch '${batchCode}' not found` } } }
     const resp = { ...batch }
     if (batch.lot) {
-      resp.design_no = batch.lot.design_no
+      resp.design_no = batch.design_no || batch.lot.designs?.[0]?.design_no || null
       resp.lot_date = batch.lot.lot_date || null
-      resp.default_size_pattern = null
     }
     return mockResponse(resp)
   }
@@ -109,7 +109,8 @@ export async function createBatch(data) {
     const newBatch = {
       id: crypto.randomUUID(),
       batch_code: nextCode,
-      lot: lot ? { id: lot.id, lot_code: lot.lot_code, design_no: lot.design_no, total_pieces: lot.total_pieces, status: lot.status } : null,
+      lot: lot ? { id: lot.id, lot_code: lot.lot_code, designs: lot.designs, product_type: lot.product_type, total_pieces: lot.total_pieces, status: lot.status } : null,
+      design_no: lot?.designs?.[0]?.design_no || null,
       sku: lot ? lot.sku : { id: data.sku_id, sku_code: 'SKU', product_name: 'Product' },
       quantity: data.piece_count,
       piece_count: data.piece_count,

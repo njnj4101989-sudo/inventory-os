@@ -393,7 +393,7 @@ export default function ScanPage() {
 
             {/* Batch details — single card with everything the tailor needs */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <InfoRow label="Design No." value={batchPassport.design_no || batchPassport.lot?.design_no} />
+              <InfoRow label="Design No." value={batchPassport.design_no} />
               <InfoRow label="Lot" value={batchPassport.lot?.lot_code} />
               <InfoRow label="Date" value={batchPassport.lot_date
                 ? new Date(batchPassport.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })

@@ -14,7 +14,7 @@ export default function BatchForm({ form, onChange, lotList = [], error = null, 
           <option value="">Choose lot...</option>
           {lotList.map((l) => (
             <option key={l.id} value={l.id}>
-              {l.lot_code} — Design {l.design_no} ({l.total_pieces} pcs, {l.status})
+              {l.lot_code} — Design {(l.designs || []).map(d => d.design_no).join(', ')} ({l.total_pieces} pcs, {l.status})
             </option>
           ))}
         </select>
@@ -36,10 +36,14 @@ export default function BatchForm({ form, onChange, lotList = [], error = null, 
               <div className="typo-caption text-blue-500">Total Weight</div>
             </div>
           </div>
-          <div className="mt-2 typo-caption text-center">
-            Size: {Object.entries(selectedLot.default_size_pattern).map(([k, v]) => `${k}:${v}`).join(', ')}
-            {' = '}{selectedLot.pieces_per_palla} per palla
-          </div>
+          {selectedLot.designs?.length > 0 && (
+            <div className="mt-2 typo-caption text-center">
+              {selectedLot.designs.map((d, i) => (
+                <span key={i}>{i > 0 ? ' | ' : ''}Design {d.design_no}: {Object.entries(d.size_pattern || {}).map(([k, v]) => `${k}:${v}`).join(', ')}</span>
+              ))}
+              {' = '}{selectedLot.pieces_per_palla} per palla
+            </div>
+          )}
         </div>
       )}
 

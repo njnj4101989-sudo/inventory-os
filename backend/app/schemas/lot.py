@@ -26,6 +26,12 @@ class LotFilterParams(PaginatedParams):
 # --- Nested ---
 
 
+class DesignEntry(BaseModel):
+    """Single design within a lot — design_no + size breakdown."""
+    design_no: str
+    size_pattern: dict  # e.g. {"L": 4, "XL": 4}
+
+
 class LotRollInput(BaseModel):
     """Single roll entry when creating a lot."""
 
@@ -55,8 +61,8 @@ class LotBrief(BaseSchema):
 
     id: UUID
     lot_code: str
-    design_no: str
     product_type: str = "BLS"
+    designs: list[dict] = []
     total_pieces: int
     status: str
 
@@ -65,15 +71,14 @@ class LotBrief(BaseSchema):
 
 
 class LotCreate(BaseModel):
-    """POST /lots — create lot with rolls."""
+    """POST /lots — create lot with rolls and one or more designs."""
 
     sku_id: UUID | None = None
     lot_date: date
-    design_no: str
     product_type: str = "BLS"
-    standard_palla_weight: Decimal
+    standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
-    default_size_pattern: dict  # e.g. {"L": 2, "XL": 6, "XXL": 6, "3XL": 4}
+    designs: list[DesignEntry]  # At least one design required
     rolls: list[LotRollInput]
     notes: str | None = None
 
@@ -82,10 +87,9 @@ class LotUpdate(BaseModel):
     """PATCH /lots/{id} — update lot metadata and/or status (forward-only)."""
 
     status: Literal["open", "cutting", "distributed"] | None = None
-    design_no: str | None = None
     standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
-    default_size_pattern: dict | None = None
+    designs: list[DesignEntry] | None = None
     notes: str | None = None
 
 
@@ -97,11 +101,10 @@ class LotResponse(BaseSchema):
     lot_code: str
     sku: SKUBrief | None = None
     lot_date: date
-    design_no: str
     product_type: str = "BLS"
-    standard_palla_weight: Decimal
+    standard_palla_weight: Decimal | None = None
     standard_palla_meter: Decimal | None = None
-    default_size_pattern: dict
+    designs: list[dict] = []
     pieces_per_palla: int
     total_pallas: int
     total_pieces: int

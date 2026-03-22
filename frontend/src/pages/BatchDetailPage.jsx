@@ -7,6 +7,7 @@ import StatusBadge from '../components/common/StatusBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import PackingSlip from '../components/common/PackingSlip'
 import { useNotifications } from '../context/NotificationContext'
 
 const STEPS = [
@@ -60,7 +61,9 @@ export default function BatchDetailPage() {
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue] = useState('')
 
-  const { permissions: perms, role } = useAuth()
+  const [showPackingSlip, setShowPackingSlip] = useState(false)
+
+  const { permissions: perms, role, company } = useAuth()
   const isAdminOrSuper = ['admin', 'supervisor'].includes(role)
 
   const fetchBatch = useCallback(async () => {
@@ -191,7 +194,7 @@ export default function BatchDetailPage() {
         <h1 className="typo-page-title text-gray-900">{batch.batch_code}</h1>
         <StatusBadge status={batch.status} />
         <span className="typo-body text-gray-500">
-          {lot ? `${lot.lot_code} · Design ${lot.design_no}` : batch.sku ? batch.sku.sku_code : ''}
+          {lot ? `${lot.lot_code} · Design ${batch.design_no || lot.designs?.[0]?.design_no || '—'}` : batch.sku ? batch.sku.sku_code : ''}
         </span>
         {batch.size && <span className="rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-inset ring-primary-200">{batch.size}</span>}
         {lot?.product_type && <span className="text-xs text-gray-400">{lot.product_type}</span>}
@@ -285,6 +288,20 @@ export default function BatchDetailPage() {
               {actionLoading ? 'Packing...' : 'Mark as Packed'}
             </button>
           </div>
+        </div>
+      )}
+
+      {batch.status === 'packed' && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center justify-between">
+          <div>
+            <p className="typo-data text-emerald-800">Packed{batch.packed_at ? ` on ${new Date(batch.packed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}{batch.packed_by ? ` by ${batch.packed_by.full_name}` : ''}</p>
+            {batch.pack_reference && <p className="text-[11px] text-emerald-600 mt-0.5">Ref: {batch.pack_reference}</p>}
+          </div>
+          <button onClick={() => setShowPackingSlip(true)}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 typo-btn transition-colors flex items-center gap-1.5">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+            Print Packing Slip
+          </button>
         </div>
       )}
 
@@ -511,7 +528,7 @@ export default function BatchDetailPage() {
                 </div>
                 <div>
                   <span className="text-gray-400">Design: </span>
-                  <span className="typo-data">{lot.design_no}</span>
+                  <span className="typo-data">{batch.design_no || lot.designs?.[0]?.design_no || '—'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400">Type: </span>
@@ -625,11 +642,14 @@ export default function BatchDetailPage() {
         <BatchLabelSheet
           batches={labelBatches}
           lotCode={lot?.lot_code || '—'}
-          designNo={lot?.design_no || '—'}
+          designNo={batch?.design_no || '—'}
           lotDate={lot?.lot_date || batch.created_at || ''}
           onClose={() => setLabelBatches(null)}
         />
       )}
+
+      {/* Packing Slip Print Overlay */}
+      {showPackingSlip && <PackingSlip batch={batch} companyName={company?.name} onClose={() => setShowPackingSlip(false)} />}
     </div>
   )
 }

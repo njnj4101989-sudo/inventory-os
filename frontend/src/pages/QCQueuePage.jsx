@@ -292,7 +292,7 @@ function QCCard({ batch, isExpanded, onToggle, onCheck, isLoading, onTap }) {
               </span>
             )}
             {batch.lot && (
-              <span className="text-xs text-gray-400">{batch.lot.lot_code} &middot; Design {batch.lot.design_no}</span>
+              <span className="text-xs text-gray-400">{batch.lot.lot_code} &middot; Design {batch.design_no}</span>
             )}
           </div>
           {/* Meta: submitted time + stitch duration */}

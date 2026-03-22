@@ -95,7 +95,7 @@ function ProductionTab({ data }) {
               {data.by_lot.map((lot, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="py-3 font-semibold text-primary-600">{lot.lot_code}</td>
-                  <td className="py-3">{lot.design_no}</td>
+                  <td className="py-3">{(lot.designs || []).map(d => d.design_no).join(', ') || '—'}</td>
                   <td className="py-3 text-gray-500 text-xs">{new Date(lot.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
                   <td className="py-3">{lot.rolls_used}</td>
                   <td className="py-3">

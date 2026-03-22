@@ -352,7 +352,7 @@ class BatchService:
             sku_svc = SKUService(self.db)
             inv_svc = InventoryService(self.db)
             product_type = lot.product_type or "BLS"
-            design_no = lot.design_no
+            design_no = batch.design_no or (lot.designs[0]["design_no"] if lot.designs else "")
 
             # VA names for product_name
             va_names = sorted([
@@ -473,7 +473,7 @@ class BatchService:
                 else None,
                 "lot": {
                     "lot_code": b.lot.lot_code,
-                    "design_no": b.lot.design_no,
+                    "designs": b.lot.designs or [],
                 }
                 if b.lot
                 else None,
@@ -595,7 +595,7 @@ class BatchService:
                 else None,
                 "lot": {
                     "lot_code": b.lot.lot_code,
-                    "design_no": b.lot.design_no,
+                    "designs": b.lot.designs or [],
                 }
                 if b.lot
                 else None,
@@ -644,11 +644,11 @@ class BatchService:
         resp = self._to_response(batch)
         # Add lot-derived fields for passport display
         if batch.lot:
-            resp["design_no"] = batch.lot.design_no
+            resp["design_no"] = batch.design_no
             resp["lot_date"] = (
                 batch.lot.lot_date.isoformat() if batch.lot.lot_date else None
             )
-            resp["default_size_pattern"] = batch.lot.default_size_pattern
+            resp["designs"] = batch.lot.designs or []
         return resp
 
     async def claim_batch(self, batch_code: str, tailor_id: UUID) -> dict:
@@ -755,11 +755,12 @@ class BatchService:
         return {
             "id": str(b.id),
             "batch_code": b.batch_code,
+            "design_no": b.design_no,
             "size": b.size,
             "lot": {
                 "id": str(b.lot.id),
                 "lot_code": b.lot.lot_code,
-                "design_no": b.lot.design_no,
+                "designs": b.lot.designs or [],
                 "product_type": b.lot.product_type or "BLS",
                 "total_pieces": b.lot.total_pieces,
                 "status": b.lot.status,

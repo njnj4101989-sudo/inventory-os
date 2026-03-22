@@ -2207,7 +2207,7 @@ export default function RollsPage() {
                       {/* Grid header */}
                       <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center">
                         <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
-                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights (kg)</span>
+                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights ({grp.unit || 'kg'})</span>
                         <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
                         <span className="text-xs font-semibold text-gray-500 uppercase text-right">Total</span>
                       </div>
@@ -2590,7 +2590,7 @@ export default function RollsPage() {
                         {/* Grid header */}
                         <div className="rounded-t border border-b-0 border-gray-200 bg-gray-100 px-3 py-1 grid grid-cols-[160px_1fr_50px] gap-2 items-center">
                           <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase">Weights (kg) — Enter/Tab between fields</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase">Weights ({grp.unit}) — Enter/Tab between fields</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
                         </div>
 

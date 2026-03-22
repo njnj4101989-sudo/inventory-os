@@ -174,7 +174,7 @@ class SKUService:
             lot_brief = {
                 "id": str(b.lot.id),
                 "lot_code": b.lot.lot_code,
-                "design_no": b.lot.design_no,
+                "designs": b.lot.designs or [],
             }
 
         processing = []
