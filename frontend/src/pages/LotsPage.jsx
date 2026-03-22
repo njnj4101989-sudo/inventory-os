@@ -128,17 +128,17 @@ export default function LotsPage() {
     designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }],
     rolls: [], notes: '',
   })
-  // Derive palla mode from selected product type
-  const pallaMode = useMemo(() => {
-    const pt = masterProductTypes.find(p => p.code === form.product_type)
-    return pt?.palla_mode || 'both'
-  }, [form.product_type, masterProductTypes])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
   const designRef = useRef(null)
   const saveRef = useRef(null)
   const [masterProductTypes, setMasterProductTypes] = useState([])
+  // Derive palla mode from selected product type
+  const pallaMode = useMemo(() => {
+    const pt = masterProductTypes.find(p => p.code === form.product_type)
+    return pt?.palla_mode || 'both'
+  }, [form.product_type, masterProductTypes])
 
   // ── Shift+M Quick Master ──
   const refreshProductTypes = useCallback(() => {
