@@ -74,7 +74,11 @@ const COLUMNS = [
   },
   { key: 'total_pallas', label: 'Pallas', render: (v) => <span className="font-medium">{v}</span> },
   { key: 'total_pieces', label: 'Pieces', render: (v) => <span className="font-semibold text-primary-700">{v}</span> },
-  { key: 'total_weight', label: 'Weight', render: (v) => `${parseFloat(v || 0).toFixed(2)} kg` },
+  { key: 'total_weight', label: 'Weight', render: (v, row) => {
+    const units = [...new Set((row.lot_rolls || []).map(r => r.unit).filter(Boolean))]
+    const u = units.length === 1 && units[0] === 'meters' ? 'm' : units.length > 1 ? 'kg/m' : 'kg'
+    return `${parseFloat(v || 0).toFixed(2)} ${u}`
+  }},
   {
     key: 'status', label: 'Status',
     render: (v) => {
