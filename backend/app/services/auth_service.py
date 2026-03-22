@@ -72,30 +72,32 @@ class AuthService:
 
     async def _get_current_fy(self, company_schema: str) -> dict | None:
         """Fetch current FY from a tenant schema using the existing session."""
-        # Temporarily switch search_path, then restore
         await self.db.execute(text(f"SET search_path TO {company_schema}, public"))
-        result = await self.db.execute(
-            select(FinancialYear).where(FinancialYear.is_current == True)
-        )
-        fy = result.scalar_one_or_none()
-        # Restore to public (login runs in public context)
-        await self.db.execute(text("SET search_path TO public"))
-        if fy:
-            return {"id": str(fy.id), "code": fy.code, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
-        return None
+        try:
+            result = await self.db.execute(
+                select(FinancialYear).where(FinancialYear.is_current == True)
+            )
+            fy = result.scalar_one_or_none()
+            if fy:
+                return {"id": str(fy.id), "code": fy.code, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
+            return None
+        finally:
+            await self.db.execute(text("SET search_path TO public"))
 
     async def _get_all_fys(self, company_schema: str) -> list[dict]:
         """Fetch all FYs from a tenant schema using the existing session."""
         await self.db.execute(text(f"SET search_path TO {company_schema}, public"))
-        result = await self.db.execute(
-            select(FinancialYear).order_by(FinancialYear.start_date.desc())
-        )
-        fys = [
-            {"id": str(fy.id), "code": fy.code, "is_current": fy.is_current, "status": fy.status, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
-            for fy in result.scalars().all()
-        ]
-        await self.db.execute(text("SET search_path TO public"))
-        return fys
+        try:
+            result = await self.db.execute(
+                select(FinancialYear).order_by(FinancialYear.start_date.desc())
+            )
+            fys = [
+                {"id": str(fy.id), "code": fy.code, "is_current": fy.is_current, "status": fy.status, "start_date": str(fy.start_date), "end_date": str(fy.end_date)}
+                for fy in result.scalars().all()
+            ]
+            return fys
+        finally:
+            await self.db.execute(text("SET search_path TO public"))
 
     async def login(self, req: LoginRequest) -> dict:
         """Authenticate user. Returns user + companies list.

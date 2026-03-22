@@ -25,6 +25,7 @@ export default function MyWorkPage() {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(null)
+  const [error, setError] = useState(null)
   const { enqueue, pendingCount, isOnline } = useOfflineQueue(executeOfflineAction)
 
   const { user: currentUser } = useAuth()
@@ -52,7 +53,8 @@ export default function MyWorkPage() {
       await startBatch(id)
       await fetchBatches()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to start batch')
+      setError(err?.response?.data?.detail || 'Failed to start batch')
+      setTimeout(() => setError(null), 4000)
     } finally { setActionLoading(null) }
   }
 
@@ -67,7 +69,8 @@ export default function MyWorkPage() {
       await submitBatch(id)
       await fetchBatches()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Failed to submit batch')
+      setError(err?.response?.data?.detail || 'Failed to submit batch')
+      setTimeout(() => setError(null), 4000)
     } finally { setActionLoading(null) }
   }
 
@@ -114,6 +117,13 @@ export default function MyWorkPage() {
           </button>
         </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+          {error}
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-3 gap-2.5 mb-5">

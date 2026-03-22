@@ -297,7 +297,7 @@ export default function MastersPage() {
             <div>
               <label className="typo-label">Code <span className="text-red-500">*</span></label>
               <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
-                placeholder={tab === 'colors' ? 'e.g. CORAL (max 5)' : tab === 'fabrics' ? 'e.g. COT (max 3)' : 'e.g. BLS'}
+                placeholder={tab === 'colors' ? 'e.g. CORAL (max 5)' : tab === 'fabrics' ? 'e.g. COT (max 3)' : 'e.g. FBL'}
                 maxLength={tab === 'colors' ? 5 : tab === 'fabrics' ? 3 : 10}
                 className={`typo-input font-mono`} />
               <p className="mt-1 text-xs text-gray-400">

@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.dependencies import get_db, require_permission
 from app.models.user import User
 from app.models.role import Role
 from app.schemas.role import RoleCreate, RoleUpdate
+from app.core.exceptions import NotFoundError, DuplicateError
 
 router = APIRouter(prefix="/roles", tags=["Roles"])
 
@@ -56,7 +57,7 @@ async def create_role(
     # Check name uniqueness
     existing = await db.execute(select(Role).where(Role.name == body.name))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Role '{body.name}' already exists")
+        raise DuplicateError(f"Role '{body.name}' already exists")
 
     role = Role(
         name=body.name,
@@ -90,7 +91,7 @@ async def update_role(
     result = await db.execute(select(Role).where(Role.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise NotFoundError("Role not found")
 
     if body.display_name is not None:
         role.display_name = body.display_name
@@ -128,7 +129,7 @@ async def delete_role(
     result = await db.execute(select(Role).where(Role.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+        raise NotFoundError("Role not found")
 
     # Prevent deleting roles that have users
     count_result = await db.execute(
@@ -136,10 +137,7 @@ async def delete_role(
     )
     user_count = count_result.scalar() or 0
     if user_count > 0:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete role '{role.name}' — {user_count} user(s) assigned",
-        )
+        raise DuplicateError(f"Cannot delete role '{role.name}' — {user_count} user(s) assigned")
 
     await db.delete(role)
     return {"success": True, "message": f"Role '{role.name}' deleted"}
