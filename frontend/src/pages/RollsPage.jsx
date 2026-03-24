@@ -1339,7 +1339,7 @@ export default function RollsPage() {
     setSendProcRoll(roll)
     setSendProcForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
     setSendProcError(null)
-    setDetailRoll(null) // close detail modal
+    // Keep detailRoll open — modal layers on top, cancel returns to roll detail
     fetchNextJCNo()
     setSendProcOpen(true)
   }
@@ -1363,6 +1363,8 @@ export default function RollsPage() {
         weight_to_send: wts,
       })
       setSendProcOpen(false)
+      setDetailRoll(null) // close roll detail — status changed
+      setCameFromInvoice(null)
       refreshAll()
     } catch (err) {
       setSendProcError(err.response?.data?.detail || 'Failed to send for processing')
@@ -1379,7 +1381,7 @@ export default function RollsPage() {
     setRecvProcLog(latestLog)
     setRecvProcForm({ received_date: new Date().toISOString().split('T')[0], weight_after: '', length_after: '', processing_cost: '', notes: '' })
     setRecvProcError(null)
-    setDetailRoll(null) // close detail modal
+    // Keep detailRoll open — modal layers on top, cancel returns to roll detail
     setRecvProcOpen(true)
   }
 
@@ -1397,6 +1399,8 @@ export default function RollsPage() {
         notes: recvProcForm.notes.trim() || null,
       })
       setRecvProcOpen(false)
+      setDetailRoll(null) // close roll detail — status changed
+      setCameFromInvoice(null)
       refreshAll()
     } catch (err) {
       setRecvProcError(err.response?.data?.detail || 'Failed to receive from processing')
@@ -1520,8 +1524,8 @@ export default function RollsPage() {
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="typo-page-title">Rolls</h1>
-          <p className="mt-1 text-sm text-gray-500">Raw material stock — fabric rolls</p>
+          <h1 className="typo-page-title">Purchase & Inventory</h1>
+          <p className="mt-1 text-sm text-gray-500">Supplier invoices, roll stock, and value addition tracking</p>
         </div>
         <div className="flex items-center gap-2">
           {lastSavedRolls.length > 0 && (
@@ -1536,9 +1540,9 @@ export default function RollsPage() {
               Print Labels ({lastSavedRolls.length})
             </button>
           )}
-          <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+          <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 shadow-sm transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Stock In
+            New Purchase
           </button>
         </div>
       </div>
@@ -2005,29 +2009,43 @@ export default function RollsPage() {
       })()}
 
       {/* ════════════════════════════════════════════════════════
-          INVOICE DETAIL Modal
+          INVOICE DETAIL — Full-page overlay
          ════════════════════════════════════════════════════════ */}
-      <Modal open={!!selectedInvoice} onClose={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }}
-        title={selectedInvoice?.invoice_no ? `Invoice: ${selectedInvoice.invoice_no}` : 'Invoice Details'} extraWide
-        actions={
-          <div className="flex w-full items-center justify-between">
-            <div className="flex gap-2">
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+          {/* ── Gradient header ── */}
+          <div className="flex items-center justify-between border-b bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }}
+                className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">
+                  {selectedInvoice.supplier?.name || 'Invoice Details'}
+                </h2>
+                <p className="text-xs text-blue-100">
+                  {[selectedInvoice.invoice_no, selectedInvoice.invoice_date ? new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null].filter(Boolean).join(' · ') || 'Invoice details and roll breakdown'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
               {isInvoiceEditable(selectedInvoice) && (
                 <button onClick={openEditInvoice}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  Edit Invoice
+                  Edit
                 </button>
               )}
               {selectedInvoice?.rolls?.length > 0 && (
                 <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowLabelSheet(true) }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
-                  Print All Labels ({selectedInvoice.rolls.length})
+                  Print Labels ({selectedInvoice.rolls.length})
                 </button>
               )}
               {(() => {
@@ -2035,7 +2053,6 @@ export default function RollsPage() {
                 if (selectable.length === 0) return null
                 return (
                   <button onClick={() => {
-                      // Group selectable rolls by fabric_type
                       const groups = {}
                       for (const r of selectable) {
                         const key = r.fabric_type || 'Unknown'
@@ -2054,7 +2071,7 @@ export default function RollsPage() {
                         setLotDesignPicker({ designs, allSelectableIds: selectable.map(r => r.id) })
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors">
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 transition-colors">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
@@ -2063,15 +2080,16 @@ export default function RollsPage() {
                 )
               })()}
               {selectedInvoice && !isInvoiceEditable(selectedInvoice) && (
-                <span className="text-xs text-gray-400 italic self-center">Some rolls are used — invoice is read-only</span>
+                <span className="text-xs text-white/60 italic self-center">Read-only — rolls in use</span>
               )}
+              <button onClick={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }}
+                className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Close</button>
             </div>
-            <button onClick={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
           </div>
-        }
-      >
-        {selectedInvoice && (() => {
-          // Group rolls by fabric_type → then by color within each group
+
+          {/* ── Scrollable body ── */}
+          <div className="flex-1 overflow-y-auto">
+        {(() => {
           const fabricGroups = []
           const fabricMap = {}
           for (const roll of selectedInvoice.rolls) {
@@ -2086,95 +2104,76 @@ export default function RollsPage() {
             if (!grp.colorMap[color]) grp.colorMap[color] = []
             grp.colorMap[color].push(roll)
           }
-          // Unique colors across all groups
           const allColors = new Set(selectedInvoice.rolls.map((r) => r.color || 'Unknown'))
-          // Selectable rolls: in_stock with remaining weight
           const selectableInvRolls = selectedInvoice.rolls.filter(r => (r.status === 'in_stock' || r.status === 'remnant') && parseFloat(r.remaining_weight) > 0)
           const selectableInvIds = new Set(selectableInvRolls.map(r => r.id))
 
           return (
-            <div className="space-y-4">
-              {/* ── Compact Invoice Header ── */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-                <div>
-                  <span className="text-gray-400">Supplier:</span>{' '}
-                  <span className="font-semibold text-gray-800">{selectedInvoice.supplier?.name || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Challan No.:</span>{' '}
-                  <span className="font-semibold text-gray-800">{selectedInvoice.invoice_no || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Date:</span>{' '}
-                  <span className="font-medium text-gray-700">
-                    {selectedInvoice.invoice_date ? new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-400">Received:</span>{' '}
-                  <span className="font-medium text-gray-700">
-                    {selectedInvoice.received_at ? new Date(selectedInvoice.received_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                  </span>
-                </div>
-                {selectedInvoice.gst_percent > 0 && (
-                  <div>
-                    <span className="text-gray-400">GST:</span>{' '}
-                    <span className="font-semibold text-amber-700">{selectedInvoice.gst_percent}%</span>
+            <div className="space-y-4 px-6 py-4">
+              {/* ── Invoice info bar ── */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                  <div className="px-4 py-2 border-r border-gray-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sr. No.</label>
+                    <div className="text-sm font-bold text-primary-700">{selectedInvoice.sr_no || '—'}</div>
                   </div>
-                )}
-              </div>
-
-              {/* ── KPI Summary Pills (matching entry top-bar style) ── */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-                  {selectedInvoice.roll_count} roll{selectedInvoice.roll_count > 1 ? 's' : ''}
-                </span>
-                <span className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700">
-                  {allColors.size} color{allColors.size > 1 ? 's' : ''}
-                </span>
-                <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
-                  {fabricGroups.length} design{fabricGroups.length > 1 ? 's' : ''}
-                </span>
-                <span className="rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
-                  {selectedInvoice.total_weight.toFixed(3)} kg
-                </span>
-                <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                  ₹{selectedInvoice.total_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  <div className="px-4 py-2 border-r border-gray-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Invoice</label>
+                    <div className="text-sm font-semibold text-gray-800">{selectedInvoice.invoice_no || '—'}</div>
+                  </div>
+                  <div className="px-4 py-2 border-r border-gray-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Challan</label>
+                    <div className="text-sm text-gray-700">{selectedInvoice.challan_no || '—'}</div>
+                  </div>
+                  <div className="px-4 py-2 border-r border-gray-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date</label>
+                    <div className="text-sm text-gray-700">
+                      {selectedInvoice.invoice_date ? new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </div>
+                  </div>
+                  <div className="px-4 py-2 border-r border-gray-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Received</label>
+                    <div className="text-sm text-gray-700">
+                      {selectedInvoice.received_at ? new Date(selectedInvoice.received_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </div>
+                  </div>
                   {selectedInvoice.gst_percent > 0 && (
-                    <span className="text-amber-500 ml-1">+{selectedInvoice.gst_percent}% GST = ₹{selectedInvoice.total_with_gst?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <div className="px-4 py-2 border-r border-gray-200">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">GST</label>
+                      <div className="text-sm font-semibold text-amber-700">{selectedInvoice.gst_percent}%</div>
+                    </div>
                   )}
-                </span>
-              </div>
-
-              {/* ── Filter + Shift+Click hint + Select All ── */}
-              {selectableInvRolls.length > 0 && (
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <span>Shift+Click to select rolls for lot creation</span>
-                  {selectedInvRolls.size > 0 && (
-                    <span className="font-medium text-blue-600">{selectedInvRolls.size} selected</span>
-                  )}
-                  <button onClick={() => {
-                    if (selectedInvRolls.size === selectableInvRolls.length) {
-                      setSelectedInvRolls(new Set())
-                    } else {
-                      setSelectedInvRolls(new Set(selectableInvRolls.map(r => r.id)))
-                    }
-                  }} className="text-blue-500 hover:text-blue-700 underline">
-                    {selectedInvRolls.size === selectableInvRolls.length ? 'Deselect All' : 'Select All Available'}
-                  </button>
-                  <span className="mx-1 text-gray-200">|</span>
-                  <label className="text-[11px] font-medium text-gray-500">Min Wt</label>
-                  <input
-                    type="number" step="0.1" value={invMinWeight}
-                    onChange={e => setInvMinWeight(e.target.value)}
-                    placeholder="e.g. 6.7"
-                    className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs tabular-nums focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                  />
-                  {invMinWeight && (
-                    <button onClick={() => setInvMinWeight('')} className="text-gray-400 hover:text-red-500">&times;</button>
+                  {/* Shift+Click / Select All / Min Wt — moved here from below */}
+                  {selectableInvRolls.length > 0 && (
+                    <div className="ml-auto px-4 py-2 flex items-end gap-2 text-xs text-gray-500">
+                      <span className="text-gray-400">Shift+Click to select</span>
+                      {selectedInvRolls.size > 0 && (
+                        <span className="font-semibold text-blue-600">{selectedInvRolls.size} selected</span>
+                      )}
+                      <button onClick={() => {
+                        if (selectedInvRolls.size === selectableInvRolls.length) {
+                          setSelectedInvRolls(new Set())
+                        } else {
+                          setSelectedInvRolls(new Set(selectableInvRolls.map(r => r.id)))
+                        }
+                      }} className="text-blue-500 hover:text-blue-700 underline font-medium">
+                        {selectedInvRolls.size === selectableInvRolls.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Min Wt</label>
+                      <input
+                        type="number" step="0.1" value={invMinWeight}
+                        onChange={e => setInvMinWeight(e.target.value)}
+                        placeholder="e.g. 6.7"
+                        className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs tabular-nums focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                      />
+                      {invMinWeight && (
+                        <button onClick={() => setInvMinWeight('')} className="text-gray-400 hover:text-red-500">&times;</button>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
 
               {/* ── Design Groups ── */}
               {fabricGroups.map((grp, gIdx) => {
@@ -2187,37 +2186,44 @@ export default function RollsPage() {
 
                 return (
                   <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                    {/* Design group header bar — matches entry style */}
-                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{gIdx + 1}</span>
-                        <span className="text-xs font-semibold text-blue-800">{grp.fabric}</span>
-                        <span className="text-xs text-blue-500">
-                          {grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''} · {grpWeight.toFixed(3)} kg
-                          {grpValue > 0 ? ` · ₹${grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : ''}
+                    {/* Design group header bar */}
+                    <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-5 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">{gIdx + 1}</span>
+                        <span className="text-sm font-bold text-gray-800">{grp.fabric}</span>
+                        <span className="text-xs text-gray-400">{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''}</span>
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                          {grpWeight.toFixed(3)} {grp.unit || 'kg'}
                         </span>
+                        {grpValue > 0 && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+                            ₹{grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                          </span>
+                        )}
                       </div>
                       {grp.cost_per_unit > 0 && (
-                        <span className="text-xs text-blue-500">Rate: ₹{grp.cost_per_unit}/{grp.unit}</span>
+                        <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                          Rate: ₹{grp.cost_per_unit}/{grp.unit}
+                        </span>
                       )}
                     </div>
 
                     {/* Color-wise weight grid */}
-                    <div className="p-4">
-                      {/* Grid header */}
-                      <div className="rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center">
-                        <span className="text-xs font-semibold text-gray-500 uppercase">Color</span>
-                        <span className="text-xs font-semibold text-gray-500 uppercase">Roll Weights ({grp.unit || 'kg'})</span>
-                        <span className="text-xs font-semibold text-gray-500 uppercase text-center">Rolls</span>
-                        <span className="text-xs font-semibold text-gray-500 uppercase text-right">Total</span>
+                    <div className="overflow-hidden">
+                      {/* Grid header — emerald matching lot table */}
+                      <div className="bg-emerald-600 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center">
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">Color</span>
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">Roll Weights ({grp.unit || 'kg'})</span>
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider text-center">Rolls</span>
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider text-right">Total</span>
                       </div>
 
                       {/* Color rows */}
-                      <div className="border border-gray-200 rounded-b-lg divide-y divide-gray-100 bg-white">
-                        {colorEntries.map(([color, colorRolls]) => {
+                      <div className="divide-y divide-gray-100 bg-white border-x border-gray-200">
+                        {colorEntries.map(([color, colorRolls], cIdx) => {
                           const colorWeight = colorRolls.reduce((s, r) => s + (parseFloat(r.total_weight) || 0), 0)
                           return (
-                            <div key={color} className="px-4 py-2.5 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center hover:bg-gray-50/50">
+                            <div key={color} className={`px-4 py-2.5 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center ${cIdx % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
                               {/* Color name + number */}
                               <span className="text-sm font-medium text-gray-800">
                                 {color}
@@ -2296,21 +2302,45 @@ export default function RollsPage() {
                         })}
                       </div>
 
-                      {/* Group footer — totals */}
-                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                        <div className="flex items-center gap-3">
-                          {grp.notes && <span className="italic">{grp.notes}</span>}
+                      {/* Group footer — dark totals row matching lot table */}
+                      <div className="bg-gray-800 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center border-x border-b border-gray-700 rounded-b-lg">
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                          Totals{grp.notes && <span className="ml-2 font-normal normal-case italic text-gray-400">{grp.notes}</span>}
+                        </span>
+                        <span className="text-xs text-gray-300">
+                          {grpValue > 0 && <span className="font-semibold text-emerald-300">₹{grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                        </span>
+                        <div className="text-center">
+                          <span className="text-xs font-bold text-white">{grp.rolls.length}</span>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span>{grp.rolls.length} roll{grp.rolls.length > 1 ? 's' : ''}</span>
-                          <span className="font-medium text-gray-700">{grpWeight.toFixed(3)} kg</span>
-                          {grpValue > 0 && <span className="font-medium text-gray-700">₹{grpValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>}
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-white">{grpWeight.toFixed(3)} kg</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 )
               })}
+
+              {/* ── Summary KPIs — matching lot page grid ── */}
+              <div className={`grid ${selectedInvoice.total_value > 0 ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+                {[
+                  { value: allColors.size, label: 'Colors', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+                  { value: selectedInvoice.roll_count, label: 'Rolls', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
+                  { value: `${selectedInvoice.total_weight.toFixed(3)}`, label: `Weight (${fabricGroups[0]?.unit || 'kg'})`, color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
+                  ...(selectedInvoice.total_value > 0 ? [
+                    { value: `₹${selectedInvoice.total_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Value', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                  ] : []),
+                  ...(selectedInvoice.total_value > 0 && selectedInvoice.gst_percent > 0 ? [
+                    { value: `₹${(selectedInvoice.total_with_gst || selectedInvoice.total_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: `Total (+${selectedInvoice.gst_percent}% GST)`, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+                  ] : []),
+                ].map((kpi, i) => (
+                  <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
+                    <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{kpi.label}</div>
+                  </div>
+                ))}
+              </div>
 
               {/* ── Legend ── */}
               <div className="flex items-center gap-4 text-xs text-gray-400">
@@ -2360,7 +2390,9 @@ export default function RollsPage() {
             </div>
           )
         })()}
-      </Modal>
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════════════════════════════════════════
           MULTI-DESIGN LOT PICKER (from Create Lot from Invoice)
@@ -2402,65 +2434,64 @@ export default function RollsPage() {
          ════════════════════════════════════════════════════════ */}
       {stockInOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
-          {/* ── Top bar (sticky) ── */}
-          <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-                <h1 className="typo-modal-title">
-                  {editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Stock In — Challan Entry'}
-                </h1>
+          {/* ── Top bar — gradient header ── */}
+          <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
+                className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">
+                  {editingInvoice ? `Edit Invoice: ${editingInvoice.invoice_no || '—'}` : 'Purchase Entry'}
+                </h2>
+                <p className="text-xs text-emerald-100">
+                  {editingInvoice ? 'Modify rolls, weights, and invoice details' : 'Supplier invoice — fabric, colors, weights'}
+                </p>
               </div>
-              <div className="flex items-center gap-4">
-                {/* Live totals */}
-                {challanTotals.count > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                      {challanTotals.count} roll{challanTotals.count > 1 ? 's' : ''}
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Live totals */}
+              {challanTotals.count > 0 && (
+                <div className="hidden sm:flex items-center gap-2">
+                  <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">
+                    {challanTotals.count} roll{challanTotals.count > 1 ? 's' : ''}
+                  </span>
+                  <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">
+                    {challanTotals.weight.toFixed(3)} kg
+                  </span>
+                  {challanTotals.value > 0 && (
+                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">
+                      ₹{challanTotals.totalWithGst > 0 ? challanTotals.totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </span>
-                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
-                      {challanTotals.weight.toFixed(3)} kg
-                    </span>
-                    {challanTotals.colors > 0 && (
-                      <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700">
-                        {challanTotals.colors} color{challanTotals.colors > 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {challanTotals.value > 0 && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                        ₹{challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                        {challanTotals.gstAmount > 0 && (
-                          <span className="text-amber-500 ml-1">+{challanTotals.gstPercent}% = ₹{challanTotals.totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleStockIn} disabled={saving || challanTotals.count === 0}
-                  className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-                  {saving ? 'Saving...' : editingInvoice ? 'Save Changes' : `Stock In ${challanTotals.count} Roll${challanTotals.count > 1 ? 's' : ''}`}
-                </button>
-              </div>
+                  )}
+                </div>
+              )}
+              <span className="hidden sm:inline text-xs text-emerald-200">Ctrl+S to save</span>
+              <button onClick={() => { setStockInOpen(false); setEditingInvoice(null) }}
+                className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
+              <button onClick={handleStockIn} disabled={saving || challanTotals.count === 0}
+                className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+                {saving ? 'Saving...' : editingInvoice ? 'Save Changes' : `Stock In (${challanTotals.count})`}
+              </button>
             </div>
           </div>
 
           {/* ── Scrollable body ── */}
-          <div className="flex-1 overflow-y-auto px-4 py-2">
-            <div className="mx-auto max-w-6xl space-y-2">
+          <div className="flex-1 overflow-y-auto">
+            <div className="space-y-2 px-6 py-4">
               {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
               {/* ── Invoice Header ── */}
-              <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-                <div className="flex items-center justify-between mb-1.5">
-                  <h2 className="text-xs font-semibold text-gray-600">Invoice / Challan Details</h2>
-                  <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-300 rounded text-[9px]">Shift+M</kbd> on any dropdown to quick-add master</span>
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Invoice Details</span>
+                    <span className="text-[10px] text-gray-300">·</span>
+                    <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-200 rounded text-[9px]">Shift+M</kbd> quick-add master</span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div>
                     <label className="typo-label-sm">Sr. No.</label>
                     <div className="relative">
@@ -2513,9 +2544,9 @@ export default function RollsPage() {
                 const grpValue = grpTotals.weight * (parseFloat(grp.cost_per_unit) || 0)
 
                 return (
-                  <div key={gIdx} className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     {/* Design header bar */}
-                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-3 py-1.5">
+                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-4 py-2">
                       <div className="flex items-center gap-2">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{gIdx + 1}</span>
                         <span className="text-xs font-semibold text-blue-800">
@@ -2536,7 +2567,7 @@ export default function RollsPage() {
                       )}
                     </div>
 
-                    <div className="px-3 py-2 space-y-2">
+                    <div className="px-4 py-3 space-y-3">
                       {/* Fabric / Panna / GSM / Rate / Unit / Notes row */}
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                         <div>
@@ -2782,55 +2813,44 @@ export default function RollsPage() {
 
               {/* Add another design group */}
               <button onClick={addDesignGroup}
-                className="w-full rounded-lg border-2 border-dashed border-gray-300 py-2 text-xs font-medium text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                className="w-full rounded-xl border-2 border-dashed border-gray-300 py-3 text-xs font-medium text-gray-500 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition-colors">
                 + Add Another Design / Fabric
               </button>
 
-              {/* Grand total summary */}
+              {/* Grand total summary — KPI grid */}
               {challanTotals.count > 0 && (
-                <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-                  <div className="flex flex-wrap items-center gap-4 text-xs">
-                    <div>
-                      <span className="text-gray-400">Rolls</span>
-                      <div className="text-sm font-bold text-gray-800">{challanTotals.count}</div>
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="border-b border-gray-100 bg-gray-50 px-4 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Summary</span>
+                  </div>
+                  <div className={`grid ${challanTotals.value > 0 && challanTotals.gstAmount > 0 ? 'grid-cols-3 md:grid-cols-6' : challanTotals.value > 0 ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'} divide-x divide-gray-100`}>
+                    <div className="px-4 py-3 text-center">
+                      <div className="text-lg font-bold text-gray-800">{challanTotals.count}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Rolls</div>
                     </div>
-                    <div className="h-7 w-px bg-gray-200" />
-                    <div>
-                      <span className="text-gray-400">Weight</span>
-                      <div className="text-sm font-bold text-gray-800">{challanTotals.weight.toFixed(3)} kg</div>
+                    <div className="px-4 py-3 text-center">
+                      <div className="text-lg font-bold text-gray-800">{challanTotals.weight.toFixed(3)}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Weight (kg)</div>
                     </div>
-                    <div className="h-7 w-px bg-gray-200" />
-                    <div>
-                      <span className="text-gray-400">Colors</span>
-                      <div className="text-sm font-bold text-gray-800">{challanTotals.colors}</div>
+                    <div className="px-4 py-3 text-center">
+                      <div className="text-lg font-bold text-gray-800">{challanTotals.colors}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Colors</div>
                     </div>
-                    <div className="h-7 w-px bg-gray-200" />
-                    <div>
-                      <span className="text-gray-400">Designs</span>
-                      <div className="text-sm font-bold text-gray-800">{designGroups.length}</div>
+                    <div className="px-4 py-3 text-center">
+                      <div className="text-lg font-bold text-gray-800">{designGroups.length}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Designs</div>
                     </div>
                     {challanTotals.value > 0 && (
-                      <>
-                        <div className="h-7 w-px bg-gray-200" />
-                        <div>
-                          <span className="text-gray-400">Subtotal</span>
-                          <div className="text-sm font-bold text-green-700">₹{challanTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                        </div>
-                        {challanTotals.gstAmount > 0 && (
-                          <>
-                            <div className="h-7 w-px bg-gray-200" />
-                            <div>
-                              <span className="text-gray-400">GST {challanTotals.gstPercent}%</span>
-                              <div className="text-sm font-bold text-amber-600">₹{challanTotals.gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                            </div>
-                            <div className="h-7 w-px bg-gray-200" />
-                            <div>
-                              <span className="text-gray-400">Total</span>
-                              <div className="text-sm font-bold text-green-800">₹{challanTotals.totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                            </div>
-                          </>
-                        )}
-                      </>
+                      <div className="px-4 py-3 text-center">
+                        <div className="text-lg font-bold text-emerald-700">₹{challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Subtotal</div>
+                      </div>
+                    )}
+                    {challanTotals.value > 0 && challanTotals.gstAmount > 0 && (
+                      <div className="px-4 py-3 text-center">
+                        <div className="text-lg font-bold text-emerald-800">₹{challanTotals.totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mt-0.5">+{challanTotals.gstPercent}% GST</div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -2852,122 +2872,135 @@ export default function RollsPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          ROLL DETAIL / EDIT Modal
+          ROLL DETAIL / EDIT — Full-page overlay
          ════════════════════════════════════════════════════════ */}
-      <Modal open={!!detailRoll} onClose={() => { setDetailRoll(null); setEditing(false); setCameFromInvoice(null) }}
-        title={detailRoll ? `${detailRoll.enhanced_roll_code || detailRoll.roll_code} — ${editing ? 'Edit' : 'Details'}` : ''} extraWide
-        actions={
-          editing ? (
-            <>
-              <button onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleUpdate} disabled={editSaving}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-                {editSaving ? 'Saving...' : 'Save Changes'}
+      {detailRoll && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+          {/* ── Gradient header ── */}
+          <div className="flex items-center justify-between border-b bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { if (cameFromInvoice) { goBackToInvoice() } else { setDetailRoll(null); setEditing(false); setCameFromInvoice(null) } }}
+                className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
-            </>
-          ) : (
-            <div className="flex w-full items-center justify-between">
-              <div className="flex gap-2">
-                <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowLabelSheet(true) }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print Label
-                </button>
-                {detailRoll?.status === 'in_stock' && (
-                  <button onClick={() => openSendProcessing(detailRoll)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 transition-colors">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                    Send for Processing
-                  </button>
-                )}
-                {detailRoll?.status === 'sent_for_processing' && (() => {
-                  const latestLog = detailRoll.processing_logs?.[detailRoll.processing_logs.length - 1]
-                  return (
-                    <>
-                      <button onClick={() => openReceiveProcessing(detailRoll)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Receive Back
-                      </button>
-                      {latestLog && (
-                        <button onClick={async () => {
-                            // Try to fetch from DB if log has a job_challan_id
-                            const challanId = latestLog.job_challan_id
-                            if (challanId) {
-                              try {
-                                const res = await getJobChallan(challanId)
-                                const c = res.data?.data || res.data
-                                setJobChallanData({
-                                  challanNo: c.challan_no,
-                                  rolls: c.rolls || [detailRoll],
-                                  vaName: c.value_addition?.name || latestLog.value_addition?.name || '—',
-                                  vaShortCode: c.value_addition?.short_code || latestLog.value_addition?.short_code || '—',
-                                  vaPartyName: c.va_party?.name || latestLog.va_party?.name || '—',
-                                  vaPartyPhone: c.va_party?.phone || latestLog.va_party?.phone || '',
-                                  sentDate: c.sent_date || latestLog.sent_date || '',
-                                  notes: c.notes || '',
-                                })
-                                setDetailRoll(null)
-                                setCameFromInvoice(null)
-                                setShowJobChallan(true)
-                                return
-                              } catch { /* fallback */ }
-                            }
-                            // Fallback: use client-side data
-                            const vendorKey = latestLog.va_party?.name
-                            const vaId = latestLog.value_addition?.id
-                            const groupRolls = procRolls.filter((r) => {
-                              const log = r.processing_logs?.[r.processing_logs.length - 1]
-                              return log?.va_party?.name === vendorKey && log?.value_addition?.id === vaId
-                            })
-                            setJobChallanData({
-                              rolls: groupRolls.length > 0 ? groupRolls : [detailRoll],
-                              vaName: latestLog.value_addition?.name || '—',
-                              vaShortCode: latestLog.value_addition?.short_code || '—',
-                              vaPartyName: latestLog.va_party?.name || '—',
-                              vaPartyPhone: latestLog.va_party?.phone || '',
-                              sentDate: latestLog.sent_date || '',
-                              notes: latestLog.notes || '',
-                            })
-                            setDetailRoll(null)
-                            setCameFromInvoice(null)
-                            setShowJobChallan(true)
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 transition-colors">
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                          </svg>
-                          Print Challan
-                        </button>
-                      )}
-                    </>
-                  )
-                })()}
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => { setDetailRoll(null); setCameFromInvoice(null) }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Close</button>
-                {isEditable && (
-                  <button onClick={startEditing}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit Roll
-                  </button>
-                )}
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">
+                  {detailRoll.enhanced_roll_code || detailRoll.roll_code}
+                </h2>
+                <p className="text-xs text-purple-200">
+                  {editing ? 'Editing roll details' : [detailRoll.fabric_type, detailRoll.color, detailRoll.supplier?.name].filter(Boolean).join(' · ')}
+                </p>
               </div>
             </div>
-          )
-        }
-      >
-        {detailRoll && (() => {
+            <div className="flex items-center gap-2">
+              {editing ? (
+                <>
+                  <button onClick={() => setEditing(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
+                  <button onClick={handleUpdate} disabled={editSaving}
+                    className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50 transition-colors">
+                    {editSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowLabelSheet(true) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print
+                  </button>
+                  {detailRoll?.status === 'in_stock' && (
+                    <button onClick={() => openSendProcessing(detailRoll)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      Send for VA
+                    </button>
+                  )}
+                  {detailRoll?.status === 'sent_for_processing' && (() => {
+                    const latestLog = detailRoll.processing_logs?.[detailRoll.processing_logs.length - 1]
+                    return (
+                      <>
+                        <button onClick={() => openReceiveProcessing(detailRoll)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Receive
+                        </button>
+                        {latestLog && (
+                          <button onClick={async () => {
+                              const challanId = latestLog.job_challan_id
+                              if (challanId) {
+                                try {
+                                  const res = await getJobChallan(challanId)
+                                  const c = res.data?.data || res.data
+                                  setJobChallanData({
+                                    challanNo: c.challan_no,
+                                    rolls: c.rolls || [detailRoll],
+                                    vaName: c.value_addition?.name || latestLog.value_addition?.name || '—',
+                                    vaShortCode: c.value_addition?.short_code || latestLog.value_addition?.short_code || '—',
+                                    vaPartyName: c.va_party?.name || latestLog.va_party?.name || '—',
+                                    vaPartyPhone: c.va_party?.phone || latestLog.va_party?.phone || '',
+                                    sentDate: c.sent_date || latestLog.sent_date || '',
+                                    notes: c.notes || '',
+                                  })
+                                  setDetailRoll(null)
+                                  setCameFromInvoice(null)
+                                  setShowJobChallan(true)
+                                  return
+                                } catch { /* fallback */ }
+                              }
+                              const vendorKey = latestLog.va_party?.name
+                              const vaId = latestLog.value_addition?.id
+                              const groupRolls = procRolls.filter((r) => {
+                                const log = r.processing_logs?.[r.processing_logs.length - 1]
+                                return log?.va_party?.name === vendorKey && log?.value_addition?.id === vaId
+                              })
+                              setJobChallanData({
+                                rolls: groupRolls.length > 0 ? groupRolls : [detailRoll],
+                                vaName: latestLog.value_addition?.name || '—',
+                                vaShortCode: latestLog.value_addition?.short_code || '—',
+                                vaPartyName: latestLog.va_party?.name || '—',
+                                vaPartyPhone: latestLog.va_party?.phone || '',
+                                sentDate: latestLog.sent_date || '',
+                                notes: latestLog.notes || '',
+                              })
+                              setDetailRoll(null)
+                              setCameFromInvoice(null)
+                              setShowJobChallan(true)
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                            Challan
+                          </button>
+                        )}
+                      </>
+                    )
+                  })()}
+                  {isEditable && (
+                    <button onClick={startEditing}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 transition-colors">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                  )}
+                  <button onClick={() => { setDetailRoll(null); setEditing(false); setCameFromInvoice(null) }}
+                    className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Close</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ── Scrollable body ── */}
+          <div className="flex-1 overflow-y-auto">
+        {(() => {
           const rateUnit = detailRoll.unit === 'meters' ? 'm' : 'kg'
           const totalQty = detailRoll.total_weight
           const remainQty = detailRoll.remaining_weight
@@ -2978,17 +3011,8 @@ export default function RollsPage() {
           const totalValue = origWt * (parseFloat(detailRoll.cost_per_unit) || 0)
           const procLogs = detailRoll.processing_logs || []
           return (
-            <div className="space-y-5">
-              {/* Back to Invoice nav */}
-              {cameFromInvoice && !editing && (
-                <button onClick={goBackToInvoice}
-                  className="inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium -mt-1">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Back to Invoice: {cameFromInvoice.invoice_no || 'Details'}
-                </button>
-              )}
+            <div className="space-y-5 px-6 py-4">
+              {/* Back to Invoice nav — now in header back button */}
 
               {editing ? (
                 <RollForm form={editForm} onChange={setEditForm} suppliers={suppliers}
@@ -3012,112 +3036,126 @@ export default function RollsPage() {
                     </div>
                   )}
 
-                  {/* KPI Summary — compact single row */}
-                  <div className="flex items-center gap-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500">Original</span>
-                      <span className="text-sm font-bold text-blue-700">{origWt} kg</span>
-                    </div>
-                    {Math.abs(wtDelta) >= 0.001 && (
-                      <>
-                        <div className="h-4 w-px bg-gray-300" />
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-gray-500">Wt. Change</span>
-                          <span className={`text-sm font-bold ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)} kg
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    <div className="h-4 w-px bg-gray-300" />
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500">Remaining</span>
-                      <span className="text-sm font-bold text-green-700">{remainQty} kg</span>
-                    </div>
-                    <div className="h-4 w-px bg-gray-300" />
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500">Stock</span>
-                      <span className={`text-sm font-bold ${pct > 50 ? 'text-green-700' : pct > 20 ? 'text-amber-600' : 'text-red-600'}`}>{pct.toFixed(0)}%</span>
-                      <div className="h-1.5 w-16 rounded-full bg-gray-200">
-                        <div className={`h-1.5 rounded-full ${pct > 50 ? 'bg-green-500' : pct > 20 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }} />
+                  {/* ── Info toolbar (like LotsPage) ── */}
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                      <div className="px-4 py-2 border-r border-gray-200">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Roll Code</label>
+                        <div className="text-sm font-bold font-mono text-primary-700">{detailRoll.roll_code}{detailRoll.enhanced_roll_code && detailRoll.enhanced_roll_code !== detailRoll.roll_code && <span className="text-orange-600">{detailRoll.enhanced_roll_code.slice(detailRoll.roll_code.length)}</span>}</div>
                       </div>
-                    </div>
-                    <div className="h-4 w-px bg-gray-300" />
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500">Value</span>
-                      <span className="text-sm font-bold text-amber-700">{totalValue > 0 ? `₹${totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</span>
+                      <div className="px-4 py-2 border-r border-gray-200">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</label>
+                        <div className="mt-0.5"><StatusBadge status={detailRoll.status || 'in_stock'} label={ROLL_STATUS_LABELS[detailRoll.status] || 'In Stock'} /></div>
+                      </div>
+                      <div className="px-4 py-2 border-r border-gray-200">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Fabric</label>
+                        <div className="text-sm font-semibold text-gray-800">{detailRoll.fabric_type}</div>
+                      </div>
+                      <div className="px-4 py-2 border-r border-gray-200">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Color</label>
+                        <div className="text-sm font-semibold text-gray-800">{detailRoll.color}</div>
+                      </div>
+                      <div className="px-4 py-2 border-r border-gray-200">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Original</label>
+                        <div className="text-sm font-bold text-gray-800">{origWt} {rateUnit === 'm' ? 'm' : 'kg'}</div>
+                      </div>
+                      {Math.abs(wtDelta) >= 0.001 && (
+                        <div className="px-4 py-2 border-r border-gray-200">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Current</label>
+                          <div className="text-sm font-bold text-gray-800">{currentWt.toFixed(3)} <span className={`text-xs ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>({wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)})</span></div>
+                        </div>
+                      )}
+                      <div className="ml-auto px-4 py-2 flex items-end gap-2">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${pct > 50 ? 'bg-emerald-100 text-emerald-700' : pct > 20 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                          {remainQty} {rateUnit === 'm' ? 'm' : 'kg'} remaining ({pct.toFixed(0)}%)
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Detail sections — 2-col layout */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Left: Material Info */}
-                    <div>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Material Information</h3>
-                      <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
-                        {[
-                          ['Roll Code', <span key="rc" className="font-mono text-primary-600 font-semibold">{detailRoll.roll_code}{detailRoll.enhanced_roll_code && detailRoll.enhanced_roll_code !== detailRoll.roll_code && <span className="text-orange-600">{detailRoll.enhanced_roll_code.slice(detailRoll.roll_code.length)}</span>}</span>],
-                          ['Status', <StatusBadge key="st" status={detailRoll.status || 'in_stock'} label={ROLL_STATUS_LABELS[detailRoll.status] || 'In Stock'} />],
-                          ['Fabric Type', detailRoll.fabric_type],
-                          ['Color', detailRoll.color],
-                          ['Rate Unit', detailRoll.unit === 'meters' ? 'Meters' : 'Kilograms'],
-                          ['Original Weight', `${totalQty} kg`],
-                          ...(Math.abs(wtDelta) >= 0.001 ? [['Current Weight',
-                            <span key="cw">{currentWt.toFixed(3)} kg <span className={`text-xs ${wtDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>({wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(2)})</span></span>
-                          ]] : []),
-                          ...(detailRoll.total_length
-                            ? [['Length (ref)', `${detailRoll.total_length} m`]]
-                            : []),
-                          ['Cost / ' + rateUnit, detailRoll.cost_per_unit != null ? `₹${detailRoll.cost_per_unit}` : '—'],
-                        ].map(([label, value]) => (
-                          <div key={label} className="flex items-center justify-between py-2 text-sm">
-                            <span className="text-gray-500">{label}</span>
-                            <span className="text-gray-800 font-medium text-right">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {/* ── Detail table — emerald header matching lot/invoice ── */}
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                          <th className="py-2 px-4 text-left border-r border-emerald-500" colSpan={2}>Material Details</th>
+                          <th className="py-2 px-4 text-left border-r border-emerald-500" colSpan={2}>Supplier & Invoice</th>
+                          <th className="py-2 px-4 text-left" colSpan={2}>Receiving</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50 w-[120px]">Fabric</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.fabric_type}</td>
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50 w-[120px]">Supplier</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.supplier?.name || '—'}</td>
+                          <td className="py-2 px-4 text-gray-500 w-[120px]">Received By</td>
+                          <td className="py-2 px-4 font-medium text-gray-800">{detailRoll.received_by_user?.full_name || '—'}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100 bg-gray-50/70">
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Color</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.color}</td>
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Invoice No.</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.supplier_invoice_no || '—'}</td>
+                          <td className="py-2 px-4 text-gray-500">Received At</td>
+                          <td className="py-2 px-4 font-medium text-gray-800">{detailRoll.received_at ? new Date(detailRoll.received_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Unit</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.unit === 'meters' ? 'Meters' : 'Kilograms'}</td>
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Invoice Date</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{detailRoll.supplier_invoice_date ? new Date(detailRoll.supplier_invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                          <td className="py-2 px-4 text-gray-500">Sr. No.</td>
+                          <td className="py-2 px-4 font-bold text-primary-700">{detailRoll.sr_no || '—'}</td>
+                        </tr>
+                        <tr className={detailRoll.notes ? 'border-b border-gray-100 bg-gray-50/70' : 'bg-gray-50/70'}>
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Cost / {rateUnit}</td>
+                          <td className="py-2 px-4 font-semibold text-amber-700 border-r border-gray-200">{detailRoll.cost_per_unit != null ? `₹${detailRoll.cost_per_unit}` : '—'}</td>
+                          <td className="py-2 px-4 text-gray-500 border-r border-gray-50">Panna / GSM</td>
+                          <td className="py-2 px-4 font-medium text-gray-800 border-r border-gray-200">{[detailRoll.panna ? `${detailRoll.panna}"` : null, detailRoll.gsm ? `${detailRoll.gsm} gsm` : null].filter(Boolean).join(' · ') || '—'}</td>
+                          <td className="py-2 px-4 text-gray-500">Value</td>
+                          <td className="py-2 px-4 font-bold text-emerald-700">{totalValue > 0 ? `₹${totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</td>
+                        </tr>
+                        {detailRoll.notes && (
+                          <tr>
+                            <td className="py-2 px-4 text-gray-500">Notes</td>
+                            <td className="py-2 px-4 text-gray-700 italic" colSpan={5}>{detailRoll.notes}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-800 text-white font-semibold text-sm">
+                          <td className="py-2 px-4" colSpan={2}>
+                            <span className="text-gray-300">Original:</span> <span className="font-bold">{origWt} {rateUnit === 'm' ? 'm' : 'kg'}</span>
+                          </td>
+                          <td className="py-2 px-4" colSpan={2}>
+                            <span className="text-gray-300">Remaining:</span> <span className="font-bold text-emerald-300">{remainQty} {rateUnit === 'm' ? 'm' : 'kg'}</span>
+                            <span className="ml-2 text-gray-400">({pct.toFixed(0)}%)</span>
+                          </td>
+                          <td className="py-2 px-4" colSpan={2}>
+                            {Math.abs(wtDelta) >= 0.001 && (
+                              <><span className="text-gray-300">Change:</span> <span className={`font-bold ${wtDelta > 0 ? 'text-green-300' : 'text-red-300'}`}>{wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(3)} {rateUnit === 'm' ? 'm' : 'kg'}</span></>
+                            )}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
 
-                    {/* Right: Supplier & Receiving */}
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Supplier & Invoice</h3>
-                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
-                          {[
-                            ['Supplier', detailRoll.supplier?.name || '—'],
-                            ['Invoice No.', detailRoll.supplier_invoice_no || '—'],
-                            ['Invoice Date', detailRoll.supplier_invoice_date ? new Date(detailRoll.supplier_invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'],
-                          ].map(([label, value]) => (
-                            <div key={label} className="flex items-center justify-between py-2 text-sm">
-                              <span className="text-gray-500">{label}</span>
-                              <span className="text-gray-800 font-medium text-right">{value}</span>
-                            </div>
-                          ))}
-                        </div>
+                  {/* ── Summary KPIs ── */}
+                  <div className={`grid ${totalValue > 0 ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+                    {[
+                      { value: `${origWt}`, label: `Original (${rateUnit === 'm' ? 'm' : 'kg'})`, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+                      { value: `${remainQty}`, label: `Remaining (${rateUnit === 'm' ? 'm' : 'kg'})`, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                      { value: `${pct.toFixed(0)}%`, label: 'Stock Level', color: pct > 50 ? 'text-emerald-700' : pct > 20 ? 'text-amber-700' : 'text-red-700', bg: pct > 50 ? 'bg-emerald-50 border-emerald-200' : pct > 20 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200' },
+                      ...(Math.abs(wtDelta) >= 0.001 ? [{ value: `${wtDelta > 0 ? '+' : ''}${wtDelta.toFixed(3)}`, label: 'Wt. Change', color: wtDelta > 0 ? 'text-green-700' : 'text-red-700', bg: wtDelta > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200' }] : []),
+                      ...(totalValue > 0 ? [{ value: `₹${totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Value', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }] : []),
+                    ].map((kpi, i) => (
+                      <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
+                        <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{kpi.label}</div>
                       </div>
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Receiving Details</h3>
-                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-0 divide-y divide-gray-100">
-                          {[
-                            ['Received By', detailRoll.received_by_user?.full_name || '—'],
-                            ['Received At', detailRoll.received_at ? new Date(detailRoll.received_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'],
-                          ].map(([label, value]) => (
-                            <div key={label} className="flex items-center justify-between py-2 text-sm">
-                              <span className="text-gray-500">{label}</span>
-                              <span className="text-gray-800 font-medium text-right">{value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {detailRoll.notes && (
-                        <div>
-                          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes</h3>
-                          <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
-                            <p className="text-sm text-gray-700">{detailRoll.notes}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    ))}
                   </div>
 
                   {/* Processing History */}
@@ -3190,89 +3228,111 @@ export default function RollsPage() {
             </div>
           )
         })()}
-      </Modal>
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════════════════════════════════════════
           SEND FOR PROCESSING Modal
          ════════════════════════════════════════════════════════ */}
       <Modal open={sendProcOpen} onClose={() => setSendProcOpen(false)}
-        title={sendProcRoll ? `Send ${sendProcRoll.roll_code} for Processing` : 'Send for Processing'}
+        title="" wide
         actions={
           <>
             <button onClick={() => setSendProcOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             <button onClick={handleSendProcessing} disabled={sendProcSaving}
-              className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50">
+              className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50 shadow-sm">
               {sendProcSaving ? 'Sending...' : 'Send for Processing'}
             </button>
           </>
         }
       >
+        {/* ── Custom gradient header ── */}
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">Send for Value Addition</h2>
+          {sendProcRoll && (
+            <p className="text-sm text-teal-100 mt-0.5">{sendProcRoll.roll_code} · {sendProcRoll.fabric_type} · {sendProcRoll.color}</p>
+          )}
+        </div>
+
         {sendProcError && <div className="mb-4"><ErrorAlert message={sendProcError} onDismiss={() => setSendProcError(null)} /></div>}
 
-        {/* Challan Number Preview */}
-        {nextJCNo && (
-          <div className="mb-4 flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-600">Challan No.</div>
-            <div className="font-mono font-bold text-amber-900 text-sm">{nextJCNo}</div>
-            <div className="text-[10px] text-amber-500 ml-auto">Auto-generated</div>
-          </div>
-        )}
-
+        {/* Roll info + Challan — compact toolbar */}
         {sendProcRoll && (
-          <div className="mb-5 rounded-lg bg-blue-50 border border-blue-100 p-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-              <div><span className="text-blue-500">Roll:</span> <span className="font-medium text-blue-800">{sendProcRoll.roll_code}</span></div>
-              <div><span className="text-blue-500">Fabric:</span> <span className="font-medium text-blue-800">{sendProcRoll.fabric_type}</span></div>
-              <div><span className="text-blue-500">Color:</span> <span className="font-medium text-blue-800">{sendProcRoll.color}</span></div>
-              <div><span className="text-blue-500">Original:</span> <span className="font-medium text-blue-800">{sendProcRoll.total_weight} kg</span></div>
-              {sendProcRoll.current_weight !== sendProcRoll.total_weight && (
-                <div><span className="text-blue-500">Current:</span> <span className="font-medium text-blue-800">{sendProcRoll.current_weight} kg</span></div>
+          <div className="mb-5 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 bg-gray-50 border-b border-gray-200">
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Roll</label>
+                <div className="text-sm font-bold font-mono text-primary-700">{sendProcRoll.roll_code}</div>
+              </div>
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Remaining</label>
+                <div className="text-sm font-bold text-emerald-700">{sendProcRoll.remaining_weight} kg</div>
+              </div>
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Original</label>
+                <div className="text-sm text-gray-700">{sendProcRoll.total_weight} kg</div>
+              </div>
+              {nextJCNo && (
+                <div className="ml-auto px-4 py-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Challan No.</label>
+                  <div className="text-sm font-bold font-mono text-amber-700">{nextJCNo}</div>
+                </div>
               )}
-              <div><span className="text-blue-500">Remaining:</span> <span className="font-bold text-blue-900">{sendProcRoll.remaining_weight} kg</span></div>
             </div>
           </div>
         )}
 
-        <div className="space-y-4">
-          <div>
-            <label className="typo-label-sm">Weight to Send (kg) <span className="text-red-500">*</span></label>
-            <div className="flex items-center gap-3">
-              <input type="number" step="0.001" min="0.001"
-                max={sendProcRoll ? (sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight) : undefined}
-                value={sendProcForm.weight_to_send} onChange={(e) => setSendProcForm((f) => ({ ...f, weight_to_send: e.target.value }))}
-                className="typo-input-sm max-w-[180px]" />
-              {sendProcRoll && (
-                <button type="button" onClick={() => setSendProcForm((f) => ({ ...f, weight_to_send: String(sendProcRoll.remaining_weight || sendProcRoll.current_weight) }))}
-                  className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap">Send All</button>
-              )}
+        {/* ── Form fields in grid ── */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="bg-emerald-600 px-4 py-2">
+            <span className="text-xs font-semibold text-white uppercase tracking-wider">Processing Details</span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="typo-label-sm">Weight to Send (kg) <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-3">
+                  <input type="number" step="0.001" min="0.001"
+                    max={sendProcRoll ? (sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight) : undefined}
+                    value={sendProcForm.weight_to_send} onChange={(e) => setSendProcForm((f) => ({ ...f, weight_to_send: e.target.value }))}
+                    className="typo-input-sm flex-1" />
+                  {sendProcRoll && (
+                    <button type="button" onClick={() => setSendProcForm((f) => ({ ...f, weight_to_send: String(sendProcRoll.remaining_weight || sendProcRoll.current_weight) }))}
+                      className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 whitespace-nowrap transition-colors">Send All</button>
+                  )}
+                </div>
+                {sendProcRoll && <p className="mt-1 text-xs text-gray-400">Max: {sendProcRoll.remaining_weight} kg remaining</p>}
+              </div>
+              <div>
+                <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
+                <input type="date" value={sendProcForm.sent_date} onChange={(e) => setSendProcForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
+              </div>
             </div>
-            {sendProcRoll && <p className="mt-1 text-xs text-gray-400">Max: {sendProcRoll.remaining_weight} kg (remaining). Send less to keep the roll in stock.</p>}
-          </div>
-          <div>
-            <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
-            <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
-              <option value="">Select value addition</option>
-              {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-            </select>
-            <p className="mt-1 text-xs text-gray-400">Adds to enhanced roll code after completion (e.g. +EMB, +DYE)</p>
-          </div>
-          <div>
-            <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
-            <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
-              <option value="">Select VA Party…</option>
-              {vaParties.filter(p => p.is_active !== false).map(p => (
-                <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
-              ))}
-            </select>
-          </div>
-          <div className="max-w-xs">
-            <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
-            <input type="date" value={sendProcForm.sent_date} onChange={(e) => setSendProcForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
-          </div>
-          <div>
-            <label className="typo-label-sm">Notes</label>
-            <textarea value={sendProcForm.notes} onChange={(e) => setSendProcForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="e.g. Chikan embroidery work on full body" className="typo-input-sm" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
+                <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
+                  <option value="">Select value addition</option>
+                  {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
+                </select>
+                <p className="mt-1 text-xs text-gray-400">Adds to roll code: +EMB, +DYE etc.</p>
+              </div>
+              <div>
+                <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
+                <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
+                  <option value="">Select VA Party…</option>
+                  {vaParties.filter(p => p.is_active !== false).map(p => (
+                    <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="typo-label-sm">Notes</label>
+              <textarea value={sendProcForm.notes} onChange={(e) => setSendProcForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2} placeholder="e.g. Chikan embroidery work on full body" className="typo-input-sm" />
+            </div>
           </div>
         </div>
       </Modal>
@@ -3280,78 +3340,96 @@ export default function RollsPage() {
       {/* ════════════════════════════════════════════════════════
           RECEIVE FROM PROCESSING Modal
          ════════════════════════════════════════════════════════ */}
-      <Modal open={recvProcOpen} onClose={() => setRecvProcOpen(false)}
-        title={recvProcRoll ? `Receive ${recvProcRoll.roll_code} from Processing` : 'Receive from Processing'}
+      <Modal open={recvProcOpen} onClose={() => setRecvProcOpen(false)} title="" wide
         actions={
           <>
             <button onClick={() => setRecvProcOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             <button onClick={handleReceiveProcessing} disabled={recvProcSaving}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
+              className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {recvProcSaving ? 'Saving...' : 'Receive Back'}
             </button>
           </>
         }
       >
+        {/* ── Custom gradient header ── */}
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">Receive from Processing</h2>
+          {recvProcRoll && (
+            <p className="text-sm text-green-100 mt-0.5">{recvProcRoll.roll_code} · {recvProcLog?.value_addition?.name || '—'} · {recvProcLog?.va_party?.name || '—'}</p>
+          )}
+        </div>
+
         {recvProcError && <div className="mb-4"><ErrorAlert message={recvProcError} onDismiss={() => setRecvProcError(null)} /></div>}
 
+        {/* ── Roll info toolbar ── */}
         {recvProcRoll && recvProcLog && (
-          <div className="mb-5 space-y-3">
-            {/* Roll + processing info */}
-            <div className="rounded-lg bg-orange-50 border border-orange-100 p-3">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-                <div><span className="text-orange-500">Roll:</span> <span className="font-medium text-orange-800">{recvProcRoll.roll_code}</span></div>
-                <div><span className="text-orange-500">Process:</span> <span className="font-medium text-orange-800">{recvProcLog.value_addition?.name || '—'}</span></div>
-                <div><span className="text-orange-500">VA Party:</span> <span className="font-medium text-orange-800">{recvProcLog.va_party?.name}</span></div>
-                <div><span className="text-orange-500">Sent:</span> <span className="font-medium text-orange-800">{new Date(recvProcLog.sent_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
-                <div><span className="text-orange-500">Weight Before:</span> <span className="font-medium text-orange-800">{recvProcLog.weight_before} kg</span></div>
-                <div>
-                  <span className="text-orange-500">Days Out:</span>
-                  <span className="font-medium text-orange-800 ml-1">{Math.floor((Date.now() - new Date(recvProcLog.sent_date).getTime()) / (1000 * 60 * 60 * 24))}d</span>
-                </div>
+          <div className="mb-5 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 bg-gray-50 border-b border-gray-200">
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Roll</label>
+                <div className="text-sm font-bold font-mono text-primary-700">{recvProcRoll.roll_code}</div>
+              </div>
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Weight Sent</label>
+                <div className="text-sm font-bold text-gray-800">{recvProcLog.weight_before} kg</div>
+              </div>
+              <div className="px-4 py-2 border-r border-gray-200">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sent Date</label>
+                <div className="text-sm text-gray-700">{new Date(recvProcLog.sent_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+              </div>
+              <div className="ml-auto px-4 py-2">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Days Out</label>
+                <div className="text-sm font-bold text-amber-700">{Math.floor((Date.now() - new Date(recvProcLog.sent_date).getTime()) / (1000 * 60 * 60 * 24))}d</div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="typo-label-sm">Received Date <span className="text-red-500">*</span></label>
-              <input type="date" value={recvProcForm.received_date} onChange={(e) => setRecvProcForm((f) => ({ ...f, received_date: e.target.value }))} className="typo-input-sm" />
-            </div>
-            <div>
-              <label className="typo-label-sm">Weight After (kg) <span className="text-red-500">*</span></label>
-              <input type="number" step="0.001" value={recvProcForm.weight_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, weight_after: e.target.value }))}
-                placeholder={recvProcLog ? `Was ${recvProcLog.weight_before} kg` : ''} className="typo-input-sm" />
-              {recvProcForm.weight_after && recvProcLog && (
-                <p className={`mt-1 text-xs font-medium ${(parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  Change: {((parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? '+' : '')}
-                  {(parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before).toFixed(3)} kg
-                </p>
-              )}
-            </div>
+        {/* ── Form ── */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="bg-emerald-600 px-4 py-2">
+            <span className="text-xs font-semibold text-white uppercase tracking-wider">Receiving Details</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="typo-label-sm">Length After (m, optional)</label>
-              <input type="number" step="0.01" value={recvProcForm.length_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, length_after: e.target.value }))}
-                placeholder="If applicable" className="typo-input-sm" />
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="typo-label-sm">Received Date <span className="text-red-500">*</span></label>
+                <input type="date" value={recvProcForm.received_date} onChange={(e) => setRecvProcForm((f) => ({ ...f, received_date: e.target.value }))} className="typo-input-sm" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Weight After (kg) <span className="text-red-500">*</span></label>
+                <input type="number" step="0.001" value={recvProcForm.weight_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, weight_after: e.target.value }))}
+                  placeholder={recvProcLog ? `Was ${recvProcLog.weight_before} kg` : ''} className="typo-input-sm" />
+                {recvProcForm.weight_after && recvProcLog && (
+                  <p className={`mt-1 text-xs font-medium ${(parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Change: {((parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before) >= 0 ? '+' : '')}
+                    {(parseFloat(recvProcForm.weight_after) - recvProcLog.weight_before).toFixed(3)} kg
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="typo-label-sm">Processing Cost (₹)</label>
+                <input type="number" step="0.01" value={recvProcForm.processing_cost} onChange={(e) => setRecvProcForm((f) => ({ ...f, processing_cost: e.target.value }))}
+                  placeholder="Total cost for this processing" className="typo-input-sm" />
+                {recvProcForm.processing_cost && recvProcForm.weight_after && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    = ₹{(parseFloat(recvProcForm.processing_cost) / parseFloat(recvProcForm.weight_after)).toFixed(2)}/kg
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="typo-label-sm">Length After (m, optional)</label>
+                <input type="number" step="0.01" value={recvProcForm.length_after} onChange={(e) => setRecvProcForm((f) => ({ ...f, length_after: e.target.value }))}
+                  placeholder="If applicable" className="typo-input-sm" />
+              </div>
             </div>
             <div>
-              <label className="typo-label-sm">Processing Cost (₹)</label>
-              <input type="number" step="0.01" value={recvProcForm.processing_cost} onChange={(e) => setRecvProcForm((f) => ({ ...f, processing_cost: e.target.value }))}
-                placeholder="Total cost for this processing" className="typo-input-sm" />
-              {recvProcForm.processing_cost && recvProcForm.weight_after && (
-                <p className="mt-1 text-xs text-gray-500">
-                  = ₹{(parseFloat(recvProcForm.processing_cost) / parseFloat(recvProcForm.weight_after)).toFixed(2)}/kg added to cost
-                </p>
-              )}
+              <label className="typo-label-sm">Notes</label>
+              <textarea value={recvProcForm.notes} onChange={(e) => setRecvProcForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2} placeholder="Quality observations, shrinkage notes, etc." className="typo-input-sm" />
             </div>
-          </div>
-          <div>
-            <label className="typo-label-sm">Notes</label>
-            <textarea value={recvProcForm.notes} onChange={(e) => setRecvProcForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="Quality observations, shrinkage notes, etc." className="typo-input-sm" />
           </div>
         </div>
       </Modal>
@@ -3447,28 +3525,31 @@ export default function RollsPage() {
       {bulkSendOpen && (() => {
         const totalSendWt = bulkSendRolls.reduce((s, r) => s + (parseFloat(bulkSendWeights[r.id]) || 0), 0)
         return (
-          <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
-            {/* ── Top bar ── */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Send {bulkSendRolls.length} Roll{bulkSendRolls.length > 1 ? 's' : ''} for Processing</h2>
-                <p className="text-sm text-gray-500">Total send weight: {totalSendWt.toFixed(3)} kg</p>
+          <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+            {/* ── Gradient header ── */}
+            <div className="flex items-center justify-between border-b bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-3 text-white shadow-sm">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setBulkSendOpen(false)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">Send {bulkSendRolls.length} Roll{bulkSendRolls.length > 1 ? 's' : ''} for VA</h2>
+                  <p className="text-xs text-teal-100">Total: {totalSendWt.toFixed(3)} kg</p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => setBulkSendOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <span className="hidden sm:inline text-xs text-teal-200">Ctrl+S to save</span>
+                <button onClick={() => setBulkSendOpen(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
                 <button onClick={handleBulkSendProcessing} disabled={bulkSendSaving}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-5 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 transition-colors">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
+                  className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50 transition-colors">
                   {bulkSendSaving ? 'Sending...' : 'Send & Print Challan'}
                 </button>
               </div>
             </div>
 
             {/* ── Body ── */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="mx-auto max-w-4xl space-y-6">
+            <div className="flex-1 overflow-y-auto">
+              <div className="space-y-4 px-6 py-4">
                 {bulkSendError && <ErrorAlert message={bulkSendError} onDismiss={() => setBulkSendError(null)} />}
 
                 {/* Challan Number Preview */}
@@ -3481,29 +3562,24 @@ export default function RollsPage() {
                 )}
 
                 {/* ── Selected Rolls Table ── */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700">Selected Rolls</h3>
-                    <button type="button" onClick={() => { const wts = {}; bulkSendRolls.forEach((r) => { wts[r.id] = String(r.remaining_weight || r.current_weight || r.total_weight) }); setBulkSendWeights(wts) }}
-                      className="text-xs text-blue-600 hover:text-blue-800">Reset All to Full</button>
-                  </div>
-                  <table className="w-full text-sm">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="px-4 py-2.5 text-center w-10">#</th>
-                        <th className="px-4 py-2.5 text-left">Roll Code</th>
-                        <th className="px-4 py-2.5 text-left">Fabric</th>
-                        <th className="px-4 py-2.5 text-left">Color</th>
-                        <th className="px-4 py-2.5 text-right">Remaining</th>
-                        <th className="px-4 py-2.5 text-right">Send Weight</th>
-                        <th className="px-4 py-2.5 text-center w-10"></th>
+                      <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                        <th className="px-4 py-2 text-center w-10 border-r border-emerald-500">#</th>
+                        <th className="px-4 py-2 text-left border-r border-emerald-500">Roll Code</th>
+                        <th className="px-4 py-2 text-left border-r border-emerald-500">Fabric</th>
+                        <th className="px-4 py-2 text-left border-r border-emerald-500">Color</th>
+                        <th className="px-4 py-2 text-right border-r border-emerald-500">Remaining</th>
+                        <th className="px-4 py-2 text-right border-r border-emerald-500">Send Weight</th>
+                        <th className="px-4 py-2 text-center w-10"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {bulkSendRolls.map((r, i) => {
                         const maxWt = r.remaining_weight || r.current_weight || r.total_weight
                         return (
-                        <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <tr key={r.id} className={`border-b border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
                           <td className="px-4 py-2 text-center text-gray-400 font-medium">{i + 1}</td>
                           <td className="px-4 py-2 font-semibold text-gray-800">{r.enhanced_roll_code || r.roll_code}</td>
                           <td className="px-4 py-2 text-gray-600">{r.fabric_type}</td>
@@ -3526,9 +3602,9 @@ export default function RollsPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-50 font-semibold text-sm">
-                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">Total: {bulkSendRolls.length} roll{bulkSendRolls.length > 1 ? 's' : ''}</td>
-                        <td className="px-4 py-2 text-right">{totalSendWt.toFixed(3)} kg</td>
+                      <tr className="bg-gray-800 text-white font-semibold text-sm">
+                        <td colSpan={5} className="px-4 py-2 text-right border-r border-gray-700">Total: {bulkSendRolls.length} roll{bulkSendRolls.length > 1 ? 's' : ''}</td>
+                        <td className="px-4 py-2 text-right text-emerald-300">{totalSendWt.toFixed(3)} kg</td>
                         <td></td>
                       </tr>
                     </tfoot>
@@ -3536,8 +3612,11 @@ export default function RollsPage() {
                 </div>
 
                 {/* ── Processing Details Form ── */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5 space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-700">Processing Details</h3>
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="bg-emerald-600 px-4 py-2">
+                    <span className="text-xs font-semibold text-white uppercase tracking-wider">Processing Details</span>
+                  </div>
+                  <div className="p-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
@@ -3565,6 +3644,7 @@ export default function RollsPage() {
                     <textarea value={bulkSendForm.notes} onChange={(e) => setBulkSendForm((f) => ({ ...f, notes: e.target.value }))}
                       rows={2} placeholder="Instructions for the vendor..." className="typo-input-sm" />
                   </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3581,29 +3661,35 @@ export default function RollsPage() {
         const totalRecvWt = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.weight_after) || 0), 0)
         const totalCost = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.processing_cost) || 0), 0)
         return (
-          <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">
-                  Receive {checkedItems.length} Roll{checkedItems.length !== 1 ? 's' : ''}
-                  {bulkRecvChallan.challanNo && <span className="ml-2 font-mono text-orange-600">{bulkRecvChallan.challanNo}</span>}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {bulkRecvChallan.vaPartyName} — {bulkRecvChallan.va?.name || '—'} ({bulkRecvChallan.va?.short_code || '?'})
-                </p>
+          <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+            {/* ── Gradient header ── */}
+            <div className="flex items-center justify-between border-b bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 text-white shadow-sm">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setBulkRecvOpen(false)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">
+                    Receive {checkedItems.length} Roll{checkedItems.length !== 1 ? 's' : ''}
+                    {bulkRecvChallan.challanNo && <span className="ml-2 font-mono text-green-200">{bulkRecvChallan.challanNo}</span>}
+                  </h2>
+                  <p className="text-xs text-green-100">
+                    {bulkRecvChallan.vaPartyName} · {bulkRecvChallan.va?.name || '—'} ({bulkRecvChallan.va?.short_code || '?'})
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => setBulkRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={() => setBulkRecvOpen(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
                 <button onClick={handleBulkReceive} disabled={bulkRecvSaving || checkedItems.length === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  {bulkRecvSaving ? 'Receiving...' : `Receive ${checkedItems.length} Roll${checkedItems.length !== 1 ? 's' : ''}`}
+                  className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-green-700 hover:bg-green-50 disabled:opacity-50 transition-colors">
+                  {bulkRecvSaving ? 'Receiving...' : `Receive (${checkedItems.length})`}
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="mx-auto max-w-4xl space-y-6">
+            {/* ── Body ── */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="space-y-4 px-6 py-4">
                 {bulkRecvError && <ErrorAlert message={bulkRecvError} onDismiss={() => setBulkRecvError(null)} />}
 
                 {/* Received Date */}
@@ -3616,44 +3702,32 @@ export default function RollsPage() {
                 </div>
 
                 {/* Rolls Table */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700">Rolls</h3>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => {
-                        const rows = { ...bulkRecvRows }
-                        for (const item of items) { rows[item.log.id] = { ...rows[item.log.id], weight_after: String(item.log.weight_before || '') } }
-                        setBulkRecvRows(rows)
-                      }} className="text-xs text-blue-600 hover:text-blue-800">Reset Weights to Sent</button>
-                      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                        <input type="checkbox" checked={checkedItems.length === items.length}
-                          onChange={(e) => {
-                            const rows = { ...bulkRecvRows }
-                            for (const item of items) { rows[item.log.id] = { ...rows[item.log.id], checked: e.target.checked } }
-                            setBulkRecvRows(rows)
-                          }}
-                          className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                        All
-                      </label>
-                    </div>
-                  </div>
-                  <table className="w-full text-sm">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="px-4 py-2.5 text-center w-10"></th>
-                        <th className="px-4 py-2.5 text-center w-10">#</th>
-                        <th className="px-4 py-2.5 text-left">Roll Code</th>
-                        <th className="px-4 py-2.5 text-left">Color</th>
-                        <th className="px-4 py-2.5 text-right">Sent Wt</th>
-                        <th className="px-4 py-2.5 text-right">Received Wt</th>
-                        <th className="px-4 py-2.5 text-right">Cost</th>
+                      <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                        <th className="px-3 py-2 text-center w-10 border-r border-emerald-500">
+                          <input type="checkbox" checked={checkedItems.length === items.length}
+                            onChange={(e) => {
+                              const rows = { ...bulkRecvRows }
+                              for (const item of items) { rows[item.log.id] = { ...rows[item.log.id], checked: e.target.checked } }
+                              setBulkRecvRows(rows)
+                            }}
+                            className="h-4 w-4 rounded border-white/50 text-emerald-700 cursor-pointer" />
+                        </th>
+                        <th className="px-3 py-2 text-center w-10 border-r border-emerald-500">#</th>
+                        <th className="px-3 py-2 text-left border-r border-emerald-500">Roll Code</th>
+                        <th className="px-3 py-2 text-left border-r border-emerald-500">Color</th>
+                        <th className="px-3 py-2 text-right border-r border-emerald-500">Sent Wt</th>
+                        <th className="px-3 py-2 text-right border-r border-emerald-500">Received Wt</th>
+                        <th className="px-3 py-2 text-right">Cost (₹)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item, i) => {
                         const row = bulkRecvRows[item.log.id] || {}
                         return (
-                          <tr key={item.log.id} className={`border-b border-gray-50 ${!row.checked ? 'opacity-40' : ''} hover:bg-gray-50/50`}>
+                          <tr key={item.log.id} className={`border-b border-gray-100 ${!row.checked ? 'opacity-40' : ''} ${i % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
                             <td className="px-4 py-2 text-center">
                               <input type="checkbox" checked={!!row.checked}
                                 onChange={(e) => setBulkRecvRows(prev => ({ ...prev, [item.log.id]: { ...prev[item.log.id], checked: e.target.checked } }))}
@@ -3683,10 +3757,10 @@ export default function RollsPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-50 font-semibold text-sm">
-                        <td colSpan={5} className="px-4 py-2 text-right text-gray-600">{checkedItems.length} of {items.length} rolls</td>
-                        <td className="px-4 py-2 text-right">{totalRecvWt.toFixed(3)} kg</td>
-                        <td className="px-4 py-2 text-right text-gray-600">{totalCost > 0 ? `₹${totalCost.toLocaleString()}` : '—'}</td>
+                      <tr className="bg-gray-800 text-white font-semibold text-sm">
+                        <td colSpan={5} className="px-3 py-2 text-right border-r border-gray-700">{checkedItems.length} of {items.length} rolls</td>
+                        <td className="px-3 py-2 text-right border-r border-gray-700 text-emerald-300">{totalRecvWt.toFixed(3)} kg</td>
+                        <td className="px-3 py-2 text-right text-amber-300">{totalCost > 0 ? `₹${totalCost.toLocaleString()}` : '—'}</td>
                       </tr>
                     </tfoot>
                   </table>

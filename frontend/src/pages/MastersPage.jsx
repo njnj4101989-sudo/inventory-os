@@ -279,16 +279,20 @@ export default function MastersPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? `Edit ${entityLabel}` : `New ${entityLabel}`}
+        title=""
         actions={
           <>
             <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </button>
           </>
         }
       >
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">{editing ? `Edit ${entityLabel}` : `New ${entityLabel}`}</h2>
+          <p className="text-sm text-emerald-100 mt-0.5">{editing ? `Modify ${entityLabel.toLowerCase()} details` : `Add a new ${entityLabel.toLowerCase()} to masters`}</p>
+        </div>
         <div className="space-y-4">
           {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 

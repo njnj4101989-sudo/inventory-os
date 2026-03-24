@@ -365,7 +365,7 @@ export default function UsersPage() {
 
       {/* ─── User Create/Edit Modal ─────────────────── */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}
-        title={editing ? 'Edit User' : 'Create User'}
+        title=""
         actions={
           <>
             <button onClick={() => setModalOpen(false)}
@@ -373,19 +373,22 @@ export default function UsersPage() {
               Cancel
             </button>
             <button onClick={handleSaveUser} disabled={saving}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </button>
           </>
         }>
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">{editing ? 'Edit User' : 'New User'}</h2>
+          <p className="text-sm text-blue-100 mt-0.5">{editing ? `Editing ${form.full_name || form.username}` : 'Add a new user account'}</p>
+        </div>
         <UserForm form={form} onChange={setForm} roles={roles} editing={!!editing}
           error={formError} onDismissError={() => setFormError(null)} />
       </Modal>
 
       {/* ─── Role Create/Edit Modal ─────────────────── */}
       <Modal open={roleModalOpen} onClose={() => setRoleModalOpen(false)}
-        title={editingRole ? `Edit Role — ${roleName(editingRole)}` : 'Create Role'}
-        wide
+        title="" wide
         actions={
           <>
             <button onClick={() => setRoleModalOpen(false)}
@@ -393,11 +396,15 @@ export default function UsersPage() {
               Cancel
             </button>
             <button onClick={handleSaveRole} disabled={roleSaving}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50 shadow-sm">
               {roleSaving ? 'Saving...' : editingRole ? 'Update' : 'Create'}
             </button>
           </>
         }>
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-purple-600 to-violet-600 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">{editingRole ? `Edit Role — ${roleName(editingRole)}` : 'New Role'}</h2>
+          <p className="text-sm text-purple-100 mt-0.5">{editingRole ? 'Modify permissions and display name' : 'Define a new role with permissions'}</p>
+        </div>
         {roleFormError && (
           <div className="mb-4"><ErrorAlert message={roleFormError} onDismiss={() => setRoleFormError(null)} /></div>
         )}

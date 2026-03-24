@@ -48,15 +48,16 @@ export default function DataTable({
   const allCols = hasExpand ? [{ key: '__expand', label: '', sortable: false }, ...columns] : columns
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <table className="min-w-full">
+        <thead>
+          <tr className="bg-emerald-600">
             {allCols.map((col, ci) => (
               <th
                 key={col.key + ci}
-                className={`px-3 py-2.5 text-left typo-th ${
-                  col.sortable !== false ? 'cursor-pointer select-none hover:text-gray-800' : ''
+                className={`px-3 py-2.5 text-left text-xs font-semibold text-white uppercase tracking-wider ${
+                  ci < allCols.length - 1 ? 'border-r border-emerald-500' : ''
+                } ${col.sortable !== false ? 'cursor-pointer select-none hover:bg-emerald-700' : ''
                 } ${col.key === '__expand' ? 'w-10' : ''}`}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
               >
@@ -76,10 +77,10 @@ export default function DataTable({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody>
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
-              <tr key={i}>
+              <tr key={i} className="border-b border-gray-100">
                 {allCols.map((col, ci) => (
                   <td key={col.key + ci} className="px-4 py-3">
                     <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200" />
@@ -101,9 +102,9 @@ export default function DataTable({
                 <Fragment key={rowId}>
                   <tr
                     onClick={() => onRowClick?.(row)}
-                    className={`transition-colors ${
-                      onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
-                    } ${isExpanded ? 'bg-purple-50/40' : ''}`}
+                    className={`border-b border-gray-100 transition-colors ${
+                      isExpanded ? 'bg-purple-50/40' : idx % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'
+                    } ${onRowClick ? 'cursor-pointer hover:bg-emerald-50/40' : ''}`}
                   >
                     {hasExpand && (
                       <td className="px-2 py-3 text-center">

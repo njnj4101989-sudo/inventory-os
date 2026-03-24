@@ -813,19 +813,23 @@ export default function PartyMastersPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? `Edit ${labels.singular}` : `Add New ${labels.singular}`}
+        title=""
         extraWide
         actions={
           <>
             <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
               Cancel
             </button>
-            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Saving...' : editing ? `Update ${labels.singular}` : `Create ${labels.singular}`}
             </button>
           </>
         }
       >
+        <div className="-mx-6 mb-4 rounded-t-xl bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 text-white">
+          <h2 className="text-lg font-bold tracking-tight">{editing ? `Edit ${labels.singular}` : `New ${labels.singular}`}</h2>
+          <p className="text-sm text-primary-200 mt-0.5">{editing ? `Modify ${labels.singular.toLowerCase()} business details` : `Add a new ${labels.singular.toLowerCase()}`}</p>
+        </div>
         {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
         <div className="space-y-0 -mx-6">

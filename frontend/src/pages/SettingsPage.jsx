@@ -21,9 +21,9 @@ export default function SettingsPage() {
   const isAdmin = role === 'admin'
 
   const TABS = [
-    { key: 'company', label: 'Company Profile' },
-    { key: 'fy', label: 'Financial Years' },
-    ...(isAdmin ? [{ key: 'companies', label: 'Companies' }] : []),
+    { key: 'company', label: 'Company Profile', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+    { key: 'fy', label: 'Financial Years', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+    ...(isAdmin ? [{ key: 'companies', label: 'Companies', icon: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064' }] : []),
   ]
 
   const [tab, setTab] = useState(activeCompany ? 'company' : 'companies')
@@ -261,15 +261,30 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="typo-page-title">Settings</h1>
-      <p className="text-xs text-gray-500">Company profile, financial years, and multi-company management</p>
+      {/* ── Page header ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="typo-page-title">Settings</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Company profile, financial years, and multi-company management</p>
+        </div>
+        {activeCompany && (
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">{activeCompany.name}</span>
+            {fys.find(f => f.is_current) && (
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">{fys.find(f => f.is_current)?.code}</span>
+            )}
+          </div>
+        )}
+      </div>
 
-      <div className="mt-2 flex gap-1 border-b border-gray-200">
+      {/* ── Tabs ── */}
+      <div className="mt-4 flex gap-1 border-b border-gray-200">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t.key ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`inline-flex items-center gap-2 px-4 pb-2.5 pt-1 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={t.icon} /></svg>
             {t.label}
           </button>
         ))}
@@ -287,44 +302,53 @@ export default function SettingsPage() {
 
       {/* ── Company Profile Tab ── */}
       {tab === 'company' && (
-        <div className="mt-3 space-y-4 max-w-4xl">
+        <div className="mt-4 space-y-4">
           {companyMsg && <p className="text-xs text-green-600 font-medium">{companyMsg}</p>}
-          <div>
-            <h3 className="typo-label-sm mb-2">Business Identity</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2"><label className="block typo-data-label mb-1">Company Name</label><input value={company.name} onChange={(e) => set('name', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">Phone</label><input value={company.phone} onChange={(e) => set('phone', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">Email</label><input value={company.email} onChange={(e) => set('email', e.target.value)} className="typo-input-sm" /></div>
+
+          {/* Section cards with emerald headers */}
+          {[
+            { title: 'Business Identity', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', fields: [
+              { key: 'name', label: 'Company Name', span: 2 },
+              { key: 'phone', label: 'Phone' },
+              { key: 'email', label: 'Email' },
+            ]},
+            { title: 'GST & PAN', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', fields: [
+              { key: 'gst_no', label: 'GST No.', upper: true, max: 15 },
+              { key: 'state_code', label: 'State Code', max: 2 },
+              { key: 'pan_no', label: 'PAN No.', upper: true, max: 10 },
+            ]},
+            { title: 'Address', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z', fields: [
+              { key: 'address', label: 'Address', span: 2 },
+              { key: 'city', label: 'City' },
+              { key: 'state', label: 'State' },
+              { key: 'pin_code', label: 'PIN Code', max: 6 },
+            ]},
+            { title: 'Bank Details', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', fields: [
+              { key: 'bank_name', label: 'Bank Name' },
+              { key: 'bank_account', label: 'Account No.' },
+              { key: 'bank_ifsc', label: 'IFSC Code', upper: true, max: 11 },
+              { key: 'bank_branch', label: 'Branch' },
+            ]},
+          ].map((section) => (
+            <div key={section.title} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="bg-emerald-600 px-4 py-2 flex items-center gap-2">
+                <svg className="h-4 w-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={section.icon} /></svg>
+                <span className="text-xs font-semibold text-white uppercase tracking-wider">{section.title}</span>
+              </div>
+              <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {section.fields.map((f) => (
+                  <div key={f.key} className={f.span === 2 ? 'md:col-span-2' : ''}>
+                    <label className="block typo-data-label mb-1">{f.label}</label>
+                    <input value={company[f.key]} onChange={(e) => set(f.key, f.upper ? e.target.value.toUpperCase() : e.target.value)}
+                      className="typo-input-sm" maxLength={f.max} />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <h3 className="typo-label-sm mb-2">GST & PAN</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div><label className="block typo-data-label mb-1">GST No.</label><input value={company.gst_no} onChange={(e) => set('gst_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={15} /></div>
-              <div><label className="block typo-data-label mb-1">State Code</label><input value={company.state_code} onChange={(e) => set('state_code', e.target.value)} className="typo-input-sm" maxLength={2} /></div>
-              <div><label className="block typo-data-label mb-1">PAN No.</label><input value={company.pan_no} onChange={(e) => set('pan_no', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={10} /></div>
-            </div>
-          </div>
-          <div>
-            <h3 className="typo-label-sm mb-2">Address</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="md:col-span-2"><label className="block typo-data-label mb-1">Address</label><input value={company.address} onChange={(e) => set('address', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">City</label><input value={company.city} onChange={(e) => set('city', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">State</label><input value={company.state} onChange={(e) => set('state', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">PIN Code</label><input value={company.pin_code} onChange={(e) => set('pin_code', e.target.value)} className="typo-input-sm" maxLength={6} /></div>
-            </div>
-          </div>
-          <div>
-            <h3 className="typo-label-sm mb-2">Bank Details</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div><label className="block typo-data-label mb-1">Bank Name</label><input value={company.bank_name} onChange={(e) => set('bank_name', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">Account No.</label><input value={company.bank_account} onChange={(e) => set('bank_account', e.target.value)} className="typo-input-sm" /></div>
-              <div><label className="block typo-data-label mb-1">IFSC Code</label><input value={company.bank_ifsc} onChange={(e) => set('bank_ifsc', e.target.value.toUpperCase())} className="typo-input-sm" maxLength={11} /></div>
-              <div><label className="block typo-data-label mb-1">Branch</label><input value={company.bank_branch} onChange={(e) => set('bank_branch', e.target.value)} className="typo-input-sm" /></div>
-            </div>
-          </div>
+          ))}
+
           <button onClick={handleCompanySave} disabled={companySaving}
-            className="rounded-lg bg-primary-600 px-6 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
             {companySaving ? 'Saving...' : 'Save Company Profile'}
           </button>
         </div>
@@ -332,18 +356,22 @@ export default function SettingsPage() {
 
       {/* ── Financial Years Tab ── */}
       {tab === 'fy' && (
-        <div className="mt-3 max-w-3xl space-y-4">
+        <div className="mt-4 space-y-4">
           {activeCompany && (
             <p className="text-xs text-gray-500">Managing financial years for <span className="font-semibold text-gray-700">{activeCompany.name}</span></p>
           )}
-          <div className="bg-gray-50 rounded-lg p-3">
-            <h3 className="typo-label-sm mb-2">Create Financial Year</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+          {/* Create FY card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="bg-emerald-600 px-4 py-2 flex items-center gap-2">
+              <svg className="h-4 w-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <span className="text-xs font-semibold text-white uppercase tracking-wider">Create Financial Year</span>
+            </div>
+            <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <div><label className="block typo-data-label mb-1">Code</label><input value={fyForm.code} onChange={(e) => setFYForm(f => ({ ...f, code: e.target.value }))} className="typo-input-sm" placeholder="FY2026-27" /></div>
               <div><label className="block typo-data-label mb-1">Start Date</label><input type="date" value={fyForm.start_date} onChange={(e) => setFYForm(f => ({ ...f, start_date: e.target.value }))} className="typo-input-sm" /></div>
               <div><label className="block typo-data-label mb-1">End Date</label><input type="date" value={fyForm.end_date} onChange={(e) => setFYForm(f => ({ ...f, end_date: e.target.value }))} className="typo-input-sm" /></div>
-              <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={fyForm.is_current} onChange={(e) => setFYForm(f => ({ ...f, is_current: e.target.checked }))} /> Current</label>
-              <button onClick={handleFYCreate} disabled={fyCreating} className="rounded bg-primary-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-primary-700 disabled:opacity-50">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-600"><input type="checkbox" checked={fyForm.is_current} onChange={(e) => setFYForm(f => ({ ...f, is_current: e.target.checked }))} className="rounded border-gray-300 text-emerald-600" /> Current</label>
+              <button onClick={handleFYCreate} disabled={fyCreating} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
                 {fyCreating ? 'Creating...' : 'Create'}
               </button>
             </div>
@@ -352,7 +380,7 @@ export default function SettingsPage() {
             {fys.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No financial years created yet</p>
             ) : fys.map((fy) => (
-              <div key={fy.id} className={`rounded-lg border p-3 ${fy.is_current ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
+              <div key={fy.id} className={`rounded-xl border p-4 shadow-sm ${fy.is_current ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 bg-white'}`}>
                 {/* Edit mode */}
                 {editingFy?.id === fy.id ? (
                   <div className="space-y-2">
