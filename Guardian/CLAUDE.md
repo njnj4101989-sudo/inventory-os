@@ -31,7 +31,30 @@
 
 ---
 
-## Current State (Session 82 — 2026-03-23)
+## Current State (Session 83 — 2026-03-25)
+
+### S83: Full App Typography + Emerald Theme Unification
+
+**25 files changed, 747 insertions, 609 deletions.**
+
+- Emerald theme on all tabs, buttons, focus rings, filter pills, sidebar, modal headers — zero `primary-600`/blue left in UI chrome
+- `FilterSelect` component (`components/common/FilterSelect.jsx`) replaces all native `<select>` dropdowns — emerald highlight, custom styled
+- `SearchInput` compacted to `typo-input-sm` sizing
+- Header: company name pill with icon, FY badge with bg, compact user avatar
+- Sidebar: `w-52` (was `w-60`), emerald active states + logo, tighter nav items
+- Settings: section headers redesigned, Companies tab with premium cards (accent bar, hover, switch button)
+- LotsPage: collapsible roll picker with CSS grid slide animation, inline toolbar labels
+- ChallansPage: emerald detail header (was orange), underline tabs (was pills), full typo-* migration
+- LedgerPanel: emerald header/table, `max-w-4xl` (was 2xl), striped rows, column borders
+- PartyMasters detail: emerald header, hover shadow on cards, typo-* on all fields/KPIs
+- All 14 pages + 5 components + 6 forms migrated from raw Tailwind to typo-* classes
+- guardian.md Protocol 6 updated (FilterSelect props), Protocol 10 rules 6-12 added (emerald, tabs, buttons, modals, dark bg)
+
+**NEXT:** Test full cutting sheet flow e2e on prod. Remnant roll UX (needs spec). Deploy S83.
+
+---
+
+## Previous State (Session 82 — 2026-03-23)
 
 ### S82: Full Audit — 7 Critical + 23 Warnings Fixed
 
@@ -40,8 +63,6 @@
 **Tier 3 (polish):** auth search_path try/finally, roles HTTPException→AppException, MastersPage BLS placeholder, MyWorkPage alert→inline banner
 
 **Files:** 28 changed across 2 commits. Migration applied on prod. All deployed.
-
-**NEXT:** Test full cutting sheet flow end-to-end on prod with new product types. Remnant roll UX (needs spec).
 
 ---
 
@@ -473,6 +494,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S83 | Typography + Emerald Theme | 25 files: FilterSelect component, emerald tabs/buttons/focus/sidebar, collapsible roll picker, LedgerPanel redesign, all 14 pages typo-* migrated, guardian.md Protocol 10 rules 6-12 |
 | S82 | Full Audit — 3 Tiers | 7 critical + 23 warnings fixed: close_preview crash, BLS→FBL (16 refs), FY/batch FOR UPDATE, model ondelete/index sync (21 gaps), palla_mode CHECK, zero-size guard, Pydantic dates, auth try/finally, roles AppException, MyWorkPage banner |
 | S81 | Deploy S80 + Product Type Overhaul | Deployed S80+S81, 4 product types (FBL/SBL/LHG/SAR), palla_mode, palla unit logic, QR compact, CuttingSheet dynamic unit, LotsPage full-width |
 | S80 | Multi-Design Lots + Print + Auto-Fill | designs JSON replaces design_no+default_size_pattern, batch.design_no, lot code LT-{PT}-XXXX, 7 sizes, OrderPrint+PackingSlip, stock-in auto-fill, unit filter+label fix |
