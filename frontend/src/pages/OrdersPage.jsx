@@ -10,6 +10,7 @@ import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 import OrderPrint from '../components/common/OrderPrint'
+import FilterSelect from '../components/common/FilterSelect'
 import useQuickMaster from '../hooks/useQuickMaster'
 import { useAuth } from '../hooks/useAuth'
 
@@ -42,10 +43,10 @@ function SKUCodeDisplay({ code, large }) {
   const { base, vas } = parseSKU(code)
   return (
     <span className={`inline-flex items-center gap-1 flex-wrap ${large ? '' : ''}`}>
-      <span className={`font-semibold text-gray-800 ${large ? 'text-lg' : ''}`}>{base}</span>
+      <span className={`typo-data ${large ? 'text-lg' : ''}`}>{base}</span>
       {vas.map(va => {
         const c = VA_COLORS[va] || DEFAULT_VA
-        return <span key={va} className={`rounded px-1 py-0.5 ${large ? 'text-xs' : 'text-[10px]'} font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
+        return <span key={va} className={`rounded px-1 py-0.5 typo-badge leading-none ${c.bg} ${c.text}`}>+{va}</span>
       })}
     </span>
   )
@@ -68,9 +69,9 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color = 'slate' }) {
   return (
     <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/85">{label}</p>
+      <p className="typo-kpi-label text-white/85">{label}</p>
       <p className="mt-0.5 text-xl font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[11px] font-medium text-white/75">{sub}</p>}
+      {sub && <p className="typo-caption text-white/75">{sub}</p>}
     </div>
   )
 }
@@ -91,12 +92,12 @@ function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRo
         data-grid-col={gridCol}
         className={`w-14 rounded border text-center text-xs py-0.5 focus:outline-none focus:ring-1 ${
           qty > 0
-            ? qty > available ? 'border-red-400 focus:ring-red-400 bg-red-50' : 'border-primary-400 focus:ring-primary-400 bg-primary-50'
+            ? qty > available ? 'border-red-400 focus:ring-red-400 bg-red-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
             : 'border-gray-200 focus:ring-gray-300'
         }`}
         placeholder="0"
       />
-      <span className={`text-[11px] leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
+      <span className={`typo-caption leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
         {available}
       </span>
     </div>
@@ -106,12 +107,12 @@ function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRo
 /* ── DataTable columns ── */
 
 const COLUMNS = [
-  { key: 'order_number', label: 'Order #', render: (val) => <span className="font-semibold text-primary-700">{val}</span> },
+  { key: 'order_number', label: 'Order #', render: (val) => <span className="font-semibold text-emerald-700">{val}</span> },
   { key: 'customer_name', label: 'Customer', render: (val, row) => row.customer?.name || val || <span className="text-gray-400">Walk-in</span> },
   {
     key: 'source', label: 'Source',
     render: (val) => (
-      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${SOURCE_COLORS[val] || 'bg-gray-100 text-gray-600'}`}>
+      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 typo-badge ${SOURCE_COLORS[val] || 'bg-gray-100 text-gray-600'}`}>
         {val}
       </span>
     ),
@@ -522,23 +523,23 @@ export default function OrdersPage() {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
-            <h1 className="text-lg font-bold leading-tight">{o.customer?.name || o.customer_name || 'Walk-in'}</h1>
+            <h1 className="typo-modal-title text-white leading-tight">{o.customer?.name || o.customer_name || 'Walk-in'}</h1>
             <p className="text-xs opacity-80">{o.order_number} &middot; <StatusBadge status={o.status} /></p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setPrintOrder(detailOrder); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors flex items-center gap-1">
+            <button onClick={() => { setPrintOrder(detailOrder); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors flex items-center gap-1">
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
               Print
             </button>
-            <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Close</button>
+            <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
         </div>
 
         {detailLoading ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
           </div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
@@ -550,7 +551,7 @@ export default function OrdersPage() {
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Source</p>
-                <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_COLORS[o.source] || 'bg-gray-100 text-gray-600'}`}>{o.source}</span>
+                <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge ${SOURCE_COLORS[o.source] || 'bg-gray-100 text-gray-600'}`}>{o.source}</span>
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Date</p>
@@ -578,14 +579,14 @@ export default function OrdersPage() {
             <div className="border rounded overflow-hidden">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50">
-                  <tr className="text-left text-gray-600 text-[11px] font-semibold uppercase">
-                    <th className="px-2 py-1.5">SKU</th>
-                    <th className="px-2 py-1.5">Color</th>
-                    <th className="px-2 py-1.5">Size</th>
-                    <th className="px-2 py-1.5 text-right">Qty</th>
-                    <th className="px-2 py-1.5 text-right">Price</th>
-                    <th className="px-2 py-1.5 text-right">Total</th>
-                    <th className="px-2 py-1.5 text-right">Fulfilled</th>
+                  <tr className="text-left">
+                    <th className="px-2 py-1.5 typo-th">SKU</th>
+                    <th className="px-2 py-1.5 typo-th">Color</th>
+                    <th className="px-2 py-1.5 typo-th">Size</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Qty</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Price</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Total</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -618,8 +619,8 @@ export default function OrdersPage() {
             {/* Grand total */}
             <div className="flex justify-end">
               <div className="bg-gray-50 rounded px-4 py-2 text-right">
-                <span className="text-gray-500 text-xs">Grand Total</span>
-                <p className="text-lg font-bold text-gray-800">₹{(o.total_amount || 0).toLocaleString('en-IN')}</p>
+                <span className="typo-caption">Grand Total</span>
+                <p className="typo-kpi-sm text-gray-800">₹{(o.total_amount || 0).toLocaleString('en-IN')}</p>
               </div>
             </div>
 
@@ -627,11 +628,11 @@ export default function OrdersPage() {
             {canAct && (
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button onClick={() => handleAction('cancel')} disabled={actioning}
-                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 text-xs font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Cancel Order'}
                 </button>
                 <button onClick={() => handleAction('ship')} disabled={actioning}
-                  className="rounded bg-green-600 text-white px-4 py-1.5 text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+                  className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Ship Order'}
                 </button>
               </div>
@@ -650,17 +651,17 @@ export default function OrdersPage() {
         {confirmDiscard && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
-              <h3 className="text-sm font-bold text-gray-800">Discard this order?</h3>
+              <h3 className="typo-data">Discard this order?</h3>
               <p className="text-xs text-gray-500">
                 You have <span className="font-semibold text-gray-700">{totalItems}</span> item{totalItems !== 1 ? 's' : ''} across <span className="font-semibold text-gray-700">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''}. This cannot be undone.
               </p>
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={confirmAndClose}
-                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 text-xs font-medium hover:bg-red-50 transition-colors">
+                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 transition-colors">
                   Discard
                 </button>
                 <button onClick={cancelDiscard} autoFocus
-                  className="rounded bg-emerald-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-emerald-700 transition-colors">
+                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 transition-colors">
                   Keep Editing
                 </button>
               </div>
@@ -671,13 +672,13 @@ export default function OrdersPage() {
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
-            <h1 className="text-lg font-bold leading-tight">New Order</h1>
+            <h1 className="typo-modal-title text-white leading-tight">New Order</h1>
             <p className="text-xs opacity-80">Pick designs &middot; set qty per color &times; size</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={requestClose} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Cancel</button>
+            <button onClick={requestClose} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={saving || totalItems === 0}
-              className="rounded bg-white text-emerald-700 px-4 py-1.5 text-xs font-bold hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+              className="rounded bg-white text-emerald-700 px-4 py-1.5 typo-btn-sm hover:bg-emerald-50 disabled:opacity-50 transition-colors">
               {saving ? 'Creating...' : 'Create Order'}
             </button>
           </div>
@@ -710,7 +711,7 @@ export default function OrdersPage() {
                   <div className="flex items-center gap-3 text-xs text-gray-600 md:col-span-1">
                     <div>
                       {c.phone && <p>{c.phone}</p>}
-                      {c.gst_no && <p className="text-[10px] text-gray-400">{c.gst_no}</p>}
+                      {c.gst_no && <p className="typo-caption">{c.gst_no}</p>}
                     </div>
                   </div>
                 ) : null
@@ -752,7 +753,7 @@ export default function OrdersPage() {
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="typo-card-title">Select Designs</h3>
-                  <span className="text-[11px] text-gray-400">{designGroups.length} designs available</span>
+                  <span className="typo-caption">{designGroups.length} designs available</span>
                 </div>
                 <div className="mb-2" data-design-search>
                   <SearchInput value={designSearch} onChange={setDesignSearch} placeholder="Search by design number (e.g. 101, 702)..." />
@@ -779,21 +780,21 @@ export default function OrdersPage() {
                             }`}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-bold text-gray-800">{group.key}</span>
+                              <span className="typo-data">{group.key}</span>
                               {isSelected && (
-                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-100 rounded px-1.5 py-0.5">Added</span>
+                                <span className="typo-badge text-emerald-600 bg-emerald-100 rounded px-1.5 py-0.5">Added</span>
                               )}
                             </div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[11px] text-gray-500">{group.colors.length}c &middot; {group.sizes.length}s</span>
-                              {defaultPrice > 0 && <span className="text-[11px] text-gray-500">&middot; ₹{defaultPrice}</span>}
-                              <span className={`text-[11px] font-medium ${totalStock > 0 ? 'text-green-600' : 'text-red-400'}`}>&middot; {totalStock} in stock</span>
+                              <span className="typo-caption">{group.colors.length}c &middot; {group.sizes.length}s</span>
+                              {defaultPrice > 0 && <span className="typo-caption">&middot; ₹{defaultPrice}</span>}
+                              <span className={`typo-caption font-medium ${totalStock > 0 ? 'text-green-600' : 'text-red-400'}`}>&middot; {totalStock} in stock</span>
                             </div>
                             {firstSku?._parsed.vas.length > 0 && (
                               <div className="flex gap-1 mt-1">
                                 {firstSku._parsed.vas.map(va => {
                                   const c = VA_COLORS[va] || DEFAULT_VA
-                                  return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
+                                  return <span key={va} className={`rounded px-1 py-0.5 typo-badge leading-none ${c.bg} ${c.text}`}>+{va}</span>
                                 })}
                               </div>
                             )}
@@ -826,14 +827,14 @@ export default function OrdersPage() {
                         {/* Design header — inline delete confirmation or normal */}
                         {deleteConfirmKey === group.key ? (
                           <div className="bg-red-50 border-b border-red-200 px-3 py-2 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-red-700">Remove <span className="font-bold">{group.key}</span>{groupQty > 0 ? ` (${groupQty} items)` : ''}?</span>
+                            <span className="typo-btn-sm text-red-700">Remove <span className="font-bold">{group.key}</span>{groupQty > 0 ? ` (${groupQty} items)` : ''}?</span>
                             <div className="flex items-center gap-2">
                               <button onClick={confirmDeleteDesign}
-                                className="rounded border border-red-300 text-red-600 px-3 py-1 text-xs font-medium hover:bg-red-100 transition-colors">
+                                className="rounded border border-red-300 text-red-600 px-3 py-1 typo-btn-sm hover:bg-red-100 transition-colors">
                                 Remove
                               </button>
                               <button onClick={cancelDeleteDesign} autoFocus
-                                className="rounded bg-gray-600 text-white px-3 py-1 text-xs font-semibold hover:bg-gray-700 transition-colors">
+                                className="rounded bg-gray-600 text-white px-3 py-1 typo-btn-sm hover:bg-gray-700 transition-colors">
                                 Keep
                               </button>
                             </div>
@@ -841,20 +842,20 @@ export default function OrdersPage() {
                         ) : (
                           <div className="bg-gray-50 px-3 py-1.5 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-gray-800">{group.key}</span>
-                              <span className="text-[11px] text-gray-400">{group.colors.length}c &middot; {group.sizes.length}s</span>
+                              <span className="typo-data">{group.key}</span>
+                              <span className="typo-caption">{group.colors.length}c &middot; {group.sizes.length}s</span>
                               {group.skus[0]?._parsed.vas.length > 0 && (
                                 <span className="flex gap-1">
                                   {group.skus[0]._parsed.vas.map(va => {
                                     const c = VA_COLORS[va] || DEFAULT_VA
-                                    return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold ${c.bg} ${c.text}`}>+{va}</span>
+                                    return <span key={va} className={`rounded px-1 py-0.5 typo-badge ${c.bg} ${c.text}`}>+{va}</span>
                                   })}
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-1">
-                                <label className="text-[11px] uppercase text-gray-500 font-semibold">₹/pc</label>
+                                <label className="typo-label-sm mb-0">₹/pc</label>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -876,7 +877,7 @@ export default function OrdersPage() {
                                 />
                               </div>
                               {groupQty > 0 && (
-                                <span className="text-xs font-semibold text-emerald-700">{groupQty}pcs ₹{groupSubtotal.toLocaleString('en-IN')}</span>
+                                <span className="typo-btn-sm text-emerald-700">{groupQty}pcs ₹{groupSubtotal.toLocaleString('en-IN')}</span>
                               )}
                               <button onClick={() => setDeleteConfirmKey(group.key)} tabIndex={-1}
                                 className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Remove design (Del)">
@@ -891,9 +892,9 @@ export default function OrdersPage() {
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="border-b bg-white">
-                                <th className="px-2 py-1 text-left text-[11px] text-gray-500 font-medium w-28">Color</th>
+                                <th className="px-2 py-1 text-left typo-th w-28">Color</th>
                                 {group.sizes.map(size => (
-                                  <th key={size} className="px-1 py-1 text-center text-[11px] text-gray-500 font-medium">{size}</th>
+                                  <th key={size} className="px-1 py-1 text-center typo-th">{size}</th>
                                 ))}
                               </tr>
                             </thead>
@@ -908,7 +909,7 @@ export default function OrdersPage() {
                                   </td>
                                   {group.sizes.map((size, sIdx) => {
                                     const sku = findSKU(group, color, size)
-                                    if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 text-[11px]">—</td>
+                                    if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 typo-caption">—</td>
                                     const avail = sku.stock?.available_qty || 0
                                     return (
                                       <td key={size} className="px-1 py-1 text-center">
@@ -945,7 +946,7 @@ export default function OrdersPage() {
               <div className="text-xs text-gray-600">
                 <span className="font-semibold text-gray-800">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''} &middot; <span className="font-semibold text-gray-800">{totalItems}</span> items
               </div>
-              <div className="hidden md:flex items-center gap-3 text-[11px] text-gray-400">
+              <div className="hidden md:flex items-center gap-3 typo-caption">
                 <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Tab</kbd> Next cell</span>
                 <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Del</kbd> Remove design</span>
                 <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
@@ -954,9 +955,9 @@ export default function OrdersPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-base font-bold text-gray-800">₹{grandTotal.toLocaleString('en-IN')}</span>
-              <button onClick={requestClose} className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={requestClose} className="rounded border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={handleCreate} disabled={saving || totalItems === 0} data-create-btn
-                className="rounded bg-emerald-600 text-white px-4 py-1.5 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                 {saving ? 'Creating...' : 'Create Order'}
               </button>
             </div>
@@ -977,8 +978,9 @@ export default function OrdersPage() {
           <p className="mt-1 typo-caption">Manage customer orders and fulfillment</p>
         </div>
         <button onClick={openCreate}
-          className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-          + New Order
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          New Order
         </button>
       </div>
 
@@ -996,17 +998,15 @@ export default function OrdersPage() {
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(t => (
             <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === t.key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${
+                statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
               {t.label}
             </button>
           ))}
         </div>
-        <select value={sourceFilter} onChange={(e) => { setSourceFilter(e.target.value); setPage(1) }}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-          {SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <FilterSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v); setPage(1) }}
+          options={SOURCE_OPTIONS} />
         <div className="ml-auto w-64">
           <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search orders..." />
         </div>

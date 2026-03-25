@@ -39,7 +39,7 @@ function SKUCodeDisplay({ code }) {
       <span className="font-semibold text-gray-800">{base}</span>
       {vas.map(va => {
         const c = VA_COLORS[va] || DEFAULT_VA
-        return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
+        return <span key={va} className={`rounded px-1 py-0.5 typo-badge leading-none ${c.bg} ${c.text}`}>+{va}</span>
       })}
     </span>
   )
@@ -55,9 +55,9 @@ const KPI_COLORS = {
 function KPICard({ label, value, sub, color = 'slate' }) {
   return (
     <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/85">{label}</p>
+      <p className="typo-label-sm tracking-wide text-white/85">{label}</p>
       <p className="mt-0.5 text-xl font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[11px] font-medium text-white/75">{sub}</p>}
+      {sub && <p className="typo-caption text-white/75">{sub}</p>}
     </div>
   )
 }
@@ -65,7 +65,7 @@ function KPICard({ label, value, sub, color = 'slate' }) {
 /* ── DataTable columns ── */
 
 const COLUMNS = [
-  { key: 'invoice_number', label: 'Invoice #', render: (val) => <span className="font-semibold text-primary-700">{val}</span> },
+  { key: 'invoice_number', label: 'Invoice #', render: (val) => <span className="font-semibold text-emerald-700">{val}</span> },
   { key: 'order', label: 'Order #', render: (val) => val?.order_number || '—' },
   { key: 'order', label: 'Customer', render: (val, row) => row.order?.customer_name || val?.customer_name || <span className="text-gray-400">—</span> },
   {
@@ -200,7 +200,7 @@ export default function InvoicesPage() {
         <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
           <span className="font-semibold text-gray-800">Invoice {inv.invoice_number}</span>
           <div className="flex gap-2">
-            <button onClick={handlePrint} className="rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 transition-colors">
+            <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">
               Print
             </button>
             <button onClick={() => setPrintInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
@@ -330,20 +330,20 @@ export default function InvoicesPage() {
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-700 to-blue-700 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
-            <h1 className="text-lg font-bold leading-tight">{inv.invoice_number}</h1>
+            <h1 className="typo-modal-title text-white leading-tight">{inv.invoice_number}</h1>
             <p className="text-xs opacity-80">Order {o.order_number || '—'} &middot; <StatusBadge status={inv.status} /></p>
           </div>
           <div className="flex gap-2">
-            <button onClick={openPrint} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">
+            <button onClick={openPrint} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">
               Print Invoice
             </button>
-            <button onClick={() => setDetailInvoice(null)} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30 transition-colors">Close</button>
+            <button onClick={() => setDetailInvoice(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
         </div>
 
         {detailLoading ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
           </div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
@@ -378,7 +378,7 @@ export default function InvoicesPage() {
             <div className="border rounded overflow-hidden">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50">
-                  <tr className="text-left text-gray-600 text-[11px] font-semibold uppercase">
+                  <tr className="text-left text-gray-600 typo-th">
                     <th className="px-2 py-1.5">#</th>
                     <th className="px-2 py-1.5">SKU</th>
                     <th className="px-2 py-1.5">Color</th>
@@ -432,7 +432,7 @@ export default function InvoicesPage() {
                     <span className="text-green-600">-₹{(inv.discount_amount || 0).toLocaleString('en-IN')}</span>
                   </div>
                 )}
-                <div className="flex justify-between pt-2 border-t-2 border-blue-600 text-lg font-bold">
+                <div className="flex justify-between pt-2 border-t-2 border-emerald-600 typo-kpi-sm">
                   <span>Grand Total</span>
                   <span>₹{(inv.total_amount || 0).toLocaleString('en-IN')}</span>
                 </div>
@@ -443,7 +443,7 @@ export default function InvoicesPage() {
             {inv.status === 'issued' && (
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button onClick={handleMarkPaid} disabled={actioning}
-                  className="rounded bg-green-600 text-white px-4 py-1.5 text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+                  className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Mark as Paid'}
                 </button>
               </div>
@@ -476,8 +476,8 @@ export default function InvoicesPage() {
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(t => (
             <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === t.key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${
+                statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
               {t.label}
             </button>

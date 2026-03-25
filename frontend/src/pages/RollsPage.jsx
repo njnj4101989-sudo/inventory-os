@@ -9,6 +9,7 @@ import { getAllFabrics, getAllColors, getAllValueAdditions, getAllVAParties } fr
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import SearchInput from '../components/common/SearchInput'
+import FilterSelect from '../components/common/FilterSelect'
 import Pagination from '../components/common/Pagination'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
@@ -1540,7 +1541,7 @@ export default function RollsPage() {
               Print Labels ({lastSavedRolls.length})
             </button>
           )}
-          <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 shadow-sm transition-colors">
+          <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             New Purchase
           </button>
@@ -1551,8 +1552,8 @@ export default function RollsPage() {
       <div className="mt-5 flex items-center gap-6 border-b border-gray-200">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`inline-flex items-center gap-1.5 pb-3 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`inline-flex items-center gap-1.5 pb-3 typo-tab border-b-2 transition-colors ${
+              tab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={t.icon} />
@@ -1647,22 +1648,12 @@ export default function RollsPage() {
 
               {/* Row 2: Dropdowns + Search + Clear */}
               <div className="flex flex-wrap items-center gap-3">
-                <select value={rollSupplierFilter} onChange={(e) => { setRollSupplierFilter(e.target.value); setRollPage(1) }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Suppliers</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <select value={rollFabricFilter} onChange={(e) => { setRollFabricFilter(e.target.value); setRollPage(1) }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Fabrics</option>
-                  {uniqueFabrics.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
-                <select value={rollProcessFilter} onChange={(e) => { setRollProcessFilter(e.target.value); setRollPage(1) }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Value Additions</option>
-                  <option value="none">No Processing</option>
-                  {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-                </select>
+                <FilterSelect value={rollSupplierFilter} onChange={(v) => { setRollSupplierFilter(v); setRollPage(1) }}
+                  options={[{ value: '', label: 'All Suppliers' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
+                <FilterSelect value={rollFabricFilter} onChange={(v) => { setRollFabricFilter(v); setRollPage(1) }}
+                  options={[{ value: '', label: 'All Fabrics' }, ...uniqueFabrics.map(f => ({ value: f, label: f }))]} />
+                <FilterSelect value={rollProcessFilter} onChange={(v) => { setRollProcessFilter(v); setRollPage(1) }}
+                  options={[{ value: '', label: 'All Value Additions' }, { value: 'none', label: 'No Processing' }, ...masterValueAdditions.map(va => ({ value: va.id, label: `${va.name} (${va.short_code})` }))]} />
                 <div className="flex-1 max-w-sm">
                   <SearchInput value={rollSearch} onChange={(v) => { setRollSearch(v); setRollPage(1) }} placeholder="Search code, color, invoice..." />
                 </div>
@@ -1689,14 +1680,14 @@ export default function RollsPage() {
                       if (allSelected) setSelectedRolls(new Set())
                       else setSelectedRolls(new Set(sendableRolls.map((r) => r.id)))
                     }}
-                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                 ),
                 sortable: false,
                 render: (_, row) => ((row.status !== 'in_stock' && row.status !== 'remnant') || (row.remaining_weight || 0) <= 0) ? <span className="w-4" /> : (
                   <input type="checkbox" checked={selectedRolls.has(row.id)}
                     onChange={(e) => { e.stopPropagation(); setSelectedRolls((prev) => { const next = new Set(prev); next.has(row.id) ? next.delete(row.id) : next.add(row.id); return next }) }}
                     onClick={(e) => e.stopPropagation()}
-                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                 ),
               }
               const displayColumns = isSelectableView ? [CHECKBOX_COL, ...ROLL_COLUMNS] : ROLL_COLUMNS
@@ -1837,16 +1828,10 @@ export default function RollsPage() {
             {/* ── Filter toolbar ── */}
             {!procLoading && procRolls.length > 0 && (
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <select value={procProcessFilter} onChange={(e) => setProcProcessFilter(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Value Additions</option>
-                  {uniqueVAs.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-                </select>
-                <select value={procVendorFilter} onChange={(e) => setProcVendorFilter(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                  <option value="">All Vendors</option>
-                  {uniqueVendors.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <FilterSelect value={procProcessFilter} onChange={setProcProcessFilter}
+                  options={[{ value: '', label: 'All Value Additions' }, ...uniqueVAs.map(va => ({ value: va.id, label: `${va.name} (${va.short_code})` }))]} />
+                <FilterSelect value={procVendorFilter} onChange={setProcVendorFilter}
+                  options={[{ value: '', label: 'All Vendors' }, ...uniqueVendors.map(v => ({ value: v, label: v }))]} />
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium text-gray-500 uppercase mr-1">Duration:</span>
                   {[
@@ -2165,7 +2150,7 @@ export default function RollsPage() {
                         type="number" step="0.1" value={invMinWeight}
                         onChange={e => setInvMinWeight(e.target.value)}
                         placeholder="e.g. 6.7"
-                        className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs tabular-nums focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                       />
                       {invMinWeight && (
                         <button onClick={() => setInvMinWeight('')} className="text-gray-400 hover:text-red-500">&times;</button>
@@ -2654,7 +2639,7 @@ export default function RollsPage() {
                                     data-color-input="true"
                                     value={row.color}
                                     onChange={(e) => setColorName(gIdx, cIdx, e.target.value)}
-                                    className="w-full rounded border border-gray-300 px-1.5 py-1 text-sm font-medium focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    className="w-full rounded border border-gray-300 px-1.5 py-1 text-sm font-medium focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                     onKeyDown={(e) => {
                                       // Shift+G → new design group (from any color select)
                                       if (e.key.toLowerCase() === 'g' && e.shiftKey && !e.ctrlKey && !e.altKey) {
@@ -2729,7 +2714,7 @@ export default function RollsPage() {
                                         value={w}
                                         onChange={(e) => setWeight(gIdx, cIdx, wIdx, e.target.value)}
                                         placeholder="0.000"
-                                        className="w-[80px] rounded border border-gray-300 px-1.5 py-1 text-sm text-center tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                        className="w-[80px] rounded border border-gray-300 px-1.5 py-1 text-sm text-center tabular-nums focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                                             e.preventDefault()

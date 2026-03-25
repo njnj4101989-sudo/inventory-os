@@ -225,7 +225,7 @@ export default function MastersPage() {
           <h1 className="typo-page-title">Masters</h1>
           <p className="text-xs text-gray-500">Manage product types, colors, fabrics, and VA types</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+        <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           Add {entityLabel}
         </button>
@@ -235,8 +235,8 @@ export default function MastersPage() {
       <div className="mt-2 flex items-center gap-6 border-b border-gray-200">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => { setTab(t.key); setSearch('') }}
-            className={`inline-flex items-center gap-1.5 pb-3 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`inline-flex items-center gap-1.5 pb-3 typo-tab border-b-2 transition-colors ${
+              tab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={t.icon} />
@@ -282,8 +282,8 @@ export default function MastersPage() {
         title=""
         actions={
           <>
-            <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
+            <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </button>
           </>
@@ -399,7 +399,7 @@ export default function MastersPage() {
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked={form.is_active ?? true} onChange={(e) => set('is_active', e.target.checked)} className="sr-only peer" />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600" />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600" />
               </label>
               <span className="text-sm text-gray-700">{form.is_active ? 'Active' : 'Inactive'}</span>
             </div>

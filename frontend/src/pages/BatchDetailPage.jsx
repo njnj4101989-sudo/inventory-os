@@ -600,7 +600,7 @@ export default function BatchDetailPage() {
               <div className="mt-2 space-y-1.5">
                 <textarea value={notesValue} onChange={(e) => setNotesValue(e.target.value)}
                   rows={2} placeholder="Add notes about this batch..."
-                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none" />
+                  className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none" />
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setEditingNotes(false)} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1">Cancel</button>
                   <button onClick={handleSaveNotes} disabled={actionLoading}

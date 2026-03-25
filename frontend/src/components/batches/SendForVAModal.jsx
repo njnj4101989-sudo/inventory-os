@@ -188,7 +188,7 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
                 return (
                   <div key={b.id} className={`flex items-center gap-3 px-3 py-2 ${isSelected ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleBatch(b.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
                     <div className="flex-1 min-w-0">
                       <span className="typo-data font-mono">{b.batch_code}</span>
                       {b.size && <span className="ml-2 typo-badge bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{b.size}</span>}

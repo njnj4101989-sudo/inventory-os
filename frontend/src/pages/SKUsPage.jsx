@@ -8,6 +8,7 @@ import Pagination from '../components/common/Pagination'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
 import SKUForm from '../components/forms/SKUForm'
+import FilterSelect from '../components/common/FilterSelect'
 
 const VA_COLORS = {
   EMB: { bg: 'bg-purple-100', text: 'text-purple-700', dot: '#a855f7' },
@@ -333,25 +334,25 @@ export default function SKUsPage() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
                   <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)}
                     placeholder="0.00" min="0" step="0.01"
-                    className="w-full rounded-lg border border-gray-300 pl-7 pr-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                    className="w-full rounded-lg border border-gray-300 pl-7 pr-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                 </div>
               </div>
               <div>
                 <label className="typo-label-sm">MRP (₹)</label>
                 <input type="number" value={editMrp} onChange={e => setEditMrp(e.target.value)}
                   placeholder="0.00" min="0" step="0.01"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
               <div>
                 <label className="typo-label-sm">Sale Rate (₹)</label>
                 <input type="number" value={editSaleRate} onChange={e => setEditSaleRate(e.target.value)}
                   placeholder="0.00" min="0" step="0.01"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
               <div>
                 <label className="typo-label-sm">Unit</label>
                 <select value={editUnit} onChange={e => setEditUnit(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">Select</option>
                   <option value="pcs">Pieces</option>
                   <option value="meters">Meters</option>
@@ -362,12 +363,12 @@ export default function SKUsPage() {
                 <label className="typo-label-sm">HSN Code</label>
                 <input type="text" value={editHsn} onChange={e => setEditHsn(e.target.value)}
                   placeholder="e.g. 6206" maxLength={8}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
               <div>
                 <label className="typo-label-sm">GST %</label>
                 <select value={editGst} onChange={e => setEditGst(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                   <option value="">Select</option>
                   <option value="0">0%</option>
                   <option value="5">5%</option>
@@ -380,7 +381,7 @@ export default function SKUsPage() {
                 <label className="typo-label-sm">Description</label>
                 <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
                   placeholder="Product description..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500" />
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
             </div>
           </div>
@@ -421,8 +422,9 @@ export default function SKUsPage() {
           <h1 className="typo-page-title">Finished Goods</h1>
           <p className="mt-1 typo-caption">SKUs are auto-generated when batches are packed</p>
         </div>
-        <button onClick={openCreate} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          + Manual SKU
+        <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Manual SKU
         </button>
       </div>
 
@@ -433,11 +435,11 @@ export default function SKUsPage() {
         <KPICard label="Auto-Generated" value={kpis.autoGenerated} color="emerald" />
       </div>
 
-      <div className="mt-4 flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-4 py-2.5">
-        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5">
+        <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <span className="text-xs text-blue-700">
+        <span className="typo-caption text-emerald-700">
           SKUs with <span className="font-semibold">+EMB</span>, <span className="font-semibold">+BTN</span> etc. are auto-created at pack time from per-color QC data. Set prices here for billing.
         </span>
       </div>
@@ -446,20 +448,13 @@ export default function SKUsPage() {
         <div className="w-64">
           <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search SKU code, color, size..." />
         </div>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
-          <option value="">All Types</option>
-          {PRODUCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select value={filterStock} onChange={e => setFilterStock(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
-          <option value="">All Stock</option>
-          <option value="in_stock">In Stock</option>
-          <option value="out_of_stock">Out of Stock</option>
-        </select>
+        <FilterSelect value={filterType} onChange={setFilterType}
+          options={[{ value: '', label: 'All Types' }, ...PRODUCT_TYPES.map(t => ({ value: t, label: t }))]} />
+        <FilterSelect value={filterStock} onChange={setFilterStock}
+          options={[{ value: '', label: 'All Stock' }, { value: 'in_stock', label: 'In Stock' }, { value: 'out_of_stock', label: 'Out of Stock' }]} />
         {(filterType || filterStock) && (
           <button onClick={() => { setFilterType(''); setFilterStock('') }}
-            className="text-xs text-gray-500 hover:text-gray-700 underline">
+            className="typo-caption hover:text-gray-700 underline">
             Clear filters
           </button>
         )}
@@ -476,16 +471,20 @@ export default function SKUsPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Create SKU (Manual)"
+        title=""
         actions={
           <>
-            <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleCreate} disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleCreate} disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Creating...' : 'Create'}
             </button>
           </>
         }
       >
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+          <h2 className="typo-modal-title text-white">Create SKU (Manual)</h2>
+          <p className="typo-caption text-emerald-100 mt-0.5">Define a finished goods SKU with pricing</p>
+        </div>
         <SKUForm form={form} onChange={setForm} editing={false}
           error={formError} onDismissError={() => setFormError(null)} />
       </Modal>

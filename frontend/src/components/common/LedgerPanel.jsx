@@ -130,12 +130,12 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
       <div className="flex-1 bg-black/30" onClick={onClose} />
 
       {/* Panel */}
-      <div className="w-full max-w-2xl bg-white shadow-xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-4xl bg-white shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-4 py-3 text-white flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-white flex items-center justify-between shrink-0">
           <div>
-            <h2 className="typo-data">{partyName}</h2>
-            <p className="typo-caption opacity-80">{partyType.replace('_', ' ')} Ledger</p>
+            <h2 className="typo-modal-title text-white">{partyName}</h2>
+            <p className="typo-badge text-emerald-100 capitalize">{partyType.replace('_', ' ')} Ledger</p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowPayment(true)}
@@ -164,66 +164,66 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
               <h3 className="typo-badge text-emerald-800">Record Payment</h3>
               <button onClick={() => setShowPayment(false)} className="typo-btn-sm text-gray-500 hover:text-gray-700">Cancel</button>
             </div>
-            {payError && <p className="text-xs text-red-600">{payError}</p>}
+            {payError && <p className="typo-caption text-red-600">{payError}</p>}
             <div className="grid grid-cols-4 gap-2">
               <div>
                 <label className="typo-label-sm">Amount *</label>
                 <input type="number" value={payForm.amount} onChange={(e) => setPayForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="0.00" />
+                  className="typo-input-sm" placeholder="0.00" />
               </div>
               <div>
                 <label className="typo-label-sm">Date *</label>
                 <input type="date" value={payForm.payment_date} onChange={(e) => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs" />
+                  className="typo-input-sm" />
               </div>
               <div>
                 <label className="typo-label-sm">Mode</label>
                 <select value={payForm.payment_mode} onChange={(e) => setPayForm(f => ({ ...f, payment_mode: e.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs">
+                  className="typo-input-sm">
                   {PAYMENT_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="typo-label-sm">Ref No.</label>
                 <input type="text" value={payForm.reference_no} onChange={(e) => setPayForm(f => ({ ...f, reference_no: e.target.value }))}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="UTR / Cheque #" />
+                  className="typo-input-sm" placeholder="UTR / Cheque #" />
               </div>
             </div>
             <div className="grid grid-cols-4 gap-2 items-end">
               {showTDS && (
                 <>
-                  <label className="flex items-center gap-1 text-xs">
+                  <label className="flex items-center gap-1 typo-btn-sm text-gray-700">
                     <input type="checkbox" checked={payForm.tds_applicable} onChange={(e) => setPayForm(f => ({ ...f, tds_applicable: e.target.checked }))} />
                     TDS
                   </label>
                   {payForm.tds_applicable && (
                     <>
                       <select value={payForm.tds_section} onChange={(e) => setPayForm(f => ({ ...f, tds_section: e.target.value }))}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs">
+                        className="typo-input-sm !w-auto">
                         <option value="">Section</option>
                         {TDS_SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
                       <input type="number" value={payForm.tds_rate} onChange={(e) => setPayForm(f => ({ ...f, tds_rate: e.target.value }))}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs" placeholder="Rate %" />
+                        className="typo-input-sm !w-auto" placeholder="Rate %" />
                     </>
                   )}
                 </>
               )}
               {showTCS && (
                 <>
-                  <label className="flex items-center gap-1 text-xs">
+                  <label className="flex items-center gap-1 typo-btn-sm text-gray-700">
                     <input type="checkbox" checked={payForm.tcs_applicable} onChange={(e) => setPayForm(f => ({ ...f, tcs_applicable: e.target.checked }))} />
                     TCS
                   </label>
                   {payForm.tcs_applicable && (
                     <>
                       <select value={payForm.tcs_section} onChange={(e) => setPayForm(f => ({ ...f, tcs_section: e.target.value }))}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs">
+                        className="typo-input-sm !w-auto">
                         <option value="">Section</option>
                         {TCS_SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
                       <input type="number" value={payForm.tcs_rate} onChange={(e) => setPayForm(f => ({ ...f, tcs_rate: e.target.value }))}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs" placeholder="Rate %" />
+                        className="typo-input-sm !w-auto" placeholder="Rate %" />
                     </>
                   )}
                 </>
@@ -240,49 +240,51 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600" />
             </div>
           ) : entries.length === 0 ? (
             <div className="text-center py-12 typo-empty">No ledger entries yet</div>
           ) : (
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 sticky top-0">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-emerald-600 sticky top-0">
                 <tr>
-                  <th className="typo-th text-left px-3 py-2">Date</th>
-                  <th className="typo-th text-left px-3 py-2">Particular</th>
-                  <th className="typo-th text-right px-3 py-2">Debit</th>
-                  <th className="typo-th text-right px-3 py-2">Credit</th>
-                  <th className="typo-th text-right px-3 py-2">Balance</th>
+                  <th className="typo-th text-left px-4 py-2.5 text-white border-r border-emerald-500 w-24">Date</th>
+                  <th className="typo-th text-left px-4 py-2.5 text-white border-r border-emerald-500">Particular</th>
+                  <th className="typo-th text-right px-4 py-2.5 text-white border-r border-emerald-500 w-32">Debit</th>
+                  <th className="typo-th text-right px-4 py-2.5 text-white border-r border-emerald-500 w-32">Credit</th>
+                  <th className="typo-th text-right px-4 py-2.5 text-white w-40">Balance</th>
                 </tr>
               </thead>
               <tbody>
-                {withBalance.map((e) => (
-                  <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">
+                {withBalance.map((e, i) => (
+                  <tr key={e.id} className={`border-b border-gray-100 hover:bg-emerald-50/40 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                    <td className="px-4 py-2 typo-td text-gray-500 whitespace-nowrap border-r border-gray-100">
                       {new Date(e.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
                     </td>
-                    <td className="px-3 py-1.5">
-                      <span className={`inline-block rounded px-1.5 py-0.5 typo-badge mr-1 ${ENTRY_COLORS[e.entry_type] || 'bg-gray-100 text-gray-600'}`}>
-                        {e.entry_type.toUpperCase()}
-                      </span>
-                      <span className="typo-body text-gray-800">{e.description}</span>
-                      {e.notes && <p className="typo-caption text-gray-400 mt-0.5">{e.notes}</p>}
+                    <td className="px-4 py-2 border-r border-gray-100">
+                      <div className="flex items-start gap-2">
+                        <span className={`inline-block shrink-0 rounded px-1.5 py-0.5 typo-badge mt-0.5 ${ENTRY_COLORS[e.entry_type] || 'bg-gray-100 text-gray-600'}`}>
+                          {e.entry_type.charAt(0).toUpperCase() + e.entry_type.slice(1)}
+                        </span>
+                        <span className="typo-td text-gray-800">{e.description}</span>
+                      </div>
+                      {e.notes && <p className="typo-caption mt-0.5">{e.notes}</p>}
                     </td>
-                    <td className="px-3 py-1.5 text-right typo-td">{fmt(e.debit)}</td>
-                    <td className="px-3 py-1.5 text-right typo-td">{fmt(e.credit)}</td>
-                    <td className={`px-3 py-1.5 text-right font-bold ${e.running >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <td className="px-4 py-2 text-right typo-td tabular-nums border-r border-gray-100">{fmt(e.debit)}</td>
+                    <td className="px-4 py-2 text-right typo-td tabular-nums border-r border-gray-100">{fmt(e.credit)}</td>
+                    <td className={`px-4 py-2 text-right typo-data whitespace-nowrap tabular-nums ${e.running >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       ₹{fmt(Math.abs(e.running))} {e.running >= 0 ? (partyType === 'customer' ? 'Dr' : 'Cr') : (partyType === 'customer' ? 'Cr' : 'Dr')}
                     </td>
                   </tr>
                 ))}
               </tbody>
               {balance && (
-                <tfoot className="bg-gray-50 font-bold">
+                <tfoot className="bg-emerald-50 border-t-2 border-emerald-200 sticky bottom-0">
                   <tr>
-                    <td className="px-3 py-2" colSpan={2}>Totals</td>
-                    <td className="px-3 py-2 text-right">₹{fmt(balance.total_debit)}</td>
-                    <td className="px-3 py-2 text-right">₹{fmt(balance.total_credit)}</td>
-                    <td className={`px-3 py-2 text-right ${balance.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
+                    <td className="px-4 py-2.5 typo-data border-r border-emerald-200" colSpan={2}>Totals</td>
+                    <td className="px-4 py-2.5 text-right typo-data tabular-nums border-r border-emerald-200">₹{fmt(balance.total_debit)}</td>
+                    <td className="px-4 py-2.5 text-right typo-data tabular-nums border-r border-emerald-200">₹{fmt(balance.total_credit)}</td>
+                    <td className={`px-4 py-2.5 text-right typo-data tabular-nums whitespace-nowrap ${balance.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
                       ₹{fmt(balance.balance)} {balance.balance_type.toUpperCase()}
                     </td>
                   </tr>

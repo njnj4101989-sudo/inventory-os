@@ -44,7 +44,7 @@ export default function SearchInput({
     <div className="relative">
       {/* Search icon */}
       <svg
-        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+        className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -57,7 +57,7 @@ export default function SearchInput({
         value={local}
         onChange={handleChange}
         placeholder={placeholder}
-        className="typo-input pl-10 pr-9"
+        className="typo-input-sm pl-8 pr-8"
       />
 
       {/* Clear button */}

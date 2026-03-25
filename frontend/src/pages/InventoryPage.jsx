@@ -7,6 +7,7 @@ import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
+import FilterSelect from '../components/common/FilterSelect'
 
 // ── Stock health helpers ──────────────────────────────
 function stockLevel(available, total) {
@@ -63,7 +64,7 @@ const COLUMNS = [
       return (
         <div className="min-w-[140px]">
           <div className="flex items-center justify-between mb-1">
-            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${cfg.badge}`}>
+            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${cfg.badge}`}>
               {cfg.label}
             </span>
             <span className="text-xs text-gray-500">{pct}%</span>
@@ -258,7 +259,7 @@ export default function InventoryPage() {
           <p className="mt-1 typo-caption">Real-time stock levels, health tracking, and adjustments</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleReconcile} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+          <button onClick={handleReconcile} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50 transition-colors">
             <span className="flex items-center gap-1.5">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -266,7 +267,7 @@ export default function InventoryPage() {
               Reconcile
             </span>
           </button>
-          <button onClick={() => { setAdjustError(null); setAdjustOpen(true) }} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
+          <button onClick={() => { setAdjustError(null); setAdjustOpen(true) }} className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 transition-colors">
             <span className="flex items-center gap-1.5">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -319,9 +320,9 @@ export default function InventoryPage() {
             <button
               key={f.key}
               onClick={() => { setStockStatus(f.key); setPage(1) }}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`rounded-full px-3 py-1.5 typo-btn-sm transition-all ${
                 stockStatus === f.key
-                  ? 'bg-primary-600 text-white shadow-sm'
+                  ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -333,15 +334,8 @@ export default function InventoryPage() {
         <div className="h-6 w-px bg-gray-200" />
 
         {/* Product Type Dropdown */}
-        <select
-          value={productType}
-          onChange={(e) => { setProductType(e.target.value); setPage(1) }}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-        >
-          {PRODUCT_TYPES.map((t) => (
-            <option key={t.key} value={t.key}>{t.label}</option>
-          ))}
-        </select>
+        <FilterSelect value={productType} onChange={(v) => { setProductType(v); setPage(1) }}
+          options={PRODUCT_TYPES.map(t => ({ value: t.key, label: t.label }))} />
 
         <div className="ml-auto w-64">
           <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search SKU or product..." />
@@ -372,12 +366,12 @@ export default function InventoryPage() {
         title={selectedSku ? `Stock Events — ${selectedSku.sku_code}` : 'Inventory Events'}
         wide
         actions={
-          <button onClick={() => setEventsOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Close</button>
+          <button onClick={() => setEventsOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Close</button>
         }
       >
         {eventsLoading ? (
           <div className="flex justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-8">
@@ -398,9 +392,9 @@ export default function InventoryPage() {
         title="Adjust Stock"
         actions={
           <>
-            <button onClick={() => setAdjustOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => setAdjustOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             <button onClick={handleAdjust} disabled={adjusting || !adjustForm.sku_id || !adjustForm.quantity}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors">
+              className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
               {adjusting ? 'Applying...' : 'Apply Adjustment'}
             </button>
           </>
@@ -411,7 +405,7 @@ export default function InventoryPage() {
           <div>
             <label className="typo-label">SKU</label>
             <select value={adjustForm.sku_id} onChange={(e) => setAdjustForm((f) => ({ ...f, sku_id: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+              className="typo-input">
               <option value="">Select SKU</option>
               {items.map((inv) => (
                 <option key={inv.sku.id} value={inv.sku.id}>{inv.sku.sku_code} — {inv.sku.product_name} (avail: {inv.available_qty})</option>
@@ -421,7 +415,7 @@ export default function InventoryPage() {
           <div>
             <label className="typo-label">Event Type</label>
             <select value={adjustForm.event_type} onChange={(e) => setAdjustForm((f) => ({ ...f, event_type: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500">
+              className="typo-input">
               <option value="ADJUSTMENT">Adjustment (+/-)</option>
               <option value="LOSS">Loss (shrinkage/damage)</option>
               <option value="RETURN">Return (from customer)</option>
@@ -430,13 +424,13 @@ export default function InventoryPage() {
           <div>
             <label className="typo-label">Quantity</label>
             <input type="number" value={adjustForm.quantity} onChange={(e) => setAdjustForm((f) => ({ ...f, quantity: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="typo-input"
               placeholder="Positive to add, negative to remove" />
           </div>
           <div>
             <label className="typo-label">Reason</label>
             <textarea value={adjustForm.reason} onChange={(e) => setAdjustForm((f) => ({ ...f, reason: e.target.value }))} rows={2}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="typo-input"
               placeholder="Reason for this adjustment..." />
           </div>
         </div>

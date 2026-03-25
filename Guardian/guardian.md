@@ -142,9 +142,21 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | `DataTable` | `columns`, `data`, `loading`, `onRowClick`, `emptyText`, `expandedRows`, `onToggleExpand`, `renderExpanded` | |
 | `SearchInput` | `value`, `onChange`, `placeholder` | |
 | `Pagination` | `page`, `pages`, `total`, `onChange` | |
+| `FilterSelect` | `value`, `onChange`, `options` (`[{value,label}]`), `full` (form mode), `className` | ~~native `<select>`~~ |
 | `StatusBadge` | `status`, `label` | |
 | `ErrorAlert` | `message`, `onDismiss` | |
 | `LoadingSpinner` | `size` (`sm`/`md`/`lg`), `text` | |
+
+**FilterSelect usage:**
+```jsx
+// Filter bar (compact, emerald tint when active):
+<FilterSelect value={filter} onChange={setFilter} options={[{value:'',label:'All'}, ...]} />
+
+// Form field (full width, neutral, matches typo-input):
+<FilterSelect full value={form.role} onChange={v => set('role', v)} options={[...]} />
+
+// NEVER use native <select> for dropdowns — always use FilterSelect
+```
 
 **When creating a new page that uses Modal:**
 ```jsx
@@ -418,6 +430,15 @@ def upgrade():
 3. **Colored KPIs** — `typo-kpi-sm` (no color) + color class: `className="typo-kpi-sm text-amber-600"`
 4. **Block vs inline** — `typo-label` has `block mb-1`. For inline labels use `typo-data-label`
 5. **Print exempt** — JobChallan, BatchChallan, CuttingSheet, LabelSheet keep inline `style={{}}`
+6. **Emerald theme** — all focus rings, active tabs, primary buttons, filter pills use `emerald-600`. No `primary-600` / `blue` for UI chrome.
+7. **No native `<select>`** for dropdowns — use `FilterSelect` component (`full` prop for forms, default for filters)
+8. **Tabs** — emerald underline style: `border-b-2 border-emerald-600 text-emerald-700` + `typo-tab`. No pill/segment tabs.
+9. **Buttons** — primary: `bg-emerald-600 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm`. Secondary: `border border-gray-300 typo-btn-sm text-gray-700 hover:bg-gray-50`
+10. **Inputs** — `typo-input` (forms) or `typo-input-sm` (compact/filters). Focus: emerald ring (built into the class).
+11. **Modal headers** — `title=""` + custom emerald gradient div inside body: `bg-gradient-to-r from-emerald-600 to-teal-600`
+12. **On dark backgrounds** — never use `typo-caption`/`typo-kpi-label` (they have gray baked in). Use explicit `text-emerald-100` or `text-white`.
+
+
 
 
 
@@ -575,15 +596,15 @@ def upgrade():
 
 
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-03-24 17:27:50_
+_Last sync: 2026-03-25 16:03:39_
 ```
 {
-  "summary": "Project has 17 tracked code files (~8704 lines total).",
+  "summary": "Project has 17 tracked code files (~8707 lines total).",
   "recent_files": [
-    "CLAUDE.md (509 lines)",
-    "guardian.md (595 lines)",
+    ".claude\\settings.local.json (114 lines)",
+    "guardian.md (597 lines)",
     "project-context.json (17 lines)",
-    ".claude\\settings.local.json (113 lines)",
+    "CLAUDE.md (509 lines)",
     "API_REFERENCE.md (2057 lines)"
   ],
   "language_breakdown": {
@@ -591,7 +612,7 @@ _Last sync: 2026-03-24 17:27:50_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 8704,
-  "last_updated": "2026-03-24 17:27:50"
+  "total_lines": 8707,
+  "last_updated": "2026-03-25 16:03:39"
 }
 ```

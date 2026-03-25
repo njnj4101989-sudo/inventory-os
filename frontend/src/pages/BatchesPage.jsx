@@ -5,6 +5,7 @@ import { getBatches } from '../api/batches'
 import { getBatchChallans, getBatchChallan } from '../api/batchChallans'
 import { useNotifications } from '../context/NotificationContext'
 import SearchInput from '../components/common/SearchInput'
+import FilterSelect from '../components/common/FilterSelect'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
 import BatchChallan from '../components/common/BatchChallan'
 import SendForVAModal from '../components/batches/SendForVAModal'
@@ -182,7 +183,7 @@ function BatchDetailTable({ batches, onRowClick, highlightBatch }) {
               <td className="py-1.5 pl-4 pr-2 font-mono typo-data">{b.batch_code}</td>
               <td className="py-1.5 px-2">
                 {b.size ? (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">{b.size}</span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 typo-badge text-emerald-700">{b.size}</span>
                 ) : '—'}
               </td>
               <td className="py-1.5 px-2 text-right typo-td">{b.piece_count}</td>
@@ -214,14 +215,14 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, hi
 
   const workflowState = getLotWorkflowState(batches)
   const stateColors = {
-    unclaimed:     'border-l-gray-300',
-    in_production: 'border-l-blue-400',
-    in_review:     'border-l-purple-400',
-    done:          'border-l-emerald-400',
+    unclaimed:     'border-l-gray-300 hover:border-l-emerald-500',
+    in_production: 'border-l-blue-400 hover:border-l-blue-500',
+    in_review:     'border-l-purple-400 hover:border-l-purple-500',
+    done:          'border-l-emerald-400 hover:border-l-emerald-600',
   }
 
   return (
-    <div id={`lot-${lotId}`} className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${stateColors[workflowState]} overflow-hidden transition-shadow hover:shadow-md`}>
+    <div id={`lot-${lotId}`} className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${stateColors[workflowState]} overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer`}>
       {/* Header row */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between">
@@ -585,7 +586,7 @@ export default function BatchesPage() {
         <div className="mt-5 flex items-center gap-2">
           {canSendVA && (
             <button onClick={() => setShowSendVA(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 typo-btn-sm text-white hover:bg-violet-700 transition-colors">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
@@ -594,7 +595,7 @@ export default function BatchesPage() {
           )}
           {canReceiveVA && (
             <button onClick={() => setShowReceiveVA(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 typo-btn-sm text-white hover:bg-green-700 transition-colors">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -602,12 +603,12 @@ export default function BatchesPage() {
             </button>
           )}
           {outForVACount > 0 && (
-            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium">
+            <span className="typo-badge text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
               {outForVACount} batch{outForVACount !== 1 ? 'es' : ''} out for VA
             </span>
           )}
           {readyStockCount > 0 && (
-            <span className="text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 font-medium">
+            <span className="typo-badge text-green-600 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
               {readyStockCount} pcs ready stock
             </span>
           )}
@@ -621,7 +622,7 @@ export default function BatchesPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-full px-3.5 py-1.5 typo-btn-sm transition-colors ${
                 activeTab === tab.key
                   ? tab.key === 'out_for_va' ? 'bg-amber-600 text-white shadow-sm' : 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -653,7 +654,7 @@ export default function BatchesPage() {
 
       {/* Error */}
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 typo-body text-red-700 flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-3">&times;</button>
         </div>
@@ -684,22 +685,16 @@ export default function BatchesPage() {
 
           {/* VA filter bar */}
           <div className="flex items-center gap-2 flex-wrap mb-4">
-            <select value={bcVAFilter} onChange={(e) => setBcVAFilter(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs bg-white focus:border-primary-500 focus:outline-none">
-              <option value="">All VA Types</option>
-              {bcFilterOptions.vas.map((v) => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <select value={bcProcessorFilter} onChange={(e) => setBcProcessorFilter(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs bg-white focus:border-primary-500 focus:outline-none">
-              <option value="">All Processors</option>
-              {bcFilterOptions.processors.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+            <FilterSelect value={bcVAFilter} onChange={setBcVAFilter}
+              options={[{ value: '', label: 'All VA Types' }, ...bcFilterOptions.vas.map(v => ({ value: v, label: v }))]} />
+            <FilterSelect value={bcProcessorFilter} onChange={setBcProcessorFilter}
+              options={[{ value: '', label: 'All Processors' }, ...bcFilterOptions.processors.map(p => ({ value: p, label: p }))]} />
             <div className="w-48">
               <SearchInput value={bcSearch} onChange={setBcSearch} placeholder="Search challan, batch..." />
             </div>
             {(bcVAFilter || bcProcessorFilter || bcSearch) && (
               <button onClick={() => { setBcVAFilter(''); setBcProcessorFilter(''); setBcSearch('') }}
-                className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+                className="typo-caption hover:text-gray-700 underline">Clear</button>
             )}
           </div>
 
@@ -735,7 +730,7 @@ export default function BatchesPage() {
                       {/* Challan header */}
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-mono typo-card-title text-gray-900">{challan.challan_no}</span>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${vaStyle.bg} ${vaStyle.text} border ${vaStyle.border}`}>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${vaStyle.bg} ${vaStyle.text} border ${vaStyle.border}`}>
                           {vaCode}
                         </span>
                       </div>
@@ -757,7 +752,7 @@ export default function BatchesPage() {
 
                       {/* Days out badge */}
                       <div className="flex items-center gap-2 mb-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${
                           daysOut > 14 ? 'bg-red-100 text-red-700' : daysOut > 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {daysOut}d out
@@ -768,7 +763,7 @@ export default function BatchesPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handlePrintBatchChallan(challan)}
-                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -779,7 +774,7 @@ export default function BatchesPage() {
                         {canReceiveVA && (
                           <button
                             onClick={() => setShowReceiveVA(true)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-green-700 transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

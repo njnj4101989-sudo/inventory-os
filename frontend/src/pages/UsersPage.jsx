@@ -245,18 +245,20 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Users & Roles</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage user accounts and role configuration</p>
+          <p className="mt-1 typo-caption">Manage user accounts and role configuration</p>
         </div>
         {tab === 'users' && (
           <button onClick={openCreateUser}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-            + Add User
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Add User
           </button>
         )}
         {tab === 'roles' && (
           <button onClick={openCreateRole}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors">
-            + Add Role
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Add Role
           </button>
         )}
       </div>
@@ -265,9 +267,9 @@ export default function UsersPage() {
       <div className="mt-5 flex gap-1 border-b border-gray-200">
         {['users', 'roles'].map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2.5 typo-tab border-b-2 transition-colors ${
               tab === t
-                ? 'border-primary-600 text-primary-600'
+                ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}>
             {t === 'users' ? `Users (${total})` : `Roles (${roles.length})`}
@@ -295,7 +297,7 @@ export default function UsersPage() {
         <div className="mt-4">
           {rolesError && <ErrorAlert message={rolesError} onDismiss={() => setRolesError(null)} />}
           {rolesLoading ? (
-            <div className="text-center py-12 text-gray-400">Loading roles...</div>
+            <div className="text-center py-12 typo-empty">Loading roles...</div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {roles.map((role) => {
@@ -303,17 +305,17 @@ export default function UsersPage() {
                 const permCount = Object.values(role.permissions || {}).filter(Boolean).length
                 return (
                   <div key={role.id}
-                    className={`${c.bg} ${c.border} border rounded-xl p-5 hover:shadow-md transition-shadow`}>
+                    className={`${c.bg} ${c.border} border rounded-xl p-5 hover:shadow-md transition-all duration-200`}>
                     {/* Role header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
                         <div>
-                          <h3 className={`font-semibold ${c.text}`}>
+                          <h3 className={`typo-card-title ${c.text}`}>
                             {roleName(role)}
                           </h3>
                           {role.display_name && (
-                            <p className="text-xs text-gray-400 mt-0.5">system: {role.name}</p>
+                            <p className="typo-caption mt-0.5">system: {role.name}</p>
                           )}
                         </div>
                       </div>
@@ -328,13 +330,13 @@ export default function UsersPage() {
                     </div>
 
                     {/* Stats */}
-                    <div className="mt-4 flex items-center gap-4 text-sm">
+                    <div className="mt-3 flex items-center gap-3 typo-td">
                       <span className="text-gray-600">
-                        <span className="font-medium">{role.user_count}</span> user{role.user_count !== 1 ? 's' : ''}
+                        <span className="typo-data">{role.user_count}</span> user{role.user_count !== 1 ? 's' : ''}
                       </span>
-                      <span className="text-gray-400">|</span>
+                      <span className="text-gray-300">|</span>
                       <span className="text-gray-600">
-                        <span className="font-medium">{permCount}</span> permission{permCount !== 1 ? 's' : ''}
+                        <span className="typo-data">{permCount}</span> permission{permCount !== 1 ? 's' : ''}
                       </span>
                     </div>
 
@@ -342,7 +344,7 @@ export default function UsersPage() {
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {ALL_PERMISSIONS.filter((p) => role.permissions?.[p.key]).map((p) => (
                         <span key={p.key}
-                          className={`inline-block px-2 py-0.5 text-xs rounded-full ${c.bg} ${c.text} border ${c.border}`}>
+                          className={`inline-block px-2 py-0.5 typo-badge rounded-full ${c.bg} ${c.text} border ${c.border}`}>
                           {p.label}
                         </span>
                       ))}
@@ -351,7 +353,7 @@ export default function UsersPage() {
                     {/* Delete (only if no users) */}
                     {role.user_count === 0 && (
                       <button onClick={() => handleDeleteRole(role)}
-                        className="mt-4 text-xs text-red-400 hover:text-red-600 transition-colors">
+                        className="mt-4 typo-btn-sm text-red-400 hover:text-red-600 transition-colors">
                         Delete role
                       </button>
                     )}
@@ -369,18 +371,18 @@ export default function UsersPage() {
         actions={
           <>
             <button onClick={() => setModalOpen(false)}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+              className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">
               Cancel
             </button>
             <button onClick={handleSaveUser} disabled={saving}
-              className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 shadow-sm">
+              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </button>
           </>
         }>
-        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white">
-          <h2 className="text-lg font-bold tracking-tight">{editing ? 'Edit User' : 'New User'}</h2>
-          <p className="text-sm text-blue-100 mt-0.5">{editing ? `Editing ${form.full_name || form.username}` : 'Add a new user account'}</p>
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+          <h2 className="typo-modal-title text-white">{editing ? 'Edit User' : 'New User'}</h2>
+          <p className="typo-caption text-emerald-100 mt-0.5">{editing ? `Editing ${form.full_name || form.username}` : 'Add a new user account'}</p>
         </div>
         <UserForm form={form} onChange={setForm} roles={roles} editing={!!editing}
           error={formError} onDismissError={() => setFormError(null)} />
@@ -392,18 +394,18 @@ export default function UsersPage() {
         actions={
           <>
             <button onClick={() => setRoleModalOpen(false)}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">
+              className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">
               Cancel
             </button>
             <button onClick={handleSaveRole} disabled={roleSaving}
-              className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50 shadow-sm">
+              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {roleSaving ? 'Saving...' : editingRole ? 'Update' : 'Create'}
             </button>
           </>
         }>
-        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-purple-600 to-violet-600 px-6 py-4 text-white">
-          <h2 className="text-lg font-bold tracking-tight">{editingRole ? `Edit Role — ${roleName(editingRole)}` : 'New Role'}</h2>
-          <p className="text-sm text-purple-100 mt-0.5">{editingRole ? 'Modify permissions and display name' : 'Define a new role with permissions'}</p>
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+          <h2 className="typo-modal-title text-white">{editingRole ? `Edit Role — ${roleName(editingRole)}` : 'New Role'}</h2>
+          <p className="typo-caption text-emerald-100 mt-0.5">{editingRole ? 'Modify permissions and display name' : 'Define a new role with permissions'}</p>
         </div>
         {roleFormError && (
           <div className="mb-4"><ErrorAlert message={roleFormError} onDismiss={() => setRoleFormError(null)} /></div>
@@ -416,7 +418,7 @@ export default function UsersPage() {
               Role Name (system key)
             </label>
             {editingRole ? (
-              <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{editingRole.name}</p>
+              <p className="typo-td bg-gray-50 rounded-lg px-3 py-2">{editingRole.name}</p>
             ) : (
               <input type="text" value={roleForm.name}
                 onChange={(e) => setRoleForm((f) => ({ ...f, name: e.target.value }))}
@@ -434,7 +436,7 @@ export default function UsersPage() {
               onChange={(e) => setRoleForm((f) => ({ ...f, display_name: e.target.value }))}
               placeholder={editingRole ? editingRole.name : 'e.g. Floor Manager'}
               className="typo-input" />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 typo-caption">
               Leave blank to use the system name. This alias is what users see throughout the app.
             </p>
           </div>
@@ -450,7 +452,7 @@ export default function UsersPage() {
                   className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
                   <input type="checkbox" checked={!!roleForm.permissions[p.key]}
                     onChange={() => togglePerm(p.key)}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
                   <span className="text-gray-700">{p.label}</span>
                 </label>
               ))}

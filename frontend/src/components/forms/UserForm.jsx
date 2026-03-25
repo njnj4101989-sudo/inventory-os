@@ -1,4 +1,5 @@
 import ErrorAlert from '../common/ErrorAlert'
+import FilterSelect from '../common/FilterSelect'
 
 export default function UserForm({ form, onChange, roles = [], editing = false, error = null, onDismissError }) {
   const set = (k, v) => onChange({ ...form, [k]: v })
@@ -23,10 +24,8 @@ export default function UserForm({ form, onChange, roles = [], editing = false, 
       </div>
       <div>
         <label className="typo-label">Role</label>
-        <select value={form.role_id} onChange={(e) => set('role_id', e.target.value)} className="typo-input">
-          <option value="">Select role</option>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.display_name || r.name}</option>)}
-        </select>
+        <FilterSelect full value={form.role_id} onChange={(v) => set('role_id', v)}
+          options={[{ value: '', label: 'Select role' }, ...roles.map(r => ({ value: r.id, label: r.display_name || r.name }))]} />
       </div>
       <div>
         <label className="typo-label">Phone</label>

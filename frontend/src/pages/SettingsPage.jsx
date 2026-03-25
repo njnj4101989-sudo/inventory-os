@@ -281,7 +281,7 @@ export default function SettingsPage() {
       <div className="mt-4 flex gap-1 border-b border-gray-200">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`inline-flex items-center gap-2 px-4 pb-2.5 pt-1 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+            className={`inline-flex items-center gap-2 px-4 pb-2.5 pt-1 typo-tab border-b-2 -mb-px transition-colors ${
               tab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={t.icon} /></svg>
@@ -305,7 +305,7 @@ export default function SettingsPage() {
         <div className="mt-4 space-y-4">
           {companyMsg && <p className="text-xs text-green-600 font-medium">{companyMsg}</p>}
 
-          {/* Section cards with emerald headers */}
+          {/* Section cards with left-accent headers */}
           {[
             { title: 'Business Identity', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', fields: [
               { key: 'name', label: 'Company Name', span: 2 },
@@ -331,9 +331,11 @@ export default function SettingsPage() {
             ]},
           ].map((section) => (
             <div key={section.title} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <div className="bg-emerald-600 px-4 py-2 flex items-center gap-2">
-                <svg className="h-4 w-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={section.icon} /></svg>
-                <span className="text-xs font-semibold text-white uppercase tracking-wider">{section.title}</span>
+              <div className="border-b border-gray-100 px-4 py-2.5 flex items-center gap-2">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-50">
+                  <svg className="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={section.icon} /></svg>
+                </div>
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">{section.title}</span>
               </div>
               <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 {section.fields.map((f) => (
@@ -362,9 +364,11 @@ export default function SettingsPage() {
           )}
           {/* Create FY card */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="bg-emerald-600 px-4 py-2 flex items-center gap-2">
-              <svg className="h-4 w-4 text-emerald-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              <span className="text-xs font-semibold text-white uppercase tracking-wider">Create Financial Year</span>
+            <div className="border-b border-gray-100 px-4 py-2.5 flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-50">
+                <svg className="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              </div>
+              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Create Financial Year</span>
             </div>
             <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
               <div><label className="block typo-data-label mb-1">Code</label><input value={fyForm.code} onChange={(e) => setFYForm(f => ({ ...f, code: e.target.value }))} className="typo-input-sm" placeholder="FY2026-27" /></div>
@@ -521,52 +525,100 @@ export default function SettingsPage() {
 
       {/* ── Companies Tab (admin only) ── */}
       {tab === 'companies' && (
-        <div className="mt-3 max-w-4xl">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="typo-card-title">{allCompanies.length} {allCompanies.length === 1 ? 'Company' : 'Companies'}</h3>
-            <button
-              onClick={() => { setShowWizard(true); setWizardStep(1) }}
-              className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors shadow-sm"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              New Company
-            </button>
-          </div>
-
+        <div className="mt-4">
           {/* Company cards */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {allCompanies.map((c) => (
-              <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 text-lg font-bold text-white shadow-sm">
-                    {c.name?.charAt(0)?.toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-bold text-gray-900 truncate">{c.name}</h4>
-                    <p className="text-xs text-gray-500 font-mono">{c.schema_name}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {c.city && <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">{c.city}</span>}
-                      {c.gst_no && <span className="inline-flex items-center rounded bg-blue-50 px-2 py-0.5 text-[10px] font-mono text-blue-600">{c.gst_no}</span>}
-                      {c.is_active ? (
-                        <span className="inline-flex items-center rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600">Active</span>
-                      ) : (
-                        <span className="inline-flex items-center rounded bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">Inactive</span>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {allCompanies.map((c) => {
+              const isActive = activeCompany?.id === c.id
+              return (
+                <div key={c.id} className={`group relative rounded-xl border bg-white overflow-hidden transition-all duration-200 hover:shadow-lg ${isActive ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-gray-200 hover:border-gray-300'}`}>
+                  {/* Card top accent */}
+                  <div className={`h-1.5 ${isActive ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-gray-200 to-gray-300 group-hover:from-emerald-300 group-hover:to-teal-300'} transition-all duration-300`} />
+
+                  <div className="p-4">
+                    {/* Header row */}
+                    <div className="flex items-start gap-3">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold text-white shadow-md ${isActive ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-gray-400 to-gray-500 group-hover:from-emerald-400 group-hover:to-teal-500'} transition-all duration-300`}>
+                        {c.name?.charAt(0)?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="typo-card-title truncate">{c.name}</h4>
+                          {isActive && (
+                            <span className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 typo-badge text-emerald-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <p className="typo-caption font-mono mt-0.5">{c.schema_name}</p>
+                      </div>
+                    </div>
+
+                    {/* Info chips */}
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {c.city && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-50 border border-gray-100 px-2 py-0.5 typo-badge text-gray-600">
+                          <svg className="h-2.5 w-2.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg>
+                          {c.city}
+                        </span>
                       )}
-                      {c.is_default && (
-                        <span className="inline-flex items-center rounded bg-primary-50 px-2 py-0.5 text-[10px] font-bold text-primary-700">Default</span>
+                      {c.gst_no && (
+                        <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-100 px-2 py-0.5 typo-badge font-mono text-blue-600">{c.gst_no}</span>
+                      )}
+                      {c.is_active ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-100 px-2 py-0.5 typo-badge text-emerald-600">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-100 px-2 py-0.5 typo-badge text-red-500">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                          Inactive
+                        </span>
                       )}
                     </div>
-                    {!c.is_default && (
-                      <button onClick={() => handleSetDefault(c.id)} className="mt-1 text-[10px] text-gray-400 hover:text-primary-600 font-medium transition-colors">
-                        Set as Default
-                      </button>
-                    )}
+
+                    {/* Actions footer */}
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                      {c.is_default ? (
+                        <span className="inline-flex items-center gap-1 typo-badge text-amber-600">
+                          <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                          Default
+                        </span>
+                      ) : (
+                        <button onClick={() => handleSetDefault(c.id)} className="inline-flex items-center gap-1 typo-badge text-gray-400 hover:text-emerald-600 transition-colors">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                          Set as Default
+                        </button>
+                      )}
+                      {!isActive && (
+                        <button onClick={() => selectCompany(c.id)} className="inline-flex items-center gap-1 rounded-md bg-gray-50 border border-gray-200 px-2.5 py-1 typo-btn-sm text-gray-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-all">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                          Switch
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
+              )
+            })}
+
+            {/* Add company card */}
+            <button
+              onClick={() => { setShowWizard(true); setWizardStep(1) }}
+              className="group relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 transition-all duration-200 hover:border-emerald-300 hover:bg-emerald-50/30"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm group-hover:border-emerald-300 group-hover:shadow-md transition-all duration-200">
+                <svg className="h-5 w-5 text-gray-400 group-hover:text-emerald-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
               </div>
-            ))}
+              <div className="text-center">
+                <p className="typo-label-sm text-gray-500 group-hover:text-emerald-700 transition-colors">New Company</p>
+                <p className="typo-caption mt-0.5">Add another business entity</p>
+              </div>
+            </button>
           </div>
 
           {/* ── Create Company Wizard (overlay) ── */}
@@ -646,7 +698,7 @@ export default function SettingsPage() {
                                 type="checkbox"
                                 readOnly
                                 checked={MASTER_OPTIONS.filter((m) => m.group === 'item').every((m) => wizardData.inherit_masters.includes(m.key))}
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                               />
                               <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Item Masters</span>
                             </label>
@@ -657,7 +709,7 @@ export default function SettingsPage() {
                                     type="checkbox"
                                     checked={wizardData.inherit_masters.includes(m.key)}
                                     onChange={() => toggleInherit(m.key)}
-                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                                   />
                                   <span className={`inline-block h-2.5 w-2.5 rounded-full ${m.color}`} />
                                   <span className="text-sm text-gray-700">{m.label}</span>
@@ -673,7 +725,7 @@ export default function SettingsPage() {
                                 type="checkbox"
                                 readOnly
                                 checked={MASTER_OPTIONS.filter((m) => m.group === 'party').every((m) => wizardData.inherit_masters.includes(m.key))}
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                               />
                               <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Party Masters</span>
                             </label>
@@ -684,7 +736,7 @@ export default function SettingsPage() {
                                     type="checkbox"
                                     checked={wizardData.inherit_masters.includes(m.key)}
                                     onChange={() => toggleInherit(m.key)}
-                                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                                   />
                                   <span className={`inline-block h-2.5 w-2.5 rounded-full ${m.color}`} />
                                   <span className="text-sm text-gray-700">{m.label}</span>

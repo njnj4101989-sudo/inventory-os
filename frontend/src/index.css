@@ -87,7 +87,7 @@
     font-variant-numeric: tabular-nums;
   }
   .typo-kpi-label {
-    @apply text-xs font-medium uppercase tracking-wide text-gray-500;
+    @apply text-[10px] font-semibold uppercase tracking-wider text-gray-400;
   }
 
   /* ── Form ── */
@@ -99,11 +99,11 @@
   }
   .typo-input {
     @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800
-           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+           focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500;
   }
   .typo-input-sm {
     @apply w-full rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-800
-           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500;
+           focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500;
   }
   .typo-required {
     @apply text-red-500 ml-0.5;

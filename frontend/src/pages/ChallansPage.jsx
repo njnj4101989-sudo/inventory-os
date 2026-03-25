@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import Modal from '../components/common/Modal'
 import JobChallan from '../components/common/JobChallan'
 import BatchChallan from '../components/common/BatchChallan'
+import FilterSelect from '../components/common/FilterSelect'
 
 const VA_COLORS = {
   EMB: { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-200' },
@@ -231,37 +232,37 @@ export default function ChallansPage() {
     return (
       <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
         {/* ── Gradient header ── */}
-        <div className="flex items-center justify-between border-b bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-3 text-white shadow-sm">
+        <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
           <div className="flex items-center gap-3">
             <button onClick={() => setDetail(null)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
             <div>
-              <h2 className="text-lg font-bold tracking-tight font-mono">{detail.challan_no}</h2>
-              <p className="text-xs text-orange-100">
+              <h2 className="typo-modal-title text-white font-mono">{detail.challan_no}</h2>
+              <p className="typo-caption text-emerald-100">
                 {detail.va_party?.name || '—'} · {detail.value_addition?.name || '—'}
                 {detail.sent_date && ` · Sent: ${detail.sent_date}`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${detail.status === 'received' ? 'bg-green-500/30 text-white' : detail.status === 'partially_received' ? 'bg-amber-300/30 text-white' : 'bg-white/20 text-white'}`}>
+            <span className={`rounded-full px-2.5 py-1 typo-badge ${detail.status === 'received' ? 'bg-green-500/30 text-white' : detail.status === 'partially_received' ? 'bg-amber-300/30 text-white' : 'bg-white/20 text-white'}`}>
               {st.label}
             </span>
             {isJob && detail.status !== 'received' && (
               <button onClick={() => openReceive(detail)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50 transition-colors">
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 typo-btn-sm text-emerald-700 hover:bg-emerald-50 transition-colors">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 Receive Back
               </button>
             )}
             <button onClick={() => openPrint(detail)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
               Print
             </button>
             <button onClick={() => setDetail(null)}
-              className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Close</button>
+              className="rounded-lg border border-white/30 px-3 py-1.5 typo-btn-sm hover:bg-white/20 transition-colors">Close</button>
           </div>
         </div>
 
@@ -274,33 +275,33 @@ export default function ChallansPage() {
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
               <div className="flex items-end gap-0 bg-gray-50 border-b border-gray-200">
                 <div className="px-4 py-2 border-r border-gray-200">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Challan</label>
-                  <div className="text-sm font-bold font-mono text-gray-800">{detail.challan_no}</div>
+                  <label className="typo-label-sm">Challan</label>
+                  <div className="typo-data font-mono">{detail.challan_no}</div>
                 </div>
                 <div className="px-4 py-2 border-r border-gray-200">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">VA Party</label>
-                  <div className="text-sm font-semibold text-gray-800">{detail.va_party?.name || '—'}</div>
+                  <label className="typo-label-sm">VA Party</label>
+                  <div className="typo-data">{detail.va_party?.name || '—'}</div>
                 </div>
                 <div className="px-4 py-2 border-r border-gray-200">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">VA Type</label>
+                  <label className="typo-label-sm">VA Type</label>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${vc.bg} ${vc.text}`}>{detail.value_addition?.short_code || '—'}</span>
-                    <span className="text-xs text-gray-500">{detail.value_addition?.name}</span>
+                    <span className={`rounded-full px-2 py-0.5 typo-badge ${vc.bg} ${vc.text}`}>{detail.value_addition?.short_code || '—'}</span>
+                    <span className="typo-td-secondary">{detail.value_addition?.name}</span>
                   </div>
                 </div>
                 <div className="px-4 py-2 border-r border-gray-200">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Sent</label>
-                  <div className="text-sm text-gray-700">{detail.sent_date || '—'}</div>
+                  <label className="typo-label-sm">Sent</label>
+                  <div className="typo-td">{detail.sent_date || '—'}</div>
                 </div>
                 {detail.received_date && (
                   <div className="px-4 py-2 border-r border-gray-200">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Received</label>
-                    <div className="text-sm font-semibold text-green-700">{detail.received_date}</div>
+                    <label className="typo-label-sm">Received</label>
+                    <div className="typo-data text-green-700">{detail.received_date}</div>
                   </div>
                 )}
                 <div className="ml-auto px-4 py-2">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Created By</label>
-                  <div className="text-sm text-gray-700">{detail.created_by_user?.full_name || '—'}</div>
+                  <label className="typo-label-sm">Created By</label>
+                  <div className="typo-td">{detail.created_by_user?.full_name || '—'}</div>
                 </div>
               </div>
             </div>
@@ -309,7 +310,7 @@ export default function ChallansPage() {
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                  <tr className="bg-emerald-600 text-white typo-th">
                     <th className="py-2 px-4 text-center w-10 border-r border-emerald-500">#</th>
                     {isJob ? (
                       <>
@@ -353,7 +354,7 @@ export default function ChallansPage() {
                         <td className="px-4 py-2 text-right text-gray-500 tabular-nums border-r border-gray-50">{bi.pieces_sent}</td>
                         <td className="px-4 py-2 text-right font-medium text-gray-700 tabular-nums border-r border-gray-50">{bi.pieces_received ?? '—'}</td>
                         <td className="px-4 py-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium border ${biSt.bg} ${biSt.text} ${biSt.border}`}>
+                          <span className={`rounded-full px-2 py-0.5 typo-badge border ${biSt.bg} ${biSt.text} ${biSt.border}`}>
                             {biSt.label}
                           </span>
                         </td>
@@ -400,8 +401,8 @@ export default function ChallansPage() {
                 { value: st.label, label: 'Status', color: st.text, bg: `${st.bg} ${st.border}` },
               ].map((kpi, i) => (
                 <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
-                  <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{kpi.label}</div>
+                  <div className={`typo-kpi ${kpi.color}`}>{kpi.value}</div>
+                  <div className="typo-kpi-label">{kpi.label}</div>
                 </div>
               ))}
             </div>
@@ -409,7 +410,7 @@ export default function ChallansPage() {
             {/* Notes */}
             {detail.notes && (
               <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Notes</h4>
+                <h4 className="typo-label-sm">Notes</h4>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.notes}</p>
               </div>
             )}
@@ -428,21 +429,22 @@ export default function ChallansPage() {
           <h1 className="typo-page-title">Challans</h1>
           <p className="typo-caption">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
         </div>
-        <button onClick={fetchData} className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        <button onClick={fetchData} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60">
+          <svg className={`h-4 w-4 transition-transform ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          Refresh
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl bg-gray-100 p-1">
+      <div className="flex gap-6 border-b border-gray-200">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+            className={`inline-flex items-center gap-1.5 pb-2.5 typo-tab border-b-2 transition-colors ${
               tab === t.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}>
-            {t.label} <span className="text-xs text-gray-400 ml-1">({t.sublabel})</span>
+            {t.label} <span className="typo-caption ml-0.5">({t.sublabel})</span>
           </button>
         ))}
       </div>
@@ -457,8 +459,8 @@ export default function ChallansPage() {
           { value: kpis.totalItems, label: tab === 'job' ? 'Rolls' : 'Pieces', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
         ].map((kpi, i) => (
           <div key={i} className={`rounded-lg border ${kpi.bg} px-3 py-2 text-center`}>
-            <div className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{kpi.label}</div>
+            <div className={`typo-kpi ${kpi.color}`}>{kpi.value}</div>
+            <div className="typo-kpi-label">{kpi.label}</div>
           </div>
         ))}
       </div>
@@ -468,26 +470,15 @@ export default function ChallansPage() {
         <div className="flex-1 min-w-[200px]">
           <SearchInput value={search} onChange={setSearch} placeholder="Search challan no, party, VA type..." />
         </div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
-          <option value="">All Status</option>
-          <option value="sent">Sent</option>
-          <option value="partially_received">Partially Received</option>
-          <option value="received">Received</option>
-        </select>
-        <select value={vaFilter} onChange={e => setVaFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
-          <option value="">All VA Types</option>
-          {vaTypes.map(v => <option key={v.id} value={v.id}>{v.name} ({v.short_code})</option>)}
-        </select>
-        <select value={partyFilter} onChange={e => setPartyFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
-          <option value="">All VA Parties</option>
-          {vaParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <FilterSelect value={statusFilter} onChange={setStatusFilter}
+          options={[{ value: '', label: 'All Status' }, { value: 'sent', label: 'Sent' }, { value: 'partially_received', label: 'Partially Received' }, { value: 'received', label: 'Received' }]} />
+        <FilterSelect value={vaFilter} onChange={setVaFilter}
+          options={[{ value: '', label: 'All VA Types' }, ...vaTypes.map(v => ({ value: v.id, label: `${v.name} (${v.short_code})` }))]} />
+        <FilterSelect value={partyFilter} onChange={setPartyFilter}
+          options={[{ value: '', label: 'All VA Parties' }, ...vaParties.map(p => ({ value: p.id, label: p.name }))]} />
         {(statusFilter || vaFilter || partyFilter) && (
           <button onClick={() => { setStatusFilter(''); setVaFilter(''); setPartyFilter('') }}
-            className="text-xs text-gray-500 hover:text-gray-700 underline">Clear</button>
+            className="typo-caption hover:text-gray-700 underline">Clear</button>
         )}
       </div>
 
@@ -502,7 +493,7 @@ export default function ChallansPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+              <tr className="bg-emerald-600 text-white typo-th">
                 <th className="px-4 py-2.5 text-left border-r border-emerald-500">Challan</th>
                 <th className="px-4 py-2.5 text-left border-r border-emerald-500">VA Party</th>
                 <th className="px-4 py-2.5 text-left border-r border-emerald-500">VA Type</th>
@@ -527,15 +518,15 @@ export default function ChallansPage() {
                   <tr key={c.id} onClick={() => openDetail(c)}
                     className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-mono text-sm font-bold text-gray-900">{c.challan_no}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">{c.created_by_user?.full_name || '—'}</div>
+                      <div className="typo-data font-mono">{c.challan_no}</div>
+                      <div className="typo-caption mt-0.5">{c.created_by_user?.full_name || '—'}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-800">{c.va_party?.name || '—'}</div>
-                      {c.va_party?.city && <div className="text-[10px] text-gray-400">{c.va_party.city}</div>}
+                      {c.va_party?.city && <div className="typo-caption">{c.va_party.city}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${vc.bg} ${vc.text}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 typo-badge ${vc.bg} ${vc.text}`}>
                         {c.value_addition?.short_code || '?'} — {c.value_addition?.name || '—'}
                       </span>
                     </td>
@@ -547,19 +538,19 @@ export default function ChallansPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">{c.sent_date || '—'}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${st.bg} ${st.text} ${st.border}`}>
+                      <span className={`rounded-full px-2.5 py-0.5 typo-badge border ${st.bg} ${st.text} ${st.border}`}>
                         {st.label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {daysOut !== null && daysOut > 0 ? (
-                        <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${
+                        <span className={`typo-badge rounded-full px-2 py-0.5 ${
                           daysOut > 14 ? 'text-red-600 bg-red-50 border border-red-200' :
                           daysOut > 7 ? 'text-amber-600 bg-amber-50 border border-amber-200' :
                           'text-gray-500 bg-gray-50 border border-gray-200'
                         }`}>{daysOut}d</span>
                       ) : c.status === 'received' ? (
-                        <span className="text-[10px] text-green-600">✓</span>
+                        <span className="typo-badge text-green-600">✓</span>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
@@ -587,9 +578,9 @@ export default function ChallansPage() {
       {/* ── Receive Modal (Job Challans) ── */}
       <Modal open={recvOpen} onClose={() => setRecvOpen(false)} title="" wide>
         <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 text-white">
-          <h2 className="text-lg font-bold tracking-tight">Receive Back from VA</h2>
+          <h2 className="typo-modal-title text-white">Receive Back from VA</h2>
           {recvChallan && (
-            <p className="text-sm text-green-100 mt-0.5">{recvChallan.challan_no} · {recvChallan.va_party?.name} · {recvChallan.value_addition?.name}</p>
+            <p className="typo-caption text-green-100 mt-0.5">{recvChallan.challan_no} · {recvChallan.va_party?.name} · {recvChallan.value_addition?.name}</p>
           )}
         </div>
 
@@ -605,7 +596,7 @@ export default function ChallansPage() {
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-emerald-600 text-white text-xs font-semibold uppercase tracking-wider">
+                  <tr className="bg-emerald-600 text-white typo-th">
                     <th className="py-2 px-3 w-10 border-r border-emerald-500">
                       <input type="checkbox"
                         checked={Object.values(recvRows).every(r => r.checked)}
@@ -640,13 +631,13 @@ export default function ChallansPage() {
                         <td className="px-3 py-2 text-right border-r border-gray-50">
                           <input type="number" step="0.001" value={row.weight_after}
                             onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], weight_after: e.target.value } }))}
-                            className="w-28 rounded border border-gray-300 px-2 py-1 text-sm text-right tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                            className="w-28 typo-input-sm text-right tabular-nums !w-28" />
                         </td>
                         <td className="px-3 py-2 text-right">
                           <input type="number" step="1" value={row.processing_cost}
                             onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], processing_cost: e.target.value } }))}
                             placeholder="0"
-                            className="w-24 rounded border border-gray-300 px-2 py-1 text-sm text-right tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                            className="w-24 typo-input-sm text-right tabular-nums !w-24" />
                         </td>
                       </tr>
                     )
@@ -657,15 +648,15 @@ export default function ChallansPage() {
           )}
 
           {recvChallan && Object.keys(recvRows).length === 0 && (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 typo-body text-green-700">
               All rolls in this challan have already been received.
             </div>
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => setRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
             <button onClick={handleReceive} disabled={recvSaving || Object.keys(recvRows).length === 0}
-              className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
+              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
               {recvSaving ? 'Receiving...' : `Receive (${Object.values(recvRows).filter(r => r.checked).length})`}
             </button>
           </div>

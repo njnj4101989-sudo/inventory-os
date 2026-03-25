@@ -48,7 +48,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
           ) : null}
 
           {/* Body */}
-          <div ref={bodyRef} className={`px-6 ${title ? 'py-1' : 'py-0'}`}>{children}</div>
+          <div ref={bodyRef} className={`px-6 ${title ? 'py-4' : 'py-0'}`}>{children}</div>
 
           {/* Footer */}
           {actions && (

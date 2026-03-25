@@ -44,11 +44,11 @@ function HBar({ value, max, color = 'bg-blue-500', label }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0
   return (
     <div className="flex items-center gap-3">
-      {label && <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">{label}</span>}
+      {label && <span className="typo-td-secondary w-20 text-right flex-shrink-0">{label}</span>}
       <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs font-semibold text-gray-700 w-12">{value}</span>
+      <span className="typo-badge text-gray-700 w-12">{value}</span>
     </div>
   )
 }
@@ -94,7 +94,7 @@ function ProductionTab({ data }) {
             <tbody>
               {data.by_lot.map((lot, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-3 font-semibold text-primary-600">{lot.lot_code}</td>
+                  <td className="py-3 font-semibold text-emerald-600">{lot.lot_code}</td>
                   <td className="py-3">{(lot.designs || []).map(d => d.design_no).join(', ') || '—'}</td>
                   <td className="py-3 text-gray-500 text-xs">{new Date(lot.lot_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
                   <td className="py-3">{lot.rolls_used}</td>
@@ -103,7 +103,7 @@ function ProductionTab({ data }) {
                     <span className="text-gray-400 text-xs"> / {lot.total_weight.toFixed(1)}</span>
                   </td>
                   <td className="py-3">
-                    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${
                       lot.waste_pct > 5
                         ? 'bg-red-50 text-red-700 ring-red-600/20'
                         : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
@@ -114,7 +114,7 @@ function ProductionTab({ data }) {
                   <td className="py-3 font-medium">{lot.total_pallas}</td>
                   <td className="py-3 font-semibold">{lot.total_pieces}</td>
                   <td className="py-3">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${
                       lot.status === 'distributed' ? 'bg-emerald-100 text-emerald-700' :
                       lot.status === 'open' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
                     }`}>{lot.status}</span>
@@ -149,7 +149,7 @@ function ProductionTab({ data }) {
 //  INVENTORY TAB
 // ═══════════════════════════════════════════════════════
 function InventoryTab({ data }) {
-  if (!data || data.length === 0) return <p className="text-sm text-gray-500 py-8 text-center">No inventory movement data.</p>
+  if (!data || data.length === 0) return <p className="typo-empty py-8 text-center">No inventory movement data.</p>
 
   const totals = data.reduce((acc, r) => ({
     stock_in: acc.stock_in + r.stock_in,
@@ -198,7 +198,7 @@ function InventoryTab({ data }) {
             <tbody>
               {data.map((row, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-3 font-semibold text-gray-800">{row.sku_code}</td>
+                  <td className="py-3 typo-data">{row.sku_code}</td>
                   <td className="py-3 text-gray-500 text-xs">{row.product_name}</td>
                   <td className="py-3 text-gray-400 text-xs">
                     {new Date(row.period.from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
@@ -217,7 +217,7 @@ function InventoryTab({ data }) {
                   </td>
                   <td className="py-3 font-bold text-gray-900">{row.closing_stock}</td>
                   <td className="py-3">
-                    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${
                       row.turnover_rate > 0.3
                         ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
                         : row.turnover_rate > 0.1
@@ -232,7 +232,7 @@ function InventoryTab({ data }) {
             </tbody>
             {/* Totals row */}
             <tfoot>
-              <tr className="bg-gray-50 font-semibold text-gray-800">
+              <tr className="bg-gray-50 typo-data">
                 <td className="py-3" colSpan={3}>Totals</td>
                 <td className="py-3">{data.reduce((s, r) => s + r.opening_stock, 0)}</td>
                 <td className="py-3 text-emerald-600">+{totals.stock_in}</td>
@@ -295,7 +295,7 @@ function FinancialTab({ data }) {
             <tbody>
               {data.revenue_by_sku.map((row, i) => (
                 <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-3 font-semibold text-gray-800">{row.sku_code}</td>
+                  <td className="py-3 typo-data">{row.sku_code}</td>
                   <td className="py-3 text-gray-500 text-xs">{row.product_name}</td>
                   <td className="py-3 font-medium">{row.units_sold}</td>
                   <td className="py-3">{'\u20B9'}{row.avg_price.toLocaleString()}</td>
@@ -305,7 +305,7 @@ function FinancialTab({ data }) {
                       <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                         <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round((row.revenue / maxRevenue) * 100)}%` }} />
                       </div>
-                      <span className="text-xs text-gray-500 w-10">{Math.round((row.revenue / s.total_revenue) * 100)}%</span>
+                      <span className="typo-caption w-10">{Math.round((row.revenue / s.total_revenue) * 100)}%</span>
                     </div>
                   </td>
                 </tr>
@@ -324,8 +324,8 @@ function FinancialTab({ data }) {
             {data.cost_breakdown.map((item, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-700">{item.category}</span>
-                  <span className="text-sm font-semibold text-gray-900">{'\u20B9'}{item.amount.toLocaleString()} <span className="text-xs text-gray-400">({item.pct}%)</span></span>
+                  <span className="typo-td">{item.category}</span>
+                  <span className="typo-data">{'\u20B9'}{item.amount.toLocaleString()} <span className="typo-caption">({item.pct}%)</span></span>
                 </div>
                 <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${
@@ -361,7 +361,7 @@ function FinancialTab({ data }) {
 //  TAILOR PERFORMANCE TAB
 // ═══════════════════════════════════════════════════════
 function TailorTab({ data }) {
-  if (!data || data.length === 0) return <p className="text-sm text-gray-500 py-8 text-center">No tailor performance data.</p>
+  if (!data || data.length === 0) return <p className="typo-empty py-8 text-center">No tailor performance data.</p>
 
   const maxPieces = Math.max(...data.map((t) => t.pieces_completed), 1)
   const avgRejection = data.length > 0 ? (data.reduce((s, t) => s + t.rejection_rate, 0) / data.length).toFixed(1) : 0
@@ -391,15 +391,15 @@ function TailorTab({ data }) {
             <div key={i} className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               {/* Header */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-700 font-bold text-sm">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
                   {t.tailor.full_name.split(' ').map((n) => n[0]).join('')}
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{t.tailor.full_name}</p>
-                  <p className="text-xs text-gray-500">{t.speciality}</p>
+                  <p className="typo-data">{t.tailor.full_name}</p>
+                  <p className="typo-caption">{t.speciality}</p>
                 </div>
                 {t.current_batch && (
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 typo-badge text-blue-700 ring-1 ring-inset ring-blue-700/10">
                     Active
                   </span>
                 )}
@@ -438,7 +438,7 @@ function TailorTab({ data }) {
 
               {/* Pieces bar */}
               <div className="mt-3 pt-3 border-t border-gray-100">
-                <HBar value={t.pieces_completed} max={maxPieces} color="bg-primary-500" label="Output" />
+                <HBar value={t.pieces_completed} max={maxPieces} color="bg-emerald-500" label="Output" />
               </div>
             </div>
           )
@@ -503,15 +503,15 @@ export default function ReportsPage() {
       {/* Tab Bar + Period Selector */}
       <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
         {/* Tabs */}
-        <div className="flex rounded-xl bg-gray-100 p-1">
+        <div className="flex gap-6 border-b border-gray-200">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+              className={`inline-flex items-center gap-1.5 pb-2.5 typo-tab border-b-2 transition-colors ${
                 activeTab === tab.key
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'border-emerald-600 text-emerald-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -528,9 +528,9 @@ export default function ReportsPage() {
             <button
               key={p.key}
               onClick={() => setPeriod(p.key)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`rounded-full px-3 py-1.5 typo-btn-sm transition-all ${
                 period === p.key
-                  ? 'bg-primary-600 text-white shadow-sm'
+                  ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
               }`}
             >

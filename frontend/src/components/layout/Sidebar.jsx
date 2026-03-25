@@ -40,7 +40,7 @@ export default function Sidebar({ collapsed, onToggle }) {
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-30 flex flex-col transition-all duration-300 ${
-        collapsed ? 'w-[68px]' : 'w-60'
+        collapsed ? 'w-[60px]' : 'w-52'
       }`}
       style={{
         background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
@@ -48,37 +48,37 @@ export default function Sidebar({ collapsed, onToggle }) {
     >
       {/* ── Brand → Dashboard ── */}
       <div className={`flex h-14 items-center border-b border-white/[0.06] ${
-        collapsed ? 'justify-center px-0' : 'justify-between px-4'
+        collapsed ? 'justify-center px-0' : 'px-3'
       }`}>
         {collapsed ? (
           <div className="group relative flex items-center justify-center">
             <button
               onClick={() => navigate('/dashboard')}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-900/30 transition-transform hover:scale-105 ${
-                isHome ? 'ring-2 ring-primary-400/50' : ''
+              className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-900/40 transition-transform hover:scale-105 ${
+                isHome ? 'ring-2 ring-emerald-400/50' : ''
               }`}
             >
-              <span className="text-sm font-black text-white tracking-tighter">IO</span>
+              <span className="text-[11px] font-black text-white tracking-tighter">IO</span>
             </button>
             <span className="nav-tooltip">Dashboard</span>
           </div>
         ) : (
           <button
             onClick={() => navigate('/dashboard')}
-            className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.06] ${
+            className={`flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-white/[0.06] ${
               isHome ? 'bg-white/[0.06]' : ''
             }`}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-900/30 shrink-0">
-              <span className="text-xs font-black text-white tracking-tighter">IO</span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-900/40 shrink-0">
+              <span className="text-[10px] font-black text-white tracking-tighter">IO</span>
             </div>
-            <span className="text-sm font-bold text-white tracking-tight">Inventory-OS</span>
+            <span className="typo-label-sm text-white tracking-tight">Inventory-OS</span>
           </button>
         )}
       </div>
 
       {/* ── Navigation ── */}
-      <nav className={`flex-1 py-2 ${collapsed ? 'px-2 overflow-visible' : 'px-3 sidebar-scroll overflow-y-auto'}`}>
+      <nav className={`flex-1 py-1.5 ${collapsed ? 'px-1.5 overflow-visible' : 'px-2.5 sidebar-scroll overflow-y-auto'}`}>
         {visibleItems.map((item, idx) => {
           if (item.section) {
             // Section header
@@ -88,8 +88,8 @@ export default function Sidebar({ collapsed, onToggle }) {
               )
             }
             return (
-              <div key={item.section} className={`px-3 ${idx === 0 ? 'pt-0.5' : 'pt-3'} pb-1`}>
-                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
+              <div key={item.section} className={`px-2 ${idx === 0 ? 'pt-0.5' : 'pt-2.5'} pb-0.5`}>
+                <span className="typo-nav-section text-gray-500">
                   {item.section}
                 </span>
               </div>
@@ -108,7 +108,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               >
                 <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-200 ${
                   isActive
-                    ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
                     : 'text-gray-400 hover:bg-white/[0.08] hover:text-white'
                 }`}>
                   <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,23 +130,23 @@ export default function Sidebar({ collapsed, onToggle }) {
             >
               {/* Active accent bar */}
               {isActive && (
-                <div className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary-400" />
+                <div className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-emerald-400" />
               )}
-              <div className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] transition-all duration-200 ${
+              <div className={`flex w-full items-center gap-2 rounded-lg px-2 py-[5px] transition-all duration-200 ${
                 isActive
                   ? 'bg-white/[0.1] text-white'
                   : 'text-gray-400 hover:bg-white/[0.06] hover:text-gray-200'
               }`}>
-                <div className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors shrink-0 ${
+                <div className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors shrink-0 ${
                   isActive
-                    ? 'bg-primary-600/80 text-white shadow-sm shadow-primary-600/20'
+                    ? 'bg-emerald-600/80 text-white shadow-sm shadow-emerald-600/20'
                     : 'bg-white/[0.04] text-inherit group-hover:bg-white/[0.08]'
                 }`}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d={item.icon} />
                   </svg>
                 </div>
-                <span className={`text-[13px] font-medium transition-colors ${
+                <span className={`typo-nav transition-colors ${
                   isActive ? 'font-semibold text-white' : ''
                 }`}>{item.label}</span>
               </div>
@@ -155,19 +155,21 @@ export default function Sidebar({ collapsed, onToggle }) {
         })}
       </nav>
 
-      {/* ── Footer — toggle always here ── */}
-      <div className="border-t border-white/[0.06] px-3 py-2.5">
+      {/* ── Footer — toggle ── */}
+      <div className="border-t border-white/[0.06] px-2.5 py-2">
         <button
           onClick={onToggle}
-          className={`flex items-center rounded-lg text-gray-500 transition-colors hover:bg-white/[0.08] hover:text-gray-300 ${
-            collapsed ? 'w-full justify-center p-1.5' : 'w-full gap-2 px-2.5 py-1.5'
+          className={`flex items-center rounded-lg transition-all duration-200 hover:bg-emerald-600/20 ${
+            collapsed ? 'w-full justify-center p-1.5 text-gray-500 hover:text-emerald-400' : 'w-full gap-2 px-2 py-1.5 text-gray-500 hover:text-emerald-300'
           }`}
         >
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d={collapsed ? 'M13 5l7 7-7 7M5 5l7 7-7 7' : 'M11 19l-7-7 7-7m8 14l-7-7 7-7'} />
-          </svg>
-          {!collapsed && <span className="text-[11px] font-medium">Collapse</span>}
+          <div className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.06]">
+            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d={collapsed ? 'M13 5l7 7-7 7M5 5l7 7-7 7' : 'M11 19l-7-7 7-7m8 14l-7-7 7-7'} />
+            </svg>
+          </div>
+          {!collapsed && <span className="typo-nav text-inherit">{collapsed ? 'Expand' : 'Collapse'}</span>}
         </button>
       </div>
     </aside>
