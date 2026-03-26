@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, sendForProcessing, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
@@ -237,6 +237,14 @@ const ROLL_COLUMNS = [
 
 // ── Processing tab columns ──
 const PROCESSING_COLUMNS = [
+  {
+    key: 'processing_logs',
+    label: 'Challan',
+    render: (val) => {
+      const latest = val?.[val.length - 1]
+      return latest?.challan_no ? <span className="font-mono text-emerald-700">{latest.challan_no}</span> : '—'
+    },
+  },
   { key: 'roll_code', label: 'Roll Code', render: (val) => <span className="font-medium text-primary-600">{val}</span> },
   { key: 'fabric_type', label: 'Fabric' },
   { key: 'color', label: 'Color' },
@@ -1356,16 +1364,21 @@ export default function RollsPage() {
     setSendProcSaving(true)
     setSendProcError(null)
     try {
-      await sendForProcessing(sendProcRoll.id, {
+      const res = await createJobChallan({
         value_addition_id: sendProcForm.value_addition_id,
         va_party_id: sendProcForm.va_party_id,
         sent_date: sendProcForm.sent_date,
         notes: sendProcForm.notes.trim() || null,
-        weight_to_send: wts,
+        rolls: [{ roll_id: sendProcRoll.id, weight_to_send: wts }],
+        _rolls: [sendProcRoll],
+        _vaObj: masterValueAdditions.find((va) => va.id === sendProcForm.value_addition_id) || null,
       })
+      const challan = res.data?.data || res.data
+      setJobChallanData(challan)
       setSendProcOpen(false)
-      setDetailRoll(null) // close roll detail — status changed
+      setDetailRoll(null)
       setCameFromInvoice(null)
+      setShowJobChallan(true)
       refreshAll()
     } catch (err) {
       setSendProcError(err.response?.data?.detail || 'Failed to send for processing')

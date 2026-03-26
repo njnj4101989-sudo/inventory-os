@@ -9,7 +9,7 @@ from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
-    SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
+    ReceiveFromProcessing, UpdateProcessingLog,
     BulkStockIn, SupplierInvoiceParams, SupplierInvoiceUpdate,
 )
 from app.services.roll_service import RollService
@@ -128,19 +128,6 @@ async def get_roll(
     """Get roll detail with consumption history."""
     svc = RollService(db)
     result = await svc.get_roll(roll_id)
-    return {"success": True, "data": result}
-
-
-@router.post("/{roll_id}/processing", response_model=None, status_code=201)
-async def send_for_processing(
-    roll_id: UUID,
-    req: SendForProcessing,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = require_permission("stock_in"),
-):
-    """Send an in-stock roll for external processing (embroidery, dyeing, etc.)."""
-    svc = RollService(db)
-    result = await svc.send_for_processing(roll_id, req)
     return {"success": True, "data": result}
 
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { getJobChallans, getJobChallan, receiveJobChallan } from '../api/jobChallans'
-import { getBatchChallans, getBatchChallan } from '../api/batchChallans'
+import { getJobChallans, getJobChallan, receiveJobChallan, updateJobChallan } from '../api/jobChallans'
+import { getBatchChallans, getBatchChallan, updateBatchChallan } from '../api/batchChallans'
 import { getAllValueAdditions, getAllVAParties } from '../api/masters'
 import SearchInput from '../components/common/SearchInput'
 import Pagination from '../components/common/Pagination'
@@ -72,17 +72,67 @@ export default function ChallansPage() {
   const [recvSaving, setRecvSaving] = useState(false)
   const [recvError, setRecvError] = useState(null)
 
+  // Edit modal
+  const [editOpen, setEditOpen] = useState(false)
+  const [editChallan, setEditChallan] = useState(null)
+  const [editForm, setEditForm] = useState({ va_party_id: '', value_addition_id: '', sent_date: '', notes: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
+
+  const openEdit = (challan) => {
+    setEditChallan(challan)
+    setEditForm({
+      va_party_id: challan.va_party?.id || '',
+      value_addition_id: challan.value_addition?.id || '',
+      sent_date: challan.sent_date || '',
+      notes: challan.notes || '',
+    })
+    setEditError(null)
+    setEditOpen(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editChallan) return
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const payload = {}
+      if (editForm.va_party_id && editForm.va_party_id !== editChallan.va_party?.id) payload.va_party_id = editForm.va_party_id
+      if (editForm.value_addition_id && editForm.value_addition_id !== editChallan.value_addition?.id) payload.value_addition_id = editForm.value_addition_id
+      if (tab === 'job' && editForm.sent_date && editForm.sent_date !== editChallan.sent_date) payload.sent_date = editForm.sent_date
+      if (editForm.notes !== (editChallan.notes || '')) payload.notes = editForm.notes
+
+      if (Object.keys(payload).length === 0) {
+        setEditOpen(false)
+        return
+      }
+
+      const res = tab === 'job'
+        ? await updateJobChallan(editChallan.id, payload)
+        : await updateBatchChallan(editChallan.id, payload)
+      const updated = res.data?.data || res.data
+      setDetail(updated)
+      setEditOpen(false)
+      setEditChallan(null)
+      fetchData()
+    } catch (err) {
+      setEditError(err.response?.data?.detail || 'Failed to update challan')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   const openReceive = (challan) => {
     const today = new Date().toISOString().split('T')[0]
     const rows = {}
     for (const r of (challan.rolls || [])) {
       // Only include rolls that haven't been received yet
-      const log = r.processing_logs?.[r.processing_logs.length - 1]
-      if (log?.status === 'received') continue
+      if (r.processing_status === 'received') continue
       rows[r.id] = {
         checked: true,
         weight_after: String(r.weight_sent || r.current_weight || r.total_weight || ''),
         processing_cost: '',
+        processing_id: r.processing_id,
       }
     }
     setRecvChallan(challan)
@@ -107,16 +157,12 @@ export default function ChallansPage() {
     setRecvSaving(true)
     setRecvError(null)
     try {
-      const rollsPayload = toReceive.map(([rollId, row]) => {
-        const roll = (recvChallan.rolls || []).find(r => r.id === rollId)
-        const log = roll?.processing_logs?.[roll.processing_logs.length - 1]
-        return {
-          roll_id: rollId,
-          processing_id: log?.id,
-          weight_after: parseFloat(row.weight_after),
-          processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
-        }
-      })
+      const rollsPayload = toReceive.map(([rollId, row]) => ({
+        roll_id: rollId,
+        processing_id: row.processing_id,
+        weight_after: parseFloat(row.weight_after),
+        processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
+      }))
       await receiveJobChallan(recvChallan.id, { received_date: recvDate, rolls: rollsPayload })
       setRecvOpen(false)
       setRecvChallan(null)
@@ -229,7 +275,7 @@ export default function ChallansPage() {
     const vc = getVAColor(detail.value_addition?.short_code)
     const isJob = tab === 'job'
 
-    return (
+    return (<>
       <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
         {/* ── Gradient header ── */}
         <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
@@ -249,6 +295,13 @@ export default function ChallansPage() {
             <span className={`rounded-full px-2.5 py-1 typo-badge ${detail.status === 'received' ? 'bg-green-500/30 text-white' : detail.status === 'partially_received' ? 'bg-amber-300/30 text-white' : 'bg-white/20 text-white'}`}>
               {st.label}
             </span>
+            {detail.status !== 'received' && (
+              <button onClick={() => openEdit(detail)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                Edit
+              </button>
+            )}
             {isJob && detail.status !== 'received' && (
               <button onClick={() => openReceive(detail)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 typo-btn-sm text-emerald-700 hover:bg-emerald-50 transition-colors">
@@ -417,7 +470,139 @@ export default function ChallansPage() {
           </div>
         </div>
       </div>
-    )
+
+      {/* ── Edit Modal (Job + Batch Challans) ── */}
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="">
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
+          <h2 className="typo-modal-title text-white">Edit Challan</h2>
+          {editChallan && (
+            <p className="typo-caption text-emerald-100 mt-0.5">{editChallan.challan_no} · {editChallan.va_party?.name} · {editChallan.value_addition?.name}</p>
+          )}
+        </div>
+
+        {editError && <div className="mb-4"><ErrorAlert message={editError} onDismiss={() => setEditError(null)} /></div>}
+
+        <div className="space-y-4">
+          <div>
+            <label className="typo-label">VA Party</label>
+            <FilterSelect full value={editForm.va_party_id} onChange={v => setEditForm(f => ({ ...f, va_party_id: v }))}
+              options={[{ value: '', label: 'Select VA Party' }, ...vaParties.map(p => ({ value: p.id, label: `${p.name}${p.city ? ` — ${p.city}` : ''}` }))]} />
+          </div>
+          <div>
+            <label className="typo-label">VA Type</label>
+            <FilterSelect full value={editForm.value_addition_id} onChange={v => setEditForm(f => ({ ...f, value_addition_id: v }))}
+              options={[{ value: '', label: 'Select VA Type' }, ...vaTypes.map(v => ({ value: v.id, label: `${v.name} (${v.short_code})` }))]} />
+          </div>
+          {tab === 'job' && (
+            <div>
+              <label className="typo-label">Sent Date</label>
+              <input type="date" value={editForm.sent_date} onChange={e => setEditForm(f => ({ ...f, sent_date: e.target.value }))} className="typo-input" />
+            </div>
+          )}
+          <div>
+            <label className="typo-label">Notes</label>
+            <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+              rows={3} className="typo-input" placeholder="Optional notes..." />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setEditOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleEdit} disabled={editSaving}
+              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
+              {editSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Receive Modal (Job Challans) ── */}
+      <Modal open={recvOpen} onClose={() => setRecvOpen(false)} title="" wide>
+        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 text-white">
+          <h2 className="typo-modal-title text-white">Receive Back from VA</h2>
+          {recvChallan && (
+            <p className="typo-caption text-green-100 mt-0.5">{recvChallan.challan_no} · {recvChallan.va_party?.name} · {recvChallan.value_addition?.name}</p>
+          )}
+        </div>
+
+        {recvError && <div className="mb-4"><ErrorAlert message={recvError} onDismiss={() => setRecvError(null)} /></div>}
+
+        <div className="space-y-4">
+          <div className="max-w-xs">
+            <label className="typo-label-sm">Received Date <span className="text-red-500">*</span></label>
+            <input type="date" value={recvDate} onChange={e => setRecvDate(e.target.value)} className="typo-input-sm" />
+          </div>
+
+          {recvChallan && Object.keys(recvRows).length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-emerald-600 text-white typo-th">
+                    <th className="py-2 px-3 w-10 border-r border-emerald-500">
+                      <input type="checkbox"
+                        checked={Object.values(recvRows).every(r => r.checked)}
+                        onChange={() => {
+                          const allChecked = Object.values(recvRows).every(r => r.checked)
+                          setRecvRows(prev => {
+                            const next = { ...prev }
+                            for (const k of Object.keys(next)) next[k] = { ...next[k], checked: !allChecked }
+                            return next
+                          })
+                        }}
+                        className="h-4 w-4 rounded border-white/50 text-emerald-700 cursor-pointer" />
+                    </th>
+                    <th className="py-2 px-3 text-left border-r border-emerald-500">Roll Code</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Sent Wt</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Weight After *</th>
+                    <th className="py-2 px-3 text-right">Cost (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(recvChallan.rolls || []).filter(r => recvRows[r.id]).map((r, i) => {
+                    const row = recvRows[r.id]
+                    return (
+                      <tr key={r.id} className={`border-b border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
+                        <td className="px-3 py-2 text-center border-r border-gray-50">
+                          <input type="checkbox" checked={row.checked}
+                            onChange={() => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], checked: !prev[r.id].checked } }))}
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 cursor-pointer" />
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-gray-800 border-r border-gray-50">{r.enhanced_roll_code || r.roll_code}</td>
+                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums border-r border-gray-50">{parseFloat(r.weight_sent || r.current_weight || 0).toFixed(3)} kg</td>
+                        <td className="px-3 py-2 text-right border-r border-gray-50">
+                          <input type="number" step="0.001" value={row.weight_after}
+                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], weight_after: e.target.value } }))}
+                            className="w-28 typo-input-sm text-right tabular-nums !w-28" />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input type="number" step="1" value={row.processing_cost}
+                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], processing_cost: e.target.value } }))}
+                            placeholder="0"
+                            className="w-24 typo-input-sm text-right tabular-nums !w-24" />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {recvChallan && Object.keys(recvRows).length === 0 && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 typo-body text-green-700">
+              All rolls in this challan have already been received.
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleReceive} disabled={recvSaving || Object.keys(recvRows).length === 0}
+              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
+              {recvSaving ? 'Receiving...' : `Receive (${Object.values(recvRows).filter(r => r.checked).length})`}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </>)
   }
 
   // ── Main list view ──
@@ -575,93 +760,6 @@ export default function ChallansPage() {
         <Pagination page={page} pages={data.pages} total={data.total} onChange={setPage} />
       )}
 
-      {/* ── Receive Modal (Job Challans) ── */}
-      <Modal open={recvOpen} onClose={() => setRecvOpen(false)} title="" wide>
-        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 text-white">
-          <h2 className="typo-modal-title text-white">Receive Back from VA</h2>
-          {recvChallan && (
-            <p className="typo-caption text-green-100 mt-0.5">{recvChallan.challan_no} · {recvChallan.va_party?.name} · {recvChallan.value_addition?.name}</p>
-          )}
-        </div>
-
-        {recvError && <div className="mb-4"><ErrorAlert message={recvError} onDismiss={() => setRecvError(null)} /></div>}
-
-        <div className="space-y-4">
-          <div className="max-w-xs">
-            <label className="typo-label-sm">Received Date <span className="text-red-500">*</span></label>
-            <input type="date" value={recvDate} onChange={e => setRecvDate(e.target.value)} className="typo-input-sm" />
-          </div>
-
-          {recvChallan && Object.keys(recvRows).length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-emerald-600 text-white typo-th">
-                    <th className="py-2 px-3 w-10 border-r border-emerald-500">
-                      <input type="checkbox"
-                        checked={Object.values(recvRows).every(r => r.checked)}
-                        onChange={() => {
-                          const allChecked = Object.values(recvRows).every(r => r.checked)
-                          setRecvRows(prev => {
-                            const next = { ...prev }
-                            for (const k of Object.keys(next)) next[k] = { ...next[k], checked: !allChecked }
-                            return next
-                          })
-                        }}
-                        className="h-4 w-4 rounded border-white/50 text-emerald-700 cursor-pointer" />
-                    </th>
-                    <th className="py-2 px-3 text-left border-r border-emerald-500">Roll Code</th>
-                    <th className="py-2 px-3 text-right border-r border-emerald-500">Sent Wt</th>
-                    <th className="py-2 px-3 text-right border-r border-emerald-500">Weight After *</th>
-                    <th className="py-2 px-3 text-right">Cost (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(recvChallan.rolls || []).filter(r => recvRows[r.id]).map((r, i) => {
-                    const row = recvRows[r.id]
-                    return (
-                      <tr key={r.id} className={`border-b border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
-                        <td className="px-3 py-2 text-center border-r border-gray-50">
-                          <input type="checkbox" checked={row.checked}
-                            onChange={() => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], checked: !prev[r.id].checked } }))}
-                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 cursor-pointer" />
-                        </td>
-                        <td className="px-3 py-2 font-semibold text-gray-800 border-r border-gray-50">{r.enhanced_roll_code || r.roll_code}</td>
-                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums border-r border-gray-50">{parseFloat(r.weight_sent || r.current_weight || 0).toFixed(3)} kg</td>
-                        <td className="px-3 py-2 text-right border-r border-gray-50">
-                          <input type="number" step="0.001" value={row.weight_after}
-                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], weight_after: e.target.value } }))}
-                            className="w-28 typo-input-sm text-right tabular-nums !w-28" />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <input type="number" step="1" value={row.processing_cost}
-                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], processing_cost: e.target.value } }))}
-                            placeholder="0"
-                            className="w-24 typo-input-sm text-right tabular-nums !w-24" />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {recvChallan && Object.keys(recvRows).length === 0 && (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 typo-body text-green-700">
-              All rolls in this challan have already been received.
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setRecvOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleReceive} disabled={recvSaving || Object.keys(recvRows).length === 0}
-              className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
-              {recvSaving ? 'Receiving...' : `Receive (${Object.values(recvRows).filter(r => r.checked).length})`}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }

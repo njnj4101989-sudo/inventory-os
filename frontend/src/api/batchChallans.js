@@ -64,6 +64,21 @@ export async function getBatchChallan(id) {
   return client.get(`/batch-challans/${id}`)
 }
 
+export async function updateBatchChallan(id, data) {
+  if (USE_MOCK) {
+    const challan = mockBatchChallans.find((c) => c.id === id)
+    if (!challan) throw { response: { data: { detail: 'Batch challan not found' } } }
+    if (data.va_party_id !== undefined) {
+      const vp = vaParties.find((p) => p.id === data.va_party_id)
+      if (vp) challan.va_party = { id: vp.id, name: vp.name, phone: vp.phone, city: vp.city }
+    }
+    if (data.value_addition_id !== undefined) challan.value_addition_id = data.value_addition_id
+    if (data.notes !== undefined) challan.notes = data.notes
+    return mockResponse(challan, 'Batch challan updated')
+  }
+  return client.patch(`/batch-challans/${id}`, data)
+}
+
 export async function receiveBatchChallan(id, data) {
   if (USE_MOCK) {
     const challan = mockBatchChallans.find((c) => c.id === id)

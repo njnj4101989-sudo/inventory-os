@@ -187,15 +187,6 @@ class RollDetail(RollResponse):
 # --- Processing Requests ---
 
 
-class SendForProcessing(BaseModel):
-    value_addition_id: UUID
-    va_party_id: UUID
-    sent_date: date
-    notes: str | None = None
-    job_challan_id: UUID | None = None
-    weight_to_send: Decimal | None = None  # None = full remaining_weight
-
-
 class ReceiveFromProcessing(BaseModel):
     received_date: date
     weight_after: Decimal

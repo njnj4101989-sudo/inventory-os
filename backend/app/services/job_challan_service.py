@@ -413,67 +413,9 @@ class JobChallanService:
         return await self.get_challan(challan_id)
 
     async def _get_challan_response(self, challan_id: UUID, rolls: list[Roll], weight_sent_map: dict | None = None) -> dict:
-        """Build response for a freshly created challan using already-loaded rolls."""
-        stmt = (
-            select(JobChallan)
-            .where(JobChallan.id == challan_id)
-            .options(
-                selectinload(JobChallan.value_addition),
-                selectinload(JobChallan.va_party),
-                selectinload(JobChallan.created_by_user),
-            )
-        )
-        result = await self.db.execute(stmt)
-        challan = result.scalar_one()
-
-        va = challan.value_addition
-        vp = challan.va_party
-        user = challan.created_by_user
-
-        from app.services.roll_service import RollService
-        roll_briefs = []
-        for r in rolls:
-            enhanced = RollService._compute_enhanced_roll_code(r.roll_code, r.processing_logs)
-            ws = weight_sent_map.get(r.id) if weight_sent_map else None
-            roll_briefs.append({
-                "id": str(r.id),
-                "roll_code": r.roll_code,
-                "enhanced_roll_code": enhanced,
-                "fabric_type": r.fabric_type,
-                "color": r.color,
-                "current_weight": float(r.current_weight) if r.current_weight else 0,
-                "weight_sent": ws,
-            })
-
-        total_weight = sum(rb.get("weight_sent") or rb["current_weight"] for rb in roll_briefs)
-
-        return {
-            "id": str(challan.id),
-            "challan_no": challan.challan_no,
-            "value_addition": {
-                "id": str(va.id),
-                "name": va.name,
-                "short_code": va.short_code,
-            } if va else None,
-            "va_party": {
-                "id": str(vp.id),
-                "name": vp.name,
-                "phone": vp.phone,
-                "city": vp.city,
-            } if vp else None,
-            "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
-            "received_date": challan.received_date.isoformat() if challan.received_date else None,
-            "status": challan.status or "sent",
-            "notes": challan.notes,
-            "created_by_user": {
-                "id": str(user.id),
-                "full_name": user.full_name,
-            } if user else None,
-            "created_at": challan.created_at.isoformat() if challan.created_at else None,
-            "rolls": roll_briefs,
-            "total_weight": round(total_weight, 3),
-            "roll_count": len(roll_briefs),
-        }
+        """Build response for a freshly created challan — reloads with processing_logs for consistent shape."""
+        # Reuse _to_response via get_challan for consistent shape (includes processing_id, processing_status)
+        return await self.get_challan(challan_id)
 
     async def update_challan(self, challan_id: UUID, req: JobChallanUpdate) -> dict:
         """Edit a job challan (va_party, value_addition, sent_date, notes)."""
@@ -511,7 +453,8 @@ class JobChallanService:
             challan.notes = req.notes
 
         await self.db.flush()
-        return self._to_response(challan)
+        # Reload with fresh relationships (FK changes don't auto-refresh ORM objects)
+        return await self.get_challan(challan_id)
 
     def _to_response(self, challan: JobChallan) -> dict:
         va = challan.value_addition
@@ -533,6 +476,8 @@ class JobChallanService:
                 "color": r.color,
                 "current_weight": float(r.current_weight) if r.current_weight else 0,
                 "weight_sent": float(log.weight_before) if log.weight_before else None,
+                "processing_id": str(log.id),
+                "processing_status": log.status,
             })
 
         total_weight = sum(rb.get("weight_sent") or rb["current_weight"] for rb in roll_briefs)

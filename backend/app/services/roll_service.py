@@ -20,7 +20,7 @@ from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams, RollResponse, RollDetail,
-    SendForProcessing, ReceiveFromProcessing, UpdateProcessingLog,
+    ReceiveFromProcessing, UpdateProcessingLog,
     BulkStockIn, SupplierInvoiceParams,
 )
 from app.core.code_generator import next_roll_code
@@ -763,61 +763,6 @@ class RollService:
             }
             for c in records
         ]
-
-    async def send_for_processing(self, roll_id: UUID, req: SendForProcessing) -> dict:
-        stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
-        result = await self.db.execute(stmt)
-        roll = result.scalar_one_or_none()
-        if not roll:
-            raise NotFoundError(f"Roll {roll_id} not found")
-        if roll.status not in ("in_stock", "remnant"):
-            raise BusinessRuleViolationError("Roll must be in_stock or remnant to send for processing")
-        if roll.remaining_weight <= 0:
-            raise BusinessRuleViolationError("Roll has no remaining weight to send")
-
-        # Determine weight to send — default to full remaining
-        weight_to_send = req.weight_to_send if req.weight_to_send is not None else roll.remaining_weight
-        if weight_to_send <= 0:
-            raise BusinessRuleViolationError("Weight to send must be greater than 0")
-        if weight_to_send > roll.remaining_weight:
-            raise BusinessRuleViolationError(
-                f"Weight to send ({weight_to_send}) exceeds remaining weight ({roll.remaining_weight})"
-            )
-
-        log = RollProcessing(
-            roll_id=roll_id,
-            value_addition_id=req.value_addition_id,
-            va_party_id=req.va_party_id,
-            sent_date=req.sent_date,
-            weight_before=weight_to_send,  # partial amount sent
-            length_before=roll.total_length,
-            status="sent",
-            notes=req.notes,
-            job_challan_id=req.job_challan_id,
-        )
-        self.db.add(log)
-
-        # Deduct remaining weight
-        roll.remaining_weight = roll.remaining_weight - weight_to_send
-        # Status: sent_for_processing only if nothing remains
-        if roll.remaining_weight <= 0:
-            roll.status = "sent_for_processing"
-        # else stays in_stock (partial send)
-
-        await self.db.flush()
-
-        # Reload with all relationships for full roll response
-        reload = select(Roll).where(Roll.id == roll_id).options(
-            selectinload(Roll.color_obj),
-            selectinload(Roll.supplier),
-            selectinload(Roll.received_by_user),
-            selectinload(Roll.supplier_invoice),
-            selectinload(Roll.processing_logs).selectinload(RollProcessing.value_addition),
-                selectinload(Roll.processing_logs).selectinload(RollProcessing.va_party),
-                selectinload(Roll.processing_logs).selectinload(RollProcessing.job_challan),
-        )
-        roll = (await self.db.execute(reload)).scalar_one()
-        return self._to_response(roll)
 
     async def receive_from_processing(
         self, roll_id: UUID, processing_id: UUID, req: ReceiveFromProcessing

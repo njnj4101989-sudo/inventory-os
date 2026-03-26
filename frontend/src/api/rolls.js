@@ -303,40 +303,6 @@ export async function getProcessingRolls() {
   return client.get('/rolls', { params: { status: 'sent_for_processing', page_size: 0 } })
 }
 
-export async function sendForProcessing(rollId, data) {
-  if (USE_MOCK) {
-    const roll = rolls.find((r) => r.id === rollId)
-    if (!roll) throw { response: { data: { detail: 'Roll not found' } } }
-    if (roll.status !== 'in_stock') throw { response: { data: { detail: 'Roll must be in_stock to send for processing' } } }
-    if ((roll.remaining_weight || 0) <= 0) throw { response: { data: { detail: 'Roll has no remaining weight to send' } } }
-    const weightToSend = data.weight_to_send != null ? parseFloat(data.weight_to_send) : roll.remaining_weight
-    if (weightToSend > roll.remaining_weight) throw { response: { data: { detail: `Weight to send (${weightToSend}) exceeds remaining (${roll.remaining_weight})` } } }
-    const vaParty = vaParties.find((p) => p.id === data.va_party_id) || null
-    const log = {
-      id: crypto.randomUUID(),
-      roll_id: rollId,
-      value_addition_id: data.value_addition_id,
-      value_addition: { id: data.value_addition_id, name: 'Value Addition', short_code: 'VA' },
-      va_party: vaParty ? { id: vaParty.id, name: vaParty.name, phone: vaParty.phone, city: vaParty.city } : null,
-      sent_date: data.sent_date,
-      received_date: null,
-      weight_before: weightToSend,
-      weight_after: null,
-      length_before: roll.total_length,
-      length_after: null,
-      processing_cost: null,
-      status: 'sent',
-      notes: data.notes || null,
-    }
-    roll.remaining_weight = (roll.remaining_weight || 0) - weightToSend
-    if (roll.remaining_weight <= 0) roll.status = 'sent_for_processing'
-    roll.processing_logs = [...(roll.processing_logs || []), log]
-    rollProcessing.push(log)
-    return mockResponse(log, 'Roll sent for processing')
-  }
-  return client.post(`/rolls/${rollId}/processing`, data)
-}
-
 export async function updateProcessingLog(rollId, processingId, data) {
   if (USE_MOCK) {
     const roll = rolls.find((r) => r.id === rollId)

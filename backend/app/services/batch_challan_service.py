@@ -369,4 +369,5 @@ class BatchChallanService:
         if req.notes is not None:
             challan.notes = req.notes
         await self.db.flush()
-        return self._to_response(challan)
+        # Reload with fresh relationships (FK changes don't auto-refresh ORM objects)
+        return await self.get_challan(challan_id)
