@@ -20,7 +20,7 @@ class BatchChallan(Base):
     __tablename__ = "batch_challans"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('sent', 'partially_received', 'received')",
+            "status IN ('sent', 'partially_received', 'received', 'cancelled')",
             name="bc_valid_status",
         ),
     )

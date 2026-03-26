@@ -88,6 +88,18 @@ async def get_batch_challan(
     return {"success": True, "data": result}
 
 
+@router.post("/{challan_id}/cancel", response_model=None)
+async def cancel_batch_challan(
+    challan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_send_va"),
+):
+    """Cancel a sent batch challan."""
+    svc = BatchChallanService(db)
+    result = await svc.cancel_challan(challan_id, current_user.id)
+    return {"success": True, "data": result}
+
+
 @router.post("/{challan_id}/receive", response_model=None)
 async def receive_batch_challan(
     challan_id: UUID,

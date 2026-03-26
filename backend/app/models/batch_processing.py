@@ -20,7 +20,7 @@ class BatchProcessing(Base):
     __tablename__ = "batch_processing"
     __table_args__ = (
         CheckConstraint("pieces_sent > 0", name="positive_pieces_sent"),
-        CheckConstraint("status IN ('sent', 'received')", name="bp_valid_status"),
+        CheckConstraint("status IN ('sent', 'received', 'cancelled')", name="bp_valid_status"),
     )
 
     batch_id: Mapped[uuid.UUID] = mapped_column(

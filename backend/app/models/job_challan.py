@@ -13,7 +13,7 @@ class JobChallan(Base):
     __tablename__ = "job_challans"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('sent', 'partially_received', 'received')",
+            "status IN ('sent', 'partially_received', 'received', 'cancelled')",
             name="jc_valid_status",
         ),
     )

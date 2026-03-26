@@ -67,6 +67,18 @@ async def receive_challan(
     return {"success": True, "data": result}
 
 
+@router.post("/{challan_id}/cancel", response_model=None)
+async def cancel_challan(
+    challan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Cancel a sent job challan — reverses roll weight deductions."""
+    svc = JobChallanService(db)
+    result = await svc.cancel_challan(challan_id, current_user.id)
+    return {"success": True, "data": result}
+
+
 @router.patch("/{challan_id}", response_model=None)
 async def update_challan(
     challan_id: UUID,

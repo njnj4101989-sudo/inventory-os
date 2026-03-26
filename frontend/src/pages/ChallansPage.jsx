@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { getJobChallans, getJobChallan, receiveJobChallan, updateJobChallan } from '../api/jobChallans'
-import { getBatchChallans, getBatchChallan, updateBatchChallan } from '../api/batchChallans'
+import { getJobChallans, getJobChallan, receiveJobChallan, updateJobChallan, cancelJobChallan } from '../api/jobChallans'
+import { getBatchChallans, getBatchChallan, updateBatchChallan, cancelBatchChallan } from '../api/batchChallans'
 import { getAllValueAdditions, getAllVAParties } from '../api/masters'
 import SearchInput from '../components/common/SearchInput'
 import Pagination from '../components/common/Pagination'
@@ -30,6 +30,7 @@ const STATUS_STYLES = {
   sent: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', label: 'Sent' },
   partially_received: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', label: 'Partial' },
   received: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', label: 'Received' },
+  cancelled: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'Cancelled' },
 }
 const getStatusStyle = (s) => STATUS_STYLES[s] || STATUS_STYLES.sent
 
@@ -78,6 +79,36 @@ export default function ChallansPage() {
   const [editForm, setEditForm] = useState({ va_party_id: '', value_addition_id: '', sent_date: '', notes: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState(null)
+
+  // Cancel confirmation
+  const [cancelConfirm, setCancelConfirm] = useState(null)
+  const [cancelSaving, setCancelSaving] = useState(false)
+
+  const handleCancel = async () => {
+    if (!cancelConfirm) return
+    const challanId = cancelConfirm.id
+    setCancelSaving(true)
+    try {
+      if (tab === 'job') await cancelJobChallan(challanId)
+      else await cancelBatchChallan(challanId)
+      setCancelConfirm(null)
+      // Refresh detail overlay live
+      if (detail && detail.id === challanId) {
+        try {
+          const res = tab === 'job'
+            ? await getJobChallan(challanId)
+            : await getBatchChallan(challanId)
+          setDetail(res.data?.data || res.data)
+        } catch { setDetail(null) }
+      }
+      fetchData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to cancel challan')
+      setCancelConfirm(null)
+    } finally {
+      setCancelSaving(false)
+    }
+  }
 
   const openEdit = (challan) => {
     setEditChallan(challan)
@@ -295,14 +326,21 @@ export default function ChallansPage() {
             <span className={`rounded-full px-2.5 py-1 typo-badge ${detail.status === 'received' ? 'bg-green-500/30 text-white' : detail.status === 'partially_received' ? 'bg-amber-300/30 text-white' : 'bg-white/20 text-white'}`}>
               {st.label}
             </span>
-            {detail.status !== 'received' && (
+            {detail.status === 'sent' && (
+              <button onClick={() => setCancelConfirm(detail)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/80 px-3 py-1.5 typo-btn-sm text-white hover:bg-red-600 transition-colors">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                Cancel
+              </button>
+            )}
+            {!['received', 'cancelled'].includes(detail.status) && (
               <button onClick={() => openEdit(detail)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                 Edit
               </button>
             )}
-            {isJob && detail.status !== 'received' && (
+            {isJob && !['received', 'cancelled'].includes(detail.status) && (
               <button onClick={() => openReceive(detail)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 typo-btn-sm text-emerald-700 hover:bg-emerald-50 transition-colors">
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -470,6 +508,23 @@ export default function ChallansPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Cancel Confirmation Modal ── */}
+      <Modal open={!!cancelConfirm} onClose={() => !cancelSaving && setCancelConfirm(null)} title="Cancel Challan?">
+        <p className="typo-body text-gray-600 mb-4">
+          Are you sure you want to cancel <strong className="text-gray-900">{cancelConfirm?.challan_no}</strong>?
+          {tab === 'job' && ' This will restore the sent weight back to all rolls.'}
+          {' '}This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setCancelConfirm(null)} disabled={cancelSaving}
+            className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">No, Keep It</button>
+          <button onClick={handleCancel} disabled={cancelSaving}
+            className="rounded-lg bg-red-600 px-4 py-2 typo-btn-sm text-white hover:bg-red-700 disabled:opacity-50">
+            {cancelSaving ? 'Cancelling...' : 'Yes, Cancel Challan'}
+          </button>
+        </div>
+      </Modal>
 
       {/* ── Edit Modal (Job + Batch Challans) ── */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="">

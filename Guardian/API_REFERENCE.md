@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 17 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-17 (Session 77 — HttpOnly cookie auth, FY scoping on all endpoints, counter reset per FY, token blacklist, FY closing endpoints)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-26 (Session 84 — removed sendForProcessing, added challan edit endpoints, processing_id/processing_status on challan rolls)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -373,25 +373,8 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
 Same as `GET /rolls` with status filter pre-applied.
 
-### POST `/rolls/{id}/processing` (Send for Processing)
-**Request:**
-```json
-{
-  "value_addition_id": "uuid (required)",
-  "va_party_id": "uuid",
-  "sent_date": "2026-02-09",
-  "notes": "Chikan embroidery work",
-  "weight_to_send": 20.000
-}
-```
-- `weight_to_send` (optional): partial weight to send. Defaults to full `remaining_weight`.
-- Must be `> 0` and `<= roll.remaining_weight`.
-- `weight_before` on processing log = `weight_to_send` (the partial amount sent).
-- `roll.remaining_weight -= weight_to_send` after send.
-- If `remaining_weight > 0` after send → roll stays `in_stock` (partial send).
-- If `remaining_weight == 0` → roll becomes `sent_for_processing`.
-
-**Response:** Updated roll object
+### ~~POST `/rolls/{id}/processing`~~ — REMOVED (S84)
+> **Replaced by:** `POST /job-challans` (§16). All roll VA sends now go through Job Challans exclusively. Single-roll sends create a 1-roll challan. The standalone endpoint, schema (`SendForProcessing`), service method, and frontend API function have been deleted.
 
 ### PATCH `/rolls/{id}/processing/{processingId}` (Receive from Processing)
 **Request:**
@@ -1479,7 +1462,8 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
   "processing_cost": 2500.00,
   "status": "received",
   "notes": "",
-  "job_challan_id": "uuid | null"
+  "job_challan_id": "uuid | null",
+  "challan_no": "JC-001 | null"
 }
 ```
 
@@ -1584,7 +1568,9 @@ Creates a job challan and sends all specified rolls for processing atomically.
       "fabric_type": "Cotton",
       "color": "Green",
       "current_weight": 50.0,
-      "weight_sent": 20.0
+      "weight_sent": 20.0,
+      "processing_id": "uuid",
+      "processing_status": "sent"
     }
   ],
   "total_weight": 20.0,

@@ -100,3 +100,14 @@ export async function receiveJobChallan(id, data) {
   }
   return client.post(`/job-challans/${id}/receive`, data)
 }
+
+export async function cancelJobChallan(id) {
+  if (USE_MOCK) {
+    const challan = mockChallans.find((c) => c.id === id)
+    if (!challan) throw { response: { data: { detail: 'Job challan not found' } } }
+    if (challan.status !== 'sent') throw { response: { data: { detail: 'Only sent challans can be cancelled' } } }
+    challan.status = 'cancelled'
+    return mockResponse(challan, 'Job challan cancelled')
+  }
+  return client.post(`/job-challans/${id}/cancel`)
+}

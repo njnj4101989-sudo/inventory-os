@@ -263,8 +263,11 @@ class JobChallanService:
         challan = result.scalar_one_or_none()
         if not challan:
             raise NotFoundError(f"Job challan {challan_id} not found")
-        if challan.status == "received":
-            raise BusinessRuleViolationError("Challan already fully received")
+        if challan.status in ("received", "cancelled"):
+            raise BusinessRuleViolationError(
+                "Challan already fully received" if challan.status == "received"
+                else "Challan has been cancelled"
+            )
 
         # 2. Build lookup: processing_id → RollProcessing log
         log_map = {log.id: log for log in challan.processing_logs}
@@ -415,6 +418,119 @@ class JobChallanService:
     async def _get_challan_response(self, challan_id: UUID, rolls: list[Roll], weight_sent_map: dict | None = None) -> dict:
         """Build response for a freshly created challan — reloads with processing_logs for consistent shape."""
         # Reuse _to_response via get_challan for consistent shape (includes processing_id, processing_status)
+        return await self.get_challan(challan_id)
+
+    async def cancel_challan(self, challan_id: UUID, cancelled_by: UUID) -> dict:
+        """Cancel a sent job challan — reverses roll weight deductions.
+
+        Safety guards:
+        1. Challan must be status='sent'
+        2. ALL processing logs must be status='sent' (no individual receives)
+        3. No roll can be in_cutting (consumed by lot)
+        4. remaining_weight + weight_before <= total_weight per roll
+        5. FOR UPDATE locks on challan + rolls
+        """
+        # 1. Load and lock challan
+        stmt = (
+            select(JobChallan)
+            .where(JobChallan.id == challan_id)
+            .options(
+                selectinload(JobChallan.processing_logs).selectinload(RollProcessing.roll),
+            )
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Job challan {challan_id} not found")
+
+        # Guard 1: status must be 'sent'
+        if challan.status != "sent":
+            raise BusinessRuleViolationError(
+                f"Cannot cancel challan with status '{challan.status}' — only 'sent' challans can be cancelled"
+            )
+
+        logs = challan.processing_logs or []
+        if not logs:
+            raise BusinessRuleViolationError("Challan has no processing logs to cancel")
+
+        # Guard 2: ALL logs must be 'sent'
+        received_logs = [log for log in logs if log.status != "sent"]
+        if received_logs:
+            raise BusinessRuleViolationError(
+                f"Cannot cancel: {len(received_logs)} roll(s) have already been received individually"
+            )
+
+        # 2. Lock all affected rolls
+        roll_ids = [log.roll_id for log in logs]
+        roll_stmt = select(Roll).where(Roll.id.in_(roll_ids)).with_for_update()
+        roll_result = await self.db.execute(roll_stmt)
+        rolls_by_id = {r.id: r for r in roll_result.scalars().all()}
+
+        # Guard 3 + 4: check each roll
+        for log in logs:
+            roll = rolls_by_id.get(log.roll_id)
+            if not roll:
+                raise BusinessRuleViolationError(f"Roll {log.roll_id} not found — data inconsistency")
+            if roll.status == "in_cutting":
+                raise BusinessRuleViolationError(
+                    f"Cannot cancel: roll {roll.roll_code} is in cutting (consumed by lot)"
+                )
+            restored = float(roll.remaining_weight) + float(log.weight_before)
+            if restored > float(roll.total_weight) + 0.001:  # small tolerance for float
+                raise BusinessRuleViolationError(
+                    f"Cannot cancel: restoring weight for {roll.roll_code} would exceed total weight "
+                    f"({restored:.3f} > {float(roll.total_weight):.3f}) — state may have been modified"
+                )
+
+        # 3. Collect all log IDs in this challan (for exclusion in "other sent" queries)
+        challan_log_ids = [log.id for log in logs]
+
+        # 4. Reverse weight deductions, cancel logs, restore roll statuses
+        for log in logs:
+            roll = rolls_by_id[log.roll_id]
+            roll.remaining_weight = roll.remaining_weight + log.weight_before
+
+            # Mark processing log as cancelled FIRST
+            log.status = "cancelled"
+
+        # Flush cancelled statuses so the count query below sees them
+        await self.db.flush()
+
+        # 5. Re-evaluate roll statuses (after all logs are cancelled)
+        for roll_id_val, roll in rolls_by_id.items():
+            if roll.status != "sent_for_processing":
+                continue
+            # Count remaining 'sent' logs for this roll (across ALL challans)
+            remaining_sent_stmt = (
+                select(func.count())
+                .select_from(RollProcessing)
+                .where(
+                    RollProcessing.roll_id == roll_id_val,
+                    RollProcessing.status == "sent",
+                )
+            )
+            remaining_sent = (await self.db.execute(remaining_sent_stmt)).scalar() or 0
+            if remaining_sent == 0:
+                roll.status = "in_stock"
+
+        # 6. Mark challan as cancelled
+        challan.status = "cancelled"
+
+        await self.db.flush()
+
+        # 7. Emit SSE event
+        try:
+            from app.core.event_bus import event_bus
+            await event_bus.emit("va_cancelled", {
+                "challan_no": challan.challan_no,
+                "vendor": challan.va_party.name if challan.va_party else "Unknown",
+                "roll_count": len(logs),
+                "type": "roll",
+            }, str(cancelled_by))
+        except Exception:
+            pass  # SSE failure should not block cancel
+
         return await self.get_challan(challan_id)
 
     async def update_challan(self, challan_id: UUID, req: JobChallanUpdate) -> dict:

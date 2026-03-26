@@ -70,7 +70,7 @@ class Roll(Base):
 class RollProcessing(Base):
     __tablename__ = "roll_processing"
     __table_args__ = (
-        CheckConstraint("status IN ('sent', 'received')", name="rp_valid_status"),
+        CheckConstraint("status IN ('sent', 'received', 'cancelled')", name="rp_valid_status"),
     )
 
     roll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rolls.id", ondelete="RESTRICT"), index=True)

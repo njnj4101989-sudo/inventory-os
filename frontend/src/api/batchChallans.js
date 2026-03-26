@@ -102,3 +102,14 @@ export async function receiveBatchChallan(id, data) {
   }
   return client.post(`/batch-challans/${id}/receive`, data)
 }
+
+export async function cancelBatchChallan(id) {
+  if (USE_MOCK) {
+    const challan = mockBatchChallans.find((c) => c.id === id)
+    if (!challan) throw { response: { data: { detail: 'Batch challan not found' } } }
+    if (challan.status !== 'sent') throw { response: { data: { detail: 'Only sent challans can be cancelled' } } }
+    challan.status = 'cancelled'
+    return mockResponse(challan, 'Batch challan cancelled')
+  }
+  return client.post(`/batch-challans/${id}/cancel`)
+}

@@ -162,8 +162,11 @@ class BatchChallanService:
         challan = result.scalar_one_or_none()
         if not challan:
             raise NotFoundError(f"Batch challan {challan_id} not found")
-        if challan.status == "received":
-            raise BusinessRuleViolationError("Challan already received")
+        if challan.status in ("received", "cancelled"):
+            raise BusinessRuleViolationError(
+                "Challan already received" if challan.status == "received"
+                else "Challan has been cancelled"
+            )
 
         # Build lookup of BatchProcessing items by batch_id
         bp_map = {bp.batch_id: bp for bp in challan.batch_items}
@@ -239,6 +242,69 @@ class BatchChallanService:
             "piece_count": sum((bp.pieces_received or 0) for bp in challan.batch_items),
             "type": "garment",
         }, str(received_by))
+
+        return await self.get_challan(challan_id)
+
+    async def cancel_challan(self, challan_id: UUID, cancelled_by: UUID) -> dict:
+        """Cancel a sent batch challan.
+
+        Safety guards:
+        1. Challan must be status='sent'
+        2. ALL batch_items must be status='sent'
+        3. FOR UPDATE lock on challan
+        """
+        # 1. Load and lock challan
+        stmt = (
+            select(BatchChallan)
+            .where(BatchChallan.id == challan_id)
+            .options(
+                selectinload(BatchChallan.batch_items),
+                selectinload(BatchChallan.va_party),
+            )
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Batch challan {challan_id} not found")
+
+        # Guard 1: status must be 'sent'
+        if challan.status != "sent":
+            raise BusinessRuleViolationError(
+                f"Cannot cancel challan with status '{challan.status}' — only 'sent' challans can be cancelled"
+            )
+
+        items = challan.batch_items or []
+        if not items:
+            raise BusinessRuleViolationError("Challan has no batch items to cancel")
+
+        # Guard 2: ALL items must be 'sent'
+        received_items = [bp for bp in items if bp.status != "sent"]
+        if received_items:
+            raise BusinessRuleViolationError(
+                f"Cannot cancel: {len(received_items)} batch(es) have already been received"
+            )
+
+        # 2. Mark all batch_items as cancelled
+        for bp in items:
+            bp.status = "cancelled"
+
+        # 3. Mark challan as cancelled
+        challan.status = "cancelled"
+
+        await self.db.flush()
+
+        # 4. Emit SSE event
+        try:
+            from app.core.event_bus import event_bus
+            await event_bus.emit("va_cancelled", {
+                "challan_no": challan.challan_no,
+                "vendor": challan.va_party.name if challan.va_party else "—",
+                "piece_count": sum(bp.pieces_sent for bp in items),
+                "type": "garment",
+            }, str(cancelled_by))
+        except Exception:
+            pass
 
         return await self.get_challan(challan_id)
 
