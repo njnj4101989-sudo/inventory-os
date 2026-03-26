@@ -134,6 +134,7 @@ export default function LotsPage() {
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
   const designRef = useRef(null)
   const saveRef = useRef(null)
+  const pallaDebounce = useRef(null)
   const [masterProductTypes, setMasterProductTypes] = useState([])
   // Derive palla mode from selected product type
   const pallaMode = useMemo(() => {
@@ -551,10 +552,14 @@ export default function LotsPage() {
                   <input type="number" step="0.001" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
-                      setForm(f => ({ ...f, standard_palla_weight: v, rolls: f.rolls.map(r => {
-                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
-                        return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
-                      }) }))
+                      setForm(f => ({ ...f, standard_palla_weight: v }))
+                      clearTimeout(pallaDebounce.current)
+                      pallaDebounce.current = setTimeout(() => {
+                        setForm(f => ({ ...f, rolls: f.rolls.map(r => {
+                          const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                          return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
+                        }) }))
+                      }, 300)
                     }}
                     placeholder="6.700" className="w-20 h-[28px] rounded border border-gray-300 px-2 text-sm bg-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
                 </div>
@@ -565,10 +570,14 @@ export default function LotsPage() {
                   <input type="number" step="0.01" value={form.standard_palla_meter}
                     onChange={e => {
                       const v = e.target.value
-                      setForm(f => ({ ...f, standard_palla_meter: v, rolls: f.rolls.map(r => {
-                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
-                        return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
-                      }) }))
+                      setForm(f => ({ ...f, standard_palla_meter: v }))
+                      clearTimeout(pallaDebounce.current)
+                      pallaDebounce.current = setTimeout(() => {
+                        setForm(f => ({ ...f, rolls: f.rolls.map(r => {
+                          const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                          return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
+                        }) }))
+                      }, 300)
                     }}
                     placeholder="1.35" className="w-20 h-[28px] rounded border border-gray-300 px-2 text-sm bg-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
                 </div>

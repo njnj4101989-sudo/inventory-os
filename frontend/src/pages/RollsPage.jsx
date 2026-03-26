@@ -789,15 +789,16 @@ export default function RollsPage() {
   const setGroupField = (gIdx, k, v) => {
     updateGroup(gIdx, (g) => ({ ...g, [k]: v }))
     // Auto-fill panna/gsm/rate/unit from most recent roll when fabric changes
+    // Only fill fields that are still EMPTY (don't overwrite user-typed values)
     if (k === 'fabric_type' && v.trim()) {
       getRolls({ fabric_type: v, page_size: 1 }).then((res) => {
         const roll = res.data?.data?.[0]
         if (roll) {
           updateGroup(gIdx, (g) => ({
             ...g,
-            panna: roll.panna != null ? String(roll.panna) : g.panna,
-            gsm: roll.gsm != null ? String(roll.gsm) : g.gsm,
-            cost_per_unit: roll.cost_per_unit != null ? String(roll.cost_per_unit) : g.cost_per_unit,
+            panna: !g.panna && roll.panna != null ? String(roll.panna) : g.panna,
+            gsm: !g.gsm && roll.gsm != null ? String(roll.gsm) : g.gsm,
+            cost_per_unit: !g.cost_per_unit && roll.cost_per_unit != null ? String(roll.cost_per_unit) : g.cost_per_unit,
             unit: roll.unit || g.unit,
           }))
         }
