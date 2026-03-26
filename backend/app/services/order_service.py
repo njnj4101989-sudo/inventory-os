@@ -80,7 +80,7 @@ class OrderService:
     async def create_order(self, req: OrderCreate, created_by: UUID, fy_id: UUID) -> dict:
         order_number = await next_order_number(self.db, fy_id)
 
-        total_amount = 0.0
+        total_amount = 0
         order_items = []
 
         from app.models.inventory_state import InventoryState
