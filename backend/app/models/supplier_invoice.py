@@ -28,6 +28,9 @@ class SupplierInvoice(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    type: Mapped[str] = mapped_column(
+        String(20), default="roll_purchase", server_default="roll_purchase", index=True
+    )
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
@@ -36,3 +39,4 @@ class SupplierInvoice(Base):
     supplier: Mapped[Supplier | None] = relationship(foreign_keys=[supplier_id])
     received_by_user: Mapped[User | None] = relationship(foreign_keys=[received_by])
     rolls: Mapped[list[Roll]] = relationship(back_populates="supplier_invoice")
+    purchase_items: Mapped[list[PurchaseItem]] = relationship(back_populates="supplier_invoice")

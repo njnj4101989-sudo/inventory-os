@@ -22,6 +22,7 @@ from app.models.fabric import Fabric
 from app.models.value_addition import ValueAddition
 from app.models.va_party import VAParty
 from app.models.supplier_invoice import SupplierInvoice
+from app.models.purchase_item import PurchaseItem
 from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
@@ -56,6 +57,7 @@ __all__ = [
     "ValueAddition",
     "VAParty",
     "SupplierInvoice",
+    "PurchaseItem",
     "JobChallan",
     "BatchChallan",
     "BatchProcessing",

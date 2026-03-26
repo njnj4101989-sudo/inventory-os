@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getSKUs, getSKU, createSKU, updateSKU } from '../api/skus'
+import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices } from '../api/skus'
+import { getSuppliers } from '../api/suppliers'
+import { getAllProductTypes, getAllColors } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -7,117 +9,97 @@ import SearchInput from '../components/common/SearchInput'
 import Pagination from '../components/common/Pagination'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
-import SKUForm from '../components/forms/SKUForm'
 import FilterSelect from '../components/common/FilterSelect'
 
 const VA_COLORS = {
-  EMB: { bg: 'bg-purple-100', text: 'text-purple-700', dot: '#a855f7' },
-  DYE: { bg: 'bg-amber-100', text: 'text-amber-700', dot: '#d97706' },
-  DPT: { bg: 'bg-sky-100', text: 'text-sky-700', dot: '#0284c7' },
-  HWK: { bg: 'bg-rose-100', text: 'text-rose-700', dot: '#e11d48' },
-  SQN: { bg: 'bg-pink-100', text: 'text-pink-700', dot: '#ec4899' },
-  BTC: { bg: 'bg-teal-100', text: 'text-teal-700', dot: '#14b8a6' },
-  HST: { bg: 'bg-orange-100', text: 'text-orange-700', dot: '#ea580c' },
-  BTN: { bg: 'bg-indigo-100', text: 'text-indigo-700', dot: '#4f46e5' },
-  LCW: { bg: 'bg-lime-100', text: 'text-lime-700', dot: '#65a30d' },
-  FIN: { bg: 'bg-cyan-100', text: 'text-cyan-700', dot: '#0891b2' },
+  EMB: { bg: 'bg-purple-100', text: 'text-purple-700' },
+  DYE: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  DPT: { bg: 'bg-sky-100', text: 'text-sky-700' },
+  HWK: { bg: 'bg-rose-100', text: 'text-rose-700' },
+  SQN: { bg: 'bg-pink-100', text: 'text-pink-700' },
+  BTC: { bg: 'bg-teal-100', text: 'text-teal-700' },
+  HST: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  BTN: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  LCW: { bg: 'bg-lime-100', text: 'text-lime-700' },
+  FIN: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
 }
-const DEFAULT_VA = { bg: 'bg-gray-100', text: 'text-gray-700', dot: '#9ca3af' }
+const DEFAULT_VA = { bg: 'bg-gray-100', text: 'text-gray-700' }
 
-/** Parse SKU code: BLS-702-Red-XL+EMB+BTN → {base, vas} */
 function parseSKU(code) {
   if (!code) return { base: '', type: '', design: '', color: '', size: '', vas: [] }
   const plusIdx = code.indexOf('+')
   const basePart = plusIdx > -1 ? code.slice(0, plusIdx) : code
   const vas = plusIdx > -1 ? code.slice(plusIdx + 1).split('+').filter(Boolean) : []
   const parts = basePart.split('-')
-  return {
-    base: basePart,
-    type: parts[0] || '',
-    design: parts[1] || '',
-    color: parts[2] || '',
-    size: parts[3] || '',
-    vas,
-  }
+  return { base: basePart, type: parts[0] || '', design: parts[1] || '', color: parts[2] || '', size: parts[3] || '', vas }
 }
 
-function SKUCodeDisplay({ code, large }) {
+function SKUCodeDisplay({ code }) {
   const { base, vas } = parseSKU(code)
   return (
-    <span className={`inline-flex items-center gap-1 flex-wrap ${large ? '' : ''}`}>
-      <span className={`font-semibold text-gray-800 ${large ? 'text-lg' : ''}`}>{base}</span>
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      <span className="typo-data">{base}</span>
       {vas.map(va => {
         const c = VA_COLORS[va] || DEFAULT_VA
-        return <span key={va} className={`rounded px-1 py-0.5 ${large ? 'text-xs' : 'text-[10px]'} font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
+        return <span key={va} className={`rounded px-1 py-0.5 text-[10px] font-bold leading-none ${c.bg} ${c.text}`}>+{va}</span>
       })}
     </span>
   )
 }
 
 function StockIndicator({ stock }) {
-  if (!stock) return <span className="text-gray-400 text-xs">—</span>
+  if (!stock) return <span className="typo-caption">—</span>
   const { total_qty, available_qty, reserved_qty } = stock
   const isOut = available_qty <= 0 && total_qty === 0
   const isLow = available_qty > 0 && total_qty > 0 && (available_qty / total_qty) < 0.3
   return (
-    <div className="text-xs space-y-0.5">
+    <div className="space-y-0.5">
       <div className="flex items-center gap-1.5">
         <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-green-500'}`} />
-        <span className="font-semibold text-gray-800">{available_qty}</span>
-        <span className="text-gray-400">/ {total_qty}</span>
+        <span className="typo-data">{available_qty}</span>
+        <span className="typo-caption">/ {total_qty}</span>
       </div>
-      {reserved_qty > 0 && (
-        <span className="text-yellow-600 text-[10px]">{reserved_qty} reserved</span>
-      )}
+      {reserved_qty > 0 && <span className="text-yellow-600 text-[10px]">{reserved_qty} reserved</span>}
     </div>
   )
 }
 
-const COLUMNS = [
-  {
-    key: 'sku_code', label: 'SKU Code',
-    render: (val) => <SKUCodeDisplay code={val} />,
-  },
-  {
-    key: 'color', label: 'Color',
-    render: (val) => val ? (
-      <span className="inline-flex items-center gap-1.5">
-        <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0"
-          style={{ backgroundColor: colorHex(val) }} />
-        <span className="text-sm">{val}</span>
-      </span>
-    ) : '—',
-  },
-  { key: 'size', label: 'Size', render: (val) => val ? <span className="font-semibold">{val}</span> : '—' },
-  { key: 'product_type', label: 'Type', render: (val) => <span className="text-xs font-medium text-gray-500">{val}</span> },
-  {
-    key: 'base_price', label: 'Price',
-    render: (val) => val && val > 0 ? (
-      <span className="font-medium">₹{parseFloat(val).toLocaleString('en-IN')}</span>
-    ) : (
-      <span className="text-gray-400 text-xs">Set price</span>
-    ),
-  },
-  {
-    key: 'stock', label: 'Stock',
-    render: (val) => <StockIndicator stock={val} />,
-  },
-  {
-    key: 'is_active', label: 'Status',
-    render: (val) => (
-      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-        val ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-      }`}>
-        {val ? 'Active' : 'Inactive'}
-      </span>
-    ),
-  },
+const SKU_COLUMNS = [
+  { key: 'sku_code', label: 'SKU Code', render: (val) => <SKUCodeDisplay code={val} /> },
+  { key: 'color', label: 'Color', render: (val) => val ? (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(val) }} />
+      <span className="typo-td">{val}</span>
+    </span>
+  ) : '—' },
+  { key: 'size', label: 'Size', render: (val) => <span className="typo-data">{val || '—'}</span> },
+  { key: 'product_type', label: 'Type', render: (val) => <span className="typo-td-secondary">{val}</span> },
+  { key: 'base_price', label: 'Price', render: (val) => val && val > 0 ? <span className="typo-td">₹{parseFloat(val).toLocaleString('en-IN')}</span> : <span className="typo-caption">Set price</span> },
+  { key: 'stock', label: 'Stock', render: (val) => <StockIndicator stock={val} /> },
+  { key: 'is_active', label: 'Status', render: (val) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${val ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{val ? 'Active' : 'Inactive'}</span> },
 ]
 
-const PRODUCT_TYPES = ['FBL', 'SBL', 'LHG', 'SAR']
-const EMPTY_FORM = { product_type: 'FBL', design_no: '', product_name: '', color: '', size: '', description: '', base_price: '' }
+const PURCHASE_COLUMNS = [
+  { key: 'invoice_no', label: 'Invoice No.', render: (val) => <span className="typo-data">{val || '—'}</span> },
+  { key: 'supplier', label: 'Supplier', render: (val) => <span className="typo-td">{val?.name || '—'}</span> },
+  { key: 'invoice_date', label: 'Date', render: (val) => val ? <span className="typo-td">{new Date(val).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span> : '—' },
+  { key: 'type', label: 'Type', render: () => (
+    <span className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
+      Item Purchase
+    </span>
+  ) },
+  { key: 'item_count', label: 'Items', render: (val) => <span className="typo-data">{val}</span> },
+  { key: 'total_amount', label: 'Amount', render: (val) => <span className="typo-data">₹{parseFloat(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> },
+  { key: 'sr_no', label: 'Sr. No.', render: (val) => <span className="typo-td-secondary">{val || '—'}</span> },
+]
+
+const SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Free']
+const EMPTY_LINE = { product_type: 'FBL', design_no: '', color: '', size: 'S', qty: '', unit_price: '' }
 
 export default function SKUsPage() {
+  const [activeTab, setActiveTab] = useState('skus')
+
+  // SKU list state
   const [skus, setSKUs] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -125,47 +107,76 @@ export default function SKUsPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  // Filters
   const [filterType, setFilterType] = useState('')
   const [filterStock, setFilterStock] = useState('')
 
-  // Create modal (manual SKU only)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState(null)
+  // Purchase invoices state
+  const [purchaseInvoices, setPurchaseInvoices] = useState([])
+  const [piTotal, setPiTotal] = useState(0)
+  const [piPage, setPiPage] = useState(1)
+  const [piPages, setPiPages] = useState(1)
+  const [piLoading, setPiLoading] = useState(false)
+
+  // Masters
+  const [suppliers, setSuppliers] = useState([])
+  const [productTypes, setProductTypes] = useState([])
+  const [colors, setColors] = useState([])
+
+  // Purchase overlay
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [purchaseHeader, setPurchaseHeader] = useState({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', notes: '' })
+  const [purchaseLines, setPurchaseLines] = useState([{ ...EMPTY_LINE }])
+  const [purchaseSaving, setPurchaseSaving] = useState(false)
+  const [purchaseError, setPurchaseError] = useState(null)
 
   // Detail overlay
   const [detailSKU, setDetailSKU] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [editPrice, setEditPrice] = useState('')
-  const [editDesc, setEditDesc] = useState('')
-  const [editHsn, setEditHsn] = useState('')
-  const [editGst, setEditGst] = useState('')
-  const [editMrp, setEditMrp] = useState('')
-  const [editSaleRate, setEditSaleRate] = useState('')
-  const [editUnit, setEditUnit] = useState('')
+  const [editFields, setEditFields] = useState({})
   const [savingDetail, setSavingDetail] = useState(false)
   const [detailError, setDetailError] = useState(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  // Purchase invoice detail
+  const [piDetail, setPiDetail] = useState(null)
+
+  const fetchSKUs = useCallback(async () => {
+    setLoading(true); setError(null)
     try {
       const res = await getSKUs({ page, page_size: 50, search: search || undefined })
-      setSKUs(res.data.data)
-      setTotal(res.data.total)
-      setPages(res.data.pages)
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load SKUs')
-    } finally {
-      setLoading(false)
-    }
+      setSKUs(res.data.data); setTotal(res.data.total); setPages(res.data.pages)
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to load SKUs') }
+    finally { setLoading(false) }
   }, [page, search])
 
+  const fetchPurchaseInvoices = useCallback(async () => {
+    setPiLoading(true)
+    try {
+      const res = await getPurchaseInvoices({ page: piPage, page_size: 20 })
+      setPurchaseInvoices(res.data.data); setPiTotal(res.data.total); setPiPages(res.data.pages)
+    } catch (err) { console.error('Failed to load purchase invoices', err) }
+    finally { setPiLoading(false) }
+  }, [piPage])
+
   useEffect(() => { loadColorMap() }, [])
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchSKUs() }, [fetchSKUs])
+  useEffect(() => { if (activeTab === 'purchases') fetchPurchaseInvoices() }, [activeTab, fetchPurchaseInvoices])
+
+  // Load masters for purchase form
+  useEffect(() => {
+    async function loadMasters() {
+      try {
+        const [supRes, ptRes, colRes] = await Promise.all([
+          getSuppliers({ is_active: true }),
+          getAllProductTypes(),
+          getAllColors(),
+        ])
+        setSuppliers((supRes.data.data || supRes.data || []).filter(s => s.is_active !== false))
+        setProductTypes(ptRes.data.data || ptRes.data || [])
+        setColors(colRes.data.data || colRes.data || [])
+      } catch (err) { console.error('Failed to load masters', err) }
+    }
+    loadMasters()
+  }, [])
 
   const filteredSKUs = useMemo(() => {
     let list = skus
@@ -183,480 +194,510 @@ export default function SKUsPage() {
     return { totalSKUs, inStock, totalPieces, autoGenerated }
   }, [skus])
 
-  const openCreate = () => {
-    setForm(EMPTY_FORM)
-    setFormError(null)
-    setModalOpen(true)
-  }
-
+  // SKU detail
   const openDetail = async (row) => {
-    setDetailLoading(true)
-    setDetailError(null)
+    setDetailLoading(true); setDetailError(null)
     try {
       const res = await getSKU(row.id)
       const sku = res.data.data || res.data
       setDetailSKU(sku)
-      setEditPrice(sku.base_price ?? '')
-      setEditDesc(sku.description || '')
-      setEditHsn(sku.hsn_code || '')
-      setEditGst(sku.gst_percent ?? '')
-      setEditMrp(sku.mrp ?? '')
-      setEditSaleRate(sku.sale_rate ?? '')
-      setEditUnit(sku.unit || '')
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load SKU details')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  const handleCreate = async () => {
-    setSaving(true)
-    setFormError(null)
-    try {
-      const payload = { ...form, base_price: form.base_price ? parseFloat(form.base_price) : null }
-      await createSKU(payload)
-      setModalOpen(false)
-      fetchData()
-    } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to create SKU')
-    } finally {
-      setSaving(false)
-    }
+      setEditFields({
+        base_price: sku.base_price ?? '', description: sku.description || '',
+        hsn_code: sku.hsn_code || '', gst_percent: sku.gst_percent ?? '',
+        mrp: sku.mrp ?? '', sale_rate: sku.sale_rate ?? '', unit: sku.unit || '',
+      })
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to load SKU') }
+    finally { setDetailLoading(false) }
   }
 
   const handleSaveDetail = async () => {
     if (!detailSKU) return
-    setSavingDetail(true)
-    setDetailError(null)
+    setSavingDetail(true); setDetailError(null)
     try {
       const payload = {
-        base_price: editPrice !== '' ? parseFloat(editPrice) : null,
-        description: editDesc || null,
-        hsn_code: editHsn || null,
-        gst_percent: editGst !== '' ? parseFloat(editGst) : null,
-        mrp: editMrp !== '' ? parseFloat(editMrp) : null,
-        sale_rate: editSaleRate !== '' ? parseFloat(editSaleRate) : null,
-        unit: editUnit || null,
+        base_price: editFields.base_price !== '' ? parseFloat(editFields.base_price) : null,
+        description: editFields.description || null,
+        hsn_code: editFields.hsn_code || null,
+        gst_percent: editFields.gst_percent !== '' ? parseFloat(editFields.gst_percent) : null,
+        mrp: editFields.mrp !== '' ? parseFloat(editFields.mrp) : null,
+        sale_rate: editFields.sale_rate !== '' ? parseFloat(editFields.sale_rate) : null,
+        unit: editFields.unit || null,
       }
       const res = await updateSKU(detailSKU.id, payload)
-      const updated = res.data.data || res.data
-      setDetailSKU(prev => ({ ...prev, ...updated }))
-      fetchData()
-    } catch (err) {
-      setDetailError(err.response?.data?.detail || 'Failed to save')
-    } finally {
-      setSavingDetail(false)
-    }
+      setDetailSKU(prev => ({ ...prev, ...(res.data.data || res.data) }))
+      fetchSKUs()
+    } catch (err) { setDetailError(err.response?.data?.detail || 'Failed to save') }
+    finally { setSavingDetail(false) }
   }
 
-  const closeDetail = () => {
-    setDetailSKU(null)
-    setDetailError(null)
+  // Purchase overlay
+  const openPurchase = () => {
+    setPurchaseHeader({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', notes: '' })
+    setPurchaseLines([{ ...EMPTY_LINE }])
+    setPurchaseError(null)
+    setPurchaseOpen(true)
   }
 
-  // ── Detail Overlay ──
+  const updateLine = (idx, field, value) => {
+    setPurchaseLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l))
+  }
+  const addLine = () => {
+    setPurchaseLines(prev => [...prev, { ...EMPTY_LINE }])
+    // Focus design_no input of new row after render
+    setTimeout(() => {
+      const rows = document.querySelectorAll('[data-purchase-row]')
+      const lastRow = rows[rows.length - 1]
+      if (lastRow) {
+        const designInput = lastRow.querySelector('input[data-field="design_no"]')
+        if (designInput) designInput.focus()
+      }
+    }, 50)
+  }
+  const removeLine = (idx) => setPurchaseLines(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+
+  const purchaseSubtotal = useMemo(() => {
+    return purchaseLines.reduce((sum, l) => {
+      const qty = parseInt(l.qty) || 0
+      const price = parseFloat(l.unit_price) || 0
+      return sum + qty * price
+    }, 0)
+  }, [purchaseLines])
+
+  const purchaseGstAmt = useMemo(() => {
+    const gst = parseFloat(purchaseHeader.gst_percent) || 0
+    return Math.round(purchaseSubtotal * gst / 100 * 100) / 100
+  }, [purchaseSubtotal, purchaseHeader.gst_percent])
+
+  const handlePurchaseSubmit = async () => {
+    const validLines = purchaseLines.filter(l => l.design_no && l.color && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
+    if (!purchaseHeader.supplier_id) { setPurchaseError('Select a supplier'); return }
+    if (validLines.length === 0) { setPurchaseError('Add at least one valid line item'); return }
+
+    setPurchaseSaving(true); setPurchaseError(null)
+    try {
+      await purchaseStock({
+        supplier_id: purchaseHeader.supplier_id,
+        invoice_no: purchaseHeader.invoice_no || null,
+        challan_no: purchaseHeader.challan_no || null,
+        invoice_date: purchaseHeader.invoice_date || null,
+        sr_no: purchaseHeader.sr_no || null,
+        gst_percent: parseFloat(purchaseHeader.gst_percent) || 0,
+        notes: purchaseHeader.notes || null,
+        line_items: validLines.map(l => ({
+          product_type: l.product_type,
+          design_no: l.design_no,
+          color: l.color,
+          size: l.size,
+          qty: parseInt(l.qty),
+          unit_price: parseFloat(l.unit_price),
+        })),
+      })
+      setPurchaseOpen(false)
+      fetchSKUs()
+      if (activeTab === 'purchases') fetchPurchaseInvoices()
+    } catch (err) { setPurchaseError(err.response?.data?.detail || 'Failed to save purchase') }
+    finally { setPurchaseSaving(false) }
+  }
+
+  const ptOptions = productTypes.map(pt => ({ value: pt.code, label: `${pt.code} — ${pt.name}` }))
+
+  // ── Purchase Overlay ──
+  if (purchaseOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setPurchaseOpen(false)} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold">Purchase Ready Stock</h2>
+              <p className="text-emerald-100 text-xs">Buy finished goods from supplier — creates SKUs + updates inventory</p>
+            </div>
+          </div>
+          <button onClick={handlePurchaseSubmit} disabled={purchaseSaving}
+            className="rounded-lg bg-white/20 hover:bg-white/30 px-5 py-2 typo-btn-sm text-white transition-colors disabled:opacity-50">
+            {purchaseSaving ? 'Saving...' : 'Save & Stock In'}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {purchaseError && <ErrorAlert message={purchaseError} onDismiss={() => setPurchaseError(null)} />}
+
+          {/* Invoice Header */}
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <h3 className="typo-card-title mb-3">Invoice Details</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-2">
+                <label className="typo-label-sm">Supplier <span className="typo-required">*</span></label>
+                <FilterSelect full value={purchaseHeader.supplier_id} onChange={v => setPurchaseHeader(p => ({ ...p, supplier_id: v }))}
+                  options={[{ value: '', label: 'Select supplier...' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">Invoice No.</label>
+                <input className="typo-input-sm" value={purchaseHeader.invoice_no} onChange={e => setPurchaseHeader(p => ({ ...p, invoice_no: e.target.value }))} placeholder="e.g. INV-001" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Challan No.</label>
+                <input className="typo-input-sm" value={purchaseHeader.challan_no} onChange={e => setPurchaseHeader(p => ({ ...p, challan_no: e.target.value }))} placeholder="Optional" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Invoice Date</label>
+                <input type="date" className="typo-input-sm" value={purchaseHeader.invoice_date} onChange={e => setPurchaseHeader(p => ({ ...p, invoice_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="typo-label-sm">Sr. No.</label>
+                <input className="typo-input-sm" value={purchaseHeader.sr_no} onChange={e => setPurchaseHeader(p => ({ ...p, sr_no: e.target.value }))} placeholder="Filing serial" />
+              </div>
+              <div>
+                <label className="typo-label-sm">GST %</label>
+                <FilterSelect full value={purchaseHeader.gst_percent} onChange={v => setPurchaseHeader(p => ({ ...p, gst_percent: v }))}
+                  options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">Notes</label>
+                <input className="typo-input-sm" value={purchaseHeader.notes} onChange={e => setPurchaseHeader(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+            </div>
+          </div>
+
+          {/* Line Items */}
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="typo-card-title">Line Items</h3>
+              <button onClick={addLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Add Row
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="bg-emerald-600">
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-8 border-r border-emerald-500">#</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Type</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Design No.</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Color</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Size</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Qty</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Unit Price</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Total</th>
+                    <th className="px-1 py-2 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseLines.map((line, idx) => {
+                    const lineTotal = (parseInt(line.qty) || 0) * (parseFloat(line.unit_price) || 0)
+                    return (
+                      <tr key={idx} data-purchase-row className="border-b border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-2 py-1.5 typo-td-secondary">{idx + 1}</td>
+                        <td className="px-2 py-1.5">
+                          <FilterSelect full value={line.product_type} onChange={v => updateLine(idx, 'product_type', v)}
+                            options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input data-field="design_no" className="typo-input-sm" value={line.design_no} onChange={e => updateLine(idx, 'design_no', e.target.value)}
+                            placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="qty"]'); if (next) next.focus() } }} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <FilterSelect full className="min-w-[70px]" value={line.size} onChange={v => updateLine(idx, 'size', v)}
+                            options={SIZES.map(s => ({ value: s, label: s }))} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input data-field="qty" type="number" className="typo-input-sm text-right" value={line.qty} onChange={e => updateLine(idx, 'qty', e.target.value)} placeholder="0" min="1"
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="unit_price"]'); if (next) next.focus() } }} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input data-field="unit_price" type="number" className="typo-input-sm text-right" value={line.unit_price} onChange={e => updateLine(idx, 'unit_price', e.target.value)} placeholder="0.00" min="0" step="0.01"
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (idx === purchaseLines.length - 1) addLine(); else { const nextRow = e.target.closest('tr').nextElementSibling; if (nextRow) { const next = nextRow.querySelector('[data-field="design_no"]'); if (next) next.focus() } } } }} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right typo-data">
+                          {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-1 py-1.5">
+                          {purchaseLines.length > 1 && (
+                            <button onClick={() => removeLine(idx)} className="text-gray-400 hover:text-red-500 transition-colors p-0.5">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totals */}
+            <div className="mt-3 flex justify-end">
+              <div className="w-56 space-y-1.5 border-t border-gray-200 pt-2">
+                <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{purchaseSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between typo-td-secondary"><span>GST ({purchaseHeader.gst_percent}%)</span><span>₹{purchaseGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{(purchaseSubtotal + purchaseGstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── SKU Detail Overlay ──
   if (detailSKU) {
     const parsed = parseSKU(detailSKU.sku_code)
     const stock = detailSKU.stock || { total_qty: 0, available_qty: 0, reserved_qty: 0 }
-    const isAutoGen = parsed.vas.length > 0
     const batches = detailSKU.source_batches || []
-    const hasChanged = (editPrice !== '' ? parseFloat(editPrice) : null) !== (detailSKU.base_price || null)
-      || (editDesc || '') !== (detailSKU.description || '')
-      || (editHsn || '') !== (detailSKU.hsn_code || '')
-      || (editGst !== '' ? parseFloat(editGst) : null) !== (detailSKU.gst_percent || null)
-      || (editMrp !== '' ? parseFloat(editMrp) : null) !== (detailSKU.mrp || null)
-      || (editSaleRate !== '' ? parseFloat(editSaleRate) : null) !== (detailSKU.sale_rate || null)
-      || (editUnit || '') !== (detailSKU.unit || '')
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-primary-700 to-primary-600 text-white px-6 py-4 flex items-center justify-between shadow-lg">
-          <div className="flex items-center gap-4">
-            <button onClick={closeDetail} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
+        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <button onClick={() => { setDetailSKU(null); setDetailError(null) }} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold tracking-tight">{parsed.base}</span>
-                {parsed.vas.map(va => {
-                  const c = VA_COLORS[va] || DEFAULT_VA
-                  return <span key={va} className="rounded px-1.5 py-0.5 text-xs font-bold bg-white/20">+{va}</span>
-                })}
+                {parsed.vas.map(va => <span key={va} className="rounded px-1.5 py-0.5 text-xs font-bold bg-white/20">+{va}</span>)}
               </div>
-              <div className="flex items-center gap-3 mt-0.5 text-primary-100 text-xs">
-                <span>{detailSKU.product_name}</span>
-                {isAutoGen && <span className="bg-white/15 rounded px-1.5 py-0.5 text-[10px]">Auto-generated</span>}
-              </div>
+              <span className="text-emerald-100 text-xs">{detailSKU.product_name}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-              detailSKU.is_active ? 'bg-green-500/20 text-green-100' : 'bg-gray-500/20 text-gray-200'
-            }`}>
-              {detailSKU.is_active ? 'Active' : 'Inactive'}
-            </span>
-          </div>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${detailSKU.is_active ? 'bg-emerald-500/20 text-emerald-100' : 'bg-gray-500/20 text-gray-200'}`}>
+            {detailSKU.is_active ? 'Active' : 'Inactive'}
+          </span>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {detailError && <ErrorAlert message={detailError} onDismiss={() => setDetailError(null)} />}
 
-          {/* Stock + Info KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            <StockKPI label="Total Stock" value={stock.total_qty} color="blue" />
-            <StockKPI label="Available" value={stock.available_qty} color="green" />
-            <StockKPI label="Reserved" value={stock.reserved_qty} color="amber" />
-            <StockKPI label="Color" value={parsed.color} color="purple" icon={
-              <span className="w-3 h-3 rounded-full border border-gray-200 inline-block" style={{ backgroundColor: colorHex(parsed.color) }} />
-            } />
-            <StockKPI label="Size" value={parsed.size || '—'} color="gray" />
-            <StockKPI label="Type" value={parsed.type} color="gray" />
+            {[
+              { label: 'Total Stock', value: stock.total_qty, color: 'emerald' },
+              { label: 'Available', value: stock.available_qty, color: 'green' },
+              { label: 'Reserved', value: stock.reserved_qty, color: 'amber' },
+              { label: 'Color', value: parsed.color, color: 'purple' },
+              { label: 'Size', value: parsed.size || '—', color: 'gray' },
+              { label: 'Type', value: parsed.type, color: 'gray' },
+            ].map(k => (
+              <div key={k.label} className="rounded-lg border bg-white px-3 py-2.5">
+                <div className="typo-kpi-sm">{k.value}</div>
+                <div className="typo-kpi-label mt-0.5">{k.label}</div>
+              </div>
+            ))}
           </div>
 
-          {/* Price + Description Editors */}
+          {/* Pricing editor */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="typo-card-title">Pricing, Tax & Details</h3>
-              {hasChanged && (
-                <button onClick={handleSaveDetail} disabled={savingDetail}
-                  className="rounded-lg bg-primary-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors">
-                  {savingDetail ? 'Saving...' : 'Save Changes'}
-                </button>
-              )}
+              <button onClick={handleSaveDetail} disabled={savingDetail}
+                className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                {savingDetail ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="typo-label-sm">Base Price (₹)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                  <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)}
-                    placeholder="0.00" min="0" step="0.01"
-                    className="w-full rounded-lg border border-gray-300 pl-7 pr-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+              {[
+                { key: 'base_price', label: 'Base Price (₹)', type: 'number', placeholder: '0.00' },
+                { key: 'mrp', label: 'MRP (₹)', type: 'number', placeholder: '0.00' },
+                { key: 'sale_rate', label: 'Sale Rate (₹)', type: 'number', placeholder: '0.00' },
+                { key: 'hsn_code', label: 'HSN Code', type: 'text', placeholder: 'e.g. 6206' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="typo-label-sm">{f.label}</label>
+                  <input type={f.type} className="typo-input" value={editFields[f.key]} onChange={e => setEditFields(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} />
                 </div>
-              </div>
+              ))}
               <div>
-                <label className="typo-label-sm">MRP (₹)</label>
-                <input type="number" value={editMrp} onChange={e => setEditMrp(e.target.value)}
-                  placeholder="0.00" min="0" step="0.01"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-              </div>
-              <div>
-                <label className="typo-label-sm">Sale Rate (₹)</label>
-                <input type="number" value={editSaleRate} onChange={e => setEditSaleRate(e.target.value)}
-                  placeholder="0.00" min="0" step="0.01"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                <label className="typo-label-sm">GST %</label>
+                <FilterSelect full value={String(editFields.gst_percent)} onChange={v => setEditFields(p => ({ ...p, gst_percent: v }))}
+                  options={[{ value: '', label: 'Select' }, { value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
               </div>
               <div>
                 <label className="typo-label-sm">Unit</label>
-                <select value={editUnit} onChange={e => setEditUnit(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                  <option value="">Select</option>
-                  <option value="pcs">Pieces</option>
-                  <option value="meters">Meters</option>
-                  <option value="kg">Kg</option>
-                </select>
-              </div>
-              <div>
-                <label className="typo-label-sm">HSN Code</label>
-                <input type="text" value={editHsn} onChange={e => setEditHsn(e.target.value)}
-                  placeholder="e.g. 6206" maxLength={8}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-              </div>
-              <div>
-                <label className="typo-label-sm">GST %</label>
-                <select value={editGst} onChange={e => setEditGst(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                  <option value="">Select</option>
-                  <option value="0">0%</option>
-                  <option value="5">5%</option>
-                  <option value="12">12%</option>
-                  <option value="18">18%</option>
-                  <option value="28">28%</option>
-                </select>
+                <FilterSelect full value={editFields.unit} onChange={v => setEditFields(p => ({ ...p, unit: v }))}
+                  options={[{ value: '', label: 'Select' }, { value: 'pcs', label: 'Pieces' }, { value: 'meters', label: 'Meters' }, { value: 'kg', label: 'Kg' }]} />
               </div>
               <div className="sm:col-span-2">
                 <label className="typo-label-sm">Description</label>
-                <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)}
-                  placeholder="Product description..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                <input className="typo-input" value={editFields.description} onChange={e => setEditFields(p => ({ ...p, description: e.target.value }))} placeholder="Product description..." />
               </div>
             </div>
           </div>
 
           {/* Source Batches */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="typo-card-title mb-3">
-              Source Batches <span className="text-gray-400 font-normal">({batches.length})</span>
-            </h3>
+            <h3 className="typo-card-title mb-3">Source Batches <span className="text-gray-400 font-normal">({batches.length})</span></h3>
             {batches.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No linked batches — this SKU was created manually.</p>
+              <p className="typo-empty italic">No linked batches — this SKU was created manually or via purchase.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {batches.map(b => (
-                  <BatchCard key={b.id} batch={b} />
+                  <div key={b.id} className="rounded-lg border border-gray-200 p-3 hover:border-gray-300 transition-colors">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="typo-data">{b.batch_code}</span>
+                        <StatusBadge status={b.status} />
+                        {b.size && <span className="typo-badge bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">{b.size}</span>}
+                      </div>
+                      <span className="typo-caption">{b.piece_count} pcs</span>
+                    </div>
+                    {b.lot && <div className="typo-caption">Lot: <span className="font-medium text-gray-700">{b.lot.lot_code}</span> · Design: <span className="font-medium text-gray-700">{b.design_no}</span></div>}
+                    {b.tailor && <div className="typo-caption">Tailor: <span className="font-medium text-gray-700">{b.tailor.full_name}</span></div>}
+                  </div>
                 ))}
               </div>
             )}
           </div>
-
-          {/* Color QC Breakdown (aggregate from all batches) */}
-          {batches.some(b => b.color_qc) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="typo-card-title mb-3">Per-Color QC Breakdown</h3>
-              <ColorQCTable batches={batches} />
-            </div>
-          )}
         </div>
       </div>
     )
   }
 
-  // ── List View ──
+  // ── Purchase Invoice Detail ──
+  if (piDetail) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setPiDetail(null)} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold">Purchase Invoice {piDetail.invoice_no || ''}</h2>
+              <p className="text-emerald-100 text-xs">{piDetail.supplier?.name || 'Unknown'} · {piDetail.item_count} items</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Invoice No.', value: piDetail.invoice_no || '—' },
+              { label: 'Challan No.', value: piDetail.challan_no || '—' },
+              { label: 'Date', value: piDetail.invoice_date ? new Date(piDetail.invoice_date).toLocaleDateString('en-IN') : '—' },
+              { label: 'Total Amount', value: `₹${parseFloat(piDetail.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` },
+            ].map(k => (
+              <div key={k.label} className="rounded-lg border bg-white px-3 py-2.5">
+                <div className="typo-kpi-sm">{k.value}</div>
+                <div className="typo-kpi-label mt-0.5">{k.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="typo-section-title mb-3">Purchased Items</h3>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="typo-th text-left py-2">SKU Code</th>
+                  <th className="typo-th text-left py-2">Color</th>
+                  <th className="typo-th text-left py-2">Size</th>
+                  <th className="typo-th text-right py-2">Qty</th>
+                  <th className="typo-th text-right py-2">Unit Price</th>
+                  <th className="typo-th text-right py-2">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(piDetail.items || []).map((item, i) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-2 typo-data">{item.sku_code}</td>
+                    <td className="py-2 typo-td">{item.color}</td>
+                    <td className="py-2 typo-td">{item.size}</td>
+                    <td className="py-2 typo-td text-right">{item.quantity}</td>
+                    <td className="py-2 typo-td text-right">₹{parseFloat(item.unit_price).toLocaleString('en-IN')}</td>
+                    <td className="py-2 typo-data text-right">₹{parseFloat(item.total_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main List View ──
+  const TABS = [
+    { key: 'skus', label: 'All SKUs' },
+    { key: 'purchases', label: 'Purchase Invoices' },
+  ]
+
   return (
     <div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Finished Goods</h1>
-          <p className="mt-1 typo-caption">SKUs are auto-generated when batches are packed</p>
+          <p className="mt-0.5 typo-caption">SKUs are auto-generated when batches are packed</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+        <button onClick={openPurchase} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Manual SKU
+          Purchase Ready Stock
         </button>
       </div>
 
+      {/* KPIs */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KPICard label="Total SKUs" value={kpis.totalSKUs} color="blue" />
-        <KPICard label="In Stock" value={kpis.inStock} color="green" />
-        <KPICard label="Total Pieces" value={kpis.totalPieces.toLocaleString('en-IN')} color="purple" />
-        <KPICard label="Auto-Generated" value={kpis.autoGenerated} color="emerald" />
-      </div>
-
-      <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2.5">
-        <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span className="typo-caption text-emerald-700">
-          SKUs with <span className="font-semibold">+EMB</span>, <span className="font-semibold">+BTN</span> etc. are auto-created at pack time from per-color QC data. Set prices here for billing.
-        </span>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3 flex-wrap">
-        <div className="w-64">
-          <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search SKU code, color, size..." />
-        </div>
-        <FilterSelect value={filterType} onChange={setFilterType}
-          options={[{ value: '', label: 'All Types' }, ...PRODUCT_TYPES.map(t => ({ value: t, label: t }))]} />
-        <FilterSelect value={filterStock} onChange={setFilterStock}
-          options={[{ value: '', label: 'All Stock' }, { value: 'in_stock', label: 'In Stock' }, { value: 'out_of_stock', label: 'Out of Stock' }]} />
-        {(filterType || filterStock) && (
-          <button onClick={() => { setFilterType(''); setFilterStock('') }}
-            className="typo-caption hover:text-gray-700 underline">
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
-
-      <div className="mt-4">
-        <DataTable columns={COLUMNS} data={filteredSKUs} loading={loading || detailLoading} onRowClick={openDetail}
-          emptyText="No SKUs found. Pack batches to auto-generate SKUs." />
-        <Pagination page={page} pages={pages} total={total} onChange={setPage} />
-      </div>
-
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title=""
-        actions={
-          <>
-            <button onClick={() => setModalOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleCreate} disabled={saving} className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm">
-              {saving ? 'Creating...' : 'Create'}
-            </button>
-          </>
-        }
-      >
-        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-white">
-          <h2 className="typo-modal-title text-white">Create SKU (Manual)</h2>
-          <p className="typo-caption text-emerald-100 mt-0.5">Define a finished goods SKU with pricing</p>
-        </div>
-        <SKUForm form={form} onChange={setForm} editing={false}
-          error={formError} onDismissError={() => setFormError(null)} />
-      </Modal>
-    </div>
-  )
-}
-
-// ── Helper components (defined outside to avoid re-render issues) ──
-
-const KPI_COLORS = {
-  blue: 'bg-blue-50 border-blue-200 text-blue-700',
-  green: 'bg-green-50 border-green-200 text-green-700',
-  purple: 'bg-purple-50 border-purple-200 text-purple-700',
-  emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-}
-
-function KPICard({ label, value, color }) {
-  return (
-    <div className={`rounded-lg border px-4 py-3 ${KPI_COLORS[color] || KPI_COLORS.blue}`}>
-      <div className="typo-kpi-sm">{value}</div>
-      <div className="typo-kpi-label">{label}</div>
-    </div>
-  )
-}
-
-const STOCK_KPI_COLORS = {
-  blue: 'border-blue-200 text-blue-700',
-  green: 'border-green-200 text-green-700',
-  amber: 'border-amber-200 text-amber-700',
-  purple: 'border-purple-200 text-purple-700',
-  gray: 'border-gray-200 text-gray-600',
-}
-
-function StockKPI({ label, value, color, icon }) {
-  return (
-    <div className={`rounded-lg border bg-white px-3 py-2.5 ${STOCK_KPI_COLORS[color] || STOCK_KPI_COLORS.gray}`}>
-      <div className="flex items-center gap-1.5">
-        {icon}
-        <span className="typo-kpi-sm">{value}</span>
-      </div>
-      <div className="typo-kpi-label opacity-60 mt-0.5">{label}</div>
-    </div>
-  )
-}
-
-function BatchCard({ batch }) {
-  const b = batch
-  const vaLogs = (b.processing_logs || []).filter(p => p.value_addition)
-  return (
-    <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-sm text-gray-800">{b.batch_code}</span>
-          <StatusBadge status={b.status} />
-          {b.size && <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">{b.size}</span>}
-        </div>
-        <span className="text-xs text-gray-400">{b.piece_count} pcs</span>
-      </div>
-
-      {/* Lot info */}
-      {b.lot && (
-        <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
-          <span>Lot: <span className="font-medium text-gray-700">{b.lot.lot_code}</span></span>
-          <span>Design: <span className="font-medium text-gray-700">{b.design_no}</span></span>
-        </div>
-      )}
-
-      {/* Tailor + Pack info */}
-      <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
-        {b.tailor && <span>Tailor: <span className="font-medium text-gray-700">{b.tailor.full_name}</span></span>}
-        {b.packed_at && <span>Packed: <span className="font-medium text-gray-700">{new Date(b.packed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span></span>}
-      </div>
-
-      {/* QC summary */}
-      {(b.approved_qty != null || b.rejected_qty != null) && (
-        <div className="flex items-center gap-3 text-xs mb-2">
-          {b.approved_qty != null && <span className="text-green-600">Approved: {b.approved_qty}</span>}
-          {b.rejected_qty != null && b.rejected_qty > 0 && <span className="text-red-600">Rejected: {b.rejected_qty}</span>}
-        </div>
-      )}
-
-      {/* VA Processing */}
-      {vaLogs.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-gray-100">
-          <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1.5">Value Additions</div>
-          <div className="flex flex-wrap gap-1.5">
-            {vaLogs.map(p => {
-              const va = p.value_addition
-              const c = VA_COLORS[va?.short_code] || DEFAULT_VA
-              return (
-                <div key={p.id} className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${c.bg} ${c.text}`}>
-                  <span className="font-bold">{va?.short_code || '?'}</span>
-                  <span className="opacity-70">{va?.name}</span>
-                  {p.status === 'received' ? (
-                    <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                  ) : (
-                    <span className="text-[10px] opacity-60">({p.status})</span>
-                  )}
-                  {p.cost != null && <span className="opacity-60">₹{p.cost}</span>}
-                </div>
-              )
-            })}
+        {[
+          { label: 'Total SKUs', value: kpis.totalSKUs, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+          { label: 'In Stock', value: kpis.inStock, cls: 'bg-green-50 border-green-200 text-green-700' },
+          { label: 'Total Pieces', value: kpis.totalPieces.toLocaleString('en-IN'), cls: 'bg-purple-50 border-purple-200 text-purple-700' },
+          { label: 'Auto-Generated', value: kpis.autoGenerated, cls: 'bg-teal-50 border-teal-200 text-teal-700' },
+        ].map(k => (
+          <div key={k.label} className={`rounded-lg border px-4 py-3 ${k.cls}`}>
+            <div className="typo-kpi-sm">{k.value}</div>
+            <div className="typo-kpi-label">{k.label}</div>
           </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="mt-5 flex gap-6 border-b border-gray-200">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`pb-2.5 typo-tab transition-colors ${activeTab === t.key ? 'border-b-2 border-emerald-600 text-emerald-700 font-bold' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'skus' && (
+        <>
+          <div className="mt-4 flex items-center gap-3 flex-wrap">
+            <div className="w-64">
+              <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search SKU code, color, size..." />
+            </div>
+            <FilterSelect value={filterType} onChange={setFilterType}
+              options={[{ value: '', label: 'All Types' }, ...productTypes.map(t => ({ value: t.code, label: t.code }))]} />
+            <FilterSelect value={filterStock} onChange={setFilterStock}
+              options={[{ value: '', label: 'All Stock' }, { value: 'in_stock', label: 'In Stock' }, { value: 'out_of_stock', label: 'Out of Stock' }]} />
+            {(filterType || filterStock) && (
+              <button onClick={() => { setFilterType(''); setFilterStock('') }} className="typo-caption hover:text-gray-700 underline">Clear</button>
+            )}
+          </div>
+
+          {error && <div className="mt-3"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+
+          <div className="mt-3">
+            <DataTable columns={SKU_COLUMNS} data={filteredSKUs} loading={loading || detailLoading} onRowClick={openDetail}
+              emptyText="No SKUs found. Pack batches to auto-generate SKUs." />
+            <Pagination page={page} pages={pages} total={total} onChange={setPage} />
+          </div>
+        </>
+      )}
+
+      {activeTab === 'purchases' && (
+        <div className="mt-4">
+          <DataTable columns={PURCHASE_COLUMNS} data={purchaseInvoices} loading={piLoading} onRowClick={(row) => setPiDetail(row)}
+            emptyText="No purchase invoices yet. Use 'Purchase Ready Stock' to buy finished goods." />
+          <Pagination page={piPage} pages={piPages} total={piTotal} onChange={setPiPage} />
         </div>
       )}
     </div>
   )
 }
-
-function ColorQCTable({ batches }) {
-  // Aggregate color_qc from all batches
-  const aggr = {}
-  for (const b of batches) {
-    if (!b.color_qc) continue
-    for (const [color, data] of Object.entries(b.color_qc)) {
-      if (!aggr[color]) aggr[color] = { expected: 0, approved: 0, rejected: 0, reasons: [] }
-      aggr[color].expected += data.expected || 0
-      aggr[color].approved += data.approved || 0
-      aggr[color].rejected += data.rejected || 0
-      if (data.reason) aggr[color].reasons.push(data.reason)
-    }
-  }
-  const colors = Object.entries(aggr)
-  if (colors.length === 0) return <p className="text-sm text-gray-400 italic">No per-color QC data.</p>
-
-  const totals = colors.reduce((t, [, d]) => ({
-    expected: t.expected + d.expected,
-    approved: t.approved + d.approved,
-    rejected: t.rejected + d.rejected,
-  }), { expected: 0, approved: 0, rejected: 0 })
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 typo-th">
-            <th className="text-left py-2 pr-3">Color</th>
-            <th className="text-right py-2 px-3">Expected</th>
-            <th className="text-right py-2 px-3">Approved</th>
-            <th className="text-right py-2 px-3">Rejected</th>
-            <th className="text-left py-2 pl-3">Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {colors.map(([color, d]) => (
-            <tr key={color} className="border-b border-gray-50">
-              <td className="py-2 pr-3">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full border border-gray-200" style={{ backgroundColor: colorHex(color) }} />
-                  <span className="font-medium">{color}</span>
-                </span>
-              </td>
-              <td className="text-right py-2 px-3 text-gray-600">{d.expected}</td>
-              <td className="text-right py-2 px-3 text-green-600 font-medium">{d.approved}</td>
-              <td className="text-right py-2 px-3 text-red-600 font-medium">{d.rejected}</td>
-              <td className="py-2 pl-3 text-xs text-gray-400 truncate max-w-[200px]">
-                {[...new Set(d.reasons)].join('; ') || '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-gray-200 font-semibold text-xs">
-            <td className="py-2 pr-3">Total</td>
-            <td className="text-right py-2 px-3">{totals.expected}</td>
-            <td className="text-right py-2 px-3 text-green-700">{totals.approved}</td>
-            <td className="text-right py-2 px-3 text-red-700">{totals.rejected}</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  )
-}
-

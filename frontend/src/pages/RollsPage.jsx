@@ -68,6 +68,15 @@ const INVOICE_COLUMNS = [
     render: (val) => val?.name || '—',
   },
   {
+    key: 'type',
+    label: 'Type',
+    render: () => (
+      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+        Roll Purchase
+      </span>
+    ),
+  },
+  {
     key: 'roll_count',
     label: 'Rolls',
     render: (val) => (

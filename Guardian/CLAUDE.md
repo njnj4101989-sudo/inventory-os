@@ -31,7 +31,98 @@
 
 ---
 
-## Current State (Session 83 — 2026-03-25)
+## Current State (Session 85 — 2026-03-27)
+
+### S85: Premium Login + Purchase Ready Stock + SKU Page Redesign + Order Fix
+
+**Commits: `4ac5ca4`, `5835b06`, + pending. 15+ files changed.**
+
+**Premium Login Page:**
+- Emerald gradient background with floating orbs, frosted glass card (backdrop-blur)
+- Brand mark inline with title, icon-prefixed inputs, gradient button with press animation
+- Colorful warehouse illustration: 3D fabric roll, boxes, shelf rack, sewing machine, mannequin, 5-garment clothing rack
+- Company picker: emerald selected state, radio indicators, hover effects
+- Dev credentials hidden in production (`import.meta.env.DEV`)
+
+**Order Create Bug Fix (deployed):**
+- `TypeError: float += Decimal` in `order_service.create_order()` — `total_amount = 0.0` → `0`
+- Root cause: Pydantic `Decimal` field + Python float accumulator incompatibility
+
+**Purchase Ready Stock (new feature):**
+- `PurchaseItem` model (34th model) — links SupplierInvoice → SKU + qty + price
+- `type` column on SupplierInvoice: `roll_purchase` (default) | `item_purchase`
+- `POST /skus/purchase-stock` — creates invoice + find/create SKUs + inventory events + ledger entry
+- `GET /skus/purchase-invoices` — paginated list with items + supplier
+- Migration `i3c4d5e6f7g8`: adds type to supplier_invoices + creates purchase_items table
+
+**SKU Page Redesign:**
+- 2 emerald underline tabs: "All SKUs" | "Purchase Invoices"
+- "Purchase Ready Stock" button replaces "Manual SKU"
+- Full-page purchase overlay: invoice header + line items DataTable (emerald header) + auto-computed totals
+- Purchase invoice detail overlay with item breakdown
+- SKU detail overlay: emerald gradient header (was primary-700)
+- All typo-* classes, FilterSelect throughout
+
+**FilterSelect Upgrade (global):**
+- Type-ahead search (press M → jumps to M)
+- Arrow key navigation in dropdown
+- Enter to select, Tab to select-and-move
+- Compact full mode (px-2 py-1) matching typo-input-sm
+
+**Type Badges:**
+- RollsPage invoice tab: emerald "Roll Purchase" badge
+- SKUsPage purchase invoices tab: purple "Item Purchase" badge
+
+**NEXT:** Order page UI/UX overhaul (emerald theme, SKU picker, status flow). Sale Invoice polish. Supplier master detail filter by invoice type. Reports overhaul. Deploy S85 to prod (run migration `i3c4d5e6f7g8`).
+
+---
+
+## Previous State (Session 84 — 2026-03-26)
+
+### S84: Challan CRUD Consolidation + Cancel + Edit + Auto-Fill Fix
+
+**3 commits: `6a5209d`, `a9496e4`, `eded34c`. 15+ files changed.**
+
+**VA Send Consolidation:**
+- Removed standalone `POST /rolls/{id}/processing` endpoint, `SendForProcessing` schema, service method, frontend API
+- All VA sends now go through `POST /job-challans` exclusively (single-roll sends create 1-roll challan)
+- Added `processing_id` + `processing_status` to challan roll briefs in `_to_response`
+- ChallansPage receive uses `processing_id` from response directly (no more digging into logs)
+- Simplified `_get_challan_response` to reuse `get_challan()` (was duplicating 60 lines)
+
+**Challan Edit (both Job + Batch):**
+- `updateJobChallan` + `updateBatchChallan` frontend API functions wired
+- Edit modal on ChallansPage detail (VA Party, VA Type, Sent Date, Notes)
+- Fixed stale response bug in backend `update_challan` — now reloads via `get_challan()` after flush
+- Fixed modal z-index: Edit + Receive modals render inside detail overlay fragment
+
+**Challan Cancel (both Job + Batch):**
+- `POST /job-challans/{id}/cancel` + `POST /batch-challans/{id}/cancel` endpoints
+- Job Challan cancel with 5 safety guards: status=sent, all logs=sent, no in_cutting rolls, weight integrity check (`remaining + weight_before <= total`), FOR UPDATE locks
+- Batch Challan cancel with 3 guards: status=sent, all items=sent, FOR UPDATE lock
+- Reverses `remaining_weight` on rolls, restores roll status to `in_stock` (checks for other sent logs across all challans)
+- `cancelled` status added to 4 CHECK constraints (migration `h2b3c4d5e6f7`)
+- Receive endpoints patched to reject cancelled challans
+- Frontend: cancel button (sent only), red confirmation modal, cancelled status badge
+- Migration applied on both dev + prod
+
+**Processing Tab:**
+- Added Challan No. column (first position) in RollsPage processing tab table
+
+**Auto-Fill Fix:**
+- RollsPage: auto-fill panna/gsm/rate only fills empty fields (won't overwrite user-typed values)
+- LotsPage: debounced palla cascade (300ms) — input updates instantly, heavy roll remap after typing pause
+
+**API_REFERENCE.md Updated:**
+- Removed `POST /rolls/{id}/processing` section (marked as replaced by Job Challans)
+- Added `processing_id`, `processing_status` to challan roll brief shape
+- Added `challan_no` to RollProcessing shape
+
+**NEXT:** Reports + Inventory page overhaul (VA Tracker tab, fix Financial tab real costs, fix Tailor Performance placeholders). Remnant roll UX (needs spec).
+
+---
+
+## Previous State (Session 83 — 2026-03-25)
 
 ### S83: Full App Typography + Emerald Theme Unification
 
@@ -494,6 +585,8 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S85 | Login + Purchase Stock + SKU Redesign | Premium login (emerald, illustration, frosted glass), order create Decimal fix, PurchaseItem model (34th), purchase-stock endpoint, SKU page tabs + overlay, FilterSelect type-ahead + arrow keys, invoice type badges |
+| S84 | Challan CRUD + Cancel + Auto-Fill | Removed sendForProcessing (all sends via Job Challans), edit challan UI (both types), cancel challan with 5 safety guards + migration, processing tab challan column, auto-fill debounce fix |
 | S83 | Typography + Emerald Theme | 25 files: FilterSelect component, emerald tabs/buttons/focus/sidebar, collapsible roll picker, LedgerPanel redesign, all 14 pages typo-* migrated, guardian.md Protocol 10 rules 6-12 |
 | S82 | Full Audit — 3 Tiers | 7 critical + 23 warnings fixed: close_preview crash, BLS→FBL (16 refs), FY/batch FOR UPDATE, model ondelete/index sync (21 gaps), palla_mode CHECK, zero-size guard, Pydantic dates, auth try/finally, roles AppException, MyWorkPage banner |
 | S81 | Deploy S80 + Product Type Overhaul | Deployed S80+S81, 4 product types (FBL/SBL/LHG/SAR), palla_mode, palla unit logic, QR compact, CuttingSheet dynamic unit, LotsPage full-width |
@@ -525,7 +618,7 @@
 ```
 inventory-os/
 ├── Guardian/           ← Docs (CLAUDE.md, guardian.md, API_REFERENCE.md, STEP1-6, AWS_DEPLOYMENT.md)
-├── backend/app/        ← FastAPI (models/33, schemas/21, services/19, api/18, core/, tasks/3)
+├── backend/app/        ← FastAPI (models/34, schemas/21, services/19, api/18, core/, tasks/3)
 ├── frontend/src/       ← React+Tailwind (api/17, pages/14+Login, components/, context/, hooks/)
 └── mobile/             ← Phase 6C (future)
 ```

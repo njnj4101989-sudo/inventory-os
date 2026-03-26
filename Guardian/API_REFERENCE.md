@@ -607,6 +607,58 @@ Same as `GET /rolls` with status filter pre-applied.
 **Request:** `{ product_name?, base_price?, description?, hsn_code?, gst_percent?, mrp?, sale_rate?, unit?, is_active? }`
 **Response:** Updated SKU object
 
+### POST `/skus/purchase-stock` (S85)
+**Request:**
+```json
+{
+  "supplier_id": "uuid",
+  "invoice_no": "INV-001",
+  "challan_no": "CH-001",
+  "invoice_date": "2026-03-27",
+  "sr_no": "42",
+  "gst_percent": 12,
+  "notes": "Purchased blouses from vendor",
+  "line_items": [
+    { "product_type": "FBL", "design_no": "702", "color": "Red", "size": "M", "qty": 50, "unit_price": 150.00 },
+    { "product_type": "FBL", "design_no": "702", "color": "Red", "size": "L", "qty": 30, "unit_price": 150.00 }
+  ]
+}
+```
+**Response:**
+```json
+{
+  "invoice_id": "uuid",
+  "invoice_no": "INV-001",
+  "items_created": 2,
+  "items": [{ "sku_id": "uuid", "sku_code": "FBL-702-Red-M", "quantity": 50, "total_price": 7500.0 }, ...],
+  "subtotal": 12000.0
+}
+```
+**Side effects:** Creates SupplierInvoice (`type=item_purchase`), find/create SKUs, PurchaseItem records, `ready_stock_in` inventory events per line, ledger entry (supplier credit).
+
+### GET `/skus/purchase-invoices` (S85)
+**Query:** `page`, `page_size`
+**Response:** Paginated array of:
+```json
+{
+  "id": "uuid",
+  "supplier": { "id": "uuid", "name": "Ratan Fabrics" },
+  "invoice_no": "INV-001",
+  "challan_no": "CH-001",
+  "invoice_date": "2026-03-27",
+  "sr_no": "42",
+  "gst_percent": 12.0,
+  "received_at": "2026-03-27T10:00:00Z",
+  "notes": "...",
+  "items": [
+    { "id": "uuid", "sku_id": "uuid", "sku_code": "FBL-702-Red-M", "product_type": "FBL", "design_no": "702", "color": "Red", "size": "M", "quantity": 50, "unit_price": 150.0, "total_price": 7500.0, "hsn_code": null, "gst_percent": null }
+  ],
+  "item_count": 2,
+  "total_amount": 12000.0
+}
+```
+**Note:** SupplierInvoice now has `type` column: `roll_purchase` (default, for rolls) | `item_purchase` (for purchased SKUs). PurchaseItem model links invoice → SKU with qty + pricing.
+
 ---
 
 ## 7. Lots (`/api/v1/lots`)

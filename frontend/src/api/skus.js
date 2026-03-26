@@ -81,3 +81,17 @@ export async function updateSKU(id, data) {
   }
   return client.patch(`/skus/${id}`, data)
 }
+
+export async function purchaseStock(data) {
+  if (USE_MOCK) {
+    return mockResponse({ invoice_id: crypto.randomUUID(), items_created: data.line_items?.length || 0 })
+  }
+  return client.post('/skus/purchase-stock', data)
+}
+
+export async function getPurchaseInvoices(params = {}) {
+  if (USE_MOCK) {
+    return mockPaginated([], params.page, params.page_size)
+  }
+  return client.get('/skus/purchase-invoices', { params })
+}

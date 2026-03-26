@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.schemas import BaseSchema
+from app.schemas.supplier import SupplierBrief
 
 
 # --- Brief ---
@@ -80,3 +82,73 @@ class SKUResponse(BaseSchema):
     unit: str | None = None
     is_active: bool
     stock: StockBrief | None = None
+
+
+# --- Purchase Ready Stock ---
+
+
+class PurchaseLineItem(BaseModel):
+    product_type: str
+    design_no: str
+    color: str
+    color_id: UUID | None = None
+    size: str
+    qty: int
+    unit_price: Decimal
+    hsn_code: str | None = None
+    gst_percent: Decimal | None = None
+
+    @field_validator("qty")
+    @classmethod
+    def qty_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Quantity must be positive")
+        return v
+
+
+class PurchaseStockRequest(BaseModel):
+    supplier_id: UUID
+    invoice_no: str | None = None
+    challan_no: str | None = None
+    invoice_date: date | None = None
+    sr_no: str | None = None
+    gst_percent: Decimal = Decimal("0")
+    notes: str | None = None
+    line_items: list[PurchaseLineItem]
+
+    @field_validator("line_items")
+    @classmethod
+    def at_least_one(cls, v):
+        if not v:
+            raise ValueError("At least one line item is required")
+        return v
+
+
+class PurchaseItemBrief(BaseSchema):
+    id: UUID
+    sku_id: UUID
+    sku_code: str
+    product_type: str
+    design_no: str
+    color: str
+    size: str
+    quantity: int
+    unit_price: Decimal
+    total_price: Decimal
+    hsn_code: str | None = None
+    gst_percent: Decimal | None = None
+
+
+class PurchaseInvoiceResponse(BaseSchema):
+    id: UUID
+    supplier: SupplierBrief | None = None
+    invoice_no: str | None = None
+    challan_no: str | None = None
+    invoice_date: date | None = None
+    sr_no: str | None = None
+    gst_percent: Decimal = Decimal("0")
+    received_at: datetime | None = None
+    notes: str | None = None
+    items: list[PurchaseItemBrief] = []
+    item_count: int = 0
+    total_amount: Decimal = Decimal("0")

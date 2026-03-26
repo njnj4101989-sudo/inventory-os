@@ -5,13 +5,42 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
-from app.schemas.sku import SKUCreate, SKUUpdate
+from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest
 from app.services.sku_service import SKUService
 
 router = APIRouter(prefix="/skus", tags=["SKUs"])
+
+
+# --- Purchase stock routes MUST be before /{sku_id} to avoid UUID parse ---
+
+
+@router.post("/purchase-stock", response_model=None, status_code=201)
+async def purchase_stock(
+    req: PurchaseStockRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    """Purchase finished goods: create invoice + SKUs + inventory events."""
+    fy_id = get_fy_id(current_user)
+    svc = SKUService(db)
+    result = await svc.purchase_stock(req, current_user.id, fy_id)
+    return {"success": True, "data": result, "message": f"{len(req.line_items)} items stocked in"}
+
+
+@router.get("/purchase-invoices", response_model=None)
+async def list_purchase_invoices(
+    params: PaginatedParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """List purchase invoices for finished goods."""
+    fy_id = get_fy_id(current_user)
+    svc = SKUService(db)
+    result = await svc.get_purchase_invoices(params, fy_id)
+    return {"success": True, **result}
 
 
 @router.get("", response_model=None)

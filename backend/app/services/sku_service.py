@@ -1,6 +1,8 @@
-"""SKU service — CRUD and auto-code generation."""
+"""SKU service — CRUD, auto-code generation, and purchase stock."""
 
 import math
+from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -12,7 +14,9 @@ from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
 from app.models.inventory_state import InventoryState
-from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse
+from app.models.supplier_invoice import SupplierInvoice
+from app.models.purchase_item import PurchaseItem
+from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest
 from app.schemas import PaginatedParams
 from app.core.exceptions import DuplicateError, NotFoundError
 
@@ -160,6 +164,198 @@ class SKUService:
         self.db.add(state)
         await self.db.flush()
         return sku
+
+    async def purchase_stock(
+        self, req: PurchaseStockRequest, received_by: UUID, fy_id: UUID
+    ) -> dict:
+        """Create purchase invoice + SKUs + inventory events + ledger entry."""
+        now = datetime.now(timezone.utc)
+
+        # Duplicate check
+        if req.invoice_no and req.supplier_id:
+            dup_stmt = select(SupplierInvoice).where(
+                SupplierInvoice.supplier_id == req.supplier_id,
+                SupplierInvoice.invoice_no == req.invoice_no,
+                SupplierInvoice.type == "item_purchase",
+            )
+            if req.challan_no:
+                dup_stmt = dup_stmt.where(SupplierInvoice.challan_no == req.challan_no)
+            dup = await self.db.execute(dup_stmt)
+            if dup.scalar_one_or_none():
+                raise DuplicateError(
+                    f"Purchase invoice {req.invoice_no} already exists for this supplier"
+                )
+
+        # Create SupplierInvoice
+        supplier_inv = SupplierInvoice(
+            supplier_id=req.supplier_id,
+            invoice_no=req.invoice_no,
+            challan_no=req.challan_no,
+            invoice_date=req.invoice_date,
+            sr_no=req.sr_no,
+            gst_percent=req.gst_percent,
+            received_by=received_by,
+            received_at=now,
+            notes=req.notes,
+            type="item_purchase",
+            fy_id=fy_id,
+        )
+        self.db.add(supplier_inv)
+        await self.db.flush()
+
+        # Process line items
+        from app.services.inventory_service import InventoryService
+        inv_svc = InventoryService(self.db)
+
+        created_items = []
+        for item in req.line_items:
+            sku_code = f"{item.product_type}-{item.design_no}-{item.color}-{item.size}"
+            sku = await self.find_or_create(
+                sku_code=sku_code,
+                product_type=item.product_type,
+                product_name=item.design_no,
+                color=item.color,
+                size=item.size,
+                color_id=item.color_id,
+            )
+
+            # Set pricing/tax if not already set
+            if sku.base_price is None:
+                sku.base_price = item.unit_price
+            if item.hsn_code and not sku.hsn_code:
+                sku.hsn_code = item.hsn_code
+            if item.gst_percent is not None and sku.gst_percent is None:
+                sku.gst_percent = item.gst_percent
+
+            total_price = item.qty * item.unit_price
+            pi = PurchaseItem(
+                supplier_invoice_id=supplier_inv.id,
+                sku_id=sku.id,
+                quantity=item.qty,
+                unit_price=item.unit_price,
+                total_price=total_price,
+                hsn_code=item.hsn_code,
+                gst_percent=item.gst_percent,
+            )
+            self.db.add(pi)
+            await self.db.flush()
+
+            # Fire inventory event
+            await inv_svc.create_event(
+                event_type="ready_stock_in",
+                item_type="finished_goods",
+                reference_type="purchase_item",
+                reference_id=pi.id,
+                sku_id=sku.id,
+                quantity=item.qty,
+                performed_by=received_by,
+                metadata={"invoice_no": req.invoice_no, "sku_code": sku_code},
+            )
+
+            created_items.append({
+                "sku_id": str(sku.id),
+                "sku_code": sku_code,
+                "quantity": item.qty,
+                "total_price": float(total_price),
+            })
+
+        # Ledger entry
+        subtotal = sum(float(it["total_price"]) for it in created_items)
+        if subtotal > 0:
+            gst_pct = float(req.gst_percent or 0)
+            gst_amt = round(subtotal * gst_pct / 100, 2)
+            total = round(subtotal + gst_amt, 2)
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=req.invoice_date or now.date(),
+                party_type="supplier",
+                party_id=req.supplier_id,
+                entry_type="invoice",
+                reference_type="supplier_invoice",
+                reference_id=supplier_inv.id,
+                debit=0,
+                credit=Decimal(str(total)),
+                description=f"Purchase stock-in {req.invoice_no or 'N/A'} — {len(created_items)} items, ₹{total:,.2f}",
+                created_by=received_by,
+                fy_id=fy_id,
+            ))
+            await self.db.flush()
+
+        return {
+            "invoice_id": str(supplier_inv.id),
+            "invoice_no": req.invoice_no,
+            "items_created": len(created_items),
+            "items": created_items,
+            "subtotal": subtotal,
+        }
+
+    async def get_purchase_invoices(self, params, fy_id: UUID) -> dict:
+        """List item_purchase invoices with items."""
+        base = select(SupplierInvoice).where(
+            SupplierInvoice.type == "item_purchase",
+        )
+        if fy_id:
+            base = base.where(SupplierInvoice.fy_id == fy_id)
+
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await self.db.execute(count_stmt)).scalar() or 0
+        pages = max(1, math.ceil(total / params.page_size))
+
+        stmt = (
+            base
+            .options(
+                selectinload(SupplierInvoice.supplier),
+                selectinload(SupplierInvoice.purchase_items).selectinload(PurchaseItem.sku),
+            )
+            .order_by(SupplierInvoice.received_at.desc())
+            .offset((params.page - 1) * params.page_size)
+            .limit(params.page_size)
+        )
+        result = await self.db.execute(stmt)
+        invoices = result.scalars().all()
+
+        return {
+            "data": [self._purchase_invoice_to_response(inv) for inv in invoices],
+            "total": total,
+            "page": params.page,
+            "pages": pages,
+        }
+
+    def _purchase_invoice_to_response(self, inv: SupplierInvoice) -> dict:
+        items = []
+        total_amount = Decimal("0")
+        for pi in (inv.purchase_items or []):
+            total_amount += pi.total_price or 0
+            items.append({
+                "id": str(pi.id),
+                "sku_id": str(pi.sku_id),
+                "sku_code": pi.sku.sku_code if pi.sku else "",
+                "product_type": pi.sku.product_type if pi.sku else "",
+                "design_no": pi.sku.product_name if pi.sku else "",
+                "color": pi.sku.color if pi.sku else "",
+                "size": pi.sku.size if pi.sku else "",
+                "quantity": pi.quantity,
+                "unit_price": float(pi.unit_price),
+                "total_price": float(pi.total_price),
+                "hsn_code": pi.hsn_code,
+                "gst_percent": float(pi.gst_percent) if pi.gst_percent else None,
+            })
+        return {
+            "id": str(inv.id),
+            "supplier": {"id": str(inv.supplier.id), "name": inv.supplier.name} if inv.supplier else None,
+            "invoice_no": inv.invoice_no,
+            "challan_no": inv.challan_no,
+            "invoice_date": inv.invoice_date.isoformat() if inv.invoice_date else None,
+            "sr_no": inv.sr_no,
+            "gst_percent": float(inv.gst_percent),
+            "received_at": inv.received_at.isoformat() if inv.received_at else None,
+            "notes": inv.notes,
+            "items": items,
+            "item_count": len(items),
+            "total_amount": float(total_amount),
+        }
 
     def _batch_brief(self, b: Batch) -> dict:
         """Compact batch info for SKU detail view."""
