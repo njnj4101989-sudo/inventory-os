@@ -31,49 +31,71 @@
 
 ---
 
-## Current State (Session 85 — 2026-03-27)
+## Current State (Session 86 — 2026-03-27)
+
+### S86: Over-Order + Reservations + Pipeline Qty + Order Form Overhaul
+
+**10 commits. 15+ files changed. 3 migrations deployed to prod.**
+
+**S85 Purchase Stock Audit (4 fixes):**
+- CHECK constraint `si_valid_type` on `supplier_invoices.type` (model + migration `j4d5e6f7g8h9`)
+- Decimal-only arithmetic in purchase ledger calculation (was float)
+- `unit_price` positivity validator on `PurchaseLineItem` schema
+- Clear error state on purchase overlay close
+
+**Over-Order + Reservation Wiring (core feature):**
+- Order creation no longer blocks on insufficient stock — allows over-ordering
+- Reserves available portion via `ReservationService.create_reservation(permanent=True)`
+- `short_qty` column on OrderItem tracks unfulfillable quantity
+- `has_shortage` computed on order response for filtering
+- `ship_order()` confirms all active reservations before STOCK_OUT events
+- `cancel_order()` releases all active reservations (restores available_qty)
+- Fixed reservation CHECK constraint: `'reserved'` → `'active'` (was blocking ALL reservations)
+- Fixed auto-prefixed `ck_reservations_res_valid_status` duplicate constraint on prod
+- `permanent` flag on `create_reservation()` — skips 24h expiry for order-linked reservations
+- Migration `k5e6f7g8h9i0`: short_qty + reservation CHECK fix
+
+**Pipeline Qty on SKUs (read-only):**
+- `_compute_pipeline_map()` in SKUService — queries batches in pipeline statuses (created→packing)
+- Computes expected SKU code per batch: `{product_type}-{design_no}-{color}-{size}{va_suffix}`
+- VA suffix from received BatchProcessing logs (same logic as `pack_batch`)
+- Colors from `color_qc` (post-QC) or `color_breakdown` (pre-QC)
+- `pipeline_qty` added to SKU `stock` response dict
+- No batch/lot/pack flows modified — purely read-only computation
+
+**Order Form Premium Overhaul:**
+- Header: 8-field grid matching purchase form (Customer, Order No., Date, Source, Broker, Transport, GST%)
+- `order_date`, `broker_name`, `transport` columns added to Order model + schema
+- `GET /orders/next-number` endpoint for auto-generated order number preview
+- Native `<select>` → FilterSelect with type-ahead on all dropdowns
+- GST% dropdown (0/5/12/18/28%) with FilterSelect
+- Per-SKU pricing (was per-design) — price varies by size
+- Color×Size matrix → flat line-items table: Color, Size, Stock, Pipeline, Qty, Price, Total
+- Emerald design header bars with qty+total badge
+- Notes textarea + Order Summary (Subtotal/CGST/SGST/Grand Total) side-by-side below items
+- White card containers, `typo-*` classes, proper spacing throughout
+- KPI: "With Shortage" amber card + amber dot on shortage orders in list
+- Order detail: Short column + amber shortage banner
+- `table-fixed` with explicit column widths for alignment
+- Migration `l6f7g8h9i0j1`: order_date, broker_name, transport
+
+**Migrations deployed (dev + prod in sync):**
+- `j4d5e6f7g8h9` — si_valid_type CHECK
+- `k5e6f7g8h9i0` — short_qty + reservation CHECK fix
+- `l6f7g8h9i0j1` — order_date, broker_name, transport
+
+**NEXT:** Sale Invoice polish. Supplier master detail filter by invoice type. Reports overhaul. Remnant roll UX (needs spec).
+
+---
+
+## Previous State (Session 85 — 2026-03-27)
 
 ### S85: Premium Login + Purchase Ready Stock + SKU Page Redesign + Order Fix
 
-**Commits: `4ac5ca4`, `5835b06`, + pending. 15+ files changed.**
-
-**Premium Login Page:**
-- Emerald gradient background with floating orbs, frosted glass card (backdrop-blur)
-- Brand mark inline with title, icon-prefixed inputs, gradient button with press animation
-- Colorful warehouse illustration: 3D fabric roll, boxes, shelf rack, sewing machine, mannequin, 5-garment clothing rack
-- Company picker: emerald selected state, radio indicators, hover effects
-- Dev credentials hidden in production (`import.meta.env.DEV`)
-
-**Order Create Bug Fix (deployed):**
-- `TypeError: float += Decimal` in `order_service.create_order()` — `total_amount = 0.0` → `0`
-- Root cause: Pydantic `Decimal` field + Python float accumulator incompatibility
-
-**Purchase Ready Stock (new feature):**
-- `PurchaseItem` model (34th model) — links SupplierInvoice → SKU + qty + price
-- `type` column on SupplierInvoice: `roll_purchase` (default) | `item_purchase`
-- `POST /skus/purchase-stock` — creates invoice + find/create SKUs + inventory events + ledger entry
-- `GET /skus/purchase-invoices` — paginated list with items + supplier
-- Migration `i3c4d5e6f7g8`: adds type to supplier_invoices + creates purchase_items table
-
-**SKU Page Redesign:**
-- 2 emerald underline tabs: "All SKUs" | "Purchase Invoices"
-- "Purchase Ready Stock" button replaces "Manual SKU"
-- Full-page purchase overlay: invoice header + line items DataTable (emerald header) + auto-computed totals
-- Purchase invoice detail overlay with item breakdown
-- SKU detail overlay: emerald gradient header (was primary-700)
-- All typo-* classes, FilterSelect throughout
-
-**FilterSelect Upgrade (global):**
-- Type-ahead search (press M → jumps to M)
-- Arrow key navigation in dropdown
-- Enter to select, Tab to select-and-move
-- Compact full mode (px-2 py-1) matching typo-input-sm
-
-**Type Badges:**
-- RollsPage invoice tab: emerald "Roll Purchase" badge
-- SKUsPage purchase invoices tab: purple "Item Purchase" badge
-
-**NEXT:** Order page UI/UX overhaul (emerald theme, SKU picker, status flow). Sale Invoice polish. Supplier master detail filter by invoice type. Reports overhaul. Deploy S85 to prod (run migration `i3c4d5e6f7g8`).
+**Premium Login Page:** Emerald gradient, floating orbs, frosted glass, warehouse illustration, company picker overhaul.
+**Order Create Bug Fix:** `float += Decimal` TypeError → `total_amount = 0`.
+**Purchase Ready Stock:** PurchaseItem model (34th), `POST /skus/purchase-stock`, `GET /skus/purchase-invoices`, migration `i3c4d5e6f7g8`.
+**SKU Page Redesign:** 2 tabs, purchase overlay with emerald DataTable, FilterSelect upgrade (type-ahead, arrow keys).
 
 ---
 
@@ -585,6 +607,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S86 | Over-Order + Pipeline + Order Overhaul | Over-order with reservations (short_qty, has_shortage), pipeline_qty on SKUs (read-only from batches), reservation CHECK fix, order form overhaul (8-field header, per-SKU pricing, flat line-items table, Notes+Summary layout, GST%, broker, transport, order_date), 3 migrations |
 | S85 | Login + Purchase Stock + SKU Redesign | Premium login (emerald, illustration, frosted glass), order create Decimal fix, PurchaseItem model (34th), purchase-stock endpoint, SKU page tabs + overlay, FilterSelect type-ahead + arrow keys, invoice type badges |
 | S84 | Challan CRUD + Cancel + Auto-Fill | Removed sendForProcessing (all sends via Job Challans), edit challan UI (both types), cancel challan with 5 safety guards + migration, processing tab challan column, auto-fill debounce fix |
 | S83 | Typography + Emerald Theme | 25 files: FilterSelect component, emerald tabs/buttons/focus/sidebar, collapsible roll picker, LedgerPanel redesign, all 14 pages typo-* migrated, guardian.md Protocol 10 rules 6-12 |
