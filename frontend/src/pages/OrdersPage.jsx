@@ -840,7 +840,7 @@ export default function OrdersPage() {
                     const defaultPrice = firstSku?.base_price || 0
 
                     return (
-                      <div key={group.key} className="border rounded-lg overflow-hidden" data-design-block={group.key}>
+                      <div key={group.key} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden" data-design-block={group.key}>
                         {/* Design header — inline delete confirmation or normal */}
                         {deleteConfirmKey === group.key ? (
                           <div className="bg-red-50 border-b border-red-200 px-3 py-2 flex items-center justify-between">
@@ -857,10 +857,10 @@ export default function OrdersPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-gray-50 px-3 py-1.5 flex items-center justify-between">
+                          <div className="bg-emerald-600 px-3 py-2 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="typo-data">{group.key}</span>
-                              <span className="typo-caption">{group.colors.length}c &middot; {group.sizes.length}s</span>
+                              <span className="text-white font-bold text-sm">{group.key}</span>
+                              <span className="text-emerald-200 text-xs">{group.colors.length}c &middot; {group.sizes.length}s</span>
                               {group.skus[0]?._parsed.vas.length > 0 && (
                                 <span className="flex gap-1">
                                   {group.skus[0]._parsed.vas.map(va => {
@@ -871,8 +871,8 @@ export default function OrdersPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-1">
-                                <label className="typo-label-sm mb-0">₹/pc</label>
+                              <div className="flex items-center gap-1.5">
+                                <label className="text-emerald-100 text-xs font-medium">₹/pc</label>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -889,15 +889,15 @@ export default function OrdersPage() {
                                     const firstCell = block?.querySelector('[data-qty]')
                                     if (firstCell) { firstCell.focus(); firstCell.select() }
                                   }}
-                                  className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-right focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  className="w-20 rounded border border-emerald-400 bg-white/90 px-2 py-1 text-xs text-right focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
                                   placeholder="₹"
                                 />
                               </div>
                               {groupQty > 0 && (
-                                <span className="typo-btn-sm text-emerald-700">{groupQty}pcs ₹{groupSubtotal.toLocaleString('en-IN')}</span>
+                                <span className="text-xs font-semibold text-white bg-white/20 rounded px-2 py-0.5">{groupQty} pcs &middot; ₹{groupSubtotal.toLocaleString('en-IN')}</span>
                               )}
                               <button onClick={() => setDeleteConfirmKey(group.key)} tabIndex={-1}
-                                className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Remove design (Del)">
+                                className="rounded p-1 text-emerald-200 hover:bg-white/20 hover:text-white transition-colors" title="Remove design (Del)">
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                               </button>
                             </div>
@@ -908,20 +908,20 @@ export default function OrdersPage() {
                         <div className="overflow-x-auto" data-design-grid={group.key}>
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="border-b bg-white">
-                                <th className="px-2 py-1 text-left typo-th w-28">Color</th>
+                              <tr className="bg-gray-100 border-b border-gray-200">
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32">Color</th>
                                 {group.sizes.map(size => (
-                                  <th key={size} className="px-1 py-1 text-center typo-th">{size}</th>
+                                  <th key={size} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">{size}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody className="divide-y">
                               {group.colors.map((color, cIdx) => (
-                                <tr key={color} className="hover:bg-gray-50/50">
-                                  <td className="px-2 py-1">
-                                    <span className="inline-flex items-center gap-1">
-                                      <span className="w-2.5 h-2.5 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
-                                      <span className="text-xs font-medium">{color}</span>
+                                <tr key={color} className="hover:bg-gray-50/50 border-b border-gray-100">
+                                  <td className="px-3 py-1.5">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
+                                      <span className="typo-td font-medium">{color}</span>
                                     </span>
                                   </td>
                                   {group.sizes.map((size, sIdx) => {
