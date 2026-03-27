@@ -28,6 +28,12 @@ def upgrade():
             ))
 
         # 2. Fix reservation CHECK constraint: 'reserved' → 'active'
+        # Drop both possible names (SQLAlchemy auto-prefix + explicit name)
+        if constraint_exists(conn, s, "ck_reservations_res_valid_status"):
+            conn.execute(text(
+                f"ALTER TABLE {s}.reservations "
+                f"DROP CONSTRAINT ck_reservations_res_valid_status"
+            ))
         if constraint_exists(conn, s, "res_valid_status"):
             conn.execute(text(
                 f"ALTER TABLE {s}.reservations "
