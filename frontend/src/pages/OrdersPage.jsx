@@ -728,7 +728,7 @@ export default function OrdersPage() {
                   onChange={(v) => setCustomerForm(f => ({ ...f, gst_percent: v }))}
                   options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
               </div>
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-2">
                 <label className="typo-label-sm">Notes</label>
                 <input className="typo-input-sm" value={customerForm.notes}
                   onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
