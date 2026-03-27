@@ -13,6 +13,8 @@ import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import { useAuth } from '../hooks/useAuth'
+import useQuickMaster from '../hooks/useQuickMaster'
+import QuickMasterModal from '../components/common/QuickMasterModal'
 
 /* ── Module-level helpers ── */
 
@@ -122,6 +124,16 @@ export default function InvoicesPage() {
   const [formError, setFormError] = useState(null)
   const [isDirty, setIsDirty] = useState(false)
   const [showDiscard, setShowDiscard] = useState(false)
+
+  // Quick master for customer Shift+M
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
+    (type, newItem) => {
+      if (type === 'customer') {
+        setCustomers(prev => [...prev, newItem])
+        setInvForm(f => ({ ...f, customer_id: newItem.id }))
+      }
+    }
+  )
 
   // Detail overlay
   const [detailInvoice, setDetailInvoice] = useState(null)
@@ -714,7 +726,7 @@ export default function InvoicesPage() {
                 <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div className="col-span-2">
                     <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
-                    <FilterSelect full value={invForm.customer_id}
+                    <FilterSelect full data-master="customer" value={invForm.customer_id}
                       onChange={v => {
                         setInvForm(f => ({ ...f, customer_id: v }))
                         const cust = customers.find(c => c.id === v)
@@ -856,6 +868,7 @@ export default function InvoicesPage() {
                 </div>
               </div>
             )}
+            <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
           </div>
         )
       })()}
