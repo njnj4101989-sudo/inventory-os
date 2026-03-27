@@ -59,7 +59,9 @@
 
 **Migration `o9i0j1k2l3m4`:** CREATE TABLE brokers + transports, ALTER orders + invoices (FK + indexes)
 
-**NEXT:** Deploy S89 to prod. Partial order support. Reports overhaul. Remnant roll UX.
+**BUG — carry to next session:** ESC on QuickMaster modal (Shift+M) closes the parent Order/Invoice form instead of just the modal. Both use `document.addEventListener('keydown')` — need proper event isolation so inner modal ESC doesn't trigger parent form close.
+
+**NEXT:** Fix ESC bug above. Deploy S89 to prod. Partial order support. Reports overhaul. Remnant roll UX.
 
 ---
 

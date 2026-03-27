@@ -228,6 +228,7 @@ export default function OrdersPage() {
         handleCreate()
       }
       if (e.key === 'Escape') {
+        if (quickMasterOpen || shipModalOpen) return
         e.preventDefault()
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()

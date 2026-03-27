@@ -271,7 +271,7 @@ export default function InvoicesPage() {
     if (!createMode) return
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleCreateInvoice() }
-      if (e.key === 'Escape') { e.preventDefault(); closeCreate() }
+      if (e.key === 'Escape') { if (quickMasterOpen) return; e.preventDefault(); closeCreate() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)

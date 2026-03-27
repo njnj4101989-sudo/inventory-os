@@ -8,9 +8,9 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
 
   useEffect(() => {
     if (!open) return
-    const handler = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); onClose() } }
-    document.addEventListener('keydown', handler, true)
-    return () => document.removeEventListener('keydown', handler, true)
+    const handler = (e) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
   // Auto-focus first input/select/textarea on open
