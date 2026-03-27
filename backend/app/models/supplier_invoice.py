@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,6 +12,12 @@ from app.database import Base
 
 class SupplierInvoice(Base):
     __tablename__ = "supplier_invoices"
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('roll_purchase', 'item_purchase')",
+            name="si_valid_type",
+        ),
+    )
 
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("suppliers.id", ondelete="RESTRICT"), index=True

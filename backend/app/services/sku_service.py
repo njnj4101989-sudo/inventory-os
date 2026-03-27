@@ -256,15 +256,15 @@ class SKUService:
                 "sku_id": str(sku.id),
                 "sku_code": sku_code,
                 "quantity": item.qty,
-                "total_price": float(total_price),
+                "total_price": total_price,
             })
 
-        # Ledger entry
-        subtotal = sum(float(it["total_price"]) for it in created_items)
+        # Ledger entry — keep Decimal throughout for precision
+        subtotal = sum((it["total_price"] for it in created_items), Decimal("0"))
         if subtotal > 0:
-            gst_pct = float(req.gst_percent or 0)
-            gst_amt = round(subtotal * gst_pct / 100, 2)
-            total = round(subtotal + gst_amt, 2)
+            gst_pct = req.gst_percent or Decimal("0")
+            gst_amt = (subtotal * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+            total = subtotal + gst_amt
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
             ledger = LedgerService(self.db)
@@ -276,8 +276,8 @@ class SKUService:
                 reference_type="supplier_invoice",
                 reference_id=supplier_inv.id,
                 debit=0,
-                credit=Decimal(str(total)),
-                description=f"Purchase stock-in {req.invoice_no or 'N/A'} — {len(created_items)} items, ₹{total:,.2f}",
+                credit=total,
+                description=f"Purchase stock-in {req.invoice_no or 'N/A'} — {len(created_items)} items, ₹{float(total):,.2f}",
                 created_by=received_by,
                 fy_id=fy_id,
             ))
@@ -287,8 +287,10 @@ class SKUService:
             "invoice_id": str(supplier_inv.id),
             "invoice_no": req.invoice_no,
             "items_created": len(created_items),
-            "items": created_items,
-            "subtotal": subtotal,
+            "items": [
+                {**it, "total_price": float(it["total_price"])} for it in created_items
+            ],
+            "subtotal": float(subtotal),
         }
 
     async def get_purchase_invoices(self, params, fy_id: UUID) -> dict:

@@ -105,6 +105,13 @@ class PurchaseLineItem(BaseModel):
             raise ValueError("Quantity must be positive")
         return v
 
+    @field_validator("unit_price")
+    @classmethod
+    def unit_price_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Unit price must be positive")
+        return v
+
 
 class PurchaseStockRequest(BaseModel):
     supplier_id: UUID
