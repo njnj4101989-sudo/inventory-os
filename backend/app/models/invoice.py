@@ -42,6 +42,14 @@ class Invoice(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
     place_of_supply: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    broker_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("brokers.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    transport_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("transports.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    lr_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    lr_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -50,5 +58,7 @@ class Invoice(Base):
     # Relationships
     order: Mapped[Order | None] = relationship(back_populates="invoices")
     customer: Mapped[Customer | None] = relationship(foreign_keys=[customer_id])
+    broker: Mapped[Broker | None] = relationship(foreign_keys=[broker_id])
+    transport: Mapped[Transport | None] = relationship(foreign_keys=[transport_id])
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     items: Mapped[list[InvoiceItem]] = relationship(back_populates="invoice")

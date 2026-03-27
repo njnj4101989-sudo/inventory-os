@@ -55,6 +55,8 @@ class OrderService:
             select(Order)
             .options(
                 selectinload(Order.customer),
+                selectinload(Order.broker),
+                selectinload(Order.transport_rel),
                 selectinload(Order.items).selectinload(OrderItem.sku),
                 selectinload(Order.invoices),
             )
@@ -118,6 +120,20 @@ class OrderService:
                 short_qty=short,
             ))
 
+        # Resolve broker/transport names from masters for backward compat
+        broker_name_resolved = req.broker_name
+        transport_resolved = req.transport
+        if req.broker_id and not broker_name_resolved:
+            from app.models.broker import Broker
+            b = (await self.db.execute(select(Broker).where(Broker.id == req.broker_id))).scalar_one_or_none()
+            if b:
+                broker_name_resolved = b.name
+        if req.transport_id and not transport_resolved:
+            from app.models.transport import Transport
+            t = (await self.db.execute(select(Transport).where(Transport.id == req.transport_id))).scalar_one_or_none()
+            if t:
+                transport_resolved = t.name
+
         order = Order(
             order_number=order_number,
             order_date=req.order_date or datetime.now(timezone.utc).date(),
@@ -126,8 +142,10 @@ class OrderService:
             customer_name=req.customer_name,
             customer_phone=req.customer_phone,
             customer_address=req.customer_address,
-            broker_name=req.broker_name,
-            transport=req.transport,
+            broker_name=broker_name_resolved,
+            broker_id=req.broker_id,
+            transport=transport_resolved,
+            transport_id=req.transport_id,
             gst_percent=req.gst_percent,
             status="pending",
             total_amount=total_amount,
@@ -180,7 +198,7 @@ class OrderService:
 
         return await self.get_order(order.id)
 
-    async def ship_order(self, order_id: UUID, user_id: UUID, fy_id: UUID) -> dict:
+    async def ship_order(self, order_id: UUID, user_id: UUID, fy_id: UUID, ship_data=None) -> dict:
         order = await self._get_or_404(order_id)
         if order.status not in ("pending", "processing"):
             raise InvalidStateTransitionError(
@@ -217,14 +235,34 @@ class OrderService:
                 )
                 item.fulfilled_qty = item.quantity
 
+        # Apply LR / transport from ship_data
+        if ship_data:
+            if ship_data.transport_id:
+                order.transport_id = ship_data.transport_id
+                # Also resolve transport name for backward compat
+                from app.models.transport import Transport
+                t = (await self.db.execute(select(Transport).where(Transport.id == ship_data.transport_id))).scalar_one_or_none()
+                if t:
+                    order.transport = t.name
+            if ship_data.lr_number:
+                order.lr_number = ship_data.lr_number
+            if ship_data.lr_date:
+                order.lr_date = ship_data.lr_date
+
         order.status = "shipped"
         order.updated_at = datetime.now(timezone.utc)
         await self.db.flush()
 
-        # Create invoice
+        # Create invoice with broker/transport/LR data
         from app.services.invoice_service import InvoiceService
         inv_service = InvoiceService(self.db)
-        invoice = await inv_service.create_invoice(order.id, user_id, fy_id)
+        invoice = await inv_service.create_invoice(
+            order.id, user_id, fy_id,
+            broker_id=order.broker_id,
+            transport_id=order.transport_id,
+            lr_number=order.lr_number,
+            lr_date=order.lr_date,
+        )
 
         result = await self.get_order(order_id)
         result["invoice"] = invoice
@@ -335,6 +373,8 @@ class OrderService:
             .where(Order.id == order_id)
             .options(
                 selectinload(Order.customer),
+                selectinload(Order.broker),
+                selectinload(Order.transport_rel),
                 selectinload(Order.items).selectinload(OrderItem.sku),
                 selectinload(Order.invoices),
             )
@@ -365,7 +405,26 @@ class OrderService:
             "customer_phone": o.customer_phone,
             "customer_address": o.customer_address,
             "broker_name": o.broker_name,
+            "broker_id": str(o.broker_id) if o.broker_id else None,
+            "broker": {
+                "id": str(o.broker.id),
+                "name": o.broker.name,
+                "phone": o.broker.phone,
+                "city": o.broker.city,
+                "gst_no": o.broker.gst_no,
+                "commission_rate": float(o.broker.commission_rate) if o.broker.commission_rate else None,
+            } if hasattr(o, 'broker') and o.broker else None,
             "transport": o.transport,
+            "transport_id": str(o.transport_id) if o.transport_id else None,
+            "transport_detail": {
+                "id": str(o.transport_rel.id),
+                "name": o.transport_rel.name,
+                "phone": o.transport_rel.phone,
+                "city": o.transport_rel.city,
+                "gst_no": o.transport_rel.gst_no,
+            } if hasattr(o, 'transport_rel') and o.transport_rel else None,
+            "lr_number": o.lr_number,
+            "lr_date": o.lr_date.isoformat() if o.lr_date else None,
             "gst_percent": float(o.gst_percent) if o.gst_percent else 0,
             "status": o.status,
             "total_amount": float(o.total_amount) if o.total_amount else 0,

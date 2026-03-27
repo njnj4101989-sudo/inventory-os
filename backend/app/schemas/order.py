@@ -74,11 +74,20 @@ class OrderCreate(BaseModel):
     customer_address: str | None = None
     order_date: date | None = None
     broker_name: str | None = None
+    broker_id: UUID | None = None
     transport: str | None = None
+    transport_id: UUID | None = None
     gst_percent: Decimal = Decimal("0")
     discount_amount: Decimal = Decimal("0")
     items: list[OrderItemInput]
     notes: str | None = None
+
+
+class ShipOrderRequest(BaseModel):
+    """POST /orders/{id}/ship — body."""
+    transport_id: UUID | None = None
+    lr_number: str
+    lr_date: date | None = None
 
 
 class ReturnRequest(BaseModel):
@@ -102,7 +111,13 @@ class OrderResponse(BaseSchema):
     customer_phone: str | None = None
     customer_address: str | None = None
     broker_name: str | None = None
+    broker_id: UUID | None = None
+    broker: dict | None = None
     transport: str | None = None
+    transport_id: UUID | None = None
+    transport_detail: dict | None = None
+    lr_number: str | None = None
+    lr_date: date | None = None
     gst_percent: Decimal = Decimal("0")
     status: str
     items: list[OrderItemResponse] = []
@@ -110,4 +125,5 @@ class OrderResponse(BaseSchema):
     total_amount: Decimal | None = None
     discount_amount: Decimal = Decimal("0")
     notes: str | None = None
+    invoices: list[dict] = []
     created_at: datetime

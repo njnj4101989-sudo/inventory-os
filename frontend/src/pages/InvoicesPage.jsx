@@ -323,6 +323,27 @@ export default function InvoicesPage() {
             </div>
           </div>
 
+          {/* Transport / LR / Broker */}
+          {(inv.transport_detail || inv.lr_number || inv.broker) && (
+            <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
+              {inv.transport_detail && (
+                <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Transport</p>
+                  <p style={{ fontSize: '13px', fontWeight: 600, margin: 0 }}>{inv.transport_detail.name}</p>
+                  {inv.transport_detail.gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {inv.transport_detail.gst_no}</p>}
+                  {inv.transport_detail.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {inv.transport_detail.phone}</p>}
+                </div>
+              )}
+              {(inv.lr_number || inv.broker) && (
+                <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Dispatch Details</p>
+                  {inv.lr_number && <p style={{ fontSize: '12px', margin: '2px 0' }}>L.R. No.: <strong>{inv.lr_number}</strong>{inv.lr_date ? ` | Date: ${fmtDate(inv.lr_date + 'T00:00:00')}` : ''}</p>}
+                  {inv.broker && <p style={{ fontSize: '12px', margin: '2px 0' }}>Broker: <strong>{inv.broker.name}</strong></p>}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Notes */}
           {inv.notes && (
             <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: '#92400e' }}>
@@ -469,6 +490,22 @@ export default function InvoicesPage() {
                   {inv.place_of_supply && <div><span className="text-gray-500">Place of Supply:</span> <span className="font-medium">{inv.place_of_supply}</span></div>}
                 </div>
               </div>
+              {(inv.transport_detail || inv.lr_number || inv.broker) && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">Transport / Broker</p>
+                  <div className="text-xs mt-0.5 space-y-0.5">
+                    {inv.transport_detail && (
+                      <div><span className="text-gray-500">Transport:</span> <span className="font-medium">{inv.transport_detail.name}{inv.transport_detail.gst_no ? ` — GST: ${inv.transport_detail.gst_no}` : ''}</span></div>
+                    )}
+                    {inv.lr_number && (
+                      <div><span className="text-gray-500">L.R. No. / Date:</span> <span className="font-medium">{inv.lr_number}{inv.lr_date ? ` — ${new Date(inv.lr_date).toLocaleDateString('en-IN')}` : ''}</span></div>
+                    )}
+                    {inv.broker && (
+                      <div><span className="text-gray-500">Broker:</span> <span className="font-medium">{inv.broker.name}</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
               {inv.order && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">Linked Order</p>
@@ -634,25 +671,49 @@ export default function InvoicesPage() {
         const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
         const grandTotal = taxable + gstAmt
         return (
-          <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
+          <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 overflow-hidden">
             {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
-              <div>
-                <h1 className="typo-modal-title text-white leading-tight">New Invoice</h1>
-                <p className="text-xs text-emerald-100">Direct sale — no order required</p>
+            <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+              <div className="flex items-center gap-3">
+                <button onClick={closeCreate} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">New Invoice</h2>
+                  <p className="text-xs text-emerald-100">Direct sale &mdash; no order required</p>
+                </div>
               </div>
-              <button onClick={closeCreate} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Cancel</button>
+              <div className="flex items-center gap-3">
+                {invItems.some(it => it.sku_id) && (
+                  <div className="hidden sm:flex items-center gap-2">
+                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{invItems.filter(it => it.sku_id).length} items</span>
+                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{fmtCurrency(grandTotal)}</span>
+                  </div>
+                )}
+                <span className="hidden sm:inline text-xs text-emerald-200">Ctrl+S to save</span>
+                <button onClick={closeCreate} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
+                <button onClick={handleCreateInvoice} disabled={saving}
+                  className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+                  {saving ? 'Saving...' : `Create Invoice (${invItems.filter(it => it.sku_id).length})`}
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
               {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
               {/* Invoice details */}
-              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                <h3 className="typo-label-sm mb-2">Invoice Details</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Invoice Details</span>
+                    <span className="text-[10px] text-gray-300">&middot;</span>
+                    <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-200 rounded text-[9px]">Shift+M</kbd> quick-add master</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div className="col-span-2">
-                    <label className="typo-label">Customer</label>
+                    <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
                     <FilterSelect full value={invForm.customer_id}
                       onChange={v => {
                         setInvForm(f => ({ ...f, customer_id: v }))
@@ -664,28 +725,28 @@ export default function InvoicesPage() {
                       options={[{ value: '', label: 'Select customer...' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.phone ? ` — ${c.phone}` : ''}` }))]} />
                   </div>
                   <div>
-                    <label className="typo-label">GST %</label>
+                    <label className="typo-label-sm">GST %</label>
                     <FilterSelect full value={invForm.gst_percent}
                       onChange={v => { setInvForm(f => ({ ...f, gst_percent: v })); setIsDirty(true) }}
                       options={GST_OPTIONS} />
                   </div>
                   <div>
-                    <label className="typo-label">Discount (₹)</label>
-                    <input type="number" min="0" step="0.01" className="typo-input w-full"
+                    <label className="typo-label-sm">Discount (₹)</label>
+                    <input type="number" min="0" step="0.01" className="typo-input-sm"
                       value={invForm.discount_amount}
                       onChange={e => { setInvForm(f => ({ ...f, discount_amount: e.target.value })); setIsDirty(true) }}
                       placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="typo-label">Payment Terms</label>
-                    <input type="text" className="typo-input w-full"
+                    <label className="typo-label-sm">Payment Terms</label>
+                    <input type="text" className="typo-input-sm"
                       value={invForm.payment_terms}
                       onChange={e => { setInvForm(f => ({ ...f, payment_terms: e.target.value })); setIsDirty(true) }}
                       placeholder="e.g. Net 30" />
                   </div>
                   <div>
-                    <label className="typo-label">Place of Supply</label>
-                    <input type="text" className="typo-input w-full"
+                    <label className="typo-label-sm">Place of Supply</label>
+                    <input type="text" className="typo-input-sm"
                       value={invForm.place_of_supply}
                       onChange={e => { setInvForm(f => ({ ...f, place_of_supply: e.target.value })); setIsDirty(true) }}
                       placeholder="State code" />
@@ -694,25 +755,28 @@ export default function InvoicesPage() {
               </div>
 
               {/* Line items */}
-              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="typo-label-sm">Line Items</h3>
-                  <button onClick={addInvItem} className="rounded bg-emerald-50 text-emerald-700 px-2.5 py-1 typo-btn-sm hover:bg-emerald-100 transition-colors">+ Add Item</button>
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items</span>
+                  <button onClick={addInvItem} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add Row
+                  </button>
                 </div>
-                <div className="border rounded">
-                  <table className="w-full text-xs table-fixed">
-                    <thead className="bg-gray-50">
-                      <tr className="typo-th text-left">
-                        <th className="px-2 py-1.5 w-[45%]">SKU</th>
-                        <th className="px-2 py-1.5 w-[15%] text-right">Qty</th>
-                        <th className="px-2 py-1.5 w-[18%] text-right">Rate (₹)</th>
-                        <th className="px-2 py-1.5 w-[15%] text-right">Amount</th>
-                        <th className="px-2 py-1.5 w-[7%]"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {invItems.map((item, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
+                <div className="px-4 py-3">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-emerald-600">
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[45%] border-r border-emerald-500">SKU</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Qty</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[18%] border-r border-emerald-500">Rate (₹)</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Amount</th>
+                      <th className="px-2 py-2 w-[7%]"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invItems.map((item, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50/50">
                           <td className="px-2 py-1.5">
                             <FilterSelect full value={item.sku_id}
                               onChange={v => {
@@ -741,51 +805,40 @@ export default function InvoicesPage() {
                               </button>
                             )}
                           </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Totals */}
+                <div className="mt-3 flex justify-end">
+                  <div className="w-56 space-y-1.5 border-t border-gray-200 pt-2">
+                    <div className="flex justify-between typo-td"><span>Subtotal</span><span>{fmtCurrency(subtotal)}</span></div>
+                    {discount > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(discount)}</span></div>}
+                    {gstPct > 0 && (<>
+                      <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
+                      <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
+                    </>)}
+                    <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                  </div>
+                </div>
                 </div>
               </div>
 
-              {/* Notes + Summary */}
-              {invItems.some(it => it.sku_id) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                    <h4 className="typo-label-sm mb-2">Notes</h4>
-                    <textarea rows={3} className="typo-input w-full" placeholder="Optional notes..."
-                      value={invForm.notes || ''} onChange={e => { setInvForm(f => ({ ...f, notes: e.target.value })); setIsDirty(true) }} />
-                  </div>
-                  <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                    <h4 className="typo-label-sm mb-2">Invoice Summary</h4>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between typo-td"><span>Subtotal</span><span>{fmtCurrency(subtotal)}</span></div>
-                      {discount > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(discount)}</span></div>}
-                      {gstPct > 0 && (<>
-                        <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
-                        <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
-                      </>)}
-                      <div className="flex justify-between pt-1.5 border-t-2 border-emerald-600 typo-kpi-sm">
-                        <span>Grand Total</span><span>{fmtCurrency(grandTotal)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Notes */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden px-4 py-3">
+                <h4 className="typo-label-sm mb-2">Notes</h4>
+                <textarea className="typo-input-sm w-full h-20 resize-none" placeholder="Optional notes..."
+                  value={invForm.notes || ''} onChange={e => { setInvForm(f => ({ ...f, notes: e.target.value })); setIsDirty(true) }} />
+              </div>
             </div>
 
-            {/* Sticky footer */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-2.5 flex items-center justify-between">
-              <div className="text-xs text-gray-400">
-                {invItems.filter(it => it.sku_id).length} items · <span className="text-gray-400">Ctrl+S save · Esc close</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="typo-kpi-sm text-gray-800">{fmtCurrency((() => { const s = invItems.reduce((a, it) => a + (it.quantity * it.unit_price || 0), 0); const d = parseFloat(invForm.discount_amount) || 0; const t = s - d; const g = parseFloat(invForm.gst_percent) || 0; return t + Math.round(t * g / 100 * 100) / 100 })())}</span>
-                <button onClick={closeCreate} className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleCreateInvoice} disabled={saving}
-                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
-                  {saving ? 'Saving...' : 'Create Invoice'}
-                </button>
+            {/* Keyboard shortcuts bar */}
+            <div className="flex-shrink-0 border-t bg-white px-6 py-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Tab</kbd> Next field</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
+                <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Esc</kbd> Close</span>
               </div>
             </div>
 

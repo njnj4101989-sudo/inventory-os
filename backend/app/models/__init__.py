@@ -27,6 +27,8 @@ from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.customer import Customer
+from app.models.broker import Broker
+from app.models.transport import Transport
 from app.models.ledger_entry import LedgerEntry
 from app.models.company import Company
 from app.models.user_company import UserCompany
@@ -62,6 +64,8 @@ __all__ = [
     "BatchChallan",
     "BatchProcessing",
     "Customer",
+    "Broker",
+    "Transport",
     "LedgerEntry",
     "Company",
     "UserCompany",

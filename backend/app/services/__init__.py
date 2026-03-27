@@ -12,6 +12,8 @@ from app.services.order_service import OrderService
 from app.services.invoice_service import InvoiceService
 from app.services.reservation_service import ReservationService
 from app.services.dashboard_service import DashboardService
+from app.services.broker_service import BrokerService
+from app.services.transport_service import TransportService
 from app.services.qr_service import QRService
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "OrderService",
     "InvoiceService",
     "ReservationService",
+    "BrokerService",
+    "TransportService",
     "DashboardService",
     "QRService",
 ]

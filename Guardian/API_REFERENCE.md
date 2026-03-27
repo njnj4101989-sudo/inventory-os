@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
-> **Generated from:** `frontend/src/api/mock.js` + all 17 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-27 (Session 87 — gst_percent/discount on orders, standalone invoices, cancel invoice, order→invoice link)
+> **Generated from:** `frontend/src/api/mock.js` + all 19 API modules
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-28 (Session 89 — Broker+Transport masters, Order/Invoice broker_id+transport_id+LR fields, ShipOrderRequest, broker commission ledger)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -1019,7 +1019,13 @@ When `sku` is present:
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
   "broker_name": "Rajesh",
+  "broker_id": "uuid | null",
+  "broker": { "id": "uuid", "name": "Rajesh Agencies", "phone": "9876543210", "city": "Mumbai", "gst_no": null, "commission_rate": 2.5 },
   "transport": "Shree Maruti",
+  "transport_id": "uuid | null",
+  "transport_detail": { "id": "uuid", "name": "Shree Maruti", "phone": "9876543211", "city": "Surat", "gst_no": "24AABCS1234F1Z5" },
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-28 | null",
   "gst_percent": 12,
   "status": "pending",
   "notes": "Urgent delivery needed",
@@ -1062,9 +1068,11 @@ When `sku` is present:
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
-  "order_date": "2026-03-27",
-  "broker_name": "Rajesh",
-  "transport": "Shree Maruti",
+  "order_date": "2026-03-28",
+  "broker_name": "Rajesh (legacy — prefer broker_id)",
+  "broker_id": "uuid | null",
+  "transport": "Shree Maruti (legacy — prefer transport_id)",
+  "transport_id": "uuid | null",
   "gst_percent": 12,
   "discount_amount": 0,
   "items": [
@@ -1077,7 +1085,15 @@ When `sku` is present:
 **Over-order (S86):** Allows ordering when stock is insufficient — reserves available portion, tracks `short_qty` on items.
 
 ### POST `/orders/{id}/ship`
-**Response:** Updated order (status → `shipped`) + auto-creates invoice
+**Request (S89 — optional body):**
+```json
+{
+  "transport_id": "uuid | null",
+  "lr_number": "LR-12345 (required)",
+  "lr_date": "2026-03-28 | null"
+}
+```
+**Response:** Updated order (status → `shipped`) + auto-creates invoice. LR fields set on both Order and Invoice. If broker has `commission_rate > 0`, auto-creates broker commission ledger entry.
 
 ### POST `/orders/{id}/cancel`
 **Response:** Updated order (status → `cancelled`)
@@ -1110,6 +1126,12 @@ When `sku` is present:
   "discount_amount": 0,
   "total_amount": 1770.0,
   "status": "paid",
+  "broker_id": "uuid | null",
+  "broker": { "id": "uuid", "name": "Rajesh Agencies", "phone": "...", "city": "...", "gst_no": "..." },
+  "transport_id": "uuid | null",
+  "transport_detail": { "id": "uuid", "name": "Shree Maruti", "phone": "...", "city": "...", "gst_no": "..." },
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-28 | null",
   "issued_at": "2026-02-07T15:00:00Z",
   "paid_at": "2026-02-07T16:00:00Z",
   "created_at": "2026-02-07T15:00:00Z",
@@ -2095,7 +2117,58 @@ invoice_manage, report_view
 | Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
 | Invoice | `issued`, `paid` |
 | Financial Year | `open`, `closed` |
-| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `va_receive`, `tds`, `tcs`, `adjustment`, `opening` |
+| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `commission`, `va_receive`, `tds`, `tcs`, `adjustment`, `opening`, `credit_note` |
+| Ledger Party Type | `supplier`, `customer`, `va_party`, `broker`, `transport` |
+
+## 21. Brokers (`/api/v1/brokers`) — NEW S89
+
+### GET `/brokers`
+**Auth:** `supplier_manage` permission
+**Query:** `page`, `page_size`, `search` (ILIKE on name, phone, city, gst_no)
+**Response:** Paginated array of BrokerResponse
+
+### GET `/brokers/all`
+**Response:** Array of active brokers (for dropdowns)
+
+### GET `/brokers/{broker_id}`
+**Response:** Single broker
+
+### POST `/brokers`
+**Request:** `{ name (required), contact_person?, phone?, phone_alt?, email?, address?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, due_days?, credit_limit?, opening_balance?, balance_type?, commission_rate?, tds_applicable?, tds_rate?, tds_section?, notes? }`
+**Response:** Created broker
+
+### PATCH `/brokers/{broker_id}`
+**Request:** All fields optional + `is_active?`
+**Response:** Updated broker
+
+**Broker-specific:** `commission_rate` (Decimal) — default % used for auto commission ledger entries on ship.
+
+---
+
+## 22. Transports (`/api/v1/transports`) — NEW S89
+
+### GET `/transports`
+**Auth:** `supplier_manage` permission
+**Query:** `page`, `page_size`, `search`
+**Response:** Paginated array of TransportResponse
+
+### GET `/transports/all`
+**Response:** Array of active transports (for dropdowns)
+
+### GET `/transports/{transport_id}`
+**Response:** Single transport
+
+### POST `/transports`
+**Request:** `{ name (required), contact_person?, phone?, phone_alt?, email?, address?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, opening_balance?, balance_type?, notes? }`
+**Response:** Created transport
+
+### PATCH `/transports/{transport_id}`
+**Request:** All fields optional + `is_active?`
+**Response:** Updated transport
+
+**Transport-specific:** No due_days, credit_limit, commission_rate, or TDS fields. Lighter than Broker/Supplier.
+
+---
 
 ## Appendix C: Nested Object Patterns
 
@@ -2112,6 +2185,9 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `sku` | Batches, Inventory, Orders, Invoices | varies — see each section |
 | `order` | Invoices | `{ order_number, customer_name }` |
 | `customer` | Orders | `{ id, name, phone, gst_no }` |
+| `broker` | Orders, Invoices | `{ id, name, phone, city, gst_no, commission_rate }` |
+| `transport_detail` | Orders | `{ id, name, phone, city, gst_no }` |
+| `transport` | Invoices | `{ id, name, phone, city, gst_no }` |
 | `performed_by` | Inventory Events | `{ id, full_name }` |
 | `stock` | SKUs | `{ total_qty, available_qty, reserved_qty }` |
 | `period` | Inventory Movement | `{ from, to }` |

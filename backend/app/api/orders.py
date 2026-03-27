@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest
+from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, ShipOrderRequest
 from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -66,13 +66,14 @@ async def create_order(
 @router.post("/{order_id}/ship", response_model=None)
 async def ship_order(
     order_id: UUID,
+    req: ShipOrderRequest | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("order_manage"),
 ):
     """Ship order → confirm reservations + STOCK_OUT events + auto-invoice."""
     fy_id = get_fy_id(current_user)
     svc = OrderService(db)
-    result = await svc.ship_order(order_id, current_user.id, fy_id)
+    result = await svc.ship_order(order_id, current_user.id, fy_id, ship_data=req)
     return {"success": True, "data": result}
 
 

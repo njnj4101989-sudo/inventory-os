@@ -55,6 +55,8 @@ class InvoiceService:
             .options(
                 selectinload(Invoice.order),
                 selectinload(Invoice.customer),
+                selectinload(Invoice.broker),
+                selectinload(Invoice.transport),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
             .order_by(Invoice.created_at.desc())
@@ -98,7 +100,7 @@ class InvoiceService:
 
     # ── Order-based invoice (called by ship_order) ──
 
-    async def create_invoice(self, order_id: UUID, created_by: UUID, fy_id: UUID) -> dict:
+    async def create_invoice(self, order_id: UUID, created_by: UUID, fy_id: UUID, *, broker_id=None, transport_id=None, lr_number=None, lr_date=None) -> dict:
         # Duplicate guard — one active invoice per order
         dup_stmt = select(Invoice).where(
             Invoice.order_id == order_id,
@@ -157,11 +159,40 @@ class InvoiceService:
             due_date=due_date,
             payment_terms=payment_terms,
             place_of_supply=place_of_supply,
+            broker_id=broker_id or order.broker_id,
+            transport_id=transport_id or order.transport_id,
+            lr_number=lr_number or getattr(order, 'lr_number', None),
+            lr_date=lr_date or getattr(order, 'lr_date', None),
             created_by=created_by,
             fy_id=fy_id,
         )
         self.db.add(invoice)
         await self.db.flush()
+
+        # Broker commission ledger entry
+        effective_broker_id = broker_id or order.broker_id
+        if effective_broker_id and total_amount > 0:
+            from app.models.broker import Broker
+            broker_obj = (await self.db.execute(select(Broker).where(Broker.id == effective_broker_id))).scalar_one_or_none()
+            if broker_obj and broker_obj.commission_rate and broker_obj.commission_rate > 0:
+                from decimal import Decimal as D
+                commission = round(float(total_amount) * float(broker_obj.commission_rate) / 100, 2)
+                from app.services.ledger_service import LedgerService
+                from app.schemas.ledger import LedgerEntryCreate
+                ledger_svc = LedgerService(self.db)
+                await ledger_svc.create_entry(LedgerEntryCreate(
+                    entry_date=issued_at.date(),
+                    party_type="broker",
+                    party_id=effective_broker_id,
+                    entry_type="commission",
+                    reference_type="invoice",
+                    reference_id=invoice.id,
+                    debit=commission,
+                    credit=0,
+                    description=f"Commission on {invoice_number} @ {broker_obj.commission_rate}% — ₹{commission:,.2f}",
+                    fy_id=fy_id,
+                ))
+                await self.db.flush()
 
         # Create invoice items from order items — denormalize HSN from SKU
         for oi in order.items:
@@ -420,6 +451,8 @@ class InvoiceService:
             .options(
                 selectinload(Invoice.order),
                 selectinload(Invoice.customer),
+                selectinload(Invoice.broker),
+                selectinload(Invoice.transport),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
         )
@@ -471,6 +504,18 @@ class InvoiceService:
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "payment_terms": inv.payment_terms,
             "place_of_supply": inv.place_of_supply,
+            "broker_id": str(inv.broker_id) if inv.broker_id else None,
+            "broker": {
+                "id": str(inv.broker.id), "name": inv.broker.name,
+                "phone": inv.broker.phone, "city": inv.broker.city, "gst_no": inv.broker.gst_no,
+            } if hasattr(inv, 'broker') and inv.broker else None,
+            "transport_id": str(inv.transport_id) if inv.transport_id else None,
+            "transport_detail": {
+                "id": str(inv.transport.id), "name": inv.transport.name,
+                "phone": inv.transport.phone, "city": inv.transport.city, "gst_no": inv.transport.gst_no,
+            } if hasattr(inv, 'transport') and inv.transport else None,
+            "lr_number": inv.lr_number,
+            "lr_date": inv.lr_date.isoformat() if inv.lr_date else None,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,

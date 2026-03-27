@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getSuppliers, createSupplier, updateSupplier } from '../api/suppliers'
 import { getVAParties, createVAParty, updateVAParty } from '../api/masters'
 import { getCustomers, createCustomer, updateCustomer } from '../api/customers'
+import { getBrokers, createBroker, updateBroker } from '../api/brokers'
+import { getTransports, createTransport, updateTransport } from '../api/transports'
 import { getAllBalances } from '../api/ledger'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -17,6 +19,8 @@ const TABS = [
   { key: 'suppliers', label: 'Suppliers' },
   { key: 'va_parties', label: 'VA Parties' },
   { key: 'customers', label: 'Customers' },
+  { key: 'brokers', label: 'Brokers' },
+  { key: 'transports', label: 'Transports' },
 ]
 
 const INDIAN_STATES = [
@@ -113,10 +117,41 @@ const CUSTOMER_COLUMNS = [
   },
 ]
 
+const BROKER_COLUMNS = [
+  { key: 'name', label: 'Name' },
+  { key: 'phone', label: 'Phone', render: (v) => v || '—' },
+  {
+    key: 'city', label: 'City / State',
+    render: (v, row) => v ? `${v}${row.state ? ', ' + row.state : ''}` : '—',
+  },
+  { key: 'gst_no', label: 'GST No.', render: (v) => v || '—' },
+  { key: 'commission_rate', label: 'Comm. %', render: (v) => v != null ? `${v}%` : '—' },
+  {
+    key: 'is_active', label: 'Status',
+    render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} />,
+  },
+]
+
+const TRANSPORT_COLUMNS = [
+  { key: 'name', label: 'Name' },
+  { key: 'phone', label: 'Phone', render: (v) => v || '—' },
+  {
+    key: 'city', label: 'City / State',
+    render: (v, row) => v ? `${v}${row.state ? ', ' + row.state : ''}` : '—',
+  },
+  { key: 'gst_no', label: 'GST No.', render: (v) => v || '—' },
+  {
+    key: 'is_active', label: 'Status',
+    render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} />,
+  },
+]
+
 const COLUMNS_MAP = {
   suppliers: SUPPLIER_COLUMNS,
   va_parties: VA_PARTY_COLUMNS,
   customers: CUSTOMER_COLUMNS,
+  brokers: BROKER_COLUMNS,
+  transports: TRANSPORT_COLUMNS,
 }
 
 // ── Empty Form Per Tab ───────────────────────────────────
@@ -152,6 +187,24 @@ const EMPTY_FORMS = {
     tcs_applicable: false, tcs_rate: '', tcs_section: '',
     notes: '',
   },
+  brokers: {
+    name: '', contact_person: '',
+    gst_no: '', gst_type: '', state_code: '', pan_no: '', aadhar_no: '',
+    phone: '', phone_alt: '', email: '',
+    address: '', city: '', state: '', pin_code: '',
+    due_days: '', credit_limit: '', opening_balance: '', balance_type: '',
+    commission_rate: '',
+    tds_applicable: false, tds_rate: '', tds_section: '',
+    notes: '',
+  },
+  transports: {
+    name: '', contact_person: '',
+    gst_no: '', gst_type: '', state_code: '', pan_no: '', aadhar_no: '',
+    phone: '', phone_alt: '', email: '',
+    address: '', city: '', state: '', pin_code: '',
+    opening_balance: '', balance_type: '',
+    notes: '',
+  },
 }
 
 // ── Style Classes ────────────────────────────────────────
@@ -163,7 +216,7 @@ const HINT = 'text-xs text-gray-400 mt-0.5'
 function Field({ label, name, type = 'text', hint, placeholder, required, maxLength, className = '', form, set, fieldErrors }) {
   return (
     <div className={className}>
-      <label className="typo-label">
+      <label className="typo-label-sm">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
@@ -172,7 +225,7 @@ function Field({ label, name, type = 'text', hint, placeholder, required, maxLen
         maxLength={maxLength}
         onChange={(e) => set(name, (type === 'text' && (name === 'gst_no' || name === 'pan_no')) ? e.target.value.toUpperCase() : e.target.value)}
         placeholder={placeholder}
-        className={`typo-input ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+        className={`typo-input-sm ${fieldErrors[name] ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
       />
       {fieldErrors[name]
         ? <p className="text-xs text-red-500 mt-0.5">{fieldErrors[name]}</p>
@@ -184,8 +237,8 @@ function Field({ label, name, type = 'text', hint, placeholder, required, maxLen
 function SelectField({ label, name, options, placeholder, form, set, className = '' }) {
   return (
     <div className={className}>
-      <label className="typo-label">{label}</label>
-      <select value={form[name] ?? ''} onChange={(e) => set(name, e.target.value)} className="typo-input">
+      <label className="typo-label-sm">{label}</label>
+      <select value={form[name] ?? ''} onChange={(e) => set(name, e.target.value)} className="typo-input-sm">
         <option value="">{placeholder || `Select ${label}`}</option>
         {options.map((o) => {
           const val = typeof o === 'string' ? o : o.value
@@ -229,7 +282,7 @@ function DetailCard({ title, icon, children, accent = 'primary', span = 1, cols 
     primary: 'border-l-emerald-500',
     amber: 'border-l-amber-500',
     emerald: 'border-l-emerald-500',
-    blue: 'border-l-blue-500',
+    blue: 'border-l-emerald-500',
     purple: 'border-l-purple-500',
     rose: 'border-l-rose-500',
   }
@@ -252,6 +305,8 @@ const TAB_LABELS = {
   suppliers: { singular: 'Supplier', plural: 'Suppliers', desc: 'Manage fabric and material suppliers' },
   va_parties: { singular: 'VA Party', plural: 'VA Parties', desc: 'Manage value addition processing parties' },
   customers: { singular: 'Customer', plural: 'Customers', desc: 'Manage customers and buyers' },
+  brokers: { singular: 'Broker', plural: 'Brokers', desc: 'Manage brokers and commission agents' },
+  transports: { singular: 'Transport', plural: 'Transports', desc: 'Manage transport and logistics partners' },
 }
 
 // ── Main Component ───────────────────────────────────────
@@ -298,7 +353,7 @@ export default function PartyMastersPage() {
   ], [baseColumns, balances])
 
   // Map tab key to party_type for ledger
-  const partyTypeMap = { suppliers: 'supplier', va_parties: 'va_party', customers: 'customer' }
+  const partyTypeMap = { suppliers: 'supplier', va_parties: 'va_party', customers: 'customer', brokers: 'broker', transports: 'transport' }
 
   // ── Ctrl+S to save ────────────────────────────────────
   const handleSaveRef = useRef(null)
@@ -338,6 +393,30 @@ export default function PartyMastersPage() {
         const res = await getCustomers({ page, page_size: PAGE_SIZE, search: search || undefined })
         const data = res.data.data
         // Handle both { data: [...], total, pages } and raw array
+        if (Array.isArray(data)) {
+          setItems(data)
+          setTotal(data.length)
+          setPages(1)
+        } else {
+          setItems(data.data || data)
+          setTotal(data.total || 0)
+          setPages(data.pages || 1)
+        }
+      } else if (tab === 'brokers') {
+        const res = await getBrokers({ page, page_size: PAGE_SIZE, search: search || undefined })
+        const data = res.data.data
+        if (Array.isArray(data)) {
+          setItems(data)
+          setTotal(data.length)
+          setPages(1)
+        } else {
+          setItems(data.data || data)
+          setTotal(data.total || 0)
+          setPages(data.pages || 1)
+        }
+      } else if (tab === 'transports') {
+        const res = await getTransports({ page, page_size: PAGE_SIZE, search: search || undefined })
+        const data = res.data.data
         if (Array.isArray(data)) {
           setItems(data)
           setTotal(data.length)
@@ -408,6 +487,8 @@ export default function PartyMastersPage() {
       errs.tds_rate = 'Must be 0-100'
     if (form.tcs_rate && (isNaN(form.tcs_rate) || Number(form.tcs_rate) < 0 || Number(form.tcs_rate) > 100))
       errs.tcs_rate = 'Must be 0-100'
+    if (form.commission_rate && (isNaN(form.commission_rate) || Number(form.commission_rate) < 0 || Number(form.commission_rate) > 100))
+      errs.commission_rate = 'Must be 0-100'
     setFieldErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -453,6 +534,7 @@ export default function PartyMastersPage() {
     if (payload.opening_balance) payload.opening_balance = Number(payload.opening_balance)
     if (payload.tds_rate) payload.tds_rate = Number(payload.tds_rate)
     if (payload.tcs_rate) payload.tcs_rate = Number(payload.tcs_rate)
+    if (payload.commission_rate) payload.commission_rate = Number(payload.commission_rate)
     return payload
   }
 
@@ -502,6 +584,8 @@ export default function PartyMastersPage() {
       if (tab === 'suppliers') await updateSupplier(selected.id, { is_active: next })
       else if (tab === 'va_parties') await updateVAParty(selected.id, { is_active: next })
       else if (tab === 'customers') await updateCustomer(selected.id, { is_active: next })
+      else if (tab === 'brokers') await updateBroker(selected.id, { is_active: next })
+      else if (tab === 'transports') await updateTransport(selected.id, { is_active: next })
       setSelected((s) => ({ ...s, is_active: next }))
       fetchData()
     } catch (err) {
@@ -519,10 +603,14 @@ export default function PartyMastersPage() {
         if (tab === 'suppliers') await updateSupplier(editing.id, payload)
         else if (tab === 'va_parties') await updateVAParty(editing.id, payload)
         else if (tab === 'customers') await updateCustomer(editing.id, payload)
+        else if (tab === 'brokers') await updateBroker(editing.id, payload)
+        else if (tab === 'transports') await updateTransport(editing.id, payload)
       } else {
         if (tab === 'suppliers') await createSupplier(payload)
         else if (tab === 'va_parties') await createVAParty(payload)
         else if (tab === 'customers') await createCustomer(payload)
+        else if (tab === 'brokers') await createBroker(payload)
+        else if (tab === 'transports') await createTransport(payload)
       }
       setModalOpen(false)
       fetchData()
@@ -553,6 +641,9 @@ export default function PartyMastersPage() {
   const showContactPerson = tab !== 'va_parties' || true // all tabs show contact person
   const showMSME = tab === 'suppliers' || tab === 'va_parties'
   const showTCS = tab === 'customers'
+  const showCommission = tab === 'brokers'
+  const showCreditPayment = tab !== 'transports'
+  const showTDS = tab !== 'transports'
 
   // ── Render ─────────────────────────────────────────────
 
@@ -671,12 +762,12 @@ export default function PartyMastersPage() {
                 const b = balances[selected.id]
                 const hasBalance = b && b.balance !== 0
                 return (
-                  <div className="rounded-lg bg-blue-50/80 border border-blue-100 px-3 py-2">
-                    <div className="typo-label-sm text-blue-500">Balance</div>
+                  <div className="rounded-lg bg-emerald-50/80 border border-emerald-100 px-3 py-2">
+                    <div className="typo-label-sm text-emerald-600">Balance</div>
                     <div className={`typo-kpi-sm mt-0.5 ${hasBalance ? (b.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
                       {hasBalance ? `₹${Number(b.balance).toLocaleString('en-IN')}` : '—'}
                     </div>
-                    {hasBalance && <div className="typo-badge text-blue-400">{b.balance_type.toUpperCase()}</div>}
+                    {hasBalance && <div className="typo-badge text-emerald-500">{b.balance_type.toUpperCase()}</div>}
                   </div>
                 )
               })()}
@@ -712,7 +803,7 @@ export default function PartyMastersPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
 
               {/* GST & Compliance */}
-              <DetailCard title="GST & Compliance" accent="blue" cols={3} icon={
+              <DetailCard title="GST & Compliance" accent="emerald" cols={3} icon={
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               }>
                 <DetailField label="GSTIN" value={selected.gst_no} mono />
@@ -738,13 +829,14 @@ export default function PartyMastersPage() {
               </DetailCard>
 
               {/* Credit & Payment */}
-              <DetailCard title="Credit & Payment" accent="amber" icon={
+              <DetailCard title={showCreditPayment ? 'Credit & Payment' : 'Balance'} accent="amber" icon={
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               }>
-                <DetailField label="Due Days" value={selected.due_days != null ? `${selected.due_days} days` : null} />
-                <DetailField label="Credit Limit" value={selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : null} />
+                {showCreditPayment && <DetailField label="Due Days" value={selected.due_days != null ? `${selected.due_days} days` : null} />}
+                {showCreditPayment && <DetailField label="Credit Limit" value={selected.credit_limit != null ? `₹${Number(selected.credit_limit).toLocaleString('en-IN')}` : null} />}
                 <DetailField label="Opening Balance" value={selected.opening_balance != null ? `₹${Number(selected.opening_balance).toLocaleString('en-IN')}` : null} />
                 <DetailField label="Balance Type" value={selected.balance_type ? selected.balance_type.charAt(0).toUpperCase() + selected.balance_type.slice(1) : null} />
+                {showCommission && <DetailField label="Commission %" value={selected.commission_rate != null ? `${selected.commission_rate}%` : null} />}
               </DetailCard>
 
               {/* TDS / TCS */}
@@ -766,7 +858,7 @@ export default function PartyMastersPage() {
                   )}
                   {showTCS && selected.tcs_applicable && (
                     <>
-                      <DetailField label="TCS Status" value="Applicable" icon={<span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />} />
+                      <DetailField label="TCS Status" value="Applicable" icon={<span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />} />
                       <DetailField label="TCS Section" value={selected.tcs_section ? `${selected.tcs_section} — ${TCS_SECTIONS.find((s) => s.value === selected.tcs_section)?.label.split(' — ')[1] || ''}` : null} />
                       <DetailField label="TCS Rate" value={selected.tcs_rate != null ? `${selected.tcs_rate}%` : null} />
                     </>
@@ -826,17 +918,16 @@ export default function PartyMastersPage() {
           </>
         }
       >
-        <div className="-mx-6 mb-4 rounded-t-xl bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 text-white">
+        <div className="-mx-6 mb-4 rounded-t-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white">
           <h2 className="text-lg font-bold tracking-tight">{editing ? `Edit ${labels.singular}` : `New ${labels.singular}`}</h2>
-          <p className="text-sm text-primary-200 mt-0.5">{editing ? `Modify ${labels.singular.toLowerCase()} business details` : `Add a new ${labels.singular.toLowerCase()}`}</p>
+          <p className="text-xs text-emerald-100 mt-0.5">{editing ? `Modify ${labels.singular.toLowerCase()} business details` : `Add a new ${labels.singular.toLowerCase()}`}</p>
         </div>
         {formError && <div className="mb-4"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
         <div className="space-y-0 -mx-6">
           {/* Row 1: Business Identity — 5 cols */}
-          <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className="typo-label-sm mb-1.5">Business Information</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-gray-50 px-6 py-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <Field name="name" label={`${labels.singular} Name`} required placeholder="e.g. Krishna Textiles" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="contact_person" label="Contact Person" placeholder="e.g. Krishna Sharma" form={form} set={set} fieldErrors={fieldErrors} />
               <Field name="phone" label="Phone" type="tel" placeholder="e.g. 9876543210" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
@@ -846,9 +937,8 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 2: GST & Compliance — 5 cols */}
-          <div className="px-6 py-1.5">
-            <h3 className="typo-label-sm mb-1.5">GST & Compliance</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="px-6 py-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <Field name="gst_no" label="GST No." placeholder="e.g. 24AABCK1234F1Z5" maxLength={15} hint={form.state_code ? `State: ${form.state_code} — ${GST_STATE_CODES[form.state_code] || ''}` : 'Auto-fills state from GSTIN'} form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="gst_type" label="GST Type" options={GST_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
               <Field name="pan_no" label="PAN No." placeholder="e.g. AABCK1234F" maxLength={10} form={form} set={set} fieldErrors={fieldErrors} />
@@ -862,28 +952,29 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 3: Address — 5 cols */}
-          <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className="typo-label-sm mb-1.5">Address</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-gray-50 px-6 py-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div className={showCommission || showBroker ? '' : 'md:col-span-2'}>
+                <label className="typo-label-sm">Address</label>
+                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={1} placeholder="Street address" className="typo-input-sm" />
+              </div>
               <Field name="city" label="City" placeholder="e.g. Surat" form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="state" label="State" options={INDIAN_STATES} placeholder="Select State" form={form} set={set} />
               <Field name="pin_code" label="PIN Code" placeholder="e.g. 395002" maxLength={6} form={form} set={set} fieldErrors={fieldErrors} />
-              {showBroker ? (
+              {showBroker && (
                 <Field name="broker" label="Broker" placeholder="e.g. Ramesh Broker" form={form} set={set} fieldErrors={fieldErrors} />
-              ) : <div />}
-              <div className="md:col-span-1">
-                <label className="typo-label">Address</label>
-                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={1} placeholder="Street address" className="typo-input" />
-              </div>
+              )}
+              {showCommission && (
+                <Field name="commission_rate" label="Commission %" type="number" placeholder="e.g. 2.5" form={form} set={set} fieldErrors={fieldErrors} />
+              )}
             </div>
           </div>
 
           {/* Row 4: Credit & Payment — 5 cols */}
-          <div className="px-6 py-1.5">
-            <h3 className="typo-label-sm mb-1.5">Credit & Payment</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-              <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />
-              <Field name="credit_limit" label="Credit Limit (Rs.)" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />
+          <div className="px-6 py-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+              {showCreditPayment && <Field name="due_days" label="Due Days" type="number" placeholder="e.g. 30" form={form} set={set} fieldErrors={fieldErrors} />}
+              {showCreditPayment && <Field name="credit_limit" label="Credit Limit (Rs.)" type="number" placeholder="e.g. 500000" form={form} set={set} fieldErrors={fieldErrors} />}
               <Field name="opening_balance" label="Opening Balance" type="number" placeholder="e.g. 0" form={form} set={set} fieldErrors={fieldErrors} />
               <SelectField name="balance_type" label="Balance Type" options={BALANCE_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
               <div />
@@ -891,32 +982,31 @@ export default function PartyMastersPage() {
           </div>
 
           {/* Row 5: TDS + MSME + Notes — all inline 5 cols */}
-          <div className="bg-gray-50 px-6 py-1.5">
-            <h3 className="typo-label-sm mb-1.5">TDS {showTCS ? '/ TCS ' : ''}/ MSME / Notes</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-start">
-              <div>
-                <label className="typo-label">&nbsp;</label>
+          <div className="bg-gray-50 px-6 py-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-start">
+              {showTDS && <div>
+                <label className="typo-label-sm">&nbsp;</label>
                 <CheckboxField name="tds_applicable" label="TDS Applicable" form={form} set={set} className="pt-1.5" />
-              </div>
-              {showMSME ? (
+              </div>}
+              {showTDS && showMSME ? (
                 <SelectField name="msme_type" label="MSME Type" options={MSME_TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} placeholder="Select" form={form} set={set} />
-              ) : (
+              ) : showTDS ? (
                 <div>
-                  <label className="typo-label">&nbsp;</label>
+                  <label className="typo-label-sm">&nbsp;</label>
                   <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} className="pt-1.5" />
                 </div>
-              )}
+              ) : null}
               {showMSME && form.msme_type && form.msme_type !== 'none' && (
                 <Field name="msme_reg_no" label="MSME Reg No." placeholder="e.g. UDYAM-XX-00-0000000" form={form} set={set} fieldErrors={fieldErrors} />
               )}
-              <div className={showMSME && form.msme_type && form.msme_type !== 'none' ? 'md:col-span-2' : 'md:col-span-3'}>
-                <label className="typo-label">Notes</label>
-                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className="typo-input" />
+              <div className={!showTDS ? 'md:col-span-5' : showMSME && form.msme_type && form.msme_type !== 'none' ? 'md:col-span-2' : 'md:col-span-3'}>
+                <label className="typo-label-sm">Notes</label>
+                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={1} placeholder="Any additional notes..." className="typo-input-sm" />
               </div>
             </div>
             {/* TDS expanded fields */}
-            {form.tds_applicable && (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2 items-end">
+            {showTDS && form.tds_applicable && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 items-end">
                 <SelectField name="tds_section" label="TDS Section" options={TDS_SECTIONS} placeholder="Select section" form={form} set={set} />
                 <Field name="tds_rate" label="TDS Rate (%)" type="number" placeholder={form.tds_section === '194C' ? '1 or 2' : form.tds_section === '194H' ? '5' : 'Rate'} form={form} set={set} fieldErrors={fieldErrors} />
                 {!form.pan_no && <p className="text-xs text-amber-600 md:col-span-3 pt-2">No PAN — TDS rate may be higher (20% or double rate)</p>}
@@ -924,7 +1014,7 @@ export default function PartyMastersPage() {
             )}
             {/* TCS expanded fields (customers only) */}
             {showTCS && (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-2 items-end">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 items-end">
                 <CheckboxField name="tcs_applicable" label="TCS Applicable" form={form} set={set} />
                 {form.tcs_applicable && (
                   <>

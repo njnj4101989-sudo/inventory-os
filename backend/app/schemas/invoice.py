@@ -102,6 +102,12 @@ class InvoiceResponse(BaseSchema):
     due_date: date | None = None
     payment_terms: str | None = None
     place_of_supply: str | None = None
+    broker_id: UUID | None = None
+    broker: dict | None = None
+    transport_id: UUID | None = None
+    transport: dict | None = None
+    lr_number: str | None = None
+    lr_date: date | None = None
     issued_at: datetime | None = None
     paid_at: datetime | None = None
     notes: str | None = None

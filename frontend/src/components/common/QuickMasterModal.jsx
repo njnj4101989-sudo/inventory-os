@@ -3,6 +3,8 @@ import Modal from './Modal'
 import { createColor, createFabric, createProductType, createValueAddition, createVAParty } from '../../api/masters'
 import { createSupplier } from '../../api/suppliers'
 import { createCustomer } from '../../api/customers'
+import { createBroker } from '../../api/brokers'
+import { createTransport } from '../../api/transports'
 
 const MASTER_CONFIG = {
   color: {
@@ -70,6 +72,24 @@ const MASTER_CONFIG = {
       { key: 'city', label: 'City', placeholder: 'e.g. Mumbai' },
     ],
     create: createCustomer,
+  },
+  broker: {
+    title: 'Add Broker',
+    fields: [
+      { key: 'name', label: 'Broker Name', required: true, placeholder: 'e.g. Rajesh Agencies', autoFocus: true },
+      { key: 'phone', label: 'Phone', placeholder: 'e.g. 9876543210' },
+      { key: 'city', label: 'City', placeholder: 'e.g. Mumbai' },
+    ],
+    create: createBroker,
+  },
+  transport: {
+    title: 'Add Transport',
+    fields: [
+      { key: 'name', label: 'Transport Name', required: true, placeholder: 'e.g. Maruti Transport', autoFocus: true },
+      { key: 'phone', label: 'Phone', placeholder: 'e.g. 9876543210' },
+      { key: 'city', label: 'City', placeholder: 'e.g. Surat' },
+    ],
+    create: createTransport,
   },
 }
 

@@ -70,13 +70,13 @@ export async function createOrder(data) {
   return client.post('/orders', data)
 }
 
-export async function shipOrder(id) {
+export async function shipOrder(id, data = null) {
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)
     if (order) order.status = 'shipped'
     return mockResponse(order, 'Order shipped')
   }
-  return client.post(`/orders/${id}/ship`)
+  return client.post(`/orders/${id}/ship`, data)
 }
 
 export async function cancelOrder(id) {

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
+import { getAllBrokers } from '../api/brokers'
+import { getAllTransports } from '../api/transports'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
@@ -12,6 +14,7 @@ import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
+import Modal from '../components/common/Modal'
 import useQuickMaster from '../hooks/useQuickMaster'
 import { useAuth } from '../hooks/useAuth'
 
@@ -148,17 +151,18 @@ export default function OrdersPage() {
   const [createMode, setCreateMode] = useState(false)
   const [allSKUs, setAllSKUs] = useState([])
   const [skuLoading, setSKULoading] = useState(false)
-  const [gridQty, setGridQty] = useState({})    // { sku_id: qty }
-  const [gridPrice, setGridPrice] = useState({}) // { skuId: price }
+  const [orderLines, setOrderLines] = useState([]) // [{ design_key, color, size, sku_id, qty, price }]
   const [nextOrderNo, setNextOrderNo] = useState('')
-  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0', discount_amount: '' })
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '' })
   const [customers, setCustomers] = useState([])
-  const [designSearch, setDesignSearch] = useState('')
-  const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
+  const [brokers, setBrokers] = useState([])
+  const [transports, setTransports] = useState([])
+  const [shipModalOpen, setShipModalOpen] = useState(false)
+  const [shipForm, setShipForm] = useState({ transport_id: '', lr_number: '', lr_date: '' })
+  const [shipError, setShipError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
-  const [deleteConfirmKey, setDeleteConfirmKey] = useState(null) // design key pending deletion
   const nameRef = useRef(null)
 
   // Quick master for customer Shift+M
@@ -168,6 +172,14 @@ export default function OrdersPage() {
         setCustomers(prev => [...prev, newItem])
         setCustomerForm(f => ({ ...f, customer_id: newItem.id }))
       }
+      if (type === 'broker') {
+        setBrokers(prev => [...prev, newItem])
+        setCustomerForm(f => ({ ...f, broker_id: newItem.id }))
+      }
+      if (type === 'transport') {
+        setTransports(prev => [...prev, newItem])
+        setCustomerForm(f => ({ ...f, transport_id: newItem.id }))
+      }
     }
   )
 
@@ -175,10 +187,9 @@ export default function OrdersPage() {
   const isDirty = useMemo(() => {
     if (customerForm.customer_id) return true
     if (customerForm.notes.trim()) return true
-    if (selectedDesigns.size > 0) return true
-    if (Object.values(gridQty).some(q => q > 0)) return true
+    if (orderLines.some(l => l.sku_id)) return true
     return false
-  }, [customerForm, selectedDesigns, gridQty])
+  }, [customerForm, orderLines])
 
   /* ── Safe close — confirm if dirty ── */
   const requestClose = useCallback(() => {
@@ -195,22 +206,17 @@ export default function OrdersPage() {
     setConfirmDiscard(false)
   }, [])
 
-  /* ── Confirm/cancel design deletion ── */
-  const confirmDeleteDesign = useCallback(() => {
-    if (!deleteConfirmKey) return
-    const removedKey = deleteConfirmKey
-    setDeleteConfirmKey(null)
-    removeDesign(removedKey)
-    // After removal, focus the next design's first cell or the picker search
-    setTimeout(() => {
-      const nextCell = document.querySelector('[data-design-block] [data-qty]')
-      if (nextCell) { nextCell.focus() }
-      else { document.querySelector('[data-design-search] input')?.focus() }
-    }, 60)
-  }, [deleteConfirmKey])
+  /* ── Line helpers ── */
+  const addOrderLine = useCallback(() => {
+    setOrderLines(prev => [...prev, { design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0 }])
+  }, [])
 
-  const cancelDeleteDesign = useCallback(() => {
-    setDeleteConfirmKey(null)
+  const updateOrderLine = useCallback((idx, field, value) => {
+    setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l))
+  }, [])
+
+  const removeOrderLine = useCallback((idx) => {
+    setOrderLines(prev => prev.filter((_, i) => i !== idx))
   }, [])
 
   /* ── Global keyboard: Ctrl+S, Escape ── */
@@ -223,15 +229,13 @@ export default function OrdersPage() {
       }
       if (e.key === 'Escape') {
         e.preventDefault()
-        // Dismiss innermost dialog first
-        if (deleteConfirmKey) { cancelDeleteDesign(); return }
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, deleteConfirmKey, requestClose, cancelDiscard, cancelDeleteDesign])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard])
 
   /* ── Auto-focus Name field on overlay open ── */
   useEffect(() => {
@@ -239,59 +243,6 @@ export default function OrdersPage() {
       setTimeout(() => nameRef.current?.focus(), 100)
     }
   }, [createMode, skuLoading])
-
-  /* ── Grid cell keyboard navigation ── */
-  const handleGridKeyDown = useCallback((e) => {
-    // Delete key → ask to remove this design
-    if (e.key === 'Delete') {
-      const blockKey = e.target.closest('[data-design-block]')?.dataset.designBlock
-      if (blockKey) setDeleteConfirmKey(blockKey)
-      return
-    }
-
-    if (e.key !== 'Enter' && e.key !== 'Tab') return
-    if (e.shiftKey) return // let Shift+Tab work naturally (backward)
-
-    e.preventDefault()
-    const grid = e.target.closest('[data-design-grid]')
-    if (!grid) return
-
-    // All qty inputs in this grid, in DOM order (handles gaps from missing SKUs)
-    const cells = [...grid.querySelectorAll('[data-qty]')]
-    const idx = cells.indexOf(e.target)
-
-    if (idx < cells.length - 1) {
-      // Next cell within this design
-      cells[idx + 1].focus()
-      cells[idx + 1].select()
-    } else {
-      // End of this design → jump to next design block's first cell
-      const currentBlock = grid.closest('[data-design-block]')
-      const allBlocks = [...document.querySelectorAll('[data-design-block]')]
-      const blockIdx = allBlocks.indexOf(currentBlock)
-      if (blockIdx < allBlocks.length - 1) {
-        const nextFirst = allBlocks[blockIdx + 1].querySelector('[data-qty]')
-        if (nextFirst) { nextFirst.focus(); nextFirst.select(); nextFirst.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
-      }
-      // Last design, last cell → focus Create button
-      document.querySelector('[data-create-btn]')?.focus()
-    }
-  }, [])
-
-  /* ── Customer field Enter → advance ── */
-  const handleCustomerKeyDown = useCallback((e, fieldName) => {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    const fields = ['customer_id', 'source', 'notes']
-    const idx = fields.indexOf(fieldName)
-    if (idx < fields.length - 1) {
-      const nextField = document.querySelector(`[data-customer-field="${fields[idx + 1]}"]`)
-      nextField?.focus()
-    } else {
-      // Last customer field → focus design search
-      document.querySelector('[data-design-search] input')?.focus()
-    }
-  }, [])
 
   useEffect(() => { loadColorMap() }, [])
 
@@ -345,9 +296,21 @@ export default function OrdersPage() {
 
   /* ── Ship / Cancel actions ── */
   const handleAction = async (type) => {
+    if (type === 'ship') {
+      if (transports.length === 0) {
+        getAllTransports().then(r => setTransports(r.data?.data || [])).catch(() => {})
+      }
+      setShipForm({
+        transport_id: detailOrder.transport_id || '',
+        lr_number: '',
+        lr_date: new Date().toISOString().split('T')[0],
+      })
+      setShipError(null)
+      setShipModalOpen(true)
+      return
+    }
     setActioning(true)
     try {
-      if (type === 'ship') await shipOrder(detailOrder.id)
       if (type === 'cancel') await cancelOrder(detailOrder.id)
       setDetailOrder(null)
       fetchData()
@@ -358,26 +321,50 @@ export default function OrdersPage() {
     }
   }
 
+  const handleShipConfirm = async () => {
+    if (!shipForm.lr_number?.trim()) {
+      setShipError('L.R. Number is required')
+      return
+    }
+    setActioning(true)
+    setShipError(null)
+    try {
+      await shipOrder(detailOrder.id, {
+        transport_id: shipForm.transport_id || null,
+        lr_number: shipForm.lr_number.trim(),
+        lr_date: shipForm.lr_date || null,
+      })
+      setShipModalOpen(false)
+      setDetailOrder(null)
+      fetchData()
+    } catch (err) {
+      setShipError(err.response?.data?.detail || 'Failed to ship order')
+    } finally {
+      setActioning(false)
+    }
+  }
+
   /* ── Create overlay: load SKUs ── */
   const openCreate = async () => {
     setCreateMode(true)
     setSKULoading(true)
-    setGridQty({})
-    setGridPrice({})
+    setOrderLines([{ design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0 }])
     setNextOrderNo('')
-    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0', discount_amount: '' })
-    setDesignSearch('')
-    setSelectedDesigns(new Set())
+    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '' })
     setFormError(null)
     try {
-      const [skuRes, custRes, numRes] = await Promise.all([
+      const [skuRes, custRes, numRes, brokersRes, transportsRes] = await Promise.all([
         getSKUs({ is_active: true, page_size: 500 }),
         getAllCustomers(),
         getNextOrderNumber().catch(() => ({ data: { data: { next_number: '' } } })),
+        getAllBrokers().catch(() => ({ data: { data: [] } })),
+        getAllTransports().catch(() => ({ data: { data: [] } })),
       ])
       setAllSKUs(skuRes.data.data || [])
       setCustomers(custRes.data.data || [])
       setNextOrderNo(numRes.data?.data?.next_number || numRes.data?.next_number || '')
+      setBrokers(brokersRes.data?.data || [])
+      setTransports(transportsRes.data?.data || [])
     } catch {
       setAllSKUs([])
       setCustomers([])
@@ -410,60 +397,51 @@ export default function OrdersPage() {
   }, [allSKUs])
 
 
-  /* ── Grid helpers ── */
-  const findSKU = (group, color, size) => {
-    return group.skus.find(s => s._parsed.color === color && s._parsed.size === size)
-  }
+  /* ── Design option builders for FilterSelect ── */
+  const designOptions = useMemo(() => {
+    return [{ value: '', label: 'Select design...' }, ...designGroups.map(g => {
+      const totalStock = g.skus.reduce((s, sku) => s + (sku.stock?.available_qty || 0), 0)
+      return { value: g.key, label: `${g.key} — ${g.colors.length}c · ${g.sizes.length}s · ${totalStock} in stock` }
+    })]
+  }, [designGroups])
 
-  const setQty = (skuId, qty) => {
-    setGridQty(prev => ({ ...prev, [skuId]: qty > 0 ? qty : 0 }))
-  }
+  const getColorsForDesign = useCallback((designKey, size) => {
+    const group = designGroups.find(g => g.key === designKey)
+    if (!group) return [{ value: '', label: 'Select color...' }]
+    // If size is picked, filter colors that have a SKU for that design+size
+    const colors = size
+      ? group.colors.filter(c => group.skus.some(s => s._parsed.color === c && s._parsed.size === size))
+      : group.colors
+    return [{ value: '', label: 'Select color...' }, ...colors.map(c => ({ value: c, label: c }))]
+  }, [designGroups])
 
-  const setPrice = (skuId, price) => {
-    setGridPrice(prev => ({ ...prev, [skuId]: price }))
-  }
+  const getSizesForDesign = useCallback((designKey, color) => {
+    const group = designGroups.find(g => g.key === designKey)
+    if (!group) return [{ value: '', label: 'Select size...' }]
+    // If color is picked, filter sizes that have a SKU for that design+color
+    const sizes = color
+      ? group.sizes.filter(sz => group.skus.some(s => s._parsed.color === color && s._parsed.size === sz))
+      : group.sizes
+    return [{ value: '', label: 'Select size...' }, ...sizes.map(s => ({ value: s, label: s }))]
+  }, [designGroups])
 
-  const addDesign = (key) => {
-    setSelectedDesigns(prev => new Set([...prev, key]))
-  }
-
-  const removeDesign = (key) => {
-    setSelectedDesigns(prev => { const next = new Set(prev); next.delete(key); return next })
-    // Clear qty for all SKUs in this design group
-    const group = designGroups.find(g => g.key === key)
-    if (group) {
-      setGridQty(prev => {
-        const next = { ...prev }
-        for (const sku of group.skus) delete next[sku.id]
-        return next
-      })
-    }
-  }
-
-  const selectedGroups = useMemo(() => {
-    return designGroups.filter(g => selectedDesigns.has(g.key))
-  }, [designGroups, selectedDesigns])
-
-  const pickerGroups = useMemo(() => {
-    if (!designSearch) return designGroups
-    const q = designSearch.toLowerCase()
-    return designGroups.filter(g => g.key.toLowerCase().includes(q) || g.design.toLowerCase().includes(q))
-  }, [designGroups, designSearch])
+  /* ── Resolve SKU from line's design_key + color + size ── */
+  const resolveLineSKU = useCallback((line) => {
+    if (!line.design_key || !line.color || !line.size) return null
+    const group = designGroups.find(g => g.key === line.design_key)
+    if (!group) return null
+    return group.skus.find(s => s._parsed.color === line.color && s._parsed.size === line.size) || null
+  }, [designGroups])
 
   /* ── Create submit ── */
   const handleCreate = async () => {
     setSaving(true)
     setFormError(null)
     try {
-      const items = []
-      for (const [skuId, qty] of Object.entries(gridQty)) {
-        if (qty <= 0) continue
-        const sku = allSKUs.find(s => s.id === skuId)
-        if (!sku) continue
-        const price = parseFloat(gridPrice[skuId]) || sku.base_price || 0
-        items.push({ sku_id: skuId, quantity: qty, unit_price: price })
-      }
-      if (!items.length) { setFormError('Add at least one item'); setSaving(false); return }
+      const items = orderLines
+        .filter(l => l.sku_id && l.qty > 0)
+        .map(l => ({ sku_id: l.sku_id, quantity: l.qty, unit_price: l.price || 0 }))
+      if (!items.length) { setFormError('Add at least one item with qty > 0'); setSaving(false); return }
       if (!customerForm.customer_id) { setFormError('Please select a customer'); setSaving(false); return }
 
       const cust = customers.find(c => c.id === customerForm.customer_id)
@@ -474,8 +452,8 @@ export default function OrdersPage() {
         customer_phone: cust?.phone || null,
         customer_address: cust?.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : null,
         order_date: customerForm.order_date || null,
-        broker_name: customerForm.broker_name?.trim() || null,
-        transport: customerForm.transport?.trim() || null,
+        broker_id: customerForm.broker_id || null,
+        transport_id: customerForm.transport_id || null,
         gst_percent: parseFloat(customerForm.gst_percent) || 0,
         discount_amount: parseFloat(customerForm.discount_amount) || 0,
         notes: customerForm.notes.trim() || null,
@@ -490,18 +468,8 @@ export default function OrdersPage() {
     }
   }
 
-  const totalItems = Object.values(gridQty).reduce((s, q) => s + (q > 0 ? q : 0), 0)
-  const grandTotal = useMemo(() => {
-    let sum = 0
-    for (const [skuId, qty] of Object.entries(gridQty)) {
-      if (qty <= 0) continue
-      const sku = allSKUs.find(s => s.id === skuId)
-      if (!sku) continue
-      const price = parseFloat(gridPrice[skuId]) || sku.base_price || 0
-      sum += qty * price
-    }
-    return sum
-  }, [gridQty, gridPrice, allSKUs])
+  const totalItems = useMemo(() => orderLines.reduce((s, l) => s + (l.qty > 0 ? l.qty : 0), 0), [orderLines])
+  const grandTotal = useMemo(() => orderLines.reduce((s, l) => s + (l.qty > 0 ? l.qty * (l.price || 0) : 0), 0), [orderLines])
 
   /* ═══════════════════════ DETAIL OVERLAY ═══════════════════════ */
   if (detailOrder) {
@@ -548,16 +516,22 @@ export default function OrdersPage() {
                 <p className="typo-label-sm">Address</p>
                 <p className="typo-body">{o.customer_address || o.customer?.city || '—'}</p>
               </div>
-              {o.broker_name && (
+              {(o.broker?.name || o.broker_name) && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">Broker</p>
-                  <p className="typo-body">{o.broker_name}</p>
+                  <p className="typo-body">{o.broker?.name || o.broker_name}</p>
                 </div>
               )}
-              {o.transport && (
+              {(o.transport_detail?.name || o.transport) && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">Transport</p>
-                  <p className="typo-body">{o.transport}</p>
+                  <p className="typo-body">{o.transport_detail?.name || o.transport}</p>
+                </div>
+              )}
+              {o.lr_number && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">L.R. No.</p>
+                  <p className="typo-body">{o.lr_number}{o.lr_date ? ` (${new Date(o.lr_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}</p>
                 </div>
               )}
               {(o.gst_percent || 0) > 0 && (
@@ -694,6 +668,39 @@ export default function OrdersPage() {
               </div>
             )}
 
+            {/* Ship Modal */}
+            <Modal open={shipModalOpen} onClose={() => setShipModalOpen(false)} title="Ship Order" actions={
+              <>
+                <button onClick={() => setShipModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleShipConfirm} disabled={actioning}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50">
+                  {actioning ? 'Shipping...' : 'Confirm Ship'}
+                </button>
+              </>
+            }>
+              {shipError && <ErrorAlert message={shipError} onDismiss={() => setShipError(null)} />}
+              <div className="space-y-3">
+                <div>
+                  <label className="typo-label-sm">Transport</label>
+                  <FilterSelect searchable full data-master="transport"
+                    value={shipForm.transport_id}
+                    onChange={v => setShipForm(f => ({ ...f, transport_id: v }))}
+                    options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+                </div>
+                <div>
+                  <label className="typo-label-sm">L.R. Number <span className="text-red-500">*</span></label>
+                  <input className="typo-input-sm" value={shipForm.lr_number}
+                    onChange={e => setShipForm(f => ({ ...f, lr_number: e.target.value }))}
+                    placeholder="Lorry receipt number" autoFocus />
+                </div>
+                <div>
+                  <label className="typo-label-sm">L.R. Date</label>
+                  <input type="date" className="typo-input-sm" value={shipForm.lr_date}
+                    onChange={e => setShipForm(f => ({ ...f, lr_date: e.target.value }))} />
+                </div>
+              </div>
+            </Modal>
+
             {/* Invoice link for shipped orders */}
             {o.invoices?.length > 0 && (
               <div className="flex items-center justify-between pt-3 border-t">
@@ -716,14 +723,14 @@ export default function OrdersPage() {
   /* ═══════════════════════ CREATE OVERLAY ═══════════════════════ */
   if (createMode) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-hidden">
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 overflow-hidden">
         {/* ── Discard confirmation bar ── */}
         {confirmDiscard && (
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
               <h3 className="typo-data">Discard this order?</h3>
               <p className="text-xs text-gray-500">
-                You have <span className="font-semibold text-gray-700">{totalItems}</span> item{totalItems !== 1 ? 's' : ''} across <span className="font-semibold text-gray-700">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''}. This cannot be undone.
+                You have <span className="font-semibold text-gray-700">{orderLines.filter(l => l.sku_id).length}</span> item{orderLines.filter(l => l.sku_id).length !== 1 ? 's' : ''} in this order. This cannot be undone.
               </p>
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={confirmAndClose}
@@ -740,27 +747,46 @@ export default function OrdersPage() {
         )}
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
-          <div>
-            <h1 className="typo-modal-title text-white leading-tight">New Order</h1>
-            <p className="text-xs opacity-80">Pick designs &middot; set qty per color &times; size</p>
+        <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={requestClose} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">New Order</h2>
+              <p className="text-xs text-emerald-100">Pick designs &middot; set qty per color &times; size</p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={requestClose} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Cancel</button>
+          <div className="flex items-center gap-3">
+            {totalItems > 0 && (
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{orderLines.filter(l => l.sku_id).length} items</span>
+                <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{totalItems} pcs</span>
+                <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">₹{grandTotal.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+            <span className="hidden sm:inline text-xs text-emerald-200">Ctrl+S to save</span>
+            <button onClick={requestClose} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={saving || totalItems === 0}
-              className="rounded bg-white text-emerald-700 px-4 py-1.5 typo-btn-sm hover:bg-emerald-50 disabled:opacity-50 transition-colors">
-              {saving ? 'Creating...' : 'Create Order'}
+              className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+              {saving ? 'Creating...' : `Create Order (${totalItems})`}
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 pb-16">
-          {formError && <div className="mb-2"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
           {/* Order Details — same layout as Purchase form */}
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
-            <h3 className="typo-card-title mb-3">Order Details</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="px-3 py-2 flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Order Details</span>
+                <span className="text-[10px] text-gray-300">&middot;</span>
+                <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-200 rounded text-[9px]">Shift+M</kbd> quick-add master</span>
+              </div>
+            </div>
+            <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="sm:col-span-2">
                 <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
                 <FilterSelect full value={customerForm.customer_id}
@@ -785,15 +811,17 @@ export default function OrdersPage() {
               </div>
               <div>
                 <label className="typo-label-sm">Broker</label>
-                <input className="typo-input-sm" value={customerForm.broker_name || ''}
-                  onChange={(e) => setCustomerForm(f => ({ ...f, broker_name: e.target.value }))}
-                  placeholder="Broker name" />
+                <FilterSelect searchable full data-master="broker"
+                  value={customerForm.broker_id}
+                  onChange={(v) => setCustomerForm(f => ({ ...f, broker_id: v }))}
+                  options={[{ value: '', label: 'Select Broker' }, ...brokers.map(b => ({ value: b.id, label: b.name }))]} />
               </div>
               <div>
                 <label className="typo-label-sm">Transport</label>
-                <input className="typo-input-sm" value={customerForm.transport || ''}
-                  onChange={(e) => setCustomerForm(f => ({ ...f, transport: e.target.value }))}
-                  placeholder="Transport / courier" />
+                <FilterSelect searchable full data-master="transport"
+                  value={customerForm.transport_id}
+                  onChange={(v) => setCustomerForm(f => ({ ...f, transport_id: v }))}
+                  options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
               </div>
               <div>
                 <label className="typo-label-sm">GST %</label>
@@ -805,10 +833,12 @@ export default function OrdersPage() {
             {customerForm.customer_id && (() => {
               const c = customers.find(cu => cu.id === customerForm.customer_id)
               return c ? (
-                <div className="mt-2 flex items-center gap-4 text-xs text-gray-500 bg-gray-50 rounded px-3 py-1.5">
-                  {c.phone && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>{c.phone}</span>}
-                  {c.gst_no && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>GST: {c.gst_no}</span>}
-                  {c.city && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>{c.city}</span>}
+                <div className="px-4 pb-3 flex items-center gap-4 text-xs text-gray-500 bg-gray-50/50 border-t border-gray-100 -mt-px">
+                  <div className="flex items-center gap-4 px-3 py-1.5">
+                    {c.phone && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>{c.phone}</span>}
+                    {c.gst_no && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>GST: {c.gst_no}</span>}
+                    {c.city && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>{c.city}</span>}
+                  </div>
                 </div>
               ) : null
             })()}
@@ -824,276 +854,172 @@ export default function OrdersPage() {
             </div>
           ) : (
             <>
-              {/* ── Design Picker ── */}
-              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="typo-card-title">Select Designs</h3>
-                  <span className="typo-badge bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{designGroups.length} designs available</span>
+              {/* ── Line Items — inline row-based ── */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({orderLines.filter(l => l.sku_id).length} items)</span>
+                  <button onClick={addOrderLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add Row
+                  </button>
                 </div>
-                <div className="mb-2" data-design-search>
-                  <SearchInput value={designSearch} onChange={setDesignSearch} placeholder="Search by design number (e.g. 101, 702)..." />
-                </div>
-                <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/50 p-2">
-                  {pickerGroups.length === 0 ? (
-                    <p className="text-center py-6 text-gray-400 text-sm">No designs match your search.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                      {pickerGroups.map(group => {
-                        const isSelected = selectedDesigns.has(group.key)
-                        const firstSku = group.skus[0]
-                        const defaultPrice = firstSku?.base_price || 0
-                        const totalStock = group.skus.reduce((s, sku) => s + (sku.stock?.available_qty || 0), 0)
-                        const totalPipeline = group.skus.reduce((s, sku) => s + (sku.stock?.pipeline_qty || 0), 0)
-                        return (
-                          <button
-                            key={group.key}
-                            onClick={() => !isSelected && addDesign(group.key)}
-                            disabled={isSelected}
-                            className={`rounded-lg border p-2.5 text-left transition-all ${
-                              isSelected
-                                ? 'border-emerald-300 bg-emerald-50/60 opacity-60 cursor-default'
-                                : 'border-gray-200 bg-white hover:border-emerald-400 hover:shadow-sm cursor-pointer'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="typo-data">{group.key}</span>
-                              {isSelected && (
-                                <span className="typo-badge text-emerald-600 bg-emerald-100 rounded px-1.5 py-0.5">Added</span>
-                              )}
+                <table className="w-full table-fixed">
+                  <thead>
+                    <tr className="bg-emerald-600">
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[3%] border-r border-emerald-500">#</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[20%] border-r border-emerald-500">Design</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[13%] border-r border-emerald-500">Color</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Size</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[8%] border-r border-emerald-500">Stock</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[8%] border-r border-emerald-500">Pipeline</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Qty</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Price (₹)</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Total</th>
+                      <th className="px-1 py-2 w-[4%]"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderLines.map((line, idx) => {
+                      const sku = resolveLineSKU(line)
+                      const avail = sku?.stock?.available_qty || 0
+                      const pipeQty = sku?.stock?.pipeline_qty || 0
+                      const lineTotal = line.qty * (line.price || 0)
+                      const isShort = line.qty > 0 && line.qty > avail
+                      return (
+                        <tr key={idx} className={`border-b border-gray-100 hover:bg-gray-50/50 ${idx % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                          <td className="px-2 py-1.5 typo-td-secondary">{idx + 1}</td>
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full searchable value={line.design_key}
+                              onChange={v => {
+                                const group = designGroups.find(g => g.key === v)
+                                const defaultPrice = group?.skus[0]?.base_price || 0
+                                updateOrderLine(idx, 'design_key', v)
+                                updateOrderLine(idx, 'color', '')
+                                updateOrderLine(idx, 'size', '')
+                                updateOrderLine(idx, 'sku_id', null)
+                                updateOrderLine(idx, 'price', defaultPrice)
+                                // Reset color/size so user picks fresh
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, design_key: v, color: '', size: '', sku_id: null, price: defaultPrice } : l))
+                              }}
+                              options={designOptions} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full value={line.color}
+                              onChange={v => {
+                                setOrderLines(prev => prev.map((l, i) => {
+                                  if (i !== idx) return l
+                                  const group = designGroups.find(g => g.key === l.design_key)
+                                  // If size already picked, resolve SKU immediately
+                                  const foundSku = l.size && group ? group.skus.find(s => s._parsed.color === v && s._parsed.size === l.size) : null
+                                  return { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price }
+                                }))
+                              }}
+                              options={getColorsForDesign(line.design_key, line.size)} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full value={line.size}
+                              onChange={v => {
+                                setOrderLines(prev => prev.map((l, i) => {
+                                  if (i !== idx) return l
+                                  const group = designGroups.find(g => g.key === l.design_key)
+                                  // If color already picked, resolve SKU immediately
+                                  const foundSku = l.color && group ? group.skus.find(s => s._parsed.color === l.color && s._parsed.size === v) : null
+                                  return { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price }
+                                }))
+                              }}
+                              options={getSizesForDesign(line.design_key, line.color)} />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            {sku ? <span className={`text-xs font-medium ${avail > 0 ? 'text-green-600' : 'text-red-400'}`}>{avail}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            {sku && pipeQty > 0 ? <span className="text-xs font-medium text-blue-500">+{pipeQty}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <div className="inline-flex flex-col items-center">
+                              <input type="number" min="0" data-qty="true"
+                                value={line.qty || ''} onChange={(e) => updateOrderLine(idx, 'qty', parseInt(e.target.value) || 0)}
+                                className={`w-20 rounded border text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
+                                  line.qty > 0
+                                    ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
+                                    : 'border-gray-200 focus:ring-gray-300'
+                                }`}
+                                placeholder="0" disabled={!sku} />
+                              {isShort && <span className="text-[10px] text-amber-600 font-semibold mt-0.5">{line.qty - avail} short</span>}
                             </div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="typo-caption">{group.colors.length}c &middot; {group.sizes.length}s</span>
-                              {defaultPrice > 0 && <span className="typo-caption">&middot; ₹{defaultPrice}</span>}
-                              <span className={`typo-caption font-medium ${totalStock > 0 ? 'text-green-600' : 'text-red-400'}`}>&middot; {totalStock} in stock</span>
-                              {totalPipeline > 0 && <span className="typo-caption font-medium text-blue-500">&middot; {totalPipeline} in pipeline</span>}
-                            </div>
-                            {firstSku?._parsed.vas.length > 0 && (
-                              <div className="flex gap-1 mt-1">
-                                {firstSku._parsed.vas.map(va => {
-                                  const c = VA_COLORS[va] || DEFAULT_VA
-                                  return <span key={va} className={`rounded px-1 py-0.5 typo-badge leading-none ${c.bg} ${c.text}`}>+{va}</span>
-                                })}
-                              </div>
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <input type="number" min="0" step="0.01"
+                              value={line.price || ''}
+                              onChange={(e) => updateOrderLine(idx, 'price', parseFloat(e.target.value) || 0)}
+                              className="w-20 rounded border border-gray-200 text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                              placeholder="₹" disabled={!sku} />
+                          </td>
+                          <td className="px-2 py-1.5 text-right text-xs font-semibold">
+                            {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-1 py-1.5">
+                            {orderLines.length > 1 && (
+                              <button onClick={() => removeOrderLine(idx)} tabIndex={-1}
+                                className="text-gray-400 hover:text-red-500 transition-colors p-0.5">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
                             )}
-                          </button>
-                        )
-                      })}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Totals */}
+                <div className="px-4 py-3 flex justify-end border-t border-gray-200">
+                  <div className="w-56 space-y-1.5">
+                    <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    <div className="flex justify-between items-center typo-td-secondary">
+                      <span>Discount</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400">₹</span>
+                        <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
+                          value={customerForm.discount_amount}
+                          onChange={(e) => setCustomerForm(f => ({ ...f, discount_amount: e.target.value }))}
+                          placeholder="0.00" />
+                      </div>
                     </div>
-                  )}
+                    {(() => {
+                      const gstPct = parseFloat(customerForm.gst_percent) || 0
+                      const discountAmt = parseFloat(customerForm.discount_amount) || 0
+                      const taxable = grandTotal - discountAmt
+                      const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
+                      return (<>
+                        {gstPct > 0 && (<>
+                          <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                          <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                        </>)}
+                        <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{(taxable + gstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                      </>)
+                    })()}
+                  </div>
                 </div>
               </div>
 
-              {/* ── Selected Designs — color×size grids ── */}
-              {selectedGroups.length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 space-y-3">
-                  <h3 className="typo-card-title">Order Items ({selectedGroups.length} design{selectedGroups.length > 1 ? 's' : ''})</h3>
-                  {selectedGroups.map(group => {
-                    const groupSubtotal = group.skus.reduce((s, sku) => {
-                      const qty = gridQty[sku.id] || 0
-                      const price = parseFloat(gridPrice[sku.id]) || sku.base_price || 0
-                      return s + qty * price
-                    }, 0)
-                    const groupQty = group.skus.reduce((s, sku) => s + (gridQty[sku.id] || 0), 0)
-                    const firstSku = group.skus[0]
-                    const defaultPrice = firstSku?.base_price || 0
-
-                    return (
-                      <div key={group.key} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden" data-design-block={group.key}>
-                        {/* Design header — inline delete confirmation or normal */}
-                        {deleteConfirmKey === group.key ? (
-                          <div className="bg-red-50 border-b border-red-200 px-3 py-2 flex items-center justify-between">
-                            <span className="typo-btn-sm text-red-700">Remove <span className="font-bold">{group.key}</span>{groupQty > 0 ? ` (${groupQty} items)` : ''}?</span>
-                            <div className="flex items-center gap-2">
-                              <button onClick={confirmDeleteDesign}
-                                className="rounded border border-red-300 text-red-600 px-3 py-1 typo-btn-sm hover:bg-red-100 transition-colors">
-                                Remove
-                              </button>
-                              <button onClick={cancelDeleteDesign} autoFocus
-                                className="rounded bg-gray-600 text-white px-3 py-1 typo-btn-sm hover:bg-gray-700 transition-colors">
-                                Keep
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="bg-emerald-600 px-3 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-white font-bold text-sm">{group.key}</span>
-                              <span className="text-emerald-200 text-xs">{group.colors.length}c &middot; {group.sizes.length}s</span>
-                              {group.skus[0]?._parsed.vas.length > 0 && (
-                                <span className="flex gap-1">
-                                  {group.skus[0]._parsed.vas.map(va => {
-                                    const c = VA_COLORS[va] || DEFAULT_VA
-                                    return <span key={va} className={`rounded px-1 py-0.5 typo-badge ${c.bg} ${c.text}`}>+{va}</span>
-                                  })}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {groupQty > 0 && (
-                                <span className="text-xs font-semibold text-white bg-white/20 rounded px-2 py-0.5">{groupQty} pcs &middot; ₹{groupSubtotal.toLocaleString('en-IN')}</span>
-                              )}
-                              <button onClick={() => setDeleteConfirmKey(group.key)} tabIndex={-1}
-                                className="rounded p-1 text-emerald-200 hover:bg-white/20 hover:text-white transition-colors" title="Remove design (Del)">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Line items table */}
-                        <div className="overflow-x-auto" data-design-grid={group.key}>
-                          <table className="w-full table-fixed">
-                            <thead>
-                              <tr className="bg-gray-100 border-b border-gray-200">
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[20%]">Color</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[8%]">Size</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%]">Stock</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%]">Pipeline</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[18%]">Qty</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[18%]">Price (₹)</th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[16%]">Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {group.colors.flatMap((color, cIdx) =>
-                                group.sizes.map((size, sIdx) => {
-                                  const sku = findSKU(group, color, size)
-                                  if (!sku) return null
-                                  const avail = sku.stock?.available_qty || 0
-                                  const pipeQty = sku.stock?.pipeline_qty || 0
-                                  const qty = gridQty[sku.id] || 0
-                                  const price = parseFloat(gridPrice[sku.id]) || sku.base_price || 0
-                                  const lineTotal = qty * price
-                                  const isShort = qty > 0 && qty > avail
-                                  return (
-                                    <tr key={sku.id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                                      <td className="px-3 py-1.5">
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
-                                          <span className="text-xs font-medium">{color}</span>
-                                        </span>
-                                      </td>
-                                      <td className="px-2 py-1.5 text-xs font-semibold">{size}</td>
-                                      <td className="px-2 py-1.5 text-center">
-                                        <span className={`text-xs font-medium ${avail > 0 ? 'text-green-600' : 'text-red-400'}`}>{avail}</span>
-                                      </td>
-                                      <td className="px-2 py-1.5 text-center">
-                                        {pipeQty > 0 ? <span className="text-xs font-medium text-blue-500">+{pipeQty}</span> : <span className="text-gray-300">—</span>}
-                                      </td>
-                                      <td className="px-2 py-1.5 text-center">
-                                        <div className="inline-flex flex-col items-center">
-                                          <input type="number" min="0" data-qty="true" data-grid-row={cIdx} data-grid-col={sIdx}
-                                            value={qty || ''} onChange={(e) => setQty(sku.id, parseInt(e.target.value) || 0)}
-                                            onKeyDown={handleGridKeyDown}
-                                            className={`w-20 rounded border text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
-                                              qty > 0
-                                                ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
-                                                : 'border-gray-200 focus:ring-gray-300'
-                                            }`}
-                                            placeholder="0" />
-                                          {isShort && <span className="text-[10px] text-amber-600 font-semibold mt-0.5">{qty - avail} short</span>}
-                                        </div>
-                                      </td>
-                                      <td className="px-2 py-1.5 text-center">
-                                        <input type="number" min="0" step="0.01"
-                                          value={gridPrice[sku.id] ?? (sku.base_price || '')}
-                                          onChange={(e) => setPrice(sku.id, e.target.value)}
-                                          className="w-20 rounded border border-gray-200 text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                                          placeholder="₹" />
-                                      </td>
-                                      <td className="px-2 py-1.5 text-right text-xs font-semibold">
-                                        {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}
-                                      </td>
-                                    </tr>
-                                  )
-                                })
-                              ).filter(Boolean)}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {selectedGroups.length === 0 && (
-                <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg mt-2 bg-white">
-                  <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                  <p className="typo-body text-gray-400">Click a design card above to add it to the order</p>
-                </div>
-              )}
-
-              {/* Notes + Order Summary — side by side like reference */}
-              {totalItems > 0 && (() => {
-                const gstPct = parseFloat(customerForm.gst_percent) || 0
-                const discountAmt = parseFloat(customerForm.discount_amount) || 0
-                const taxable = grandTotal - discountAmt
-                const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
-                const orderTotal = taxable + gstAmt
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                      <h4 className="typo-label-sm mb-2">Notes</h4>
-                      <textarea className="typo-input-sm w-full h-28 resize-none" value={customerForm.notes}
-                        onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
-                        placeholder="Remarks..." />
-                    </div>
-                    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-                      <h4 className="typo-label-sm mb-2">Order Summary</h4>
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                        <div className="flex justify-between items-center typo-td-secondary">
-                          <span>Discount</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-gray-400">₹</span>
-                            <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
-                              value={customerForm.discount_amount}
-                              onChange={(e) => setCustomerForm(f => ({ ...f, discount_amount: e.target.value }))}
-                              placeholder="0.00" />
-                          </div>
-                        </div>
-                        {gstPct > 0 && (
-                          <>
-                            <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                            <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                          </>
-                        )}
-                        <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2 font-bold">
-                          <span>Grand Total</span>
-                          <span className="text-emerald-700">₹{orderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
+              {/* Notes */}
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden px-4 py-3">
+                <h4 className="typo-label-sm mb-2">Notes</h4>
+                <textarea className="typo-input-sm w-full h-20 resize-none" value={customerForm.notes}
+                  onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Remarks..." />
+              </div>
             </>
           )}
         </div>
 
-        {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t bg-white px-4 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="text-xs text-gray-600">
-                <span className="font-semibold text-gray-800">{selectedDesigns.size}</span> design{selectedDesigns.size !== 1 ? 's' : ''} &middot; <span className="font-semibold text-gray-800">{totalItems}</span> items
-              </div>
-              <div className="hidden md:flex items-center gap-3 typo-caption">
-                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Tab</kbd> Next cell</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Del</kbd> Remove design</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
-                <span><kbd className="rounded border border-gray-300 bg-gray-50 px-1 py-0.5 text-[10px] font-mono">Esc</kbd> Close</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-base font-bold text-gray-800">₹{grandTotal.toLocaleString('en-IN')}</span>
-              <button onClick={requestClose} className="rounded border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={handleCreate} disabled={saving || totalItems === 0} data-create-btn
-                className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                {saving ? 'Creating...' : 'Create Order'}
-              </button>
-            </div>
+        {/* Keyboard shortcuts bar */}
+        <div className="flex-shrink-0 border-t bg-white px-6 py-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+            <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Tab</kbd> Next field</span>
+            <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Ctrl+S</kbd> Save</span>
+            <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono">Esc</kbd> Close</span>
           </div>
         </div>
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
