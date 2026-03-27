@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder } from '../api/orders'
+import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
@@ -76,40 +76,7 @@ function KPICard({ label, value, sub, color = 'slate' }) {
   )
 }
 
-function GridCell({ available, pipelineQty, qty, onChange, onKeyDown, 'data-grid-row': gridRow, 'data-grid-col': gridCol }) {
-  const hasStock = available > 0
-  const isShort = qty > 0 && qty > available
-  const shortAmt = isShort ? qty - available : 0
-  return (
-    <div className="flex flex-col items-center gap-0">
-      <input
-        type="number"
-        min="0"
-        value={qty || ''}
-        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
-        onKeyDown={onKeyDown}
-        data-qty="true"
-        data-grid-row={gridRow}
-        data-grid-col={gridCol}
-        className={`w-14 rounded border text-center text-xs py-0.5 focus:outline-none focus:ring-1 ${
-          qty > 0
-            ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
-            : 'border-gray-200 focus:ring-gray-300'
-        }`}
-        placeholder="0"
-      />
-      <span className={`typo-caption leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
-        {available}
-      </span>
-      {pipelineQty > 0 && (
-        <span className="typo-caption leading-tight text-blue-500" title="In production pipeline">+{pipelineQty}</span>
-      )}
-      {isShort && (
-        <span className="typo-caption leading-tight text-amber-600 font-semibold">{shortAmt} short</span>
-      )}
-    </div>
-  )
-}
+/* GridCell removed — replaced by flat line-items table */
 
 /* ── DataTable columns ── */
 
@@ -180,8 +147,9 @@ export default function OrdersPage() {
   const [allSKUs, setAllSKUs] = useState([])
   const [skuLoading, setSKULoading] = useState(false)
   const [gridQty, setGridQty] = useState({})    // { sku_id: qty }
-  const [gridPrice, setGridPrice] = useState({}) // { designKey: price }
-  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '' })
+  const [gridPrice, setGridPrice] = useState({}) // { skuId: price }
+  const [nextOrderNo, setNextOrderNo] = useState('')
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '' })
   const [customers, setCustomers] = useState([])
   const [designSearch, setDesignSearch] = useState('')
   const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
@@ -394,17 +362,20 @@ export default function OrdersPage() {
     setSKULoading(true)
     setGridQty({})
     setGridPrice({})
-    setCustomerForm({ customer_id: '', source: 'web', notes: '' })
+    setNextOrderNo('')
+    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '' })
     setDesignSearch('')
     setSelectedDesigns(new Set())
     setFormError(null)
     try {
-      const [skuRes, custRes] = await Promise.all([
+      const [skuRes, custRes, numRes] = await Promise.all([
         getSKUs({ is_active: true, page_size: 500 }),
         getAllCustomers(),
+        getNextOrderNumber().catch(() => ({ data: { data: { next_number: '' } } })),
       ])
       setAllSKUs(skuRes.data.data || [])
       setCustomers(custRes.data.data || [])
+      setNextOrderNo(numRes.data?.data?.next_number || numRes.data?.next_number || '')
     } catch {
       setAllSKUs([])
       setCustomers([])
@@ -446,8 +417,8 @@ export default function OrdersPage() {
     setGridQty(prev => ({ ...prev, [skuId]: qty > 0 ? qty : 0 }))
   }
 
-  const setPrice = (designKey, price) => {
-    setGridPrice(prev => ({ ...prev, [designKey]: price }))
+  const setPrice = (skuId, price) => {
+    setGridPrice(prev => ({ ...prev, [skuId]: price }))
   }
 
   const addDesign = (key) => {
@@ -487,9 +458,7 @@ export default function OrdersPage() {
         if (qty <= 0) continue
         const sku = allSKUs.find(s => s.id === skuId)
         if (!sku) continue
-        const p = parseSKU(sku.sku_code)
-        const designKey = `${p.type}-${p.design}`
-        const price = parseFloat(gridPrice[designKey]) || sku.base_price || 0
+        const price = parseFloat(gridPrice[skuId]) || sku.base_price || 0
         items.push({ sku_id: skuId, quantity: qty, unit_price: price })
       }
       if (!items.length) { setFormError('Add at least one item'); setSaving(false); return }
@@ -502,6 +471,9 @@ export default function OrdersPage() {
         customer_name: cust?.name || null,
         customer_phone: cust?.phone || null,
         customer_address: cust?.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : null,
+        order_date: customerForm.order_date || null,
+        broker_name: customerForm.broker_name?.trim() || null,
+        transport: customerForm.transport?.trim() || null,
         notes: customerForm.notes.trim() || null,
         items,
       })
@@ -521,9 +493,7 @@ export default function OrdersPage() {
       if (qty <= 0) continue
       const sku = allSKUs.find(s => s.id === skuId)
       if (!sku) continue
-      const p = parseSKU(sku.sku_code)
-      const designKey = `${p.type}-${p.design}`
-      const price = parseFloat(gridPrice[designKey]) || sku.base_price || 0
+      const price = parseFloat(gridPrice[skuId]) || sku.base_price || 0
       sum += qty * price
     }
     return sum
@@ -714,32 +684,49 @@ export default function OrdersPage() {
         <div className="flex-1 overflow-auto p-4 pb-16">
           {formError && <div className="mb-2"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
-          {/* Customer section */}
+          {/* Order Details */}
           <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
-            <h3 className="typo-card-title mb-3">Customer Details</h3>
+            <h3 className="typo-card-title mb-3">Order Details</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="sm:col-span-2">
-                <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
-                <FilterSelect full value={customerForm.customer_id}
-                  data-customer-field="customer_id"
-                  data-master="customer"
-                  onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
-                  options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
+              <div>
+                <label className="typo-label-sm">Order No.</label>
+                <input className="typo-input-sm bg-gray-50 text-gray-500" value={nextOrderNo} readOnly placeholder="Auto-generated" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Order Date</label>
+                <input type="date" className="typo-input-sm" value={customerForm.order_date}
+                  onChange={(e) => setCustomerForm(f => ({ ...f, order_date: e.target.value }))} />
               </div>
               <div>
                 <label className="typo-label-sm">Source</label>
                 <FilterSelect full value={customerForm.source}
-                  data-customer-field="source"
                   onChange={(v) => setCustomerForm(f => ({ ...f, source: v }))}
                   options={[{ value: 'web', label: 'Web' }, { value: 'ecommerce', label: 'E-commerce' }, { value: 'walk_in', label: 'Walk-in' }]} />
               </div>
               <div>
                 <label className="typo-label-sm">Notes</label>
                 <input type="text" className="typo-input-sm" value={customerForm.notes}
-                  data-customer-field="notes"
                   onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'notes')}
                   placeholder="Optional notes" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
+                <FilterSelect full value={customerForm.customer_id}
+                  data-master="customer"
+                  onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
+                  options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">Broker</label>
+                <input type="text" className="typo-input-sm" value={customerForm.broker_name || ''}
+                  onChange={(e) => setCustomerForm(f => ({ ...f, broker_name: e.target.value }))}
+                  placeholder="Broker name" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Transport</label>
+                <input type="text" className="typo-input-sm" value={customerForm.transport || ''}
+                  onChange={(e) => setCustomerForm(f => ({ ...f, transport: e.target.value }))}
+                  placeholder="Transport / courier" />
               </div>
             </div>
             {customerForm.customer_id && (() => {
@@ -752,6 +739,7 @@ export default function OrdersPage() {
                 </div>
               ) : null
             })()}
+            </div>
           </div>
 
           {skuLoading ? (
@@ -830,9 +818,7 @@ export default function OrdersPage() {
                   {selectedGroups.map(group => {
                     const groupSubtotal = group.skus.reduce((s, sku) => {
                       const qty = gridQty[sku.id] || 0
-                      const p = parseSKU(sku.sku_code)
-                      const designKey = `${p.type}-${p.design}`
-                      const price = parseFloat(gridPrice[designKey]) || sku.base_price || 0
+                      const price = parseFloat(gridPrice[sku.id]) || sku.base_price || 0
                       return s + qty * price
                     }, 0)
                     const groupQty = group.skus.reduce((s, sku) => s + (gridQty[sku.id] || 0), 0)
@@ -871,28 +857,6 @@ export default function OrdersPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-1.5">
-                                <label className="text-emerald-100 text-xs font-medium">₹/pc</label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  data-price-input="true"
-                                  tabIndex={-1}
-                                  value={gridPrice[group.key] ?? (defaultPrice || '')}
-                                  onChange={(e) => setPrice(group.key, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Delete') { setDeleteConfirmKey(group.key); return }
-                                    if (e.key !== 'Enter' && e.key !== 'Tab') return
-                                    if (e.shiftKey) return
-                                    e.preventDefault()
-                                    const block = e.target.closest('[data-design-block]')
-                                    const firstCell = block?.querySelector('[data-qty]')
-                                    if (firstCell) { firstCell.focus(); firstCell.select() }
-                                  }}
-                                  className="w-20 rounded border border-emerald-400 bg-white/90 px-2 py-1 text-xs text-right focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
-                                  placeholder="₹"
-                                />
-                              </div>
                               {groupQty > 0 && (
                                 <span className="text-xs font-semibold text-white bg-white/20 rounded px-2 py-0.5">{groupQty} pcs &middot; ₹{groupSubtotal.toLocaleString('en-IN')}</span>
                               )}
@@ -904,41 +868,72 @@ export default function OrdersPage() {
                           </div>
                         )}
 
-                        {/* Grid: colors × sizes */}
+                        {/* Line items table */}
                         <div className="overflow-x-auto" data-design-grid={group.key}>
-                          <table className="w-full text-xs">
+                          <table className="w-full">
                             <thead>
                               <tr className="bg-gray-100 border-b border-gray-200">
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-32">Color</th>
-                                {group.sizes.map(size => (
-                                  <th key={size} className="px-1 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">{size}</th>
-                                ))}
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Color</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Size</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Pipeline</th>
+                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Qty</th>
+                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Price (₹)</th>
+                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y">
-                              {group.colors.map((color, cIdx) => (
-                                <tr key={color} className="hover:bg-gray-50/50 border-b border-gray-100">
-                                  <td className="px-3 py-1.5">
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
-                                      <span className="typo-td font-medium">{color}</span>
-                                    </span>
-                                  </td>
-                                  {group.sizes.map((size, sIdx) => {
-                                    const sku = findSKU(group, color, size)
-                                    if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 typo-caption">—</td>
-                                    const avail = sku.stock?.available_qty || 0
-                                    const pipeQty = sku.stock?.pipeline_qty || 0
-                                    return (
-                                      <td key={size} className="px-1 py-1 text-center">
-                                        <GridCell available={avail} pipelineQty={pipeQty} qty={gridQty[sku.id] || 0} onChange={(q) => setQty(sku.id, q)}
-                                          onKeyDown={handleGridKeyDown}
-                                          data-grid-row={cIdx} data-grid-col={sIdx} />
+                            <tbody>
+                              {group.colors.flatMap((color, cIdx) =>
+                                group.sizes.map((size, sIdx) => {
+                                  const sku = findSKU(group, color, size)
+                                  if (!sku) return null
+                                  const avail = sku.stock?.available_qty || 0
+                                  const pipeQty = sku.stock?.pipeline_qty || 0
+                                  const qty = gridQty[sku.id] || 0
+                                  const price = parseFloat(gridPrice[sku.id]) || sku.base_price || 0
+                                  const lineTotal = qty * price
+                                  const isShort = qty > 0 && qty > avail
+                                  return (
+                                    <tr key={sku.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                                      <td className="px-3 py-1.5">
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(color) }} />
+                                          <span className="text-xs font-medium">{color}</span>
+                                        </span>
                                       </td>
-                                    )
-                                  })}
-                                </tr>
-                              ))}
+                                      <td className="px-2 py-1.5 text-xs font-semibold">{size}</td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        <span className={`text-xs font-medium ${avail > 0 ? 'text-green-600' : 'text-red-400'}`}>{avail}</span>
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        {pipeQty > 0 ? <span className="text-xs font-medium text-blue-500">+{pipeQty}</span> : <span className="text-gray-300">—</span>}
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        <input type="number" min="0" data-qty="true" data-grid-row={cIdx} data-grid-col={sIdx}
+                                          value={qty || ''} onChange={(e) => setQty(sku.id, parseInt(e.target.value) || 0)}
+                                          onKeyDown={handleGridKeyDown}
+                                          className={`w-16 rounded border text-right text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
+                                            qty > 0
+                                              ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
+                                              : 'border-gray-200 focus:ring-gray-300'
+                                          }`}
+                                          placeholder="0" />
+                                        {isShort && <span className="text-[10px] text-amber-600 font-semibold ml-1">{qty - avail} short</span>}
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        <input type="number" min="0" step="0.01"
+                                          value={gridPrice[sku.id] ?? (sku.base_price || '')}
+                                          onChange={(e) => setPrice(sku.id, e.target.value)}
+                                          className="w-20 rounded border border-gray-200 text-right text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                          placeholder="₹" />
+                                      </td>
+                                      <td className="px-2 py-1.5 text-right text-xs font-semibold">
+                                        {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}
+                                      </td>
+                                    </tr>
+                                  )
+                                })
+                              ).filter(Boolean)}
                             </tbody>
                           </table>
                         </div>

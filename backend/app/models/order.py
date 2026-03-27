@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,6 +20,7 @@ class Order(Base):
     )
 
     order_number: Mapped[str] = mapped_column(String(50), unique=True)
+    order_date: Mapped[datetime | None] = mapped_column(Date)
     source: Mapped[str] = mapped_column(String(20), index=True)
     external_order_ref: Mapped[str | None] = mapped_column(String(100))
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -28,6 +29,8 @@ class Order(Base):
     customer_name: Mapped[str | None] = mapped_column(String(200))
     customer_phone: Mapped[str | None] = mapped_column(String(20))
     customer_address: Mapped[str | None] = mapped_column(Text)
+    broker_name: Mapped[str | None] = mapped_column(String(200))
+    transport: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), index=True)
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)

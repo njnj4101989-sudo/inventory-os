@@ -72,6 +72,9 @@ class OrderCreate(BaseModel):
     customer_name: str | None = None
     customer_phone: str | None = None
     customer_address: str | None = None
+    order_date: date | None = None
+    broker_name: str | None = None
+    transport: str | None = None
     items: list[OrderItemInput]
     notes: str | None = None
 
@@ -88,6 +91,7 @@ class ReturnRequest(BaseModel):
 class OrderResponse(BaseSchema):
     id: UUID
     order_number: str
+    order_date: date | None = None
     source: str
     external_order_ref: str | None = None
     customer_id: UUID | None = None
@@ -95,6 +99,8 @@ class OrderResponse(BaseSchema):
     customer_name: str | None = None
     customer_phone: str | None = None
     customer_address: str | None = None
+    broker_name: str | None = None
+    transport: str | None = None
     status: str
     items: list[OrderItemResponse] = []
     has_shortage: bool = False

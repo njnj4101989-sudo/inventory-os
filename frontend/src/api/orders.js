@@ -28,6 +28,13 @@ export async function getOrder(id) {
   return client.get(`/orders/${id}`)
 }
 
+export async function getNextOrderNumber() {
+  if (USE_MOCK) {
+    return mockResponse({ next_number: `ORD-${String(orders.length + 1).padStart(4, '0')}` })
+  }
+  return client.get('/orders/next-number')
+}
+
 export async function createOrder(data) {
   if (USE_MOCK) {
     const nextNum = `ORD-${String(orders.length + 1).padStart(4, '0')}`

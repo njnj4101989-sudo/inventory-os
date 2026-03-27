@@ -118,11 +118,14 @@ class OrderService:
 
         order = Order(
             order_number=order_number,
+            order_date=req.order_date or datetime.now(timezone.utc).date(),
             source=req.source or "web",
             customer_id=req.customer_id,
             customer_name=req.customer_name,
             customer_phone=req.customer_phone,
             customer_address=req.customer_address,
+            broker_name=req.broker_name,
+            transport=req.transport,
             status="pending",
             total_amount=total_amount,
             notes=req.notes,
@@ -331,6 +334,7 @@ class OrderService:
         return {
             "id": str(o.id),
             "order_number": o.order_number,
+            "order_date": o.order_date.isoformat() if o.order_date else None,
             "source": o.source,
             "external_order_ref": o.external_order_ref,
             "customer_id": str(o.customer_id) if o.customer_id else None,
@@ -344,6 +348,8 @@ class OrderService:
             "customer_name": o.customer_name,
             "customer_phone": o.customer_phone,
             "customer_address": o.customer_address,
+            "broker_name": o.broker_name,
+            "transport": o.transport,
             "status": o.status,
             "total_amount": float(o.total_amount) if o.total_amount else 0,
             "notes": o.notes,

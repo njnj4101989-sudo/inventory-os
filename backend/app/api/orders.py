@@ -26,6 +26,18 @@ async def list_orders(
     return {"success": True, **result}
 
 
+@router.get("/next-number", response_model=None)
+async def next_number(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("order_manage"),
+):
+    """Preview next order number."""
+    from app.core.code_generator import next_order_number
+    fy_id = get_fy_id(current_user)
+    number = await next_order_number(db, fy_id)
+    return {"success": True, "data": {"next_number": number}}
+
+
 @router.get("/{order_id}", response_model=None)
 async def get_order(
     order_id: UUID,
