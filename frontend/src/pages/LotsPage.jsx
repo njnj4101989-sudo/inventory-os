@@ -549,17 +549,17 @@ export default function LotsPage() {
                 {(pallaMode === 'weight' || pallaMode === 'both') && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-gray-200">
                   <label className="typo-data-label whitespace-nowrap">Palla Wt</label>
-                  <input type="number" step="0.001" value={form.standard_palla_weight}
+                  <input type="text" inputMode="decimal" value={form.standard_palla_weight}
                     onChange={e => {
                       const v = e.target.value
                       setForm(f => ({ ...f, standard_palla_weight: v }))
-                      clearTimeout(pallaDebounce.current)
-                      pallaDebounce.current = setTimeout(() => {
-                        setForm(f => ({ ...f, rolls: f.rolls.map(r => {
-                          const roll = availableRolls.find(rl => rl.id === r.roll_id)
-                          return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
-                        }) }))
-                      }, 300)
+                    }}
+                    onBlur={() => {
+                      const v = form.standard_palla_weight
+                      if (v) setForm(f => ({ ...f, rolls: f.rolls.map(r => {
+                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                        return roll?.unit === 'meters' ? r : { ...r, palla_weight: v }
+                      }) }))
                     }}
                     placeholder="6.700" className="w-20 h-[28px] rounded border border-gray-300 px-2 text-sm bg-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
                 </div>
@@ -567,17 +567,17 @@ export default function LotsPage() {
                 {(pallaMode === 'meter' || pallaMode === 'both') && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-gray-200">
                   <label className="typo-data-label whitespace-nowrap">Palla Mtr</label>
-                  <input type="number" step="0.01" value={form.standard_palla_meter}
+                  <input type="text" inputMode="decimal" value={form.standard_palla_meter}
                     onChange={e => {
                       const v = e.target.value
                       setForm(f => ({ ...f, standard_palla_meter: v }))
-                      clearTimeout(pallaDebounce.current)
-                      pallaDebounce.current = setTimeout(() => {
-                        setForm(f => ({ ...f, rolls: f.rolls.map(r => {
-                          const roll = availableRolls.find(rl => rl.id === r.roll_id)
-                          return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
-                        }) }))
-                      }, 300)
+                    }}
+                    onBlur={() => {
+                      const v = form.standard_palla_meter
+                      if (v) setForm(f => ({ ...f, rolls: f.rolls.map(r => {
+                        const roll = availableRolls.find(rl => rl.id === r.roll_id)
+                        return roll?.unit === 'meters' ? { ...r, palla_weight: v } : r
+                      }) }))
                     }}
                     placeholder="1.35" className="w-20 h-[28px] rounded border border-gray-300 px-2 text-sm bg-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" />
                 </div>
