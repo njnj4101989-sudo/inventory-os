@@ -149,7 +149,7 @@ export default function OrdersPage() {
   const [gridQty, setGridQty] = useState({})    // { sku_id: qty }
   const [gridPrice, setGridPrice] = useState({}) // { skuId: price }
   const [nextOrderNo, setNextOrderNo] = useState('')
-  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '' })
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0' })
   const [customers, setCustomers] = useState([])
   const [designSearch, setDesignSearch] = useState('')
   const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
@@ -363,7 +363,7 @@ export default function OrdersPage() {
     setGridQty({})
     setGridPrice({})
     setNextOrderNo('')
-    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '' })
+    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0' })
     setDesignSearch('')
     setSelectedDesigns(new Set())
     setFormError(null)
@@ -684,10 +684,17 @@ export default function OrdersPage() {
         <div className="flex-1 overflow-auto p-4 pb-16">
           {formError && <div className="mb-2"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
-          {/* Order Details */}
+          {/* Order Details — same layout as Purchase form */}
           <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
             <h3 className="typo-card-title mb-3">Order Details</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-2">
+                <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
+                <FilterSelect full value={customerForm.customer_id}
+                  data-master="customer"
+                  onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
+                  options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
+              </div>
               <div>
                 <label className="typo-label-sm">Order No.</label>
                 <input className="typo-input-sm bg-gray-50 text-gray-500" value={nextOrderNo} readOnly placeholder="Auto-generated" />
@@ -704,29 +711,28 @@ export default function OrdersPage() {
                   options={[{ value: 'web', label: 'Web' }, { value: 'ecommerce', label: 'E-commerce' }, { value: 'walk_in', label: 'Walk-in' }]} />
               </div>
               <div>
-                <label className="typo-label-sm">Notes</label>
-                <input type="text" className="typo-input-sm" value={customerForm.notes}
-                  onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder="Optional notes" />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
-                <FilterSelect full value={customerForm.customer_id}
-                  data-master="customer"
-                  onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
-                  options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
-              </div>
-              <div>
                 <label className="typo-label-sm">Broker</label>
-                <input type="text" className="typo-input-sm" value={customerForm.broker_name || ''}
+                <input className="typo-input-sm" value={customerForm.broker_name || ''}
                   onChange={(e) => setCustomerForm(f => ({ ...f, broker_name: e.target.value }))}
                   placeholder="Broker name" />
               </div>
               <div>
                 <label className="typo-label-sm">Transport</label>
-                <input type="text" className="typo-input-sm" value={customerForm.transport || ''}
+                <input className="typo-input-sm" value={customerForm.transport || ''}
                   onChange={(e) => setCustomerForm(f => ({ ...f, transport: e.target.value }))}
                   placeholder="Transport / courier" />
+              </div>
+              <div>
+                <label className="typo-label-sm">GST %</label>
+                <FilterSelect full value={customerForm.gst_percent || '0'}
+                  onChange={(v) => setCustomerForm(f => ({ ...f, gst_percent: v }))}
+                  options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="typo-label-sm">Notes</label>
+                <input className="typo-input-sm" value={customerForm.notes}
+                  onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional notes" />
               </div>
             </div>
             {customerForm.customer_id && (() => {
