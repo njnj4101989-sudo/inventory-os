@@ -869,16 +869,16 @@ export default function OrdersPage() {
 
                         {/* Line items table */}
                         <div className="overflow-x-auto" data-design-grid={group.key}>
-                          <table className="w-full">
+                          <table className="w-full table-fixed">
                             <thead>
                               <tr className="bg-gray-100 border-b border-gray-200">
-                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Color</th>
-                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Size</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
-                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Pipeline</th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Qty</th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Price (₹)</th>
-                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[20%]">Color</th>
+                                <th className="px-2 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[8%]">Size</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%]">Stock</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%]">Pipeline</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[18%]">Qty</th>
+                                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[18%]">Price (₹)</th>
+                                <th className="px-2 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider w-[16%]">Total</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -907,23 +907,25 @@ export default function OrdersPage() {
                                       <td className="px-2 py-1.5 text-center">
                                         {pipeQty > 0 ? <span className="text-xs font-medium text-blue-500">+{pipeQty}</span> : <span className="text-gray-300">—</span>}
                                       </td>
-                                      <td className="px-2 py-1.5">
-                                        <input type="number" min="0" data-qty="true" data-grid-row={cIdx} data-grid-col={sIdx}
-                                          value={qty || ''} onChange={(e) => setQty(sku.id, parseInt(e.target.value) || 0)}
-                                          onKeyDown={handleGridKeyDown}
-                                          className={`w-16 rounded border text-right text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
-                                            qty > 0
-                                              ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
-                                              : 'border-gray-200 focus:ring-gray-300'
-                                          }`}
-                                          placeholder="0" />
-                                        {isShort && <span className="text-[10px] text-amber-600 font-semibold ml-1">{qty - avail} short</span>}
+                                      <td className="px-2 py-1.5 text-center">
+                                        <div className="inline-flex flex-col items-center">
+                                          <input type="number" min="0" data-qty="true" data-grid-row={cIdx} data-grid-col={sIdx}
+                                            value={qty || ''} onChange={(e) => setQty(sku.id, parseInt(e.target.value) || 0)}
+                                            onKeyDown={handleGridKeyDown}
+                                            className={`w-20 rounded border text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
+                                              qty > 0
+                                                ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
+                                                : 'border-gray-200 focus:ring-gray-300'
+                                            }`}
+                                            placeholder="0" />
+                                          {isShort && <span className="text-[10px] text-amber-600 font-semibold mt-0.5">{qty - avail} short</span>}
+                                        </div>
                                       </td>
-                                      <td className="px-2 py-1.5">
+                                      <td className="px-2 py-1.5 text-center">
                                         <input type="number" min="0" step="0.01"
                                           value={gridPrice[sku.id] ?? (sku.base_price || '')}
                                           onChange={(e) => setPrice(sku.id, e.target.value)}
-                                          className="w-20 rounded border border-gray-200 text-right text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                          className="w-20 rounded border border-gray-200 text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                                           placeholder="₹" />
                                       </td>
                                       <td className="px-2 py-1.5 text-right text-xs font-semibold">
