@@ -28,6 +28,7 @@ class ReservationService:
         order_id: UUID | None = None,
         external_order_ref: str | None = None,
         expires_at: datetime | None = None,
+        permanent: bool = False,
     ) -> Reservation:
         reservation_code = await next_reservation_code(self.db)
 
@@ -43,7 +44,7 @@ class ReservationService:
                 f"Insufficient stock: available={state.available_qty}, requested={quantity}"
             )
 
-        if expires_at is None:
+        if expires_at is None and not permanent:
             expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
         reservation = Reservation(

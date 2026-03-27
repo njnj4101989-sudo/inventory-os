@@ -102,10 +102,7 @@ class OrderService:
 
             inv_state = inv_map.get(item.sku_id)
             available = inv_state.available_qty if inv_state else 0
-            if available < item.quantity:
-                raise InsufficientStockError(
-                    f"SKU {sku.sku_code}: requested {item.quantity}, available {available}"
-                )
+            short = max(0, item.quantity - available)
 
             total_price = item.quantity * item.unit_price
             total_amount += total_price
@@ -116,6 +113,7 @@ class OrderService:
                 unit_price=item.unit_price,
                 total_price=total_price,
                 fulfilled_qty=0,
+                short_qty=short,
             ))
 
         order = Order(
@@ -139,6 +137,40 @@ class OrderService:
             self.db.add(oi)
         await self.db.flush()
 
+        # Reserve available stock for each item
+        from app.services.reservation_service import ReservationService
+        res_svc = ReservationService(self.db)
+
+        for oi in order_items:
+            reservable = oi.quantity - oi.short_qty
+            if reservable <= 0:
+                continue
+            try:
+                await res_svc.create_reservation(
+                    sku_id=oi.sku_id,
+                    quantity=reservable,
+                    order_id=order.id,
+                    permanent=True,
+                )
+            except InsufficientStockError:
+                # Race: stock reserved between read and reserve — re-read and try remainder
+                fresh_inv = await self.db.execute(
+                    select(InventoryState).where(InventoryState.sku_id == oi.sku_id)
+                )
+                current = fresh_inv.scalar_one_or_none()
+                current_available = current.available_qty if current else 0
+                if current_available > 0:
+                    await res_svc.create_reservation(
+                        sku_id=oi.sku_id,
+                        quantity=current_available,
+                        order_id=order.id,
+                        permanent=True,
+                    )
+                    oi.short_qty = oi.quantity - current_available
+                else:
+                    oi.short_qty = oi.quantity
+                await self.db.flush()
+
         return await self.get_order(order.id)
 
     async def ship_order(self, order_id: UUID, user_id: UUID, fy_id: UUID) -> dict:
@@ -147,6 +179,18 @@ class OrderService:
             raise InvalidStateTransitionError(
                 f"Cannot ship order in '{order.status}' status (expected 'pending' or 'processing')"
             )
+
+        # Confirm all active reservations for this order
+        from app.models.reservation import Reservation
+        from app.services.reservation_service import ReservationService
+        res_svc = ReservationService(self.db)
+        res_stmt = select(Reservation).where(
+            Reservation.order_id == order_id,
+            Reservation.status == "active",
+        )
+        res_result = await self.db.execute(res_stmt)
+        for res in res_result.scalars().all():
+            await res_svc.confirm_reservation(res.id)
 
         # Create STOCK_OUT events per item
         from app.services.inventory_service import InventoryService
@@ -185,6 +229,18 @@ class OrderService:
             raise InvalidStateTransitionError(
                 f"Cannot cancel order in '{order.status}' status"
             )
+
+        # Release all active reservations for this order
+        from app.models.reservation import Reservation
+        from app.services.reservation_service import ReservationService
+        res_svc = ReservationService(self.db)
+        res_stmt = select(Reservation).where(
+            Reservation.order_id == order_id,
+            Reservation.status == "active",
+        )
+        res_result = await self.db.execute(res_stmt)
+        for res in res_result.scalars().all():
+            await res_svc.release_reservation(res.id)
 
         order.status = "cancelled"
         await self.db.flush()
@@ -306,8 +362,10 @@ class OrderService:
                     "unit_price": float(item.unit_price) if item.unit_price else 0,
                     "total_price": float(item.total_price) if item.total_price else 0,
                     "fulfilled_qty": item.fulfilled_qty or 0,
+                    "short_qty": item.short_qty or 0,
                 }
                 for item in (o.items or [])
             ],
+            "has_shortage": any((item.short_qty or 0) > 0 for item in (o.items or [])),
             "created_at": o.created_at.isoformat() if o.created_at else None,
         }

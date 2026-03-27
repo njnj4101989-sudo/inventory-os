@@ -13,6 +13,7 @@ from app.models.sku import SKU
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
+from app.models.lot import Lot
 from app.models.inventory_state import InventoryState
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
@@ -48,8 +49,14 @@ class SKUService:
         inv_result = await self.db.execute(inv_stmt)
         inv_map = {inv.sku_id: inv for inv in inv_result.scalars().all()}
 
+        # Pipeline qty: batches not yet packed, aggregated by expected SKU code
+        pipeline_map = await self._compute_pipeline_map()
+
         return {
-            "data": [self._to_response(s, inv_map.get(s.id)) for s in skus],
+            "data": [
+                self._to_response(s, inv_map.get(s.id), pipeline_map.get(s.sku_code, 0))
+                for s in skus
+            ],
             "total": total,
             "page": params.page,
             "pages": pages,
@@ -78,7 +85,8 @@ class SKUService:
         batch_result = await self.db.execute(batch_stmt)
         batches = batch_result.scalars().all()
 
-        resp = self._to_response(sku, inv)
+        pipeline_map = await self._compute_pipeline_map()
+        resp = self._to_response(sku, inv, pipeline_map.get(sku.sku_code, 0))
         resp["source_batches"] = [self._batch_brief(b) for b in batches]
         return resp
 
@@ -417,7 +425,66 @@ class SKUService:
             raise NotFoundError(f"SKU {sku_id} not found")
         return sku
 
-    def _to_response(self, s: SKU, inv: InventoryState | None = None) -> dict:
+    async def _compute_pipeline_map(self) -> dict[str, int]:
+        """Compute pipeline qty per expected SKU code from in-progress batches."""
+        pipeline_statuses = (
+            "created", "assigned", "in_progress", "submitted", "checked", "packing",
+        )
+        stmt = (
+            select(Batch)
+            .join(Lot, Batch.lot_id == Lot.id)
+            .options(
+                selectinload(Batch.lot),
+                selectinload(Batch.processing_logs).selectinload(
+                    BatchProcessing.value_addition
+                ),
+            )
+            .where(Batch.status.in_(pipeline_statuses))
+        )
+        result = await self.db.execute(stmt)
+        batches = result.scalars().unique().all()
+
+        pipeline_map: dict[str, int] = {}
+        for batch in batches:
+            lot = batch.lot
+            if not lot:
+                continue
+            product_type = lot.product_type or "FBL"
+            design_no = batch.design_no or (
+                lot.designs[0]["design_no"] if lot.designs else ""
+            )
+            size = batch.size or "Free"
+
+            # VA suffix from received processing logs (same logic as pack_batch)
+            va_codes = sorted([
+                log.value_addition.short_code
+                for log in (batch.processing_logs or [])
+                if log.status == "received"
+                and log.value_addition
+                and log.value_addition.short_code
+            ])
+            va_suffix = "+" + "+".join(va_codes) if va_codes else ""
+
+            # Colors from color_qc (post-QC) or color_breakdown (pre-QC)
+            color_qty_map: dict[str, int] = {}
+            if batch.color_qc:
+                for color, qc in batch.color_qc.items():
+                    color_qty_map[color] = qc.get("approved", 0)
+            elif batch.color_breakdown:
+                for color, qty in batch.color_breakdown.items():
+                    color_qty_map[color] = qty
+            else:
+                continue
+
+            for color, qty in color_qty_map.items():
+                if qty <= 0:
+                    continue
+                expected_code = f"{product_type}-{design_no}-{color}-{size}{va_suffix}"
+                pipeline_map[expected_code] = pipeline_map.get(expected_code, 0) + qty
+
+        return pipeline_map
+
+    def _to_response(self, s: SKU, inv: InventoryState | None = None, pipeline_qty: int = 0) -> dict:
         return {
             "id": str(s.id),
             "sku_code": s.sku_code,
@@ -433,6 +500,7 @@ class SKUService:
                 "total_qty": inv.total_qty if inv else 0,
                 "available_qty": inv.available_qty if inv else 0,
                 "reserved_qty": inv.reserved_qty if inv else 0,
+                "pipeline_qty": pipeline_qty,
             },
             "created_at": s.created_at.isoformat() if s.created_at else None,
         }

@@ -76,14 +76,15 @@ function KPICard({ label, value, sub, color = 'slate' }) {
   )
 }
 
-function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRow, 'data-grid-col': gridCol }) {
+function GridCell({ available, pipelineQty, qty, onChange, onKeyDown, 'data-grid-row': gridRow, 'data-grid-col': gridCol }) {
   const hasStock = available > 0
+  const isShort = qty > 0 && qty > available
+  const shortAmt = isShort ? qty - available : 0
   return (
     <div className="flex flex-col items-center gap-0">
       <input
         type="number"
         min="0"
-        max={available}
         value={qty || ''}
         onChange={(e) => onChange(parseInt(e.target.value) || 0)}
         onKeyDown={onKeyDown}
@@ -92,7 +93,7 @@ function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRo
         data-grid-col={gridCol}
         className={`w-14 rounded border text-center text-xs py-0.5 focus:outline-none focus:ring-1 ${
           qty > 0
-            ? qty > available ? 'border-red-400 focus:ring-red-400 bg-red-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
+            ? isShort ? 'border-amber-400 focus:ring-amber-400 bg-amber-50' : 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50'
             : 'border-gray-200 focus:ring-gray-300'
         }`}
         placeholder="0"
@@ -100,6 +101,12 @@ function GridCell({ available, qty, onChange, onKeyDown, 'data-grid-row': gridRo
       <span className={`typo-caption leading-tight ${hasStock ? 'text-green-600' : 'text-red-400'}`}>
         {available}
       </span>
+      {pipelineQty > 0 && (
+        <span className="typo-caption leading-tight text-blue-500" title="In production pipeline">+{pipelineQty}</span>
+      )}
+      {isShort && (
+        <span className="typo-caption leading-tight text-amber-600 font-semibold">{shortAmt} short</span>
+      )}
     </div>
   )
 }
@@ -117,7 +124,12 @@ const COLUMNS = [
       </span>
     ),
   },
-  { key: 'items', label: 'SKUs', render: (val) => <span className="font-medium">{val?.length || 0}</span> },
+  { key: 'items', label: 'SKUs', render: (val, row) => (
+    <span className="font-medium inline-flex items-center gap-1">
+      {val?.length || 0}
+      {row.has_shortage && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" title="Has shortage" />}
+    </span>
+  )},
   {
     key: 'total_amount', label: 'Total',
     render: (val) => <span className="font-semibold">₹{(val || 0).toLocaleString('en-IN')}</span>,
@@ -343,7 +355,8 @@ export default function OrdersPage() {
     const today = new Date().toDateString()
     const shippedToday = all.filter(o => o.status === 'shipped' && o.created_at && new Date(o.created_at).toDateString() === today).length
     const revenue = all.reduce((s, o) => s + (o.total_amount || 0), 0)
-    return { total: all.length, pending, processing, shippedToday, revenue }
+    const withShortage = all.filter(o => o.has_shortage).length
+    return { total: all.length, pending, processing, shippedToday, revenue, withShortage }
   }, [ordersList])
 
   /* ── Row click → detail overlay ── */
@@ -575,6 +588,13 @@ export default function OrdersPage() {
               </div>
             )}
 
+            {o.has_shortage && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800 flex items-center gap-1.5">
+                <svg className="h-4 w-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                <span><span className="font-semibold">Shortage:</span> Some items exceed available stock — partial reservation applied.</span>
+              </div>
+            )}
+
             {/* Items table */}
             <div className="border rounded overflow-hidden">
               <table className="w-full text-xs">
@@ -587,6 +607,7 @@ export default function OrdersPage() {
                     <th className="px-2 py-1.5 typo-th text-right">Price</th>
                     <th className="px-2 py-1.5 typo-th text-right">Total</th>
                     <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Short</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -609,6 +630,12 @@ export default function OrdersPage() {
                         <span className={item.fulfilled_qty >= item.quantity ? 'text-green-600 font-semibold' : 'text-gray-500'}>
                           {item.fulfilled_qty || 0}
                         </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        {(item.short_qty || 0) > 0
+                          ? <span className="text-amber-600 font-semibold">{item.short_qty}</span>
+                          : <span className="text-gray-300">—</span>
+                        }
                       </td>
                     </tr>
                   ))}
@@ -768,6 +795,7 @@ export default function OrdersPage() {
                         const firstSku = group.skus[0]
                         const defaultPrice = firstSku?.base_price || 0
                         const totalStock = group.skus.reduce((s, sku) => s + (sku.stock?.available_qty || 0), 0)
+                        const totalPipeline = group.skus.reduce((s, sku) => s + (sku.stock?.pipeline_qty || 0), 0)
                         return (
                           <button
                             key={group.key}
@@ -789,6 +817,7 @@ export default function OrdersPage() {
                               <span className="typo-caption">{group.colors.length}c &middot; {group.sizes.length}s</span>
                               {defaultPrice > 0 && <span className="typo-caption">&middot; ₹{defaultPrice}</span>}
                               <span className={`typo-caption font-medium ${totalStock > 0 ? 'text-green-600' : 'text-red-400'}`}>&middot; {totalStock} in stock</span>
+                              {totalPipeline > 0 && <span className="typo-caption font-medium text-blue-500">&middot; {totalPipeline} in pipeline</span>}
                             </div>
                             {firstSku?._parsed.vas.length > 0 && (
                               <div className="flex gap-1 mt-1">
@@ -911,9 +940,10 @@ export default function OrdersPage() {
                                     const sku = findSKU(group, color, size)
                                     if (!sku) return <td key={size} className="px-1 py-1 text-center text-gray-300 typo-caption">—</td>
                                     const avail = sku.stock?.available_qty || 0
+                                    const pipeQty = sku.stock?.pipeline_qty || 0
                                     return (
                                       <td key={size} className="px-1 py-1 text-center">
-                                        <GridCell available={avail} qty={gridQty[sku.id] || 0} onChange={(q) => setQty(sku.id, q)}
+                                        <GridCell available={avail} pipelineQty={pipeQty} qty={gridQty[sku.id] || 0} onChange={(q) => setQty(sku.id, q)}
                                           onKeyDown={handleGridKeyDown}
                                           data-grid-row={cIdx} data-grid-col={sIdx} />
                                       </td>
@@ -985,11 +1015,12 @@ export default function OrdersPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-6 gap-2">
         <KPICard label="Total Orders" value={kpis.total} color="slate" />
         <KPICard label="Pending" value={kpis.pending} color="amber" />
         <KPICard label="Processing" value={kpis.processing} color="blue" />
         <KPICard label="Shipped Today" value={kpis.shippedToday} color="green" />
+        <KPICard label="With Shortage" value={kpis.withShortage} color="amber" />
         <KPICard label="Revenue" value={`₹${kpis.revenue.toLocaleString('en-IN')}`} color="emerald" />
       </div>
 

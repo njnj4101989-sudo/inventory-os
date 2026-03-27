@@ -50,6 +50,7 @@ class OrderItemResponse(BaseSchema):
     unit_price: Decimal
     total_price: Decimal
     fulfilled_qty: int = 0
+    short_qty: int = 0
 
 
 class ReturnItemInput(BaseModel):
@@ -96,6 +97,7 @@ class OrderResponse(BaseSchema):
     customer_address: str | None = None
     status: str
     items: list[OrderItemResponse] = []
+    has_shortage: bool = False
     total_amount: Decimal | None = None
     notes: str | None = None
     created_at: datetime

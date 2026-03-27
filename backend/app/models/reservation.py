@@ -13,7 +13,7 @@ class Reservation(Base):
     __tablename__ = "reservations"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('reserved', 'confirmed', 'released', 'cancelled', 'expired')",
+            "status IN ('active', 'confirmed', 'released', 'cancelled', 'expired')",
             name="res_valid_status",
         ),
     )
