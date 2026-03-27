@@ -739,7 +739,6 @@ export default function OrdersPage() {
                 </div>
               ) : null
             })()}
-            </div>
           </div>
 
           {skuLoading ? (
