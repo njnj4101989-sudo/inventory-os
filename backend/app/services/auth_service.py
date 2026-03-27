@@ -66,6 +66,9 @@ class AuthService:
                 "slug": company.slug,
                 "schema_name": company.schema_name,
                 "is_default": is_default,
+                "city": company.city,
+                "gst_no": company.gst_no,
+                "address": company.address,
             }
             for company, is_default in result.all()
         ]
@@ -248,6 +251,9 @@ class AuthService:
             "slug": company.slug,
             "schema_name": company.schema_name,
             "is_default": uc.is_default,
+            "city": company.city,
+            "gst_no": company.gst_no,
+            "address": company.address,
         }
 
         payload = build_token_payload(

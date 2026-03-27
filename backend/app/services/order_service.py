@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.invoice import Invoice
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.sku import SKU
@@ -55,6 +56,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.items).selectinload(OrderItem.sku),
+                selectinload(Order.invoices),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -126,8 +128,10 @@ class OrderService:
             customer_address=req.customer_address,
             broker_name=req.broker_name,
             transport=req.transport,
+            gst_percent=req.gst_percent,
             status="pending",
             total_amount=total_amount,
+            discount_amount=req.discount_amount,
             notes=req.notes,
             created_by=created_by,
             fy_id=fy_id,
@@ -248,6 +252,17 @@ class OrderService:
         order.status = "cancelled"
         await self.db.flush()
 
+        # Cascade: cancel any linked draft/issued invoices (not paid)
+        from app.services.invoice_service import InvoiceService
+        inv_svc = InvoiceService(self.db)
+        inv_stmt = select(Invoice).where(
+            Invoice.order_id == order_id,
+            Invoice.status.in_(("draft", "issued")),
+        )
+        inv_result = await self.db.execute(inv_stmt)
+        for inv in inv_result.scalars().all():
+            await inv_svc.cancel_invoice(inv.id)
+
         return await self.get_order(order_id)
 
     async def return_order(self, order_id: UUID, req: ReturnRequest, user_id: UUID) -> dict:
@@ -321,6 +336,7 @@ class OrderService:
             .options(
                 selectinload(Order.customer),
                 selectinload(Order.items).selectinload(OrderItem.sku),
+                selectinload(Order.invoices),
             )
         )
         result = await self.db.execute(stmt)
@@ -350,8 +366,10 @@ class OrderService:
             "customer_address": o.customer_address,
             "broker_name": o.broker_name,
             "transport": o.transport,
+            "gst_percent": float(o.gst_percent) if o.gst_percent else 0,
             "status": o.status,
             "total_amount": float(o.total_amount) if o.total_amount else 0,
+            "discount_amount": float(o.discount_amount) if o.discount_amount else 0,
             "notes": o.notes,
             "items": [
                 {
@@ -373,5 +391,14 @@ class OrderService:
                 for item in (o.items or [])
             ],
             "has_shortage": any((item.short_qty or 0) > 0 for item in (o.items or [])),
+            "invoices": [
+                {
+                    "id": str(inv.id),
+                    "invoice_number": inv.invoice_number,
+                    "total_amount": float(inv.total_amount) if inv.total_amount else 0,
+                    "status": inv.status,
+                }
+                for inv in (o.invoices or [])
+            ],
             "created_at": o.created_at.isoformat() if o.created_at else None,
         }

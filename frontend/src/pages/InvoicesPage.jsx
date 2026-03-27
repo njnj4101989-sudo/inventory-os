@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
-import { getInvoices, getInvoice, markPaid } from '../api/invoices'
+import { getInvoices, getInvoice, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
+import { getSKUs } from '../api/skus'
+import { getAllCustomers } from '../api/customers'
+import { getCompany } from '../api/company'
+import FilterSelect from '../components/common/FilterSelect'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
+import { useAuth } from '../hooks/useAuth'
 
 /* ── Module-level helpers ── */
 
@@ -17,10 +23,6 @@ const VA_COLORS = {
   HWK: { bg: 'bg-rose-100', text: 'text-rose-700' },
   SQN: { bg: 'bg-pink-100', text: 'text-pink-700' },
   BTC: { bg: 'bg-teal-100', text: 'text-teal-700' },
-  HST: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  BTN: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-  LCW: { bg: 'bg-lime-100', text: 'text-lime-700' },
-  FIN: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
 }
 const DEFAULT_VA = { bg: 'bg-gray-100', text: 'text-gray-700' }
 
@@ -50,6 +52,8 @@ const KPI_COLORS = {
   amber: 'from-amber-500 to-amber-600',
   green: 'from-green-500 to-green-600',
   emerald: 'from-emerald-500 to-emerald-600',
+  red: 'from-red-500 to-red-600',
+  blue: 'from-blue-500 to-blue-600',
 }
 
 function KPICard({ label, value, sub, color = 'slate' }) {
@@ -62,38 +66,40 @@ function KPICard({ label, value, sub, color = 'slate' }) {
   )
 }
 
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+const fmtCurrency = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
 /* ── DataTable columns ── */
 
 const COLUMNS = [
   { key: 'invoice_number', label: 'Invoice #', render: (val) => <span className="font-semibold text-emerald-700">{val}</span> },
-  { key: 'order', label: 'Order #', render: (val) => val?.order_number || '—' },
-  { key: 'order', label: 'Customer', render: (val, row) => row.order?.customer_name || val?.customer_name || <span className="text-gray-400">—</span> },
-  {
-    key: 'subtotal', label: 'Subtotal',
-    render: (val) => `₹${(val || 0).toLocaleString('en-IN')}`,
-  },
-  {
-    key: 'tax_amount', label: 'Tax',
-    render: (val) => <span className="text-gray-500">₹{(val || 0).toLocaleString('en-IN')}</span>,
-  },
-  {
-    key: 'total_amount', label: 'Total',
-    render: (val) => <span className="font-bold">₹{(val || 0).toLocaleString('en-IN')}</span>,
-  },
+  { key: 'customer_name', label: 'Customer', render: (val) => val || <span className="text-gray-400">—</span> },
+  { key: 'order', label: 'Type', render: (val) => val ? (
+    <span className="inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge bg-blue-100 text-blue-700">{val.order_number}</span>
+  ) : (
+    <span className="inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge bg-purple-100 text-purple-700">Direct</span>
+  )},
+  { key: 'total_amount', label: 'Total', render: (val) => <span className="font-bold">{fmtCurrency(val)}</span> },
+  { key: 'due_date', label: 'Due', render: (val) => val ? fmtDate(val + 'T00:00:00') : <span className="text-gray-300">—</span> },
   { key: 'status', label: 'Status', render: (val) => <StatusBadge status={val} /> },
-  {
-    key: 'issued_at', label: 'Issued',
-    render: (val) => val ? new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
-  },
+  { key: 'issued_at', label: 'Issued', render: (val) => fmtDate(val) },
 ]
 
 const TABS = [
   { key: '', label: 'All' },
   { key: 'issued', label: 'Unpaid' },
   { key: 'paid', label: 'Paid' },
+  { key: 'cancelled', label: 'Cancelled' },
+]
+
+const GST_OPTIONS = [
+  { value: '0', label: '0%' }, { value: '5', label: '5%' },
+  { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' },
 ]
 
 export default function InvoicesPage() {
+  const navigate = useNavigate()
+  const { company } = useAuth()
   const [invoicesList, setInvoicesList] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -103,10 +109,25 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Company full data (with bank details)
+  const [companyFull, setCompanyFull] = useState(null)
+
+  // Create mode
+  const [createMode, setCreateMode] = useState(false)
+  const [customers, setCustomers] = useState([])
+  const [allSKUs, setAllSKUs] = useState([])
+  const [invForm, setInvForm] = useState({ customer_id: '', gst_percent: '0', discount_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
+  const [invItems, setInvItems] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState(null)
+  const [isDirty, setIsDirty] = useState(false)
+  const [showDiscard, setShowDiscard] = useState(false)
+
   // Detail overlay
   const [detailInvoice, setDetailInvoice] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   // Print overlay
   const [printInvoice, setPrintInvoice] = useState(null)
@@ -115,31 +136,23 @@ export default function InvoicesPage() {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: printInvoice ? `Invoice-${printInvoice.invoice_number}` : 'Invoice',
-    pageStyle: `
-      @page { size: A4 portrait; margin: 15mm; }
-      * { box-sizing: border-box; }
-    `,
+    pageStyle: `@page { size: A4 portrait; margin: 15mm; } * { box-sizing: border-box; }`,
   })
 
   useEffect(() => { loadColorMap() }, [])
+  useEffect(() => { getCompany().then(r => setCompanyFull(r.data?.data || r.data)).catch(() => {}) }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await getInvoices({
-        page, page_size: 20,
-        status: statusFilter || undefined,
-        search: search || undefined,
-      })
+      const res = await getInvoices({ page, page_size: 20, status: statusFilter || undefined, search: search || undefined })
       setInvoicesList(res.data.data)
       setTotal(res.data.total)
       setPages(res.data.pages)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load invoices')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [page, statusFilter, search])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -149,10 +162,20 @@ export default function InvoicesPage() {
     const all = invoicesList
     const unpaid = all.filter(i => i.status === 'issued')
     const paid = all.filter(i => i.status === 'paid')
-    const unpaidAmt = unpaid.reduce((s, i) => s + (i.total_amount || 0), 0)
-    const paidAmt = paid.reduce((s, i) => s + (i.total_amount || 0), 0)
-    const revenue = all.reduce((s, i) => s + (i.total_amount || 0), 0)
-    return { total: all.length, unpaidCount: unpaid.length, unpaidAmt, paidCount: paid.length, paidAmt, revenue }
+    const cancelled = all.filter(i => i.status === 'cancelled')
+    const today = new Date().toISOString().slice(0, 7)
+    const overdue = all.filter(i => i.status === 'issued' && i.due_date && new Date(i.due_date + 'T00:00:00') < new Date())
+    const thisMonth = all.filter(i => i.issued_at && i.issued_at.slice(0, 7) === today && i.status !== 'cancelled')
+    return {
+      total: all.length,
+      unpaidCount: unpaid.length,
+      unpaidAmt: unpaid.reduce((s, i) => s + (i.total_amount || 0), 0),
+      paidCount: paid.length,
+      paidAmt: paid.reduce((s, i) => s + (i.total_amount || 0), 0),
+      cancelledCount: cancelled.length,
+      overdueCount: overdue.length,
+      monthRevenue: thisMonth.reduce((s, i) => s + (i.total_amount || 0), 0),
+    }
   }, [invoicesList])
 
   /* ── Row click → detail overlay ── */
@@ -162,116 +185,171 @@ export default function InvoicesPage() {
     try {
       const res = await getInvoice(row.id)
       setDetailInvoice(res.data.data || res.data)
-    } catch {
-      // fallback to list data
-    } finally {
-      setDetailLoading(false)
-    }
+    } catch { /* fallback to list data */ } finally { setDetailLoading(false) }
   }
 
   /* ── Mark paid ── */
   const handleMarkPaid = async () => {
     setActioning(true)
-    try {
-      await markPaid(detailInvoice.id)
-      setDetailInvoice(null)
-      fetchData()
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to mark invoice as paid')
-    } finally {
-      setActioning(false)
-    }
+    try { await markPaid(detailInvoice.id); setDetailInvoice(null); fetchData() }
+    catch (err) { setError(err.response?.data?.detail || 'Failed to mark paid') }
+    finally { setActioning(false) }
   }
 
-  /* ── Open print overlay — close detail first (both z-50) ── */
-  const openPrint = () => {
-    const inv = detailInvoice
-    setDetailInvoice(null)
-    setPrintInvoice(inv)
+  /* ── Cancel invoice ── */
+  const handleCancelInvoice = async () => {
+    setActioning(true)
+    try { await cancelInvoice(detailInvoice.id); setDetailInvoice(null); setConfirmCancel(false); fetchData() }
+    catch (err) { setError(err.response?.data?.detail || 'Failed to cancel') }
+    finally { setActioning(false) }
   }
+
+  /* ── Create standalone invoice ── */
+  const openCreate = async () => {
+    setCreateMode(true)
+    setInvForm({ customer_id: '', gst_percent: '0', discount_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
+    setInvItems([{ sku_id: '', quantity: 1, unit_price: 0 }])
+    setFormError(null)
+    setIsDirty(false)
+    try {
+      const [skuRes, custRes] = await Promise.all([getSKUs({ is_active: true, page_size: 500 }), getAllCustomers()])
+      setAllSKUs(skuRes.data.data || [])
+      setCustomers(custRes.data.data || [])
+    } catch { setAllSKUs([]); setCustomers([]) }
+  }
+
+  const closeCreate = () => {
+    if (isDirty) { setShowDiscard(true); return }
+    setCreateMode(false)
+  }
+
+  const handleCreateInvoice = async () => {
+    setSaving(true)
+    setFormError(null)
+    try {
+      const validItems = invItems.filter(it => it.sku_id && it.quantity > 0)
+      if (!validItems.length) { setFormError('Add at least one item'); setSaving(false); return }
+      if (!invForm.customer_id) { setFormError('Select a customer'); setSaving(false); return }
+      const cust = customers.find(c => c.id === invForm.customer_id)
+      await createInvoice({
+        customer_id: invForm.customer_id,
+        customer_name: cust?.name || null,
+        customer_phone: cust?.phone || null,
+        customer_address: cust?.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : null,
+        gst_percent: parseFloat(invForm.gst_percent) || 0,
+        discount_amount: parseFloat(invForm.discount_amount) || 0,
+        payment_terms: invForm.payment_terms?.trim() || null,
+        place_of_supply: invForm.place_of_supply?.trim() || null,
+        items: validItems.map(it => ({ sku_id: it.sku_id, quantity: it.quantity, unit_price: it.unit_price })),
+        notes: invForm.notes?.trim() || null,
+      })
+      setCreateMode(false)
+      setIsDirty(false)
+      fetchData()
+    } catch (err) { setFormError(err.response?.data?.detail || 'Failed to create invoice') }
+    finally { setSaving(false) }
+  }
+
+  const addInvItem = () => { setInvItems(prev => [...prev, { sku_id: '', quantity: 1, unit_price: 0 }]); setIsDirty(true) }
+  const removeInvItem = (i) => { setInvItems(prev => prev.filter((_, idx) => idx !== i)); setIsDirty(true) }
+  const updateInvItem = (i, field, val) => { setInvItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: val } : it)); setIsDirty(true) }
+
+  /* ── Keyboard shortcuts for create mode ── */
+  useEffect(() => {
+    if (!createMode) return
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleCreateInvoice() }
+      if (e.key === 'Escape') { e.preventDefault(); closeCreate() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [createMode, isDirty, invForm, invItems])
+
+  /* ── Open print overlay ── */
+  const openPrint = () => { const inv = detailInvoice; setDetailInvoice(null); setPrintInvoice(inv) }
+
+  const co = companyFull || company || {}
 
   /* ═══════════════════════ PRINT OVERLAY ═══════════════════════ */
   if (printInvoice) {
     const inv = printInvoice
-    const o = inv.order || {}
+    const isIGST = inv.place_of_supply && co.state_code && inv.place_of_supply !== co.state_code
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto">
-        {/* Toolbar */}
         <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
           <span className="font-semibold text-gray-800">Invoice {inv.invoice_number}</span>
           <div className="flex gap-2">
-            <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">
-              Print
-            </button>
-            <button onClick={() => setPrintInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-              Close
-            </button>
+            <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">Print</button>
+            <button onClick={() => setPrintInvoice(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Close</button>
           </div>
         </div>
 
-        {/* A4 printable div — ALL inline styles */}
-        <div ref={printRef} style={{
-          width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm',
-          fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937',
-          fontSize: '12px', lineHeight: '1.5',
-        }}>
+        <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.5' }}>
           {/* Header */}
-          <div style={{ borderBottom: '3px solid #1e40af', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ borderBottom: '3px solid #059669', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#1e40af', margin: 0, letterSpacing: '-0.5px' }}>TAX INVOICE</h1>
-              <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>DRS Blouse</p>
-              <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: ______________</p>
+              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px' }}>TAX INVOICE</h1>
+              <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{co.name || 'Company'}</p>
+              {co.address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
+              {co.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: {co.gst_no}{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
+              {co.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {co.phone}{co.email ? ` | ${co.email}` : ''}</p>}
             </div>
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: '13px', fontWeight: 600 }}>{inv.invoice_number}</p>
-              <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {inv.issued_at ? new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
-              <p style={{ fontSize: '11px', color: '#6b7280' }}>Order: {o.order_number || '—'}</p>
+              <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(inv.issued_at)}</p>
+              <p style={{ fontSize: '11px', color: '#6b7280' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}</p>
+              {inv.due_date && <p style={{ fontSize: '11px', color: '#6b7280' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
             </div>
           </div>
 
-          {/* Bill To */}
+          {/* Bill To + Payment Info */}
           <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
             <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
               <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bill To</p>
-              <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{o.customer?.name || o.customer_name || '—'}</p>
-              {(o.customer?.phone || o.customer_phone) && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {o.customer?.phone || o.customer_phone}</p>}
-              {(o.customer_address || o.customer?.city) && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{o.customer_address || o.customer?.city}</p>}
-              {o.customer?.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GST: {o.customer.gst_no}</p>}
+              <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{inv.customer_name || '—'}</p>
+              {inv.customer_phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {inv.customer_phone}</p>}
+              {inv.customer_address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{inv.customer_address}</p>}
+              {inv.customer_gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {inv.customer_gst_no}</p>}
+              {inv.place_of_supply && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Place of Supply: {inv.place_of_supply}</p>}
             </div>
             <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Payment Status</p>
-              <p style={{
-                display: 'inline-block', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
-                background: inv.status === 'paid' ? '#dcfce7' : '#fef3c7',
-                color: inv.status === 'paid' ? '#166534' : '#92400e',
-              }}>
-                {inv.status === 'paid' ? 'PAID' : 'PENDING'}
+              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Payment Details</p>
+              <p style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, background: inv.status === 'paid' ? '#dcfce7' : inv.status === 'cancelled' ? '#fee2e2' : '#fef3c7', color: inv.status === 'paid' ? '#166534' : inv.status === 'cancelled' ? '#991b1b' : '#92400e' }}>
+                {inv.status === 'paid' ? 'PAID' : inv.status === 'cancelled' ? 'CANCELLED' : 'PENDING'}
               </p>
-              {inv.paid_at && <p style={{ fontSize: '11px', color: '#166534', margin: '4px 0 0' }}>Paid on: {new Date(inv.paid_at).toLocaleDateString('en-IN')}</p>}
+              {inv.paid_at && <p style={{ fontSize: '11px', color: '#166534', margin: '4px 0 0' }}>Paid: {fmtDate(inv.paid_at)}</p>}
+              {inv.payment_terms && <p style={{ fontSize: '11px', margin: '4px 0 0' }}>Terms: {inv.payment_terms}</p>}
+              {inv.due_date && !inv.paid_at && <p style={{ fontSize: '11px', margin: '2px 0 0' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
             </div>
           </div>
 
-          {/* Line items table */}
+          {/* Notes */}
+          {inv.notes && (
+            <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: '#92400e' }}>
+              <strong>Notes:</strong> {inv.notes}
+            </div>
+          )}
+
+          {/* Line items */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                <th style={{ padding: '8px 6px', textAlign: 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>#</th>
-                <th style={{ padding: '8px 6px', textAlign: 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>SKU Code</th>
-                <th style={{ padding: '8px 6px', textAlign: 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Description</th>
-                <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Qty</th>
-                <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Rate</th>
-                <th style={{ padding: '8px 6px', textAlign: 'right', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
+                {['#', 'HSN', 'SKU Code', 'Description', 'Size', 'Qty', 'Rate', 'Amount'].map(h => (
+                  <th key={h} style={{ padding: '8px 6px', textAlign: h === 'Qty' || h === 'Rate' || h === 'Amount' ? 'right' : 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {inv.items?.map((item, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '8px 6px', color: '#9ca3af' }}>{i + 1}</td>
+                  <td style={{ padding: '8px 6px', color: '#6b7280', fontSize: '11px' }}>{item.hsn_code || '—'}</td>
                   <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
                   <td style={{ padding: '8px 6px', color: '#6b7280' }}>{item.sku?.product_name || '—'}</td>
+                  <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.size || '—'}</td>
                   <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{item.quantity}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>₹{(item.unit_price || 0).toLocaleString('en-IN')}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>₹{(item.total_price || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(item.total_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -279,31 +357,48 @@ export default function InvoicesPage() {
 
           {/* Tax breakdown */}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ width: '260px' }}>
+            <div style={{ width: '280px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                 <span style={{ color: '#6b7280' }}>Subtotal</span>
-                <span style={{ fontWeight: 600 }}>₹{(inv.subtotal || 0).toLocaleString('en-IN')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#6b7280' }}>CGST (9%)</span>
-                <span>₹{(((inv.tax_amount || 0) / 2).toFixed(2)).toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#6b7280' }}>SGST (9%)</span>
-                <span>₹{(((inv.tax_amount || 0) / 2).toFixed(2)).toLocaleString()}</span>
+                <span style={{ fontWeight: 600 }}>{fmtCurrency(inv.subtotal)}</span>
               </div>
               {(inv.discount_amount || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                   <span style={{ color: '#16a34a' }}>Discount</span>
-                  <span style={{ color: '#16a34a' }}>-₹{(inv.discount_amount || 0).toLocaleString('en-IN')}</span>
+                  <span style={{ color: '#16a34a' }}>-{fmtCurrency(inv.discount_amount)}</span>
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '4px', borderTop: '2px solid #1e40af', fontSize: '16px', fontWeight: 800 }}>
+              {(inv.gst_percent || 0) > 0 && (isIGST ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#6b7280' }}>IGST ({inv.gst_percent}%)</span>
+                  <span>{fmtCurrency(inv.tax_amount)}</span>
+                </div>
+              ) : (<>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#6b7280' }}>CGST ({(inv.gst_percent || 0) / 2}%)</span>
+                  <span>{fmtCurrency((inv.tax_amount || 0) / 2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#6b7280' }}>SGST ({(inv.gst_percent || 0) / 2}%)</span>
+                  <span>{fmtCurrency((inv.tax_amount || 0) / 2)}</span>
+                </div>
+              </>))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '4px', borderTop: '2px solid #059669', fontSize: '16px', fontWeight: 800 }}>
                 <span>Grand Total</span>
-                <span>₹{(inv.total_amount || 0).toLocaleString('en-IN')}</span>
+                <span>{fmtCurrency(inv.total_amount)}</span>
               </div>
             </div>
           </div>
+
+          {/* Bank Details */}
+          {co.bank_name && (
+            <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginTop: '24px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bank Details</p>
+              <p style={{ fontSize: '12px', margin: '2px 0' }}>Bank: <strong>{co.bank_name}</strong></p>
+              {co.bank_account && <p style={{ fontSize: '12px', margin: '2px 0' }}>A/C No: <strong>{co.bank_account}</strong></p>}
+              {co.bank_ifsc && <p style={{ fontSize: '12px', margin: '2px 0' }}>IFSC: <strong>{co.bank_ifsc}</strong>{co.bank_branch ? ` | Branch: ${co.bank_branch}` : ''}</p>}
+            </div>
+          )}
 
           {/* Footer */}
           <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -311,9 +406,15 @@ export default function InvoicesPage() {
               <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Thank you for your business!</p>
               <p style={{ fontSize: '10px', color: '#9ca3af', margin: '2px 0 0' }}>This is a computer-generated invoice.</p>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '150px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Authorized Signatory</p>
+            <div style={{ display: 'flex', gap: '60px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
+                <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Customer Signature</p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
+                <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Authorized Signatory</p>
+              </div>
             </div>
           </div>
         </div>
@@ -324,55 +425,74 @@ export default function InvoicesPage() {
   /* ═══════════════════════ DETAIL OVERLAY ═══════════════════════ */
   if (detailInvoice) {
     const inv = detailInvoice
-    const o = inv.order || {}
+    const isIGST = inv.place_of_supply && co.state_code && inv.place_of_supply !== co.state_code
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-blue-700 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="typo-modal-title text-white leading-tight">{inv.invoice_number}</h1>
-            <p className="text-xs opacity-80">Order {o.order_number || '—'} &middot; <StatusBadge status={inv.status} /></p>
+            <p className="text-xs text-emerald-100">{inv.order?.order_number ? `Order ${inv.order.order_number}` : 'Direct Sale'} · <StatusBadge status={inv.status} /></p>
           </div>
           <div className="flex gap-2">
-            <button onClick={openPrint} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">
-              Print Invoice
-            </button>
+            <button onClick={openPrint} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
             <button onClick={() => setDetailInvoice(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
         </div>
 
         {detailLoading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
-          </div>
+          <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
-            {/* Info cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {/* 6 info cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Bill To</p>
-                <p className="typo-data">{o.customer?.name || o.customer_name || '—'}</p>
-                {(o.customer?.phone || o.customer_phone) && <p className="text-xs text-gray-600 mt-0.5">Phone: {o.customer?.phone || o.customer_phone}</p>}
-                {(o.customer_address || o.customer?.city) && <p className="text-xs text-gray-600 mt-0.5">{o.customer_address || o.customer?.city}</p>}
-                {o.customer?.gst_no && <p className="text-xs text-gray-600 mt-0.5">GST: {o.customer.gst_no}</p>}
+                <p className="typo-data">{inv.customer_name || '—'}</p>
+                {inv.customer_phone && <p className="text-xs text-gray-600 mt-0.5">Phone: {inv.customer_phone}</p>}
+                {inv.customer_address && <p className="text-xs text-gray-600 mt-0.5">{inv.customer_address}</p>}
+                {inv.customer_gst_no && <p className="text-xs text-gray-600 mt-0.5 font-medium">GST: {inv.customer_gst_no}</p>}
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Invoice Info</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-gray-500">Issued:</span> <span className="font-medium">{inv.issued_at ? new Date(inv.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
+                <div className="grid grid-cols-2 gap-1 text-xs mt-0.5">
+                  <div><span className="text-gray-500">Issued:</span> <span className="font-medium">{fmtDate(inv.issued_at)}</span></div>
                   <div><span className="text-gray-500">Status:</span> <StatusBadge status={inv.status} /></div>
-                  {inv.paid_at && (
-                    <div className="col-span-2"><span className="text-gray-500">Paid:</span> <span className="font-medium text-green-600">{new Date(inv.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
-                  )}
+                  <div><span className="text-gray-500">Type:</span> <span className="font-medium">{inv.order ? 'From Order' : 'Direct Sale'}</span></div>
+                  {inv.paid_at && <div><span className="text-gray-500">Paid:</span> <span className="font-medium text-green-600">{fmtDate(inv.paid_at)}</span></div>}
                 </div>
               </div>
-            </div>
-
-            {inv.notes && (
-              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
-                <span className="font-semibold">Notes:</span> {inv.notes}
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Payment</p>
+                <div className="text-xs mt-0.5 space-y-0.5">
+                  <div><span className="text-gray-500">Due:</span> <span className="font-medium">{inv.due_date ? fmtDate(inv.due_date + 'T00:00:00') : '—'}</span></div>
+                  {inv.payment_terms && <div><span className="text-gray-500">Terms:</span> <span className="font-medium">{inv.payment_terms}</span></div>}
+                  {inv.place_of_supply && <div><span className="text-gray-500">Place of Supply:</span> <span className="font-medium">{inv.place_of_supply}</span></div>}
+                </div>
               </div>
-            )}
+              {inv.order && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">Linked Order</p>
+                  <button onClick={() => { setDetailInvoice(null); navigate('/orders') }} className="text-emerald-700 font-semibold text-sm hover:underline mt-0.5">
+                    {inv.order.order_number} →
+                  </button>
+                </div>
+              )}
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Financial Summary</p>
+                <div className="text-xs mt-0.5 space-y-0.5">
+                  <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{fmtCurrency(inv.subtotal)}</span></div>
+                  {(inv.discount_amount || 0) > 0 && <div className="flex justify-between"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(inv.discount_amount)}</span></div>}
+                  <div className="flex justify-between"><span className="text-gray-500">Tax ({inv.gst_percent || 0}%)</span><span>{fmtCurrency(inv.tax_amount)}</span></div>
+                  <div className="flex justify-between font-bold border-t border-emerald-300 pt-0.5"><span>Total</span><span>{fmtCurrency(inv.total_amount)}</span></div>
+                </div>
+              </div>
+              {inv.notes && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                  <p className="typo-label-sm">Notes</p>
+                  <p className="text-xs text-amber-800 mt-0.5">{inv.notes}</p>
+                </div>
+              )}
+            </div>
 
             {/* Line items */}
             <div className="border rounded overflow-hidden">
@@ -380,6 +500,7 @@ export default function InvoicesPage() {
                 <thead className="bg-gray-50">
                   <tr className="text-left text-gray-600 typo-th">
                     <th className="px-2 py-1.5">#</th>
+                    <th className="px-2 py-1.5">HSN</th>
                     <th className="px-2 py-1.5">SKU</th>
                     <th className="px-2 py-1.5">Color</th>
                     <th className="px-2 py-1.5">Size</th>
@@ -392,6 +513,7 @@ export default function InvoicesPage() {
                   {inv.items?.map((item, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-2 py-1.5 text-gray-400">{i + 1}</td>
+                      <td className="px-2 py-1.5 text-gray-500">{item.hsn_code || '—'}</td>
                       <td className="px-2 py-1.5"><SKUCodeDisplay code={item.sku?.sku_code} /></td>
                       <td className="px-2 py-1.5">
                         {item.sku?.color ? (
@@ -403,49 +525,51 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-2 py-1.5 font-semibold">{item.sku?.size || '—'}</td>
                       <td className="px-2 py-1.5 text-right font-medium">{item.quantity}</td>
-                      <td className="px-2 py-1.5 text-right">₹{(item.unit_price || 0).toLocaleString('en-IN')}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold">₹{(item.total_price || 0).toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-1.5 text-right">{fmtCurrency(item.unit_price)}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold">{fmtCurrency(item.total_price)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Amount summary */}
-            <div className="flex justify-end">
-              <div className="w-64 space-y-0.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="font-medium">₹{(inv.subtotal || 0).toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">CGST (9%)</span>
-                  <span>₹{(((inv.tax_amount || 0) / 2).toFixed(2))}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">SGST (9%)</span>
-                  <span>₹{(((inv.tax_amount || 0) / 2).toFixed(2))}</span>
-                </div>
-                {(inv.discount_amount || 0) > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-green-600">Discount</span>
-                    <span className="text-green-600">-₹{(inv.discount_amount || 0).toLocaleString('en-IN')}</span>
-                  </div>
-                )}
-                <div className="flex justify-between pt-2 border-t-2 border-emerald-600 typo-kpi-sm">
-                  <span>Grand Total</span>
-                  <span>₹{(inv.total_amount || 0).toLocaleString('en-IN')}</span>
-                </div>
+            {/* Bank details */}
+            {co.bank_name && (
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Bank Details</p>
+                <p className="text-xs mt-0.5">{co.bank_name} — A/C: {co.bank_account || '—'}</p>
+                <p className="text-xs text-gray-500">IFSC: {co.bank_ifsc || '—'}{co.bank_branch ? ` · Branch: ${co.bank_branch}` : ''}</p>
               </div>
-            </div>
+            )}
 
             {/* Actions */}
             {inv.status === 'issued' && (
               <div className="flex justify-end gap-2 pt-3 border-t">
+                <button onClick={() => setConfirmCancel(true)} disabled={actioning}
+                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
+                  Cancel Invoice
+                </button>
                 <button onClick={handleMarkPaid} disabled={actioning}
                   className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Mark as Paid'}
                 </button>
+              </div>
+            )}
+
+            {/* Cancel confirmation */}
+            {confirmCancel && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
+                  <h3 className="typo-data text-red-700">Cancel this invoice?</h3>
+                  <p className="text-xs text-gray-500">This will reverse the ledger entry{!inv.order_id ? ' and restore stock' : ''}. This cannot be undone.</p>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => setConfirmCancel(false)} className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep</button>
+                    <button onClick={handleCancelInvoice} disabled={actioning}
+                      className="rounded bg-red-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-red-700 disabled:opacity-50">
+                      {actioning ? 'Cancelling...' : 'Yes, Cancel'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -457,28 +581,34 @@ export default function InvoicesPage() {
   /* ═══════════════════════ LIST VIEW ═══════════════════════ */
   return (
     <div>
-      {/* Header */}
-      <div>
-        <h1 className="typo-page-title">Invoices</h1>
-        <p className="mt-1 typo-caption">Track billing and payment status</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="typo-page-title">Invoices</h1>
+          <p className="mt-1 typo-caption">Track billing and payment status</p>
+        </div>
+        <button onClick={openCreate}
+          className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm transition-colors flex items-center gap-1.5">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          New Invoice
+        </button>
       </div>
 
-      {/* KPI strip */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KPICard label="Total Invoices" value={kpis.total} color="slate" />
-        <KPICard label="Unpaid" value={kpis.unpaidCount} sub={`₹${kpis.unpaidAmt.toLocaleString('en-IN')}`} color="amber" />
-        <KPICard label="Paid" value={kpis.paidCount} sub={`₹${kpis.paidAmt.toLocaleString('en-IN')}`} color="green" />
-        <KPICard label="Revenue" value={`₹${kpis.revenue.toLocaleString('en-IN')}`} color="emerald" />
+      {/* KPI strip — 6 cards */}
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        <KPICard label="Total" value={kpis.total} color="slate" />
+        <KPICard label="Unpaid" value={kpis.unpaidCount} sub={fmtCurrency(kpis.unpaidAmt)} color="amber" />
+        <KPICard label="Paid" value={kpis.paidCount} sub={fmtCurrency(kpis.paidAmt)} color="green" />
+        <KPICard label="Cancelled" value={kpis.cancelledCount} color="red" />
+        <KPICard label="Overdue" value={kpis.overdueCount} color="amber" />
+        <KPICard label="This Month" value={fmtCurrency(kpis.monthRevenue)} color="emerald" />
       </div>
 
-      {/* Tab pills + search */}
+      {/* Tabs + search */}
       <div className="mt-3 flex items-center gap-3 flex-wrap">
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(t => (
             <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
-              className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${
-                statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}>
+              className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               {t.label}
             </button>
           ))}
@@ -494,6 +624,188 @@ export default function InvoicesPage() {
         <DataTable columns={COLUMNS} data={invoicesList} loading={loading} onRowClick={handleRowClick} emptyText="No invoices found." />
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
+
+      {/* ═══════════════════════ CREATE OVERLAY ═══════════════════════ */}
+      {createMode && (() => {
+        const subtotal = invItems.reduce((s, it) => s + (it.quantity * it.unit_price || 0), 0)
+        const discount = parseFloat(invForm.discount_amount) || 0
+        const taxable = subtotal - discount
+        const gstPct = parseFloat(invForm.gst_percent) || 0
+        const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
+        const grandTotal = taxable + gstAmt
+        return (
+          <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
+              <div>
+                <h1 className="typo-modal-title text-white leading-tight">New Invoice</h1>
+                <p className="text-xs text-emerald-100">Direct sale — no order required</p>
+              </div>
+              <button onClick={closeCreate} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Cancel</button>
+            </div>
+
+            <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-4">
+              {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
+
+              {/* Invoice details */}
+              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                <h3 className="typo-label-sm mb-2">Invoice Details</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="col-span-2">
+                    <label className="typo-label">Customer</label>
+                    <FilterSelect full value={invForm.customer_id}
+                      onChange={v => {
+                        setInvForm(f => ({ ...f, customer_id: v }))
+                        const cust = customers.find(c => c.id === v)
+                        if (cust?.due_days) setInvForm(f => ({ ...f, payment_terms: `Net ${cust.due_days}` }))
+                        if (cust?.state_code) setInvForm(f => ({ ...f, place_of_supply: cust.state_code }))
+                        setIsDirty(true)
+                      }}
+                      options={[{ value: '', label: 'Select customer...' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.phone ? ` — ${c.phone}` : ''}` }))]} />
+                  </div>
+                  <div>
+                    <label className="typo-label">GST %</label>
+                    <FilterSelect full value={invForm.gst_percent}
+                      onChange={v => { setInvForm(f => ({ ...f, gst_percent: v })); setIsDirty(true) }}
+                      options={GST_OPTIONS} />
+                  </div>
+                  <div>
+                    <label className="typo-label">Discount (₹)</label>
+                    <input type="number" min="0" step="0.01" className="typo-input w-full"
+                      value={invForm.discount_amount}
+                      onChange={e => { setInvForm(f => ({ ...f, discount_amount: e.target.value })); setIsDirty(true) }}
+                      placeholder="0.00" />
+                  </div>
+                  <div>
+                    <label className="typo-label">Payment Terms</label>
+                    <input type="text" className="typo-input w-full"
+                      value={invForm.payment_terms}
+                      onChange={e => { setInvForm(f => ({ ...f, payment_terms: e.target.value })); setIsDirty(true) }}
+                      placeholder="e.g. Net 30" />
+                  </div>
+                  <div>
+                    <label className="typo-label">Place of Supply</label>
+                    <input type="text" className="typo-input w-full"
+                      value={invForm.place_of_supply}
+                      onChange={e => { setInvForm(f => ({ ...f, place_of_supply: e.target.value })); setIsDirty(true) }}
+                      placeholder="State code" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Line items */}
+              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="typo-label-sm">Line Items</h3>
+                  <button onClick={addInvItem} className="rounded bg-emerald-50 text-emerald-700 px-2.5 py-1 typo-btn-sm hover:bg-emerald-100 transition-colors">+ Add Item</button>
+                </div>
+                <div className="border rounded">
+                  <table className="w-full text-xs table-fixed">
+                    <thead className="bg-gray-50">
+                      <tr className="typo-th text-left">
+                        <th className="px-2 py-1.5 w-[45%]">SKU</th>
+                        <th className="px-2 py-1.5 w-[15%] text-right">Qty</th>
+                        <th className="px-2 py-1.5 w-[18%] text-right">Rate (₹)</th>
+                        <th className="px-2 py-1.5 w-[15%] text-right">Amount</th>
+                        <th className="px-2 py-1.5 w-[7%]"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {invItems.map((item, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full value={item.sku_id}
+                              onChange={v => {
+                                const sku = allSKUs.find(s => s.id === v)
+                                updateInvItem(i, 'sku_id', v)
+                                if (sku?.selling_price || sku?.base_price || sku?.sale_rate) updateInvItem(i, 'unit_price', sku.sale_rate || sku.selling_price || sku.base_price)
+                              }}
+                              options={[{ value: '', label: 'Select SKU...' }, ...allSKUs.map(s => ({
+                                value: s.id,
+                                label: `${s.sku_code} — Stock: ${s.stock?.available_qty ?? s.available_qty ?? '?'}`,
+                              }))]} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input type="number" min="1" className="typo-input-sm w-full text-right"
+                              value={item.quantity} onChange={e => updateInvItem(i, 'quantity', parseInt(e.target.value) || 0)} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input type="number" min="0" step="0.01" className="typo-input-sm w-full text-right"
+                              value={item.unit_price} onChange={e => updateInvItem(i, 'unit_price', parseFloat(e.target.value) || 0)} />
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-semibold">{fmtCurrency(item.quantity * item.unit_price)}</td>
+                          <td className="px-2 py-1.5 text-center">
+                            {invItems.length > 1 && (
+                              <button onClick={() => removeInvItem(i)} className="text-red-400 hover:text-red-600 transition-colors">
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Notes + Summary */}
+              {invItems.some(it => it.sku_id) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                    <h4 className="typo-label-sm mb-2">Notes</h4>
+                    <textarea rows={3} className="typo-input w-full" placeholder="Optional notes..."
+                      value={invForm.notes || ''} onChange={e => { setInvForm(f => ({ ...f, notes: e.target.value })); setIsDirty(true) }} />
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                    <h4 className="typo-label-sm mb-2">Invoice Summary</h4>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between typo-td"><span>Subtotal</span><span>{fmtCurrency(subtotal)}</span></div>
+                      {discount > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(discount)}</span></div>}
+                      {gstPct > 0 && (<>
+                        <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
+                        <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
+                      </>)}
+                      <div className="flex justify-between pt-1.5 border-t-2 border-emerald-600 typo-kpi-sm">
+                        <span>Grand Total</span><span>{fmtCurrency(grandTotal)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sticky footer */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-2.5 flex items-center justify-between">
+              <div className="text-xs text-gray-400">
+                {invItems.filter(it => it.sku_id).length} items · <span className="text-gray-400">Ctrl+S save · Esc close</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="typo-kpi-sm text-gray-800">{fmtCurrency((() => { const s = invItems.reduce((a, it) => a + (it.quantity * it.unit_price || 0), 0); const d = parseFloat(invForm.discount_amount) || 0; const t = s - d; const g = parseFloat(invForm.gst_percent) || 0; return t + Math.round(t * g / 100 * 100) / 100 })())}</span>
+                <button onClick={closeCreate} className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleCreateInvoice} disabled={saving}
+                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                  {saving ? 'Saving...' : 'Create Invoice'}
+                </button>
+              </div>
+            </div>
+
+            {/* Discard confirmation */}
+            {showDiscard && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
+                  <h3 className="typo-data">Unsaved changes</h3>
+                  <p className="text-xs text-gray-500">You have unsaved invoice data. Discard changes?</p>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => setShowDiscard(false)} className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep Editing</button>
+                    <button onClick={() => { setShowDiscard(false); setCreateMode(false); setIsDirty(false) }}
+                      className="rounded bg-red-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-red-700">Discard</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

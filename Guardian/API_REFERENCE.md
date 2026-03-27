@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 17 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-26 (Session 84 — removed sendForProcessing, added challan edit endpoints, processing_id/processing_status on challan rolls)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-27 (Session 87 — gst_percent/discount on orders, standalone invoices, cancel invoice, order→invoice link)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -1018,6 +1018,9 @@ When `sku` is present:
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
+  "broker_name": "Rajesh",
+  "transport": "Shree Maruti",
+  "gst_percent": 12,
   "status": "pending",
   "notes": "Urgent delivery needed",
   "items": [
@@ -1036,7 +1039,12 @@ When `sku` is present:
       "fulfilled_qty": 0
     }
   ],
+  "has_shortage": false,
   "total_amount": 2250.0,
+  "discount_amount": 0,
+  "invoices": [
+    { "id": "uuid", "invoice_number": "INV-0001", "total_amount": 2520.0, "status": "issued" }
+  ],
   "created_at": "2026-02-08T08:00:00Z"
 }
 ```
@@ -1054,6 +1062,11 @@ When `sku` is present:
   "customer_name": "Priya Sharma",
   "customer_phone": "9876543210",
   "customer_address": "12, Ring Road, Surat 395003",
+  "order_date": "2026-03-27",
+  "broker_name": "Rajesh",
+  "transport": "Shree Maruti",
+  "gst_percent": 12,
+  "discount_amount": 0,
   "items": [
     { "sku_id": "uuid", "quantity": 5, "unit_price": 450.0 }
   ],
@@ -1061,7 +1074,7 @@ When `sku` is present:
 }
 ```
 **Response:** Created order object
-**Stock validation (S48):** Checks `InventoryState.available_qty` per item. Raises `InsufficientStockError` if insufficient.
+**Over-order (S86):** Allows ordering when stock is insufficient — reserves available portion, tracks `short_qty` on items.
 
 ### POST `/orders/{id}/ship`
 **Response:** Updated order (status → `shipped`) + auto-creates invoice
@@ -1081,6 +1094,7 @@ When `sku` is present:
 {
   "id": "uuid",
   "invoice_number": "INV-0001",
+  "gst_percent": 18,
   "order": {
     "id": "uuid",
     "order_number": "ORD-0002",
@@ -1088,6 +1102,9 @@ When `sku` is present:
     "customer_phone": "9876543212",
     "customer_address": "45, Textile Market, Ahmedabad 380002"
   },
+  "customer_name": "Anita Verma",
+  "customer_phone": "9876543212",
+  "customer_address": "45, Textile Market, Ahmedabad 380002",
   "subtotal": 1500.0,
   "tax_amount": 270.0,
   "discount_amount": 0,
@@ -1113,13 +1130,36 @@ When `sku` is present:
   ]
 }
 ```
-**IMPORTANT:** `order` is a nested object with `id`, `order_number`, `customer_name`, `customer_phone`, `customer_address` (S48 extension). `items[].sku` includes `color`, `size`, `base_price`.
+**S87:** `order` is nullable (standalone invoices have `order: null`). Top-level `customer_name/phone/address` are always populated — prefer invoice-level, fall back to order-level. `gst_percent` drives CGST/SGST split.
 
 ### GET `/invoices/{id}`
-**Response:** Single invoice object (same shape as list items). Uses `selectinload` for order + items + sku.
+**Response:** Single invoice object (same shape as list items). Uses `selectinload` for order + customer + items + sku.
+
+### POST `/invoices`
+**Request (standalone invoice — no order):**
+```json
+{
+  "customer_id": "uuid",
+  "customer_name": "Priya Sharma",
+  "customer_phone": "9876543210",
+  "customer_address": "Surat",
+  "gst_percent": 12,
+  "discount_amount": 0,
+  "items": [
+    { "sku_id": "uuid", "quantity": 5, "unit_price": 450.0 }
+  ],
+  "notes": "Optional"
+}
+```
+**Response:** Created invoice. Auto-creates ledger debit entry for customer.
+**Permission:** `invoice_manage`
 
 ### PATCH `/invoices/{id}/pay`
 **Response:** Updated invoice (status → `paid`, `paid_at` set)
+
+### POST `/invoices/{id}/cancel`
+**Response:** Updated invoice (status → `cancelled`). Only `draft` or `issued` invoices can be cancelled. Reverses ledger entry (credit note).
+**Permission:** `invoice_manage`
 
 ### GET `/invoices/{id}/pdf`
 **Response:** Binary PDF blob (Content-Type: application/pdf)

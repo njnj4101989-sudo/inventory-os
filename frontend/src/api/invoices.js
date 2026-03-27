@@ -39,6 +39,49 @@ export async function markPaid(id) {
   return client.patch(`/invoices/${id}/pay`)
 }
 
+export async function createInvoice(data) {
+  if (USE_MOCK) {
+    const nextNum = `INV-${String(invoices.length + 1).padStart(4, '0')}`
+    const newInv = {
+      id: crypto.randomUUID(),
+      invoice_number: nextNum,
+      order: null,
+      ...data,
+      status: 'issued',
+      issued_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    }
+    invoices.push(newInv)
+    return { data: { success: true, data: newInv } }
+  }
+  return client.post('/invoices', data)
+}
+
+export async function cancelInvoice(id) {
+  if (USE_MOCK) {
+    const invoice = invoices.find((inv) => inv.id === id)
+    if (invoice) invoice.status = 'cancelled'
+    return mockResponse(invoice, 'Invoice cancelled')
+  }
+  return client.post(`/invoices/${id}/cancel`)
+}
+
+export async function updateInvoice(id, data) {
+  if (USE_MOCK) {
+    const invoice = invoices.find((inv) => inv.id === id)
+    if (invoice) Object.assign(invoice, data)
+    return mockResponse(invoice, 'Invoice updated')
+  }
+  return client.patch(`/invoices/${id}`, data)
+}
+
+export async function createInvoiceFromOrder(data) {
+  if (USE_MOCK) {
+    return mockResponse({ id: crypto.randomUUID(), invoice_number: 'INV-MOCK', ...data }, 'Invoice created from order')
+  }
+  return client.post('/invoices/from-order', data)
+}
+
 export async function downloadPDF(id) {
   if (USE_MOCK) {
     return mockResponse({ url: '#', message: 'PDF generation is a stub in mock mode' })

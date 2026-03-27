@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
@@ -125,6 +126,7 @@ const SOURCE_OPTIONS = [
 ]
 
 export default function OrdersPage() {
+  const navigate = useNavigate()
   const { company } = useAuth()
   const [ordersList, setOrdersList] = useState([])
   const [total, setTotal] = useState(0)
@@ -149,7 +151,7 @@ export default function OrdersPage() {
   const [gridQty, setGridQty] = useState({})    // { sku_id: qty }
   const [gridPrice, setGridPrice] = useState({}) // { skuId: price }
   const [nextOrderNo, setNextOrderNo] = useState('')
-  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0' })
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0', discount_amount: '' })
   const [customers, setCustomers] = useState([])
   const [designSearch, setDesignSearch] = useState('')
   const [selectedDesigns, setSelectedDesigns] = useState(new Set()) // design keys added to order
@@ -363,7 +365,7 @@ export default function OrdersPage() {
     setGridQty({})
     setGridPrice({})
     setNextOrderNo('')
-    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0' })
+    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_name: '', transport: '', gst_percent: '0', discount_amount: '' })
     setDesignSearch('')
     setSelectedDesigns(new Set())
     setFormError(null)
@@ -474,6 +476,8 @@ export default function OrdersPage() {
         order_date: customerForm.order_date || null,
         broker_name: customerForm.broker_name?.trim() || null,
         transport: customerForm.transport?.trim() || null,
+        gst_percent: parseFloat(customerForm.gst_percent) || 0,
+        discount_amount: parseFloat(customerForm.discount_amount) || 0,
         notes: customerForm.notes.trim() || null,
         items,
       })
@@ -537,13 +541,37 @@ export default function OrdersPage() {
                 <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge ${SOURCE_COLORS[o.source] || 'bg-gray-100 text-gray-600'}`}>{o.source}</span>
               </div>
               <div className="bg-gray-50 rounded p-2">
-                <p className="typo-label-sm">Date</p>
-                <p className="typo-body">{o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
+                <p className="typo-label-sm">Order Date</p>
+                <p className="typo-body">{o.order_date ? new Date(o.order_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
               </div>
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Address</p>
                 <p className="typo-body">{o.customer_address || o.customer?.city || '—'}</p>
               </div>
+              {o.broker_name && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">Broker</p>
+                  <p className="typo-body">{o.broker_name}</p>
+                </div>
+              )}
+              {o.transport && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">Transport</p>
+                  <p className="typo-body">{o.transport}</p>
+                </div>
+              )}
+              {(o.gst_percent || 0) > 0 && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">GST</p>
+                  <p className="typo-body">{o.gst_percent}%</p>
+                </div>
+              )}
+              {o.customer?.gst_no && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">Customer GST</p>
+                  <p className="typo-body">{o.customer.gst_no}</p>
+                </div>
+              )}
             </div>
 
             {o.notes && (
@@ -613,13 +641,44 @@ export default function OrdersPage() {
               </table>
             </div>
 
-            {/* Grand total */}
-            <div className="flex justify-end">
-              <div className="bg-gray-50 rounded px-4 py-2 text-right">
-                <span className="typo-caption">Grand Total</span>
-                <p className="typo-kpi-sm text-gray-800">₹{(o.total_amount || 0).toLocaleString('en-IN')}</p>
-              </div>
-            </div>
+            {/* Order totals */}
+            {(() => {
+              const sub = o.total_amount || 0
+              const disc = o.discount_amount || 0
+              const taxable = sub - disc
+              const gst = o.gst_percent || 0
+              const gstAmt = taxable * gst / 100
+              return (
+                <div className="flex justify-end">
+                  <div className="w-56 space-y-0.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Subtotal</span>
+                      <span className="font-medium">₹{sub.toLocaleString('en-IN')}</span>
+                    </div>
+                    {disc > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-green-600">Discount</span>
+                        <span className="text-green-600">-₹{disc.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {gst > 0 && <>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">CGST ({gst / 2}%)</span>
+                        <span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">SGST ({gst / 2}%)</span>
+                        <span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </>}
+                    <div className="flex justify-between pt-1.5 border-t border-emerald-600 mt-1">
+                      <span className="typo-data-label">Grand Total</span>
+                      <span className="typo-kpi-sm text-gray-800">₹{(taxable + gstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Actions */}
             {canAct && (
@@ -631,6 +690,20 @@ export default function OrdersPage() {
                 <button onClick={() => handleAction('ship')} disabled={actioning}
                   className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Ship Order'}
+                </button>
+              </div>
+            )}
+
+            {/* Invoice link for shipped orders */}
+            {o.invoices?.length > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t">
+                <div className="text-xs text-gray-500">
+                  {o.invoices.length === 1 ? 'Invoice generated' : `${o.invoices.length} invoices generated`}
+                </div>
+                <button onClick={() => navigate('/invoices')}
+                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 transition-colors flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
+                  {o.invoices[0].invoice_number}
                 </button>
               </div>
             )}
@@ -954,8 +1027,10 @@ export default function OrdersPage() {
               {/* Notes + Order Summary — side by side like reference */}
               {totalItems > 0 && (() => {
                 const gstPct = parseFloat(customerForm.gst_percent) || 0
-                const gstAmt = Math.round(grandTotal * gstPct / 100 * 100) / 100
-                const orderTotal = grandTotal + gstAmt
+                const discountAmt = parseFloat(customerForm.discount_amount) || 0
+                const taxable = grandTotal - discountAmt
+                const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
+                const orderTotal = taxable + gstAmt
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                     <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
@@ -968,6 +1043,16 @@ export default function OrdersPage() {
                       <h4 className="typo-label-sm mb-2">Order Summary</h4>
                       <div className="space-y-1.5">
                         <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                        <div className="flex justify-between items-center typo-td-secondary">
+                          <span>Discount</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-400">₹</span>
+                            <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
+                              value={customerForm.discount_amount}
+                              onChange={(e) => setCustomerForm(f => ({ ...f, discount_amount: e.target.value }))}
+                              placeholder="0.00" />
+                          </div>
+                        </div>
                         {gstPct > 0 && (
                           <>
                             <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
@@ -1071,7 +1156,7 @@ export default function OrdersPage() {
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
 
       {/* Order Print Overlay */}
-      {printOrder && <OrderPrint order={printOrder} companyName={company?.name} onClose={() => setPrintOrder(null)} />}
+      {printOrder && <OrderPrint order={printOrder} companyName={company?.name} company={company} onClose={() => setPrintOrder(null)} />}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { useReactToPrint } from 'react-to-print'
  * Order Confirmation / Order Sheet — A4 print document.
  * Full-screen overlay with print button, follows JobChallan pattern.
  */
-export default function OrderPrint({ order, companyName, onClose }) {
+export default function OrderPrint({ order, companyName, company, onClose }) {
   const printRef = useRef(null)
 
   const o = order || {}
@@ -30,7 +30,7 @@ export default function OrderPrint({ order, companyName, onClose }) {
       <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
         <span className="font-semibold text-gray-800">Order {o.order_number}</span>
         <div className="flex gap-2">
-          <button onClick={handlePrint} className="rounded-lg bg-primary-600 text-white px-4 py-2 text-sm font-medium hover:bg-primary-700 transition-colors">
+          <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 transition-colors">
             Print
           </button>
           <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
@@ -49,11 +49,14 @@ export default function OrderPrint({ order, companyName, onClose }) {
         <div style={{ borderBottom: '3px solid #1e40af', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#1e40af', margin: 0, letterSpacing: '-0.5px' }}>ORDER CONFIRMATION</h1>
-            <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{companyName || 'DRS Blouse'}</p>
+            <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{companyName || company?.name || 'Company'}</p>
+            {company?.address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{company.address}{company.city ? `, ${company.city}` : ''}</p>}
+            {!company?.address && company?.city && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{company.city}</p>}
+            {company?.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: {company.gst_no}</p>}
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ fontSize: '14px', fontWeight: 700 }}>{o.order_number}</p>
-            <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(o.created_at)}</p>
+            <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {o.order_date ? fmtDate(o.order_date + 'T00:00:00') : fmtDate(o.created_at)}</p>
             <p style={{
               display: 'inline-block', padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, marginTop: '4px',
               background: o.status === 'shipped' ? '#dcfce7' : o.status === 'cancelled' ? '#fee2e2' : '#fef3c7',
@@ -77,6 +80,8 @@ export default function OrderPrint({ order, companyName, onClose }) {
             <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Order Details</p>
             <p style={{ fontSize: '11px', margin: '2px 0' }}><span style={{ fontWeight: 600 }}>Source:</span> {o.source || '—'}</p>
             {o.external_order_ref && <p style={{ fontSize: '11px', margin: '2px 0' }}><span style={{ fontWeight: 600 }}>Ext. Ref:</span> {o.external_order_ref}</p>}
+            {o.broker_name && <p style={{ fontSize: '11px', margin: '2px 0' }}><span style={{ fontWeight: 600 }}>Broker:</span> {o.broker_name}</p>}
+            {o.transport && <p style={{ fontSize: '11px', margin: '2px 0' }}><span style={{ fontWeight: 600 }}>Transport:</span> {o.transport}</p>}
             <p style={{ fontSize: '11px', margin: '2px 0' }}><span style={{ fontWeight: 600 }}>Items:</span> {items.length} line items · {totalQty} pcs</p>
           </div>
         </div>
@@ -117,14 +122,28 @@ export default function OrderPrint({ order, companyName, onClose }) {
 
         {/* Totals */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ width: '240px' }}>
+          <div style={{ width: '260px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
               <span style={{ color: '#6b7280' }}>Total Qty</span>
               <span style={{ fontWeight: 600 }}>{totalQty} pcs</span>
             </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+              <span style={{ color: '#6b7280' }}>Subtotal</span>
+              <span style={{ fontWeight: 600 }}>{'\u20B9'}{(o.total_amount || 0).toLocaleString('en-IN')}</span>
+            </div>
+            {(o.gst_percent || 0) > 0 && <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                <span style={{ color: '#6b7280' }}>CGST ({(o.gst_percent || 0) / 2}%)</span>
+                <span>{'\u20B9'}{((o.total_amount || 0) * (o.gst_percent || 0) / 200).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                <span style={{ color: '#6b7280' }}>SGST ({(o.gst_percent || 0) / 2}%)</span>
+                <span>{'\u20B9'}{((o.total_amount || 0) * (o.gst_percent || 0) / 200).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </>}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: '14px', borderTop: '2px solid #1f2937', marginTop: '4px' }}>
               <span style={{ fontWeight: 800 }}>Grand Total</span>
-              <span style={{ fontWeight: 800 }}>{'\u20B9'}{(o.total_amount || 0).toLocaleString('en-IN')}</span>
+              <span style={{ fontWeight: 800 }}>{'\u20B9'}{((o.total_amount || 0) * (1 + (o.gst_percent || 0) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         </div>

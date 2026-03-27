@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -75,6 +75,8 @@ class OrderCreate(BaseModel):
     order_date: date | None = None
     broker_name: str | None = None
     transport: str | None = None
+    gst_percent: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
     items: list[OrderItemInput]
     notes: str | None = None
 
@@ -101,9 +103,11 @@ class OrderResponse(BaseSchema):
     customer_address: str | None = None
     broker_name: str | None = None
     transport: str | None = None
+    gst_percent: Decimal = Decimal("0")
     status: str
     items: list[OrderItemResponse] = []
     has_shortage: bool = False
     total_amount: Decimal | None = None
+    discount_amount: Decimal = Decimal("0")
     notes: str | None = None
     created_at: datetime

@@ -31,7 +31,55 @@
 
 ---
 
-## Current State (Session 86 — 2026-03-27)
+## Current State (Session 87 — 2026-03-27)
+
+### S87: Sale Invoice Polish + Standalone Invoices + Order GST/Discount
+
+**14 files changed. 1 migration (dev applied, prod pending).**
+
+**Invoice Standalone Create (new feature):**
+- `POST /invoices` — create invoice without an order (direct sale)
+- Invoice model: `order_id` now nullable, added `customer_id` FK, `customer_name/phone/address`, `gst_percent`
+- `InvoiceCreate` + `InvoiceItemInput` request schemas
+- `create_standalone_invoice()` service — SKU lookup, line items, ledger debit entry
+- InvoicesPage: "New Invoice" button + full-screen create overlay (customer picker, GST%, discount, SKU line items, notes, live summary)
+
+**Invoice Cancel:**
+- `POST /invoices/{id}/cancel` — only draft/issued, reverses ledger (credit note)
+- Cancel button + red confirmation modal on detail overlay
+- "Cancelled" tab in filter pills
+
+**GST/Discount on Orders + Invoices:**
+- `gst_percent` + `discount_amount` on Order model/schema/service/response
+- `gst_percent` on Invoice model — drives CGST/SGST split (was hardcoded 18%)
+- Order create form: discount input in summary, GST calc uses actual percent
+- Order detail: Subtotal → Discount → CGST/SGST → Grand Total breakdown
+- Invoice print + detail: dynamic GST% (was hardcoded 9%/9%)
+
+**Order → Invoice Link:**
+- `selectinload(Order.invoices)` on order queries
+- Order response includes `invoices[]` array
+- Order detail: invoice link button for shipped orders
+
+**Company Info in Print + Auth:**
+- Auth service returns `city`, `gst_no`, `address` on company response
+- Invoice print + OrderPrint: company name, address, GSTIN from JWT company
+- "Direct Sale" label for standalone invoices (was "Order —")
+
+**Bill To Fallback:**
+- Detail + print overlays: `inv.customer_name` → `order.customer` fallback chain
+- DataTable customer column: same fallback
+
+**Migration `m7g8h9i0j1k2`:**
+- `orders.gst_percent`, `orders.discount_amount`
+- `invoices.gst_percent`, `customer_id` (FK + index), `customer_name/phone/address`
+- `invoices.order_id` → nullable, `qr_code_data` → nullable
+
+**NEXT:** Deploy S87 to prod. Reports overhaul. Supplier master invoice filter. Remnant roll UX (needs spec).
+
+---
+
+## Previous State (Session 86 — 2026-03-27)
 
 ### S86: Over-Order + Reservations + Pipeline Qty + Order Form Overhaul
 
@@ -607,6 +655,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S87 | Sale Invoice Polish + Standalone | Standalone invoices (POST /invoices, no order), cancel invoice + ledger reversal, gst_percent/discount_amount on orders+invoices, dynamic GST split (was hardcoded 18%), order→invoice link, company info in prints, create invoice overlay, Bill To fallback for standalone |
 | S86 | Over-Order + Pipeline + Order Overhaul | Over-order with reservations (short_qty, has_shortage), pipeline_qty on SKUs (read-only from batches), reservation CHECK fix, order form overhaul (8-field header, per-SKU pricing, flat line-items table, Notes+Summary layout, GST%, broker, transport, order_date), 3 migrations |
 | S85 | Login + Purchase Stock + SKU Redesign | Premium login (emerald, illustration, frosted glass), order create Decimal fix, PurchaseItem model (34th), purchase-stock endpoint, SKU page tabs + overlay, FilterSelect type-ahead + arrow keys, invoice type badges |
 | S84 | Challan CRUD + Cancel + Auto-Fill | Removed sendForProcessing (all sends via Job Challans), edit challan UI (both types), cancel challan with 5 safety guards + migration, processing tab challan column, auto-fill debounce fix |

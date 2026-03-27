@@ -359,7 +359,7 @@ export const inventoryEvents = [
 export const orders = [
   {
     id: uid('14'), order_number: 'ORD-0001', source: 'web',
-    external_order_ref: null,
+    external_order_ref: null, gst_percent: 12,
     customer_name: 'Priya Sharma', customer_phone: '9876543210',
     customer_address: '12, Ring Road, Surat 395003',
     status: 'pending', notes: 'Urgent delivery needed',
@@ -372,7 +372,7 @@ export const orders = [
     total_amount: 2250.0, created_at: '2026-02-08T08:00:00Z',
   },
   {
-    id: uid('15'), order_number: 'ORD-0002', source: 'ecommerce',
+    id: uid('15'), order_number: 'ORD-0002', source: 'ecommerce', gst_percent: 18,
     external_order_ref: 'DRS-1234',
     customer_name: 'Anita Verma', customer_phone: '9876543212',
     customer_address: '45, Textile Market, Ahmedabad 380002',
@@ -386,7 +386,7 @@ export const orders = [
     total_amount: 1500.0, created_at: '2026-02-07T14:00:00Z',
   },
   {
-    id: uid('16'), order_number: 'ORD-0003', source: 'web',
+    id: uid('16'), order_number: 'ORD-0003', source: 'web', gst_percent: 5,
     external_order_ref: null,
     customer_name: 'Rahul Gupta', customer_phone: '9876543213',
     customer_address: '78, Station Road, Mumbai 400001',
@@ -408,7 +408,7 @@ export const orders = [
 // ── Invoices ───────────────────────────────────────────
 export const invoices = [
   {
-    id: uid('17'), invoice_number: 'INV-0001',
+    id: uid('17'), invoice_number: 'INV-0001', gst_percent: 18,
     order: { id: uid('15'), order_number: 'ORD-0002', customer_name: 'Anita Verma', customer_phone: '9876543212', customer_address: '45, Textile Market, Ahmedabad 380002' },
     subtotal: 1500.0, tax_amount: 270.0, discount_amount: 0,
     total_amount: 1770.0, status: 'paid', notes: null,
@@ -422,9 +422,9 @@ export const invoices = [
     ],
   },
   {
-    id: uid('18'), invoice_number: 'INV-0002',
+    id: uid('18'), invoice_number: 'INV-0002', gst_percent: 12,
     order: { id: uid('14'), order_number: 'ORD-0001', customer_name: 'Priya Sharma', customer_phone: '9876543210', customer_address: '12, Ring Road, Surat 395003' },
-    subtotal: 2250.0, tax_amount: 405.0, discount_amount: 100.0,
+    subtotal: 2250.0, tax_amount: 270.0, discount_amount: 100.0,
     total_amount: 2555.0, status: 'issued', notes: 'Discount applied for bulk order',
     issued_at: '2026-02-08T08:30:00Z', paid_at: null,
     created_at: '2026-02-08T08:30:00Z',
