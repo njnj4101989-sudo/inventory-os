@@ -728,12 +728,6 @@ export default function OrdersPage() {
                   onChange={(v) => setCustomerForm(f => ({ ...f, gst_percent: v }))}
                   options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
               </div>
-              <div className="sm:col-span-2">
-                <label className="typo-label-sm">Notes</label>
-                <input className="typo-input-sm" value={customerForm.notes}
-                  onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder="Optional notes" />
-              </div>
             </div>
             {customerForm.customer_id && (() => {
               const c = customers.find(cu => cu.id === customerForm.customer_id)
@@ -956,6 +950,39 @@ export default function OrdersPage() {
                   <p className="typo-body text-gray-400">Click a design card above to add it to the order</p>
                 </div>
               )}
+
+              {/* Notes + Order Summary — side by side like reference */}
+              {totalItems > 0 && (() => {
+                const gstPct = parseFloat(customerForm.gst_percent) || 0
+                const gstAmt = Math.round(grandTotal * gstPct / 100 * 100) / 100
+                const orderTotal = grandTotal + gstAmt
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                      <h4 className="typo-label-sm mb-2">Notes</h4>
+                      <textarea className="typo-input-sm w-full h-28 resize-none" value={customerForm.notes}
+                        onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
+                        placeholder="Remarks..." />
+                    </div>
+                    <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                      <h4 className="typo-label-sm mb-2">Order Summary</h4>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                        {gstPct > 0 && (
+                          <>
+                            <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                            <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                          </>
+                        )}
+                        <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2 font-bold">
+                          <span>Grand Total</span>
+                          <span className="text-emerald-700">₹{orderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )}
         </div>
