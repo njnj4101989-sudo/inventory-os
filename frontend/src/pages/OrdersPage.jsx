@@ -715,55 +715,43 @@ export default function OrdersPage() {
           {formError && <div className="mb-2"><ErrorAlert message={formError} onDismiss={() => setFormError(null)} /></div>}
 
           {/* Customer section */}
-          <div className="bg-gray-50 rounded-lg p-3 mb-3">
-            <h3 className="typo-card-title mb-2">Customer Details</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <div className="md:col-span-2">
-                <label className="typo-label-sm">Customer *</label>
-                <select ref={nameRef} value={customerForm.customer_id}
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
+            <h3 className="typo-card-title mb-3">Customer Details</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-2">
+                <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
+                <FilterSelect full value={customerForm.customer_id}
                   data-customer-field="customer_id"
                   data-master="customer"
-                  onChange={(e) => setCustomerForm(f => ({ ...f, customer_id: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'customer_id')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                  <option value="">Select customer (Shift+M to create)</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}{c.city ? ` — ${c.city}` : ''}{c.phone ? ` (${c.phone})` : ''}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
+                  options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
               </div>
-              {customerForm.customer_id && (() => {
-                const c = customers.find(cu => cu.id === customerForm.customer_id)
-                return c ? (
-                  <div className="flex items-center gap-3 text-xs text-gray-600 md:col-span-1">
-                    <div>
-                      {c.phone && <p>{c.phone}</p>}
-                      {c.gst_no && <p className="typo-caption">{c.gst_no}</p>}
-                    </div>
-                  </div>
-                ) : null
-              })()}
               <div>
                 <label className="typo-label-sm">Source</label>
-                <select value={customerForm.source}
+                <FilterSelect full value={customerForm.source}
                   data-customer-field="source"
-                  onChange={(e) => setCustomerForm(f => ({ ...f, source: e.target.value }))}
-                  onKeyDown={(e) => handleCustomerKeyDown(e, 'source')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                  <option value="web">Web</option>
-                  <option value="ecommerce">E-commerce</option>
-                  <option value="walk_in">Walk-in</option>
-                </select>
+                  onChange={(v) => setCustomerForm(f => ({ ...f, source: v }))}
+                  options={[{ value: 'web', label: 'Web' }, { value: 'ecommerce', label: 'E-commerce' }, { value: 'walk_in', label: 'Walk-in' }]} />
               </div>
               <div>
                 <label className="typo-label-sm">Notes</label>
-                <input type="text" value={customerForm.notes}
+                <input type="text" className="typo-input-sm" value={customerForm.notes}
                   data-customer-field="notes"
                   onChange={(e) => setCustomerForm(f => ({ ...f, notes: e.target.value }))}
                   onKeyDown={(e) => handleCustomerKeyDown(e, 'notes')}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Optional notes" />
+                  placeholder="Optional notes" />
               </div>
             </div>
+            {customerForm.customer_id && (() => {
+              const c = customers.find(cu => cu.id === customerForm.customer_id)
+              return c ? (
+                <div className="mt-2 flex items-center gap-4 text-xs text-gray-500 bg-gray-50 rounded px-3 py-1.5">
+                  {c.phone && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>{c.phone}</span>}
+                  {c.gst_no && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>GST: {c.gst_no}</span>}
+                  {c.city && <span className="inline-flex items-center gap-1"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>{c.city}</span>}
+                </div>
+              ) : null
+            })()}
           </div>
 
           {skuLoading ? (
@@ -777,10 +765,10 @@ export default function OrdersPage() {
           ) : (
             <>
               {/* ── Design Picker ── */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-2">
+              <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 mb-3">
+                <div className="flex items-center justify-between mb-3">
                   <h3 className="typo-card-title">Select Designs</h3>
-                  <span className="typo-caption">{designGroups.length} designs available</span>
+                  <span className="typo-badge bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{designGroups.length} designs available</span>
                 </div>
                 <div className="mb-2" data-design-search>
                   <SearchInput value={designSearch} onChange={setDesignSearch} placeholder="Search by design number (e.g. 101, 702)..." />
@@ -837,7 +825,7 @@ export default function OrdersPage() {
 
               {/* ── Selected Designs — color×size grids ── */}
               {selectedGroups.length > 0 && (
-                <div className="space-y-3">
+                <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 space-y-3">
                   <h3 className="typo-card-title">Order Items ({selectedGroups.length} design{selectedGroups.length > 1 ? 's' : ''})</h3>
                   {selectedGroups.map(group => {
                     const groupSubtotal = group.skus.reduce((s, sku) => {
@@ -961,8 +949,9 @@ export default function OrdersPage() {
               )}
 
               {selectedGroups.length === 0 && (
-                <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg mt-2">
-                  <p className="text-sm">Click a design card above to add it to the order</p>
+                <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg mt-2 bg-white">
+                  <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                  <p className="typo-body text-gray-400">Click a design card above to add it to the order</p>
                 </div>
               )}
             </>
