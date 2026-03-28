@@ -169,7 +169,6 @@ export default function OrdersPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
-  const nameRef = useRef(null)
 
   // Quick master for customer Shift+M
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
@@ -244,10 +243,13 @@ export default function OrdersPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen])
 
-  /* ── Auto-focus Name field on overlay open ── */
+  /* ── Auto-focus Customer field on overlay open ── */
   useEffect(() => {
     if (createMode && !skuLoading) {
-      setTimeout(() => nameRef.current?.focus(), 100)
+      setTimeout(() => {
+        const el = document.querySelector('button[data-master="customer"]')
+        if (el) el.focus()
+      }, 150)
     }
   }, [createMode, skuLoading])
 

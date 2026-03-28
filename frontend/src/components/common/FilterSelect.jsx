@@ -131,7 +131,7 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
         onClick={() => setOpen(v => !v)}
         onKeyDown={!searchable || !open ? handleKey : undefined}
         {...(rest['data-master'] ? { 'data-master': rest['data-master'] } : {})}
-        className={`inline-flex items-center justify-between gap-1.5 rounded border text-sm font-medium transition-colors ${
+        className={`inline-flex items-center justify-between gap-1.5 rounded border text-sm font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${
           full ? 'w-full rounded-lg px-2 py-1' : 'px-2 py-1'
         } ${
           open
