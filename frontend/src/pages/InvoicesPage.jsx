@@ -309,7 +309,7 @@ export default function InvoicesPage() {
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: '13px', fontWeight: 600 }}>{inv.invoice_number}</p>
               <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(inv.issued_at)}</p>
-              <p style={{ fontSize: '11px', color: '#6b7280' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}</p>
+              <p style={{ fontSize: '11px', color: '#6b7280' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}{inv.shipment?.shipment_no ? ` · ${inv.shipment.shipment_no}` : ''}</p>
               {inv.due_date && <p style={{ fontSize: '11px', color: '#6b7280' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
             </div>
           </div>
@@ -490,7 +490,7 @@ export default function InvoicesPage() {
                 <div className="grid grid-cols-2 gap-1 text-xs mt-0.5">
                   <div><span className="text-gray-500">Issued:</span> <span className="font-medium">{fmtDate(inv.issued_at)}</span></div>
                   <div><span className="text-gray-500">Status:</span> <StatusBadge status={inv.status} /></div>
-                  <div><span className="text-gray-500">Type:</span> <span className="font-medium">{inv.order ? 'From Order' : 'Direct Sale'}</span></div>
+                  <div><span className="text-gray-500">Type:</span> <span className="font-medium">{inv.order ? 'From Order' : 'Direct Sale'}{inv.shipment ? ` · ${inv.shipment.shipment_no}` : ''}</span></div>
                   {inv.paid_at && <div><span className="text-gray-500">Paid:</span> <span className="font-medium text-green-600">{fmtDate(inv.paid_at)}</span></div>}
                 </div>
               </div>

@@ -22,6 +22,7 @@ from app.models.batch import Batch
 from app.models.order import Order
 from app.models.invoice import Invoice
 from app.models.reservation import Reservation
+from app.models.shipment import Shipment
 
 
 def _extract_number(code: str | None, prefix: str) -> int:
@@ -168,6 +169,15 @@ async def next_invoice_number(db: AsyncSession, fy_id: UUID) -> str:
         "INV-",
     )
     return f"INV-{current + 1:04d}"
+
+
+async def next_shipment_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next SHP-XXXX code, scoped to financial year."""
+    current = _extract_number(
+        await _max_code(db, Shipment.shipment_no, extra_where=Shipment.fy_id == fy_id),
+        "SHP-",
+    )
+    return f"SHP-{current + 1:04d}"
 
 
 async def next_reservation_code(db: AsyncSession) -> str:

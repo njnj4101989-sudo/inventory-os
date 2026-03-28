@@ -83,17 +83,27 @@ class OrderCreate(BaseModel):
     notes: str | None = None
 
 
+class ShipItemInput(BaseModel):
+    """Single item in partial ship request."""
+
+    order_item_id: UUID
+    quantity: int  # must be > 0 and <= remaining (quantity - fulfilled_qty)
+
+
 class ShipOrderRequest(BaseModel):
-    """POST /orders/{id}/ship — body. All fields optional (LR/eway can come later)."""
+    """POST /orders/{id}/ship — body. items=None ships all remaining (backward compat)."""
+
+    items: list[ShipItemInput] | None = None
     transport_id: UUID | None = None
     lr_number: str | None = None
     lr_date: date | None = None
     eway_bill_no: str | None = None
     eway_bill_date: date | None = None
+    notes: str | None = None
 
 
 class UpdateShippingRequest(BaseModel):
-    """PATCH /orders/{id}/shipping — update LR/eway/transport after ship."""
+    """PATCH /orders/{id}/shipping — DEPRECATED, use PATCH /shipments/{id} instead."""
     transport_id: UUID | None = None
     lr_number: str | None = None
     lr_date: date | None = None
@@ -139,4 +149,5 @@ class OrderResponse(BaseSchema):
     discount_amount: Decimal = Decimal("0")
     notes: str | None = None
     invoices: list[dict] = []
+    shipments: list[dict] = []
     created_at: datetime

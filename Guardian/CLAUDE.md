@@ -31,7 +31,203 @@
 
 ---
 
-## Current State (Session 89 — 2026-03-28)
+## Current State (Session 90 — 2026-03-28)
+
+### S90: Modal ESC Isolation + Ship Without LR + E-Way Bill + FilterSelect Fixes
+
+**3 commits pushed. 1 migration on dev + prod.**
+
+**Modal ESC Isolation (global fix):**
+- Modal.jsx: capture-phase ESC handler with `stopImmediatePropagation` + `overlayRef.contains(activeElement)` check
+- Only the innermost focused modal handles ESC — no more leaking to parent forms
+- Fixed stale closure in OrdersPage (`quickMasterOpen`, `shipModalOpen` missing from deps) and InvoicesPage (`quickMasterOpen`)
+
+**Ship Without LR + E-Way Bill (Option C):**
+- `ShipOrderRequest.lr_number` now optional — all ship modal fields are optional
+- `eway_bill_no` + `eway_bill_date` on Order model + schema + response
+- `PATCH /orders/{id}/shipping` — update transport/LR/eway on shipped orders
+- `UpdateShippingRequest` schema, `update_shipping()` service method
+- Ship modal: 2x2 grid (LR no/date + E-Way no/date), amber hint "add later"
+- Shipped order detail: orange warning banner for missing LR/eway, "Update Shipping" button
+- DataTable: orange dot badge on shipped orders missing LR
+- Migration `p0j1k2l3m4n5` deployed to dev + prod
+
+**FilterSelect Fixes:**
+- `data-master` now propagated to search input (was only on button) — Shift+M picks correct master type
+- Focus ring: `focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500` matching typo-input style
+- Auto-focus Customer FilterSelect on New Order overlay open (was broken — `nameRef` never attached)
+
+---
+
+## Current State (Session 91 — 2026-03-29)
+
+### S91: Partial Order Support (Shipment Model)
+
+**6 new files + 14 modified = 20 files. 1 migration on dev. Frontend builds clean.**
+
+**New Models (37th + 38th):**
+- `Shipment`: shipment_no, order FK, transport FK, LR/eway fields, invoice FK, fy FK
+- `ShipmentItem`: shipment FK (CASCADE), order_item FK, sku FK, quantity
+
+**Backend Changes:**
+- `ship_order()` rewritten — accepts `items[]` (partial) or None (ship all remaining), creates Shipment + ShipmentItems, increments `fulfilled_qty`, STOCK_OUT per shipment item, proportional reservation confirmation, status = `partially_shipped` or `shipped`
+- Stock validation at ship time — `available_qty >= ship_qty` with FOR UPDATE lock, rejects if insufficient
+- `create_invoice_for_shipment()` — invoice per shipment, proportional discount, broker commission, customer ledger
+- `ShipmentService` — get_shipments(order_id), update_shipment(id, data)
+- API: `GET /orders/{id}/shipments`, `GET /shipments/{id}`, `PATCH /shipments/{id}`
+- Code generator: `next_shipment_number()` — SHP-XXXX per FY
+
+**Frontend Changes:**
+- Ship modal: shows unfulfilled items with "In Stock" column, qty capped at available, checkbox disabled for 0 stock, "No stock" label
+- Order detail: Fulfilled column shows `X/Y` amber for partial, Shipment History section with per-shipment cards (items, transport, LR, invoice link, "Add Details"/"Edit" button)
+- Status: `partially_shipped` → amber "Partial" badge, new tab in filter pills
+- Orange dot/banner: per-shipment (checks each shipment for missing LR/eway)
+- Order create fix: `resolveLineSKU` fallback at submit time (was blocking 0-stock orders)
+- Invoice detail/print: shows `· SHP-xxxx` shipment reference
+
+**Migration `q1r2s3t4u5v6`:** CREATE shipments + shipment_items, ALTER orders CHECK (add partially_shipped), ALTER invoices ADD shipment_id, backfill existing shipped orders
+
+**Bug fixed:** Order create with 0 stock was blocked — `sku_id` not set by onChange handlers. Fixed with `resolveLineSKU()` fallback at submit time.
+
+**Phase D noted:** Consolidated Dispatch (multi-order → 1 parcel → 1 invoice). Workaround: cancel remaining partials + create 1 new consolidated order.
+
+**NEXT:** Test full partial ship flow. Deploy to prod. Reports overhaul. Remnant roll UX.
+
+---
+
+## S91: Partial Order Support — Implementation Checklist
+
+**Goal:** Ship any subset of order items per shipment. Each shipment gets its own invoice. Transport/LR/eway details live on Shipment (not Order). All fields optional — filled in 1-3 days after ship.
+
+**Design decisions:**
+- `transport_id` stays on Order as customer preference (planning field)
+- `lr_number`, `lr_date`, `eway_bill_no`, `eway_bill_date` move to Shipment only
+- Existing shipped orders backfilled with 1 Shipment each (preserves history)
+- `ship_data.items = None` → ships all remaining (backward compatible)
+- Discount proportioned per shipment: `shipment_discount = order.discount × (shipment_subtotal / order_subtotal)`
+- 1 Shipment = 1 Invoice (auto-created)
+
+### Backend — Models
+- [x] **1a.** Create `backend/app/models/shipment.py` — Shipment model (37th): shipment_no, order_id FK, transport_id FK, lr_number, lr_date, eway_bill_no, eway_bill_date, shipped_by FK, shipped_at, notes, invoice_id FK, fy_id FK
+- [x] **1b.** Create `backend/app/models/shipment_item.py` — ShipmentItem model (38th): shipment_id FK (CASCADE), order_item_id FK (RESTRICT), sku_id FK (RESTRICT), quantity
+- [x] **1c.** Update `backend/app/models/order.py` — add `partially_shipped` to CHECK constraint, add `shipments` relationship
+- [x] **1d.** Update `backend/app/models/invoice.py` — add `shipment_id` FK (SET NULL, nullable), add `shipment` relationship
+- [x] **1e.** Register both new models in `backend/app/models/__init__.py`
+
+### Backend — Schemas
+- [x] **2a.** Create `backend/app/schemas/shipment.py` — ShipItemInput, ShipmentItemResponse, ShipmentResponse, UpdateShipmentRequest, ShipmentBrief
+- [x] **2b.** Update `backend/app/schemas/order.py` — rewrite ShipOrderRequest (add `items: list[ShipItemInput] | None`), add ShipItemInput, deprecate UpdateShippingRequest
+- [x] **2c.** Update OrderResponse — add `shipments: list[dict] = []`
+
+### Backend — Code Generator
+- [x] **3.** Add `next_shipment_number()` to `backend/app/core/code_generator.py` — pattern `SHP-XXXX`, per FY auto-increment
+
+### Backend — Services
+- [x] **4a.** Create `backend/app/services/shipment_service.py` — get_shipments(order_id), get_shipment(id), update_shipment(id, data), _to_response()
+- [x] **4b.** Rewrite `ship_order()` in `backend/app/services/order_service.py`:
+  - Accept items[] (optional, None = ship all remaining)
+  - Validate qty per item (> 0, <= remaining = quantity - fulfilled_qty)
+  - Create Shipment + ShipmentItems
+  - Increment `fulfilled_qty` per item (not set to full)
+  - STOCK_OUT per shipment item (reference_type="shipment")
+  - Proportional reservation confirmation
+  - Status: all fulfilled → "shipped", else → "partially_shipped"
+  - Allow shipping from `partially_shipped` status (not just pending/processing)
+- [x] **4c.** Update `create_invoice()` in `backend/app/services/invoice_service.py`:
+  - New method: `create_invoice_for_shipment(order, shipment, shipment_items, ...)`
+  - Invoice items = only this shipment's SKUs/qtys
+  - Proportional discount
+  - Set `invoice.shipment_id`
+  - Old create_invoice() kept for backward compat (manual trigger)
+- [x] **4d.** Update `_to_response()` in order_service — include `shipments[]` with nested items + transport + invoice
+
+### Backend — API Routes
+- [x] **5a.** Create `backend/app/api/shipments.py` — `GET /orders/{id}/shipments`, `GET /shipments/{id}`, `PATCH /shipments/{id}`
+- [x] **5b.** Register shipments router in `backend/app/api/router.py`
+- [x] **5c.** `POST /orders/{id}/ship` already passes ShipOrderRequest (schema updated in step 2b)
+- [x] **5d.** `PATCH /orders/{id}/shipping` kept as-is for backward compat (updates order-level fields, legacy)
+
+### Backend — Migration
+- [x] **6.** Write migration `q1r2s3t4u5v6_s91_shipments.py`:
+  - CREATE TABLE `shipments` (all tenant schemas)
+  - CREATE TABLE `shipment_items` (all tenant schemas)
+  - ALTER `orders` CHECK constraint → add `partially_shipped`
+  - ALTER `invoices` ADD COLUMN `shipment_id` UUID + FK + INDEX
+  - Backfill: for each shipped order → create 1 Shipment + ShipmentItems from order_items (copy LR/eway from order)
+
+### Frontend — API Module
+- [x] **7a.** Update `frontend/src/api/orders.js` — `shipOrder(id, data)` payload now includes optional `items[]`
+- [x] **7b.** Add to `frontend/src/api/orders.js`: `updateShipment(shipmentId, data)`, `getOrderShipments(orderId)`
+
+### Frontend — OrdersPage Ship Modal
+- [x] **8a.** Rewrite ship modal — show unfulfilled items with qty pickers (default = remaining), allow unchecking items
+- [x] **8b.** Transport + LR + Eway fields below items (all optional, "details can be added later" hint)
+- [x] **8c.** "Ship Selected" button — sends `{ items: [{order_item_id, quantity}], transport_id, ... }`
+
+### Frontend — OrdersPage Detail Overlay
+- [x] **9a.** Items table — "Fulfilled" column shows `X/Y` amber for partial, green check for full
+- [x] **9b.** Shipment History section below items table — cards per shipment (SHP-xxx, date, item badges, transport, LR, invoice link)
+- [x] **9c.** "Add Details" / "Edit" button per shipment card → opens modal for that specific shipment via updateShipment()
+- [x] **9d.** Orange dot/banner logic → per shipment (checks each shipment for missing LR/eway)
+- [x] **9e.** "Ship More" button visible when `status === 'partially_shipped'`
+
+### Frontend — Status & List
+- [x] **10a.** Add "Partial" tab in status filter pills for `partially_shipped`
+- [x] **10b.** StatusBadge: `partially_shipped` → amber "Partial" badge (amber-100/amber-700)
+- [x] **10c.** DataTable: orange dot checks `row.shipments` for missing LR (not order-level fields)
+
+### Frontend — InvoicesPage
+- [x] **11a.** Invoice detail — shows `· SHP-xxxx` next to "From Order" type label
+- [x] **11b.** Invoice print template — shows `· SHP-xxxx` in header, LR/eway from invoice fields (populated from shipment at creation)
+
+### Documentation
+- [ ] **12a.** Update `Guardian/API_REFERENCE.md` — new Shipment endpoints, updated OrderResponse shape, updated ShipOrderRequest
+- [ ] **12b.** Update `Guardian/CLAUDE.md` — S91 session summary, current state, architecture decisions
+
+### Deploy
+- [x] **13a.** Run migration on dev DB
+- [ ] **13b.** Test: create order → partial ship → verify invoice + fulfilled_qty → ship remaining → verify order status = shipped
+- [ ] **13c.** Test: backward compat — ship without items[] → ships all remaining
+- [ ] **13d.** Test: update shipment LR/eway days later
+- [ ] **13e.** Deploy migration to prod
+- [ ] **13f.** Deploy backend to prod
+- [ ] **13g.** Deploy frontend (Vercel auto)
+
+**Total: 38 models, ~30 files changed (6 new + ~24 modified)**
+
+---
+
+## Previous State (Session 90 — 2026-03-28)
+
+### S90: Modal ESC Isolation + Ship Without LR + E-Way Bill + FilterSelect Fixes
+
+**3 commits pushed. 1 migration on dev + prod.**
+
+**Modal ESC Isolation (global fix):**
+- Modal.jsx: capture-phase ESC handler with `stopImmediatePropagation` + `overlayRef.contains(activeElement)` check
+- Only the innermost focused modal handles ESC — no more leaking to parent forms
+- Fixed stale closure in OrdersPage (`quickMasterOpen`, `shipModalOpen` missing from deps) and InvoicesPage (`quickMasterOpen`)
+
+**Ship Without LR + E-Way Bill (Option C):**
+- `ShipOrderRequest.lr_number` now optional — all ship modal fields are optional
+- `eway_bill_no` + `eway_bill_date` on Order model + schema + response
+- `PATCH /orders/{id}/shipping` — update transport/LR/eway on shipped orders
+- `UpdateShippingRequest` schema, `update_shipping()` service method
+- Ship modal: 2x2 grid (LR no/date + E-Way no/date), amber hint "add later"
+- Shipped order detail: orange warning banner for missing LR/eway, "Update Shipping" button
+- DataTable: orange dot badge on shipped orders missing LR
+- Migration `p0j1k2l3m4n5` deployed to dev + prod
+
+**FilterSelect Fixes:**
+- `data-master` now propagated to search input (was only on button) — Shift+M picks correct master type
+- Focus ring: `focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500` matching typo-input style
+- Auto-focus Customer FilterSelect on New Order overlay open (was broken — `nameRef` never attached)
+
+**NEXT:** Partial order support (S91). Reports overhaul. Remnant roll UX.
+
+---
+
+## Previous State (Session 89 — 2026-03-28)
 
 ### S89: Broker + Transport Masters + Order/Invoice Form Overhaul + Ship Modal
 
@@ -49,7 +245,7 @@
 - `ship_order()`: accepts `ShipOrderRequest` (transport_id, lr_number, lr_date)
 - `create_invoice()`: receives broker/transport/LR, creates broker commission ledger if commission_rate > 0
 
-**Ship Order Modal:** Click "Ship" → modal with Transport, L.R. No. (required), L.R. Date
+**Ship Order Modal:** Click "Ship" → modal with Transport, L.R. No. (optional), L.R. Date, E-Way Bill No/Date
 
 **Order Create Form Overhaul:** Broker/Transport → searchable FilterSelect, row-based design picker, single flat emerald table, inline totals
 
@@ -195,6 +391,8 @@
 | C6 | CI/CD GitHub Actions | ✅ S57 — backend auto-deploy on push, Vercel handles frontend |
 | C7 | CORS production config | ✅ S56 — removed trycloudflare, added production origin |
 
+**PHASE D (discuss with client):** Consolidated Dispatch — ship remaining items from multiple orders (same customer) in 1 parcel → 1 invoice. Needs Dispatch entity, multi-order shipment, "Ship for Customer" view. GST-compliant (single invoice for multiple orders is valid). **Current workaround:** cancel remaining partial orders + create 1 new consolidated order → ship as single order, 1 invoice.
+
 **NICE-TO-HAVE (post-deploy):** Free size support | Feriwala (waste) | Reports enrichment | Thermal ZPL templates
 
 ---
@@ -325,6 +523,7 @@
 | S66 | QC UX + Remnant + Bulk VA Receive | All Pass/Mark Rejects QC, remnant roll status (full stack), palla-weight picker filter, bulk receive by challan, invoice tab bulk send fix, prod DB cleanup |
 | S67 | VA Diamond Timeline + Mobile UX | Desktop timeline with VA diamonds, tailor/checker mobile glow-up, notification bell fix |
 | S68 | Stock-In UX + SupplierInvoice + GST | 25th model, CapsLock-safe shortcuts, stale closure fix, GST% dropdown + totals, PATCH invoice endpoint |
+| S90 | Ship optional LR + E-Way Bill + ESC fix | Modal ESC isolation (capture-phase + containment check), ship without LR (all optional), eway_bill_no/date on Order, PATCH /orders/{id}/shipping, UpdateShippingRequest, orange warning banner/dot for missing LR, FilterSelect data-master on search input, focus ring matching typo-input, auto-focus Customer on New Order |
 | S89 | Broker + Transport Masters + Ship Modal | Broker model (35th, commission_rate), Transport model (36th), broker_id/transport_id/lr_number/lr_date on Order+Invoice, ShipOrderRequest, broker commission ledger, Order form overhaul (row-based design picker, searchable FilterSelect), Invoice form overhaul, PartyMastersPage 5 tabs, FilterSelect searchable prop |
 | S87 | Sale Invoice Polish + Standalone | Standalone invoices (POST /invoices, no order), cancel invoice + ledger reversal, gst_percent/discount_amount on orders+invoices, dynamic GST split (was hardcoded 18%), order→invoice link, company info in prints, create invoice overlay, Bill To fallback for standalone |
 | S86 | Over-Order + Pipeline + Order Overhaul | Over-order with reservations (short_qty, has_shortage), pipeline_qty on SKUs (read-only from batches), reservation CHECK fix, order form overhaul (8-field header, per-SKU pricing, flat line-items table, Notes+Summary layout, GST%, broker, transport, order_date), 3 migrations |

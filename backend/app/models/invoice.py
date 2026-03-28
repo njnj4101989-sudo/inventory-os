@@ -50,6 +50,9 @@ class Invoice(Base):
     )
     lr_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     lr_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    shipment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("shipments.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -57,6 +60,7 @@ class Invoice(Base):
 
     # Relationships
     order: Mapped[Order | None] = relationship(back_populates="invoices")
+    shipment: Mapped[Shipment | None] = relationship(foreign_keys=[shipment_id])
     customer: Mapped[Customer | None] = relationship(foreign_keys=[customer_id])
     broker: Mapped[Broker | None] = relationship(foreign_keys=[broker_id])
     transport: Mapped[Transport | None] = relationship(foreign_keys=[transport_id])

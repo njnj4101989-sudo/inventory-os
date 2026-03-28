@@ -32,6 +32,8 @@ from app.models.transport import Transport
 from app.models.ledger_entry import LedgerEntry
 from app.models.company import Company
 from app.models.user_company import UserCompany
+from app.models.shipment import Shipment
+from app.models.shipment_item import ShipmentItem
 from app.models.financial_year import FinancialYear
 
 __all__ = [
@@ -69,5 +71,7 @@ __all__ = [
     "LedgerEntry",
     "Company",
     "UserCompany",
+    "Shipment",
+    "ShipmentItem",
     "FinancialYear",
 ]

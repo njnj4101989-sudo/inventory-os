@@ -20,6 +20,7 @@ from app.api import (
     inventory,
     orders,
     invoices,
+    shipments,
     dashboard,
     mobile,
     external,
@@ -47,6 +48,7 @@ api_router.include_router(batch_challans.router)
 api_router.include_router(inventory.router)
 api_router.include_router(orders.router)
 api_router.include_router(invoices.router)
+api_router.include_router(shipments.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(mobile.router)
 api_router.include_router(external.router)

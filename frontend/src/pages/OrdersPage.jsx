@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, getNextOrderNumber } from '../api/orders'
+import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -105,12 +105,16 @@ const COLUMNS = [
     key: 'total_amount', label: 'Total',
     render: (val) => <span className="font-semibold">₹{(val || 0).toLocaleString('en-IN')}</span>,
   },
-  { key: 'status', label: 'Status', render: (val, row) => (
-    <span className="inline-flex items-center gap-1">
-      <StatusBadge status={val} />
-      {val === 'shipped' && !row.lr_number && <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Missing L.R." />}
-    </span>
-  )},
+  { key: 'status', label: 'Status', render: (val, row) => {
+    const missingLR = (val === 'shipped' || val === 'partially_shipped') &&
+      row.shipments?.some(s => !s.lr_number)
+    return (
+      <span className="inline-flex items-center gap-1">
+        <StatusBadge status={val} />
+        {missingLR && <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Shipment missing L.R." />}
+      </span>
+    )
+  }},
   {
     key: 'created_at', label: 'Date',
     render: (val) => val ? new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
@@ -121,6 +125,7 @@ const TABS = [
   { key: '', label: 'All' },
   { key: 'pending', label: 'Pending' },
   { key: 'processing', label: 'Processing' },
+  { key: 'partially_shipped', label: 'Partial' },
   { key: 'shipped', label: 'Shipped' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: 'returned', label: 'Returned' },
@@ -164,7 +169,9 @@ export default function OrdersPage() {
   const [transports, setTransports] = useState([])
   const [shipModalOpen, setShipModalOpen] = useState(false)
   const [shipForm, setShipForm] = useState({ transport_id: '', lr_number: '', lr_date: '', eway_bill_no: '', eway_bill_date: '' })
+  const [shipItems, setShipItems] = useState([]) // [{order_item_id, sku_code, max_qty, qty, checked}]
   const [updateShipMode, setUpdateShipMode] = useState(false)
+  const [updateShipmentId, setUpdateShipmentId] = useState(null) // shipment ID when updating a specific shipment
   const [shipError, setShipError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -192,7 +199,7 @@ export default function OrdersPage() {
   const isDirty = useMemo(() => {
     if (customerForm.customer_id) return true
     if (customerForm.notes.trim()) return true
-    if (orderLines.some(l => l.sku_id)) return true
+    if (orderLines.some(l => l.sku_id || (l.design_key && l.color && l.size))) return true
     return false
   }, [customerForm, orderLines])
 
@@ -303,20 +310,70 @@ export default function OrdersPage() {
     }
   }
 
-  /* ── Ship / Cancel actions ── */
-  const handleAction = async (type) => {
-    if (type === 'ship' || type === 'update_shipping') {
+  /* ── Ship / Cancel / Update Shipment actions ── */
+  const handleAction = async (type, shipment = null) => {
+    if (type === 'ship') {
       if (transports.length === 0) {
         getAllTransports().then(r => setTransports(r.data?.data || [])).catch(() => {})
       }
-      const isUpdate = type === 'update_shipping'
-      setUpdateShipMode(isUpdate)
+      setUpdateShipMode(false)
+      setUpdateShipmentId(null)
+
+      // Fetch current stock levels for order SKUs
+      let stockMap = {}
+      try {
+        const res = await getSKUs({ is_active: true, page_size: 500 })
+        const skuList = res.data?.data || []
+        for (const sku of skuList) {
+          stockMap[sku.id] = sku.stock?.available_qty || 0
+        }
+      } catch { /* proceed with 0 stock fallback */ }
+
+      // Build ship items — cap qty at available stock
+      const items = (detailOrder.items || [])
+        .map(item => {
+          const remaining = item.quantity - (item.fulfilled_qty || 0)
+          if (remaining <= 0) return null
+          const available = stockMap[item.sku?.id] || 0
+          const shipQty = Math.min(remaining, available)
+          return {
+            order_item_id: item.id,
+            sku_id: item.sku?.id,
+            sku_code: item.sku?.sku_code || '—',
+            color: item.sku?.color,
+            size: item.sku?.size,
+            max_qty: remaining,
+            available,
+            qty: shipQty,
+            checked: shipQty > 0,
+          }
+        })
+        .filter(Boolean)
+      setShipItems(items)
       setShipForm({
         transport_id: detailOrder.transport_id || '',
-        lr_number: isUpdate ? (detailOrder.lr_number || '') : '',
-        lr_date: isUpdate ? (detailOrder.lr_date || '') : new Date().toISOString().split('T')[0],
-        eway_bill_no: isUpdate ? (detailOrder.eway_bill_no || '') : '',
-        eway_bill_date: isUpdate ? (detailOrder.eway_bill_date || '') : '',
+        lr_number: '',
+        lr_date: new Date().toISOString().split('T')[0],
+        eway_bill_no: '',
+        eway_bill_date: '',
+      })
+      setShipError(null)
+      setShipModalOpen(true)
+      return
+    }
+    if (type === 'update_shipment' && shipment) {
+      if (transports.length === 0) {
+        getAllTransports().then(r => setTransports(r.data?.data || [])).catch(() => {})
+      }
+      setUpdateShipMode(true)
+      setUpdateShipmentId(shipment.id)
+      setShipItems([])
+      setShipForm({
+        transport_id: shipment.transport_id || '',
+        lr_number: shipment.lr_number || '',
+        lr_date: shipment.lr_date ? shipment.lr_date.split('T')[0] : '',
+        eway_bill_no: shipment.eway_bill_no || '',
+        eway_bill_date: shipment.eway_bill_date ? shipment.eway_bill_date.split('T')[0] : '',
       })
       setShipError(null)
       setShipModalOpen(true)
@@ -338,24 +395,47 @@ export default function OrdersPage() {
     setActioning(true)
     setShipError(null)
     try {
-      const payload = {
+      const transportPayload = {
         transport_id: shipForm.transport_id || null,
         lr_number: shipForm.lr_number?.trim() || null,
         lr_date: shipForm.lr_date || null,
         eway_bill_no: shipForm.eway_bill_no?.trim() || null,
         eway_bill_date: shipForm.eway_bill_date || null,
       }
-      if (updateShipMode) {
-        const res = await updateShipping(detailOrder.id, payload)
-        setDetailOrder(res.data?.data || detailOrder)
+      if (updateShipMode && updateShipmentId) {
+        // Update specific shipment details
+        await updateShipment(updateShipmentId, transportPayload)
+        // Refresh order detail
+        const res = await getOrder(detailOrder.id)
+        setDetailOrder(res.data?.data || res.data)
       } else {
+        // Ship items — build payload with items[]
+        const checkedItems = shipItems.filter(si => si.checked && si.qty > 0)
+        if (!checkedItems.length) {
+          setShipError('Select at least one item to ship')
+          setActioning(false)
+          return
+        }
+        const payload = {
+          ...transportPayload,
+          items: checkedItems.map(si => ({
+            order_item_id: si.order_item_id,
+            quantity: si.qty,
+          })),
+        }
         await shipOrder(detailOrder.id, payload)
-        setDetailOrder(null)
+        // Refresh order detail (may still be partially_shipped)
+        try {
+          const res = await getOrder(detailOrder.id)
+          setDetailOrder(res.data?.data || res.data)
+        } catch {
+          setDetailOrder(null)
+        }
       }
       setShipModalOpen(false)
       fetchData()
     } catch (err) {
-      setShipError(err.response?.data?.detail || (updateShipMode ? 'Failed to update shipping' : 'Failed to ship order'))
+      setShipError(err.response?.data?.detail || (updateShipMode ? 'Failed to update shipment' : 'Failed to ship order'))
     } finally {
       setActioning(false)
     }
@@ -456,9 +536,22 @@ export default function OrdersPage() {
     setFormError(null)
     try {
       const items = orderLines
-        .filter(l => l.sku_id && l.qty > 0)
-        .map(l => ({ sku_id: l.sku_id, quantity: l.qty, unit_price: l.price || 0 }))
-      if (!items.length) { setFormError('Add at least one item with qty > 0'); setSaving(false); return }
+        .filter(l => l.qty > 0)
+        .map(l => {
+          // Resolve sku_id at submit time — fallback if onChange didn't set it
+          const skuId = l.sku_id || resolveLineSKU(l)?.id || null
+          return skuId ? { sku_id: skuId, quantity: l.qty, unit_price: l.price || 0 } : null
+        })
+        .filter(Boolean)
+      if (!items.length) {
+        const withQty = orderLines.filter(l => l.qty > 0)
+        if (withQty.length > 0) {
+          setFormError('Please select Design, Color, and Size for all items')
+        } else {
+          setFormError('Add at least one item with qty > 0')
+        }
+        setSaving(false); return
+      }
       if (!customerForm.customer_id) { setFormError('Please select a customer'); setSaving(false); return }
 
       const cust = customers.find(c => c.id === customerForm.customer_id)
@@ -491,7 +584,7 @@ export default function OrdersPage() {
   /* ═══════════════════════ DETAIL OVERLAY ═══════════════════════ */
   if (detailOrder) {
     const o = detailOrder
-    const canAct = o.status === 'pending' || o.status === 'processing'
+    const canAct = o.status === 'pending' || o.status === 'processing' || o.status === 'partially_shipped'
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
         {/* Header */}
@@ -590,32 +683,11 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* Missing shipping details banner for shipped orders */}
-            {o.status === 'shipped' && (!o.lr_number || !o.eway_bill_no) && (
-              <div className="bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <svg className="h-4 w-4 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
-                  <span>
-                    <span className="font-semibold">Pending:</span>
-                    {!o.lr_number && ' L.R. (Bilti)'}
-                    {!o.lr_number && !o.eway_bill_no && ' &'}
-                    {!o.eway_bill_no && ' E-Way Bill'}
-                  </span>
-                </div>
-                <button onClick={() => handleAction('update_shipping')}
-                  className="rounded bg-orange-600 text-white px-3 py-1 typo-btn-sm hover:bg-orange-700 transition-colors whitespace-nowrap">
-                  Update Shipping
-                </button>
-              </div>
-            )}
-
-            {/* Update shipping button for shipped orders that have all details */}
-            {o.status === 'shipped' && o.lr_number && o.eway_bill_no && (
-              <div className="flex justify-end">
-                <button onClick={() => handleAction('update_shipping')}
-                  className="rounded border border-gray-300 text-gray-600 px-3 py-1 typo-btn-sm hover:bg-gray-50 transition-colors">
-                  Edit Shipping Details
-                </button>
+            {/* Per-shipment missing details banner */}
+            {o.shipments?.some(s => !s.lr_number || !s.eway_bill_no) && (
+              <div className="bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800 flex items-center gap-1.5">
+                <svg className="h-4 w-4 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                <span><span className="font-semibold">Pending:</span> Some shipments are missing L.R. or E-Way Bill details — update from shipment history below.</span>
               </div>
             )}
 
@@ -651,9 +723,12 @@ export default function OrdersPage() {
                       <td className="px-2 py-1.5 text-right">₹{(item.unit_price || 0).toLocaleString('en-IN')}</td>
                       <td className="px-2 py-1.5 text-right font-semibold">₹{(item.total_price || 0).toLocaleString('en-IN')}</td>
                       <td className="px-2 py-1.5 text-right">
-                        <span className={item.fulfilled_qty >= item.quantity ? 'text-green-600 font-semibold' : 'text-gray-500'}>
-                          {item.fulfilled_qty || 0}
-                        </span>
+                        {(item.fulfilled_qty || 0) >= item.quantity
+                          ? <span className="text-green-600 font-semibold">{item.fulfilled_qty}</span>
+                          : (item.fulfilled_qty || 0) > 0
+                            ? <span className="text-amber-600 font-semibold">{item.fulfilled_qty}<span className="text-gray-400 font-normal">/{item.quantity}</span></span>
+                            : <span className="text-gray-400">0</span>
+                        }
                       </td>
                       <td className="px-2 py-1.5 text-right">
                         {(item.short_qty || 0) > 0
@@ -709,33 +784,94 @@ export default function OrdersPage() {
             {/* Actions */}
             {canAct && (
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <button onClick={() => handleAction('cancel')} disabled={actioning}
-                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
-                  {actioning ? 'Processing...' : 'Cancel Order'}
-                </button>
+                {(o.status === 'pending' || o.status === 'processing') && (
+                  <button onClick={() => handleAction('cancel')} disabled={actioning}
+                    className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
+                    {actioning ? 'Processing...' : 'Cancel Order'}
+                  </button>
+                )}
                 <button onClick={() => handleAction('ship')} disabled={actioning}
-                  className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  {actioning ? 'Processing...' : 'Ship Order'}
+                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                  {actioning ? 'Processing...' : o.status === 'partially_shipped' ? 'Ship More' : 'Ship Items'}
                 </button>
               </div>
             )}
 
-            {/* Ship / Update Shipping Modal */}
-            <Modal open={shipModalOpen} onClose={() => setShipModalOpen(false)} title={updateShipMode ? 'Update Shipping Details' : 'Ship Order'} actions={
+            {/* Ship / Update Shipment Modal */}
+            <Modal open={shipModalOpen} onClose={() => setShipModalOpen(false)} title={updateShipMode ? 'Update Shipment Details' : 'Ship Items'} wide actions={
               <>
                 <button onClick={() => setShipModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
                 <button onClick={handleShipConfirm} disabled={actioning}
                   className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50">
-                  {actioning ? (updateShipMode ? 'Saving...' : 'Shipping...') : (updateShipMode ? 'Save' : 'Confirm Ship')}
+                  {actioning ? (updateShipMode ? 'Saving...' : 'Shipping...') : (updateShipMode ? 'Save' : `Ship ${shipItems.filter(si => si.checked).reduce((s, si) => s + si.qty, 0)} pcs`)}
                 </button>
               </>
             }>
               {shipError && <ErrorAlert message={shipError} onDismiss={() => setShipError(null)} />}
-              {!updateShipMode && (
-                <p className="typo-caption bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
-                  All fields are optional — you can add L.R. and E-Way Bill details later from order detail.
-                </p>
+
+              {/* Item qty pickers — only for new ship, not update */}
+              {!updateShipMode && shipItems.length > 0 && (
+                <div className="mb-3">
+                  <p className="typo-label-sm mb-1.5">Items to Ship</p>
+                  <div className="border rounded overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-2 py-1.5 typo-th w-8"></th>
+                          <th className="px-2 py-1.5 typo-th text-left">SKU</th>
+                          <th className="px-2 py-1.5 typo-th text-left">Color</th>
+                          <th className="px-2 py-1.5 typo-th text-left">Size</th>
+                          <th className="px-2 py-1.5 typo-th text-right">Ordered</th>
+                          <th className="px-2 py-1.5 typo-th text-right">In Stock</th>
+                          <th className="px-2 py-1.5 typo-th text-right">Ship Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {shipItems.map((si, idx) => (
+                          <tr key={si.order_item_id} className={si.checked ? '' : 'opacity-40'}>
+                            <td className="px-2 py-1.5 text-center">
+                              <input type="checkbox" checked={si.checked}
+                                disabled={si.available <= 0}
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                onChange={e => setShipItems(prev => prev.map((s, i) => i === idx ? { ...s, checked: e.target.checked } : s))} />
+                            </td>
+                            <td className="px-2 py-1.5"><SKUCodeDisplay code={si.sku_code} /></td>
+                            <td className="px-2 py-1.5">
+                              {si.color ? <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-gray-200" style={{ backgroundColor: colorHex(si.color) }} />{si.color}</span> : '—'}
+                            </td>
+                            <td className="px-2 py-1.5 font-semibold">{si.size || '—'}</td>
+                            <td className="px-2 py-1.5 text-right text-gray-500">{si.max_qty}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              <span className={`font-medium ${si.available > 0 ? 'text-green-600' : 'text-red-400'}`}>{si.available}</span>
+                            </td>
+                            <td className="px-2 py-1.5 text-right">
+                              {si.available > 0 ? (
+                                <input type="number" min={1} max={Math.min(si.max_qty, si.available)}
+                                  className="typo-input-sm w-16 text-right"
+                                  value={si.qty}
+                                  disabled={!si.checked}
+                                  onChange={e => {
+                                    const v = Math.min(Math.max(1, parseInt(e.target.value) || 0), Math.min(si.max_qty, si.available))
+                                    setShipItems(prev => prev.map((s, i) => i === idx ? { ...s, qty: v } : s))
+                                  }} />
+                              ) : (
+                                <span className="text-red-400 font-medium">No stock</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {shipItems.every(si => si.available <= 0) && (
+                      <p className="text-center py-2 text-xs text-red-500 font-medium">No stock available for any items — cannot ship.</p>
+                    )}
+                  </div>
+                </div>
               )}
+
+              <p className="typo-caption bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+                {updateShipMode ? 'Update transport details for this shipment.' : 'Transport details are optional — can be added 1-3 days after shipment.'}
+              </p>
               <div className="space-y-3">
                 <div>
                   <label className="typo-label-sm">Transport</label>
@@ -773,7 +909,49 @@ export default function OrdersPage() {
               </div>
             </Modal>
 
-            {/* Invoice link for shipped orders */}
+            {/* Shipment History */}
+            {o.shipments?.length > 0 && (
+              <div className="pt-3 border-t space-y-2">
+                <p className="typo-label-sm">Shipments ({o.shipments.length})</p>
+                {o.shipments.map(shp => {
+                  const missingDetails = !shp.lr_number || !shp.eway_bill_no
+                  return (
+                    <div key={shp.id} className={`border rounded-lg p-3 ${missingDetails ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200 bg-gray-50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="typo-data font-semibold text-emerald-700">{shp.shipment_no}</span>
+                            <span className="typo-caption">{shp.shipped_at ? new Date(shp.shipped_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</span>
+                            {missingDetails && <span className="w-2 h-2 rounded-full bg-orange-400" title="Missing L.R. or E-Way Bill" />}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {shp.items?.map(si => (
+                              <span key={si.id} className="inline-flex items-center gap-1 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[10px]">
+                                <span className="font-medium">{si.sku?.sku_code || '—'}</span>
+                                <span className="text-gray-400">×</span>
+                                <span className="font-semibold">{si.quantity}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-gray-500">
+                            {shp.transport?.name && <span>Transport: <span className="font-medium text-gray-700">{shp.transport.name}</span></span>}
+                            {shp.lr_number && <span>LR: <span className="font-medium text-gray-700">{shp.lr_number}</span></span>}
+                            {shp.eway_bill_no && <span>E-Way: <span className="font-medium text-gray-700">{shp.eway_bill_no}</span></span>}
+                            {shp.invoice && <span>Invoice: <span className="font-medium text-emerald-700">{shp.invoice.invoice_number}</span></span>}
+                          </div>
+                        </div>
+                        <button onClick={() => handleAction('update_shipment', shp)}
+                          className="rounded border border-gray-300 text-gray-600 px-2.5 py-1 typo-btn-sm hover:bg-gray-100 transition-colors whitespace-nowrap flex-shrink-0">
+                          {missingDetails ? 'Add Details' : 'Edit'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Invoice summary for shipped orders */}
             {o.invoices?.length > 0 && (
               <div className="flex items-center justify-between pt-3 border-t">
                 <div className="text-xs text-gray-500">

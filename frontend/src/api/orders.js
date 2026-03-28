@@ -88,6 +88,16 @@ export async function updateShipping(id, data) {
   return client.patch(`/orders/${id}/shipping`, data)
 }
 
+export async function getOrderShipments(orderId) {
+  if (USE_MOCK) return mockResponse([])
+  return client.get(`/orders/${orderId}/shipments`)
+}
+
+export async function updateShipment(shipmentId, data) {
+  if (USE_MOCK) return mockResponse({}, 'Shipment updated')
+  return client.patch(`/shipments/${shipmentId}`, data)
+}
+
 export async function cancelOrder(id) {
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)

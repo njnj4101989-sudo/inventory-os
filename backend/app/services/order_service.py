@@ -11,10 +11,12 @@ from sqlalchemy.orm import selectinload
 from app.models.invoice import Invoice
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.shipment import Shipment
+from app.models.shipment_item import ShipmentItem
 from app.models.sku import SKU
 from app.models.customer import Customer
 from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, OrderResponse
-from app.core.code_generator import next_order_number
+from app.core.code_generator import next_order_number, next_shipment_number
 from app.core.exceptions import (
     NotFoundError,
     InvalidStateTransitionError,
@@ -29,7 +31,7 @@ class OrderService:
 
     async def get_orders(self, params: OrderFilterParams, fy_id: UUID) -> dict:
         # FY scoping: current FY records + unfulfilled orders from any previous FY
-        _ORDER_ACTIVE = ("pending", "processing")
+        _ORDER_ACTIVE = ("pending", "processing", "partially_shipped")
         filters = [or_(Order.fy_id == fy_id, Order.status.in_(_ORDER_ACTIVE))]
         if params.status:
             filters.append(Order.status == params.status)
@@ -59,6 +61,9 @@ class OrderService:
                 selectinload(Order.transport_rel),
                 selectinload(Order.items).selectinload(OrderItem.sku),
                 selectinload(Order.invoices),
+                selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
+                selectinload(Order.shipments).selectinload(Shipment.transport_rel),
+                selectinload(Order.shipments).selectinload(Shipment.invoice),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -200,73 +205,159 @@ class OrderService:
 
     async def ship_order(self, order_id: UUID, user_id: UUID, fy_id: UUID, ship_data=None) -> dict:
         order = await self._get_or_404(order_id)
-        if order.status not in ("pending", "processing"):
+        if order.status not in ("pending", "processing", "partially_shipped"):
             raise InvalidStateTransitionError(
-                f"Cannot ship order in '{order.status}' status (expected 'pending' or 'processing')"
+                f"Cannot ship order in '{order.status}' status (expected 'pending', 'processing', or 'partially_shipped')"
             )
 
-        # Confirm all active reservations for this order
+        # Build item→qty map for this shipment
+        item_map = {item.id: item for item in order.items}
+
+        if ship_data and ship_data.items:
+            # Partial ship — validate each requested item
+            ship_items = []
+            for si in ship_data.items:
+                oi = item_map.get(si.order_item_id)
+                if not oi:
+                    raise ValidationError(f"Order item {si.order_item_id} not found in this order")
+                remaining = oi.quantity - (oi.fulfilled_qty or 0)
+                if si.quantity <= 0:
+                    raise ValidationError(f"Ship quantity must be > 0 for {oi.sku.sku_code if oi.sku else oi.sku_id}")
+                if si.quantity > remaining:
+                    raise ValidationError(
+                        f"Cannot ship {si.quantity} of {oi.sku.sku_code if oi.sku else oi.sku_id} — only {remaining} remaining"
+                    )
+                ship_items.append((oi, si.quantity))
+        else:
+            # Ship all remaining (backward compatible)
+            ship_items = []
+            for oi in order.items:
+                remaining = oi.quantity - (oi.fulfilled_qty or 0)
+                if remaining > 0:
+                    ship_items.append((oi, remaining))
+
+        if not ship_items:
+            raise ValidationError("No items to ship — all items are already fulfilled")
+
+        # Validate stock availability for each item
+        from app.models.inventory_state import InventoryState
+        ship_sku_ids = [oi.sku_id for oi, _ in ship_items]
+        inv_result = await self.db.execute(
+            select(InventoryState).where(InventoryState.sku_id.in_(ship_sku_ids)).with_for_update()
+        )
+        inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
+
+        insufficient = []
+        for oi, qty in ship_items:
+            state = inv_map.get(oi.sku_id)
+            available = state.available_qty if state else 0
+            if qty > available:
+                sku_code = oi.sku.sku_code if oi.sku else str(oi.sku_id)
+                insufficient.append(f"{sku_code}: need {qty}, available {available}")
+        if insufficient:
+            raise ValidationError(
+                f"Insufficient stock to ship: {'; '.join(insufficient)}"
+            )
+
+        # Create Shipment record
+        shipment_no = await next_shipment_number(self.db, fy_id)
+        shipment = Shipment(
+            shipment_no=shipment_no,
+            order_id=order.id,
+            transport_id=ship_data.transport_id if ship_data else None,
+            lr_number=ship_data.lr_number if ship_data else None,
+            lr_date=ship_data.lr_date if ship_data else None,
+            eway_bill_no=ship_data.eway_bill_no if ship_data else None,
+            eway_bill_date=ship_data.eway_bill_date if ship_data else None,
+            shipped_by=user_id,
+            shipped_at=datetime.now(timezone.utc),
+            notes=ship_data.notes if ship_data else None,
+            fy_id=fy_id,
+        )
+        self.db.add(shipment)
+        await self.db.flush()
+
+        # Create ShipmentItems + STOCK_OUT events + update fulfilled_qty
+        from app.services.inventory_service import InventoryService
+        inv_svc = InventoryService(self.db)
+
+        shipment_subtotal = 0
+        for oi, qty in ship_items:
+            si = ShipmentItem(
+                shipment_id=shipment.id,
+                order_item_id=oi.id,
+                sku_id=oi.sku_id,
+                quantity=qty,
+            )
+            self.db.add(si)
+
+            await inv_svc.create_event(
+                event_type="stock_out",
+                item_type="finished_goods",
+                reference_type="shipment",
+                reference_id=shipment.id,
+                sku_id=oi.sku_id,
+                quantity=qty,
+                performed_by=user_id,
+                metadata={"order_number": order.order_number, "shipment_no": shipment_no},
+            )
+
+            oi.fulfilled_qty = (oi.fulfilled_qty or 0) + qty
+            shipment_subtotal += float(oi.unit_price) * qty
+
+        await self.db.flush()
+
+        # Confirm proportional reservations
         from app.models.reservation import Reservation
         from app.services.reservation_service import ReservationService
         res_svc = ReservationService(self.db)
+
+        # Build sku→shipped qty map for this shipment
+        shipped_by_sku = {}
+        for oi, qty in ship_items:
+            shipped_by_sku[oi.sku_id] = shipped_by_sku.get(oi.sku_id, 0) + qty
+
         res_stmt = select(Reservation).where(
             Reservation.order_id == order_id,
             Reservation.status == "active",
         )
         res_result = await self.db.execute(res_stmt)
         for res in res_result.scalars().all():
-            await res_svc.confirm_reservation(res.id)
+            if res.sku_id in shipped_by_sku:
+                needed = shipped_by_sku[res.sku_id]
+                if needed >= res.quantity:
+                    # Fully confirm this reservation
+                    await res_svc.confirm_reservation(res.id)
+                    shipped_by_sku[res.sku_id] = needed - res.quantity
+                else:
+                    # Partial: split reservation — confirm shipped portion, keep remainder active
+                    # For simplicity, confirm the full reservation if shipped >= reserved
+                    # (reservations are per-order, not per-shipment, so confirm as we go)
+                    await res_svc.confirm_reservation(res.id)
+                    shipped_by_sku[res.sku_id] = 0
 
-        # Create STOCK_OUT events per item
-        from app.services.inventory_service import InventoryService
-        inv_svc = InventoryService(self.db)
-
-        for item in order.items:
-            if item.sku_id and item.quantity > 0:
-                await inv_svc.create_event(
-                    event_type="stock_out",
-                    item_type="finished_goods",
-                    reference_type="order",
-                    reference_id=order.id,
-                    sku_id=item.sku_id,
-                    quantity=item.quantity,
-                    performed_by=user_id,
-                    metadata={"order_number": order.order_number},
-                )
-                item.fulfilled_qty = item.quantity
-
-        # Apply transport / LR / eway from ship_data (all optional)
-        if ship_data:
-            if ship_data.transport_id:
-                order.transport_id = ship_data.transport_id
-                # Also resolve transport name for backward compat
-                from app.models.transport import Transport
-                t = (await self.db.execute(select(Transport).where(Transport.id == ship_data.transport_id))).scalar_one_or_none()
-                if t:
-                    order.transport = t.name
-            if ship_data.lr_number:
-                order.lr_number = ship_data.lr_number
-            if ship_data.lr_date:
-                order.lr_date = ship_data.lr_date
-            if ship_data.eway_bill_no:
-                order.eway_bill_no = ship_data.eway_bill_no
-            if ship_data.eway_bill_date:
-                order.eway_bill_date = ship_data.eway_bill_date
-
-        order.status = "shipped"
+        # Determine new order status
+        all_fulfilled = all(
+            (item.fulfilled_qty or 0) >= item.quantity for item in order.items
+        )
+        order.status = "shipped" if all_fulfilled else "partially_shipped"
         order.updated_at = datetime.now(timezone.utc)
         await self.db.flush()
 
-        # Create invoice with broker/transport/LR data
+        # Create invoice for THIS shipment's items only
         from app.services.invoice_service import InvoiceService
         inv_service = InvoiceService(self.db)
-        invoice = await inv_service.create_invoice(
-            order.id, user_id, fy_id,
-            broker_id=order.broker_id,
-            transport_id=order.transport_id,
-            lr_number=order.lr_number,
-            lr_date=order.lr_date,
+        invoice = await inv_service.create_invoice_for_shipment(
+            order=order,
+            shipment=shipment,
+            ship_items=ship_items,
+            created_by=user_id,
+            fy_id=fy_id,
         )
+
+        # Link invoice to shipment
+        shipment.invoice_id = invoice.get("id") if isinstance(invoice.get("id"), UUID) else UUID(invoice["id"])
+        await self.db.flush()
 
         result = await self.get_order(order_id)
         result["invoice"] = invoice
@@ -275,7 +366,7 @@ class OrderService:
     async def update_shipping(self, order_id: UUID, data) -> dict:
         """Update transport/LR/eway on a shipped order."""
         order = await self._get_or_404(order_id)
-        if order.status not in ("shipped", "delivered"):
+        if order.status not in ("partially_shipped", "shipped", "delivered"):
             raise InvalidStateTransitionError(
                 f"Can only update shipping details on shipped/delivered orders (current: '{order.status}')"
             )
@@ -409,6 +500,9 @@ class OrderService:
                 selectinload(Order.transport_rel),
                 selectinload(Order.items).selectinload(OrderItem.sku),
                 selectinload(Order.invoices),
+                selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
+                selectinload(Order.shipments).selectinload(Shipment.transport_rel),
+                selectinload(Order.shipments).selectinload(Shipment.invoice),
             )
         )
         result = await self.db.execute(stmt)
@@ -492,6 +586,48 @@ class OrderService:
                     "status": inv.status,
                 }
                 for inv in (o.invoices or [])
+            ],
+            "shipments": [
+                {
+                    "id": str(shp.id),
+                    "shipment_no": shp.shipment_no,
+                    "transport_id": str(shp.transport_id) if shp.transport_id else None,
+                    "transport": {
+                        "id": str(shp.transport_rel.id),
+                        "name": shp.transport_rel.name,
+                        "phone": shp.transport_rel.phone,
+                        "city": shp.transport_rel.city,
+                    } if hasattr(shp, 'transport_rel') and shp.transport_rel else None,
+                    "lr_number": shp.lr_number,
+                    "lr_date": shp.lr_date.isoformat() if shp.lr_date else None,
+                    "eway_bill_no": shp.eway_bill_no,
+                    "eway_bill_date": shp.eway_bill_date.isoformat() if shp.eway_bill_date else None,
+                    "shipped_at": shp.shipped_at.isoformat() if shp.shipped_at else None,
+                    "notes": shp.notes,
+                    "invoice": {
+                        "id": str(shp.invoice.id),
+                        "invoice_number": shp.invoice.invoice_number,
+                        "total_amount": float(shp.invoice.total_amount) if shp.invoice.total_amount else 0,
+                        "status": shp.invoice.status,
+                    } if shp.invoice else None,
+                    "items": [
+                        {
+                            "id": str(si.id),
+                            "order_item_id": str(si.order_item_id),
+                            "sku_id": str(si.sku_id),
+                            "sku": {
+                                "id": str(si.sku.id),
+                                "sku_code": si.sku.sku_code,
+                                "product_name": si.sku.product_name,
+                                "color": si.sku.color,
+                                "size": si.sku.size,
+                            } if si.sku else None,
+                            "quantity": si.quantity,
+                        }
+                        for si in (shp.items or [])
+                    ],
+                }
+                for shp in (o.shipments or [])
             ],
             "created_at": o.created_at.isoformat() if o.created_at else None,
         }

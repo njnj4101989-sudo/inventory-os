@@ -54,6 +54,7 @@ class InvoiceService:
             select(Invoice)
             .options(
                 selectinload(Invoice.order),
+                selectinload(Invoice.shipment),
                 selectinload(Invoice.customer),
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
@@ -208,6 +209,133 @@ class InvoiceService:
         await self.db.flush()
 
         # Auto-create ledger entry for customer invoice
+        if order.customer_id and total_amount > 0:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=issued_at.date(),
+                party_type="customer",
+                party_id=order.customer_id,
+                entry_type="invoice",
+                reference_type="invoice",
+                reference_id=invoice.id,
+                debit=total_amount,
+                credit=0,
+                description=f"Invoice {invoice_number} — ₹{total_amount:,.2f}",
+                fy_id=fy_id,
+            ))
+            await self.db.flush()
+
+        return await self.get_invoice(invoice.id)
+
+    # ── Shipment-based invoice (called by ship_order for partial/full ship) ──
+
+    async def create_invoice_for_shipment(self, order, shipment, ship_items, created_by: UUID, fy_id: UUID) -> dict:
+        """Create invoice for a specific shipment's items only.
+
+        Args:
+            order: The Order object (already loaded with relationships).
+            shipment: The Shipment object (already flushed with id).
+            ship_items: List of (OrderItem, qty_shipped) tuples.
+            created_by: User UUID.
+            fy_id: Financial year UUID.
+        """
+        invoice_number = await next_invoice_number(self.db, fy_id)
+
+        # Calculate subtotal for THIS shipment's items
+        shipment_subtotal = sum(float(oi.unit_price) * qty for oi, qty in ship_items)
+
+        # Proportional discount: shipment_discount = order.discount × (shipment_subtotal / order_subtotal)
+        order_subtotal = float(order.total_amount or 0)
+        if order_subtotal > 0:
+            discount_ratio = shipment_subtotal / order_subtotal
+        else:
+            discount_ratio = 0
+        discount_amount = round(float(order.discount_amount or 0) * discount_ratio, 2)
+
+        gst_rate = float(order.gst_percent or 0) / 100
+        taxable = shipment_subtotal - discount_amount
+        tax_amount = round(taxable * gst_rate, 2)
+        total_amount = taxable + tax_amount
+
+        # Customer snapshot + due date
+        customer = await self._get_customer(order.customer_id)
+        issued_at = datetime.now(timezone.utc)
+        due_date, payment_terms = self._compute_due_date(issued_at, customer)
+        place_of_supply = customer.state_code if customer else None
+
+        from app.services.qr_service import QRService
+        qr_data = QRService.generate_qr_base64(invoice_number)
+
+        invoice = Invoice(
+            invoice_number=invoice_number,
+            order_id=order.id,
+            shipment_id=shipment.id,
+            customer_id=order.customer_id,
+            customer_name=order.customer_name,
+            customer_phone=order.customer_phone,
+            customer_address=order.customer_address,
+            qr_code_data=qr_data,
+            gst_percent=order.gst_percent or 0,
+            subtotal=shipment_subtotal,
+            tax_amount=tax_amount,
+            discount_amount=discount_amount,
+            total_amount=total_amount,
+            status="issued",
+            issued_at=issued_at,
+            due_date=due_date,
+            payment_terms=payment_terms,
+            place_of_supply=place_of_supply,
+            broker_id=order.broker_id,
+            transport_id=shipment.transport_id,
+            lr_number=shipment.lr_number,
+            lr_date=shipment.lr_date,
+            created_by=created_by,
+            fy_id=fy_id,
+        )
+        self.db.add(invoice)
+        await self.db.flush()
+
+        # Broker commission — proportional to this shipment's invoice value
+        if order.broker_id and total_amount > 0:
+            from app.models.broker import Broker
+            broker_obj = (await self.db.execute(
+                select(Broker).where(Broker.id == order.broker_id)
+            )).scalar_one_or_none()
+            if broker_obj and broker_obj.commission_rate and broker_obj.commission_rate > 0:
+                commission = round(float(total_amount) * float(broker_obj.commission_rate) / 100, 2)
+                from app.services.ledger_service import LedgerService
+                from app.schemas.ledger import LedgerEntryCreate
+                ledger_svc = LedgerService(self.db)
+                await ledger_svc.create_entry(LedgerEntryCreate(
+                    entry_date=issued_at.date(),
+                    party_type="broker",
+                    party_id=order.broker_id,
+                    entry_type="commission",
+                    reference_type="invoice",
+                    reference_id=invoice.id,
+                    debit=commission,
+                    credit=0,
+                    description=f"Commission on {invoice_number} @ {broker_obj.commission_rate}% — ₹{commission:,.2f}",
+                    fy_id=fy_id,
+                ))
+                await self.db.flush()
+
+        # Create invoice items — only this shipment's items
+        for oi, qty in ship_items:
+            inv_item = InvoiceItem(
+                invoice_id=invoice.id,
+                sku_id=oi.sku_id,
+                hsn_code=oi.sku.hsn_code if oi.sku else None,
+                quantity=qty,
+                unit_price=oi.unit_price,
+                total_price=oi.unit_price * qty,
+            )
+            self.db.add(inv_item)
+        await self.db.flush()
+
+        # Customer ledger debit — this invoice's total only
         if order.customer_id and total_amount > 0:
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
@@ -450,6 +578,7 @@ class InvoiceService:
             .where(Invoice.id == invoice_id)
             .options(
                 selectinload(Invoice.order),
+                selectinload(Invoice.shipment),
                 selectinload(Invoice.customer),
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
@@ -516,6 +645,15 @@ class InvoiceService:
             } if hasattr(inv, 'transport') and inv.transport else None,
             "lr_number": inv.lr_number,
             "lr_date": inv.lr_date.isoformat() if inv.lr_date else None,
+            "shipment": {
+                "id": str(inv.shipment.id),
+                "shipment_no": inv.shipment.shipment_no,
+                "shipped_at": inv.shipment.shipped_at.isoformat() if inv.shipment.shipped_at else None,
+                "lr_number": inv.shipment.lr_number,
+                "lr_date": inv.shipment.lr_date.isoformat() if inv.shipment.lr_date else None,
+                "eway_bill_no": inv.shipment.eway_bill_no,
+                "eway_bill_date": inv.shipment.eway_bill_date.isoformat() if inv.shipment.eway_bill_date else None,
+            } if hasattr(inv, 'shipment') and inv.shipment else None,
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,

@@ -14,7 +14,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned')",
+            "status IN ('pending', 'confirmed', 'processing', 'partially_shipped', 'shipped', 'delivered', 'cancelled', 'returned')",
             name="ord_valid_status",
         ),
     )
@@ -59,4 +59,5 @@ class Order(Base):
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     items: Mapped[list[OrderItem]] = relationship(back_populates="order")
     invoices: Mapped[list[Invoice]] = relationship(back_populates="order")
+    shipments: Mapped[list[Shipment]] = relationship(back_populates="order")
     reservations: Mapped[list[Reservation]] = relationship(back_populates="order")
