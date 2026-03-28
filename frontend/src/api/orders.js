@@ -79,6 +79,15 @@ export async function shipOrder(id, data = null) {
   return client.post(`/orders/${id}/ship`, data)
 }
 
+export async function updateShipping(id, data) {
+  if (USE_MOCK) {
+    const order = orders.find((o) => o.id === id)
+    if (order) Object.assign(order, data)
+    return mockResponse(order, 'Shipping updated')
+  }
+  return client.patch(`/orders/${id}/shipping`, data)
+}
+
 export async function cancelOrder(id) {
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)

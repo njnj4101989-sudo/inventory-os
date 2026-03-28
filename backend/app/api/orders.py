@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, ShipOrderRequest
+from app.schemas.order import OrderCreate, OrderFilterParams, ReturnRequest, ShipOrderRequest, UpdateShippingRequest
 from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -74,6 +74,19 @@ async def ship_order(
     fy_id = get_fy_id(current_user)
     svc = OrderService(db)
     result = await svc.ship_order(order_id, current_user.id, fy_id, ship_data=req)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{order_id}/shipping", response_model=None)
+async def update_shipping(
+    order_id: UUID,
+    req: UpdateShippingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("order_manage"),
+):
+    """Update transport/LR/eway bill on shipped order."""
+    svc = OrderService(db)
+    result = await svc.update_shipping(order_id, req)
     return {"success": True, "data": result}
 
 

@@ -235,7 +235,7 @@ class OrderService:
                 )
                 item.fulfilled_qty = item.quantity
 
-        # Apply LR / transport from ship_data
+        # Apply transport / LR / eway from ship_data (all optional)
         if ship_data:
             if ship_data.transport_id:
                 order.transport_id = ship_data.transport_id
@@ -248,6 +248,10 @@ class OrderService:
                 order.lr_number = ship_data.lr_number
             if ship_data.lr_date:
                 order.lr_date = ship_data.lr_date
+            if ship_data.eway_bill_no:
+                order.eway_bill_no = ship_data.eway_bill_no
+            if ship_data.eway_bill_date:
+                order.eway_bill_date = ship_data.eway_bill_date
 
         order.status = "shipped"
         order.updated_at = datetime.now(timezone.utc)
@@ -267,6 +271,34 @@ class OrderService:
         result = await self.get_order(order_id)
         result["invoice"] = invoice
         return result
+
+    async def update_shipping(self, order_id: UUID, data) -> dict:
+        """Update transport/LR/eway on a shipped order."""
+        order = await self._get_or_404(order_id)
+        if order.status not in ("shipped", "delivered"):
+            raise InvalidStateTransitionError(
+                f"Can only update shipping details on shipped/delivered orders (current: '{order.status}')"
+            )
+
+        if data.transport_id is not None:
+            order.transport_id = data.transport_id or None
+            if data.transport_id:
+                from app.models.transport import Transport
+                t = (await self.db.execute(select(Transport).where(Transport.id == data.transport_id))).scalar_one_or_none()
+                if t:
+                    order.transport = t.name
+        if data.lr_number is not None:
+            order.lr_number = data.lr_number or None
+        if data.lr_date is not None:
+            order.lr_date = data.lr_date
+        if data.eway_bill_no is not None:
+            order.eway_bill_no = data.eway_bill_no or None
+        if data.eway_bill_date is not None:
+            order.eway_bill_date = data.eway_bill_date
+
+        order.updated_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return await self.get_order(order_id)
 
     async def cancel_order(self, order_id: UUID, user_id: UUID) -> dict:
         order = await self._get_or_404(order_id)
@@ -425,6 +457,8 @@ class OrderService:
             } if hasattr(o, 'transport_rel') and o.transport_rel else None,
             "lr_number": o.lr_number,
             "lr_date": o.lr_date.isoformat() if o.lr_date else None,
+            "eway_bill_no": o.eway_bill_no,
+            "eway_bill_date": o.eway_bill_date.isoformat() if o.eway_bill_date else None,
             "gst_percent": float(o.gst_percent) if o.gst_percent else 0,
             "status": o.status,
             "total_amount": float(o.total_amount) if o.total_amount else 0,

@@ -39,6 +39,8 @@ class Order(Base):
     )
     lr_number: Mapped[str | None] = mapped_column(String(50))
     lr_date: Mapped[datetime | None] = mapped_column(Date)
+    eway_bill_no: Mapped[str | None] = mapped_column(String(50))
+    eway_bill_date: Mapped[datetime | None] = mapped_column(Date)
     gst_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     status: Mapped[str] = mapped_column(String(20), index=True)
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))

@@ -84,10 +84,21 @@ class OrderCreate(BaseModel):
 
 
 class ShipOrderRequest(BaseModel):
-    """POST /orders/{id}/ship — body."""
+    """POST /orders/{id}/ship — body. All fields optional (LR/eway can come later)."""
     transport_id: UUID | None = None
-    lr_number: str
+    lr_number: str | None = None
     lr_date: date | None = None
+    eway_bill_no: str | None = None
+    eway_bill_date: date | None = None
+
+
+class UpdateShippingRequest(BaseModel):
+    """PATCH /orders/{id}/shipping — update LR/eway/transport after ship."""
+    transport_id: UUID | None = None
+    lr_number: str | None = None
+    lr_date: date | None = None
+    eway_bill_no: str | None = None
+    eway_bill_date: date | None = None
 
 
 class ReturnRequest(BaseModel):
@@ -118,6 +129,8 @@ class OrderResponse(BaseSchema):
     transport_detail: dict | None = None
     lr_number: str | None = None
     lr_date: date | None = None
+    eway_bill_no: str | None = None
+    eway_bill_date: date | None = None
     gst_percent: Decimal = Decimal("0")
     status: str
     items: list[OrderItemResponse] = []

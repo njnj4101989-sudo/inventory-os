@@ -153,6 +153,7 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
           value={search}
           onChange={e => { setSearch(e.target.value); setHighlight(0) }}
           onKeyDown={handleKey}
+          {...(rest['data-master'] ? { 'data-master': rest['data-master'] } : {})}
           placeholder={selected?.label || 'Type to search...'}
           className={`rounded border text-sm font-medium border-emerald-500 ring-1 ring-emerald-500 bg-white text-gray-800 ${
             full ? 'w-full rounded-lg px-2 py-1' : 'w-full px-2 py-1'

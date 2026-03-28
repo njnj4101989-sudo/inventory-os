@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, getNextOrderNumber } from '../api/orders'
+import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -105,7 +105,12 @@ const COLUMNS = [
     key: 'total_amount', label: 'Total',
     render: (val) => <span className="font-semibold">₹{(val || 0).toLocaleString('en-IN')}</span>,
   },
-  { key: 'status', label: 'Status', render: (val) => <StatusBadge status={val} /> },
+  { key: 'status', label: 'Status', render: (val, row) => (
+    <span className="inline-flex items-center gap-1">
+      <StatusBadge status={val} />
+      {val === 'shipped' && !row.lr_number && <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Missing L.R." />}
+    </span>
+  )},
   {
     key: 'created_at', label: 'Date',
     render: (val) => val ? new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
@@ -158,7 +163,8 @@ export default function OrdersPage() {
   const [brokers, setBrokers] = useState([])
   const [transports, setTransports] = useState([])
   const [shipModalOpen, setShipModalOpen] = useState(false)
-  const [shipForm, setShipForm] = useState({ transport_id: '', lr_number: '', lr_date: '' })
+  const [shipForm, setShipForm] = useState({ transport_id: '', lr_number: '', lr_date: '', eway_bill_no: '', eway_bill_date: '' })
+  const [updateShipMode, setUpdateShipMode] = useState(false)
   const [shipError, setShipError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -297,14 +303,18 @@ export default function OrdersPage() {
 
   /* ── Ship / Cancel actions ── */
   const handleAction = async (type) => {
-    if (type === 'ship') {
+    if (type === 'ship' || type === 'update_shipping') {
       if (transports.length === 0) {
         getAllTransports().then(r => setTransports(r.data?.data || [])).catch(() => {})
       }
+      const isUpdate = type === 'update_shipping'
+      setUpdateShipMode(isUpdate)
       setShipForm({
         transport_id: detailOrder.transport_id || '',
-        lr_number: '',
-        lr_date: new Date().toISOString().split('T')[0],
+        lr_number: isUpdate ? (detailOrder.lr_number || '') : '',
+        lr_date: isUpdate ? (detailOrder.lr_date || '') : new Date().toISOString().split('T')[0],
+        eway_bill_no: isUpdate ? (detailOrder.eway_bill_no || '') : '',
+        eway_bill_date: isUpdate ? (detailOrder.eway_bill_date || '') : '',
       })
       setShipError(null)
       setShipModalOpen(true)
@@ -323,23 +333,27 @@ export default function OrdersPage() {
   }
 
   const handleShipConfirm = async () => {
-    if (!shipForm.lr_number?.trim()) {
-      setShipError('L.R. Number is required')
-      return
-    }
     setActioning(true)
     setShipError(null)
     try {
-      await shipOrder(detailOrder.id, {
+      const payload = {
         transport_id: shipForm.transport_id || null,
-        lr_number: shipForm.lr_number.trim(),
+        lr_number: shipForm.lr_number?.trim() || null,
         lr_date: shipForm.lr_date || null,
-      })
+        eway_bill_no: shipForm.eway_bill_no?.trim() || null,
+        eway_bill_date: shipForm.eway_bill_date || null,
+      }
+      if (updateShipMode) {
+        const res = await updateShipping(detailOrder.id, payload)
+        setDetailOrder(res.data?.data || detailOrder)
+      } else {
+        await shipOrder(detailOrder.id, payload)
+        setDetailOrder(null)
+      }
       setShipModalOpen(false)
-      setDetailOrder(null)
       fetchData()
     } catch (err) {
-      setShipError(err.response?.data?.detail || 'Failed to ship order')
+      setShipError(err.response?.data?.detail || (updateShipMode ? 'Failed to update shipping' : 'Failed to ship order'))
     } finally {
       setActioning(false)
     }
@@ -535,6 +549,12 @@ export default function OrdersPage() {
                   <p className="typo-body">{o.lr_number}{o.lr_date ? ` (${new Date(o.lr_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}</p>
                 </div>
               )}
+              {o.eway_bill_no && (
+                <div className="bg-gray-50 rounded p-2">
+                  <p className="typo-label-sm">E-Way Bill</p>
+                  <p className="typo-body">{o.eway_bill_no}{o.eway_bill_date ? ` (${new Date(o.eway_bill_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}</p>
+                </div>
+              )}
               {(o.gst_percent || 0) > 0 && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">GST</p>
@@ -565,6 +585,35 @@ export default function OrdersPage() {
               <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800 flex items-center gap-1.5">
                 <svg className="h-4 w-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
                 <span><span className="font-semibold">Shortage:</span> Some items exceed available stock — partial reservation applied.</span>
+              </div>
+            )}
+
+            {/* Missing shipping details banner for shipped orders */}
+            {o.status === 'shipped' && (!o.lr_number || !o.eway_bill_no) && (
+              <div className="bg-orange-50 border border-orange-200 rounded p-2 text-xs text-orange-800 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <svg className="h-4 w-4 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                  <span>
+                    <span className="font-semibold">Pending:</span>
+                    {!o.lr_number && ' L.R. (Bilti)'}
+                    {!o.lr_number && !o.eway_bill_no && ' &'}
+                    {!o.eway_bill_no && ' E-Way Bill'}
+                  </span>
+                </div>
+                <button onClick={() => handleAction('update_shipping')}
+                  className="rounded bg-orange-600 text-white px-3 py-1 typo-btn-sm hover:bg-orange-700 transition-colors whitespace-nowrap">
+                  Update Shipping
+                </button>
+              </div>
+            )}
+
+            {/* Update shipping button for shipped orders that have all details */}
+            {o.status === 'shipped' && o.lr_number && o.eway_bill_no && (
+              <div className="flex justify-end">
+                <button onClick={() => handleAction('update_shipping')}
+                  className="rounded border border-gray-300 text-gray-600 px-3 py-1 typo-btn-sm hover:bg-gray-50 transition-colors">
+                  Edit Shipping Details
+                </button>
               </div>
             )}
 
@@ -669,35 +718,55 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* Ship Modal */}
-            <Modal open={shipModalOpen} onClose={() => setShipModalOpen(false)} title="Ship Order" actions={
+            {/* Ship / Update Shipping Modal */}
+            <Modal open={shipModalOpen} onClose={() => setShipModalOpen(false)} title={updateShipMode ? 'Update Shipping Details' : 'Ship Order'} actions={
               <>
                 <button onClick={() => setShipModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
                 <button onClick={handleShipConfirm} disabled={actioning}
                   className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50">
-                  {actioning ? 'Shipping...' : 'Confirm Ship'}
+                  {actioning ? (updateShipMode ? 'Saving...' : 'Shipping...') : (updateShipMode ? 'Save' : 'Confirm Ship')}
                 </button>
               </>
             }>
               {shipError && <ErrorAlert message={shipError} onDismiss={() => setShipError(null)} />}
+              {!updateShipMode && (
+                <p className="typo-caption bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+                  All fields are optional — you can add L.R. and E-Way Bill details later from order detail.
+                </p>
+              )}
               <div className="space-y-3">
                 <div>
                   <label className="typo-label-sm">Transport</label>
                   <FilterSelect searchable full data-master="transport"
                     value={shipForm.transport_id}
                     onChange={v => setShipForm(f => ({ ...f, transport_id: v }))}
-                    options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+                    options={[{ value: '', label: 'Select Transport (Shift+M to create)' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
                 </div>
-                <div>
-                  <label className="typo-label-sm">L.R. Number <span className="text-red-500">*</span></label>
-                  <input className="typo-input-sm" value={shipForm.lr_number}
-                    onChange={e => setShipForm(f => ({ ...f, lr_number: e.target.value }))}
-                    placeholder="Lorry receipt number" autoFocus />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="typo-label-sm">L.R. Number</label>
+                    <input className="typo-input-sm" value={shipForm.lr_number}
+                      onChange={e => setShipForm(f => ({ ...f, lr_number: e.target.value }))}
+                      placeholder="Bilti / lorry receipt no." />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">L.R. Date</label>
+                    <input type="date" className="typo-input-sm" value={shipForm.lr_date}
+                      onChange={e => setShipForm(f => ({ ...f, lr_date: e.target.value }))} />
+                  </div>
                 </div>
-                <div>
-                  <label className="typo-label-sm">L.R. Date</label>
-                  <input type="date" className="typo-input-sm" value={shipForm.lr_date}
-                    onChange={e => setShipForm(f => ({ ...f, lr_date: e.target.value }))} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="typo-label-sm">E-Way Bill No.</label>
+                    <input className="typo-input-sm" value={shipForm.eway_bill_no}
+                      onChange={e => setShipForm(f => ({ ...f, eway_bill_no: e.target.value }))}
+                      placeholder="e.g. 1234 5678 9012" />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">E-Way Bill Date</label>
+                    <input type="date" className="typo-input-sm" value={shipForm.eway_bill_date}
+                      onChange={e => setShipForm(f => ({ ...f, eway_bill_date: e.target.value }))} />
+                  </div>
                 </div>
               </div>
             </Modal>
