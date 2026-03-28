@@ -275,7 +275,7 @@ export default function InvoicesPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, isDirty, invForm, invItems])
+  }, [createMode, isDirty, invForm, invItems, quickMasterOpen])
 
   /* ── Open print overlay ── */
   const openPrint = () => { const inv = detailInvoice; setDetailInvoice(null); setPrintInvoice(inv) }

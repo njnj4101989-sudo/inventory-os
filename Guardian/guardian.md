@@ -615,16 +615,18 @@ def upgrade():
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-03-27 23:19:25_
+_Last sync: 2026-03-28 21:48:30_
 ```
 {
-  "summary": "Project has 17 tracked code files (~9029 lines total).",
+  "summary": "Project has 17 tracked code files (~8772 lines total).",
   "recent_files": [
-    "CLAUDE.md (704 lines)",
-    "guardian.md (636 lines)",
-    "API_REFERENCE.md (2135 lines)",
-    ".claude\\settings.local.json (124 lines)",
+    "CLAUDE.md (367 lines)",
+    "API_REFERENCE.md (2211 lines)",
+    ".claude\\settings.local.json (126 lines)",
+    "guardian.md (638 lines)",
     "project-context.json (17 lines)"
   ],
   "language_breakdown": {
@@ -632,7 +634,7 @@ _Last sync: 2026-03-27 23:19:25_
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 9029,
-  "last_updated": "2026-03-27 23:19:25"
+  "total_lines": 8772,
+  "last_updated": "2026-03-28 21:48:30"
 }
 ```

@@ -236,7 +236,7 @@ export default function OrdersPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen])
 
   /* ── Auto-focus Name field on overlay open ── */
   useEffect(() => {

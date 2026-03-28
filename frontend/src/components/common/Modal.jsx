@@ -5,12 +5,20 @@ import { useEffect, useRef } from 'react'
  */
 export default function Modal({ open, onClose, title, children, actions, wide = false, extraWide = false }) {
   const bodyRef = useRef(null)
+  const overlayRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
-    const handler = (e) => e.key === 'Escape' && onClose()
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const handler = (e) => {
+      if (e.key !== 'Escape') return
+      // Only handle ESC if focus is inside THIS modal (innermost wins)
+      if (!overlayRef.current?.contains(document.activeElement)) return
+      e.stopImmediatePropagation()
+      e.preventDefault()
+      onClose()
+    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, [open, onClose])
 
   // Auto-focus first input/select/textarea on open
@@ -28,7 +36,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
   const maxW = extraWide ? 'max-w-6xl' : wide ? 'max-w-2xl' : 'max-w-md'
 
   return (
-    <div className="fixed inset-0 z-50" style={{ overflowY: 'auto' }}>
+    <div ref={overlayRef} className="fixed inset-0 z-50" style={{ overflowY: 'auto' }}>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
 
