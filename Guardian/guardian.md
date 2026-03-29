@@ -142,7 +142,7 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | `DataTable` | `columns`, `data`, `loading`, `onRowClick`, `emptyText`, `expandedRows`, `onToggleExpand`, `renderExpanded` | |
 | `SearchInput` | `value`, `onChange`, `placeholder` | |
 | `Pagination` | `page`, `pages`, `total`, `onChange` | |
-| `FilterSelect` | `value`, `onChange`, `options` (`[{value,label}]`), `full` (form mode), `className` | ~~native `<select>`~~ |
+| `FilterSelect` | `value`, `onChange`, `options` (`[{value,label}]`), `full` (form mode), `searchable`, `autoFocus`, `className` | ~~native `<select>`~~ |
 | `StatusBadge` | `status`, `label` | |
 | `ErrorAlert` | `message`, `onDismiss` | |
 | `LoadingSpinner` | `size` (`sm`/`md`/`lg`), `text` | |
@@ -157,6 +157,13 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 
 // NEVER use native <select> for dropdowns — always use FilterSelect
 ```
+
+**FilterSelect searchable rule (S94):**
+- **Master data dropdowns (Supplier, Customer, Fabric, Transport, Broker, VA Party, SKU)** → ALWAYS use `searchable` prop. These lists grow to 100+ items — showing all on click is unprofessional. User types to filter, dropdown shows matches only.
+- **Small fixed lists (GST%, Status, Return Type, Unit, Size)** → non-searchable is fine (5-10 options).
+- **First field on create forms** → add `autoFocus` so the search input is ready on open. Searchable + autoFocus opens directly into type-to-search mode.
+- **`data-master` attribute** → always add on searchable fields that support Shift+M quick-create (supplier, customer, transport, broker, fabric, color, va_party).
+- **Parent cards** → remove `overflow-hidden` from any card containing a searchable FilterSelect, or the dropdown gets clipped. Use `rounded-t-xl` on the header div instead.
 
 **When creating a new page that uses Modal:**
 ```jsx
