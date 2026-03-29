@@ -8,6 +8,8 @@ import { getOrders } from '../api/orders'
 import { getAllCustomers } from '../api/customers'
 import { getSKUs, getSKUByCode } from '../api/skus'
 import { getRolls } from '../api/rolls'
+import { getCompany } from '../api/company'
+import { useAuth } from '../hooks/useAuth'
 import CameraScanner from '../components/common/CameraScanner'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
@@ -18,6 +20,9 @@ import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 import useQuickMaster from '../hooks/useQuickMaster'
+import ReturnNotePrint from '../components/common/ReturnNotePrint'
+import SalesReturnPrint from '../components/common/SalesReturnPrint'
+import CreditNotePrint from '../components/common/CreditNotePrint'
 
 /* ── Supplier Returns constants ── */
 const SUPPLIER_TABS = [
@@ -127,6 +132,13 @@ const SALES_COLUMNS = [
 export default function ReturnsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [category, setCategory] = useState(searchParams.get('tab') || 'supplier')
+  const { company } = useAuth()
+  const [companyFull, setCompanyFull] = useState(null)
+  const [printNote, setPrintNote] = useState(null)       // supplier return print
+  const [printSalesReturn, setPrintSalesReturn] = useState(null) // sales return print
+  const [printCreditNote, setPrintCreditNote] = useState(null)   // credit note print
+
+  useEffect(() => { getCompany().then(r => setCompanyFull(r.data?.data || r.data)).catch(() => {}) }, [])
 
   // ── Shared state ──
   const [list, setList] = useState([])
@@ -162,7 +174,7 @@ export default function ReturnsPage() {
   const [skus, setSkus] = useState([])
   const [orders, setOrders] = useState([])
   const [customerOrders, setCustomerOrders] = useState([])
-  const [salesForm, setSalesForm] = useState({ customer_id: '', order_id: '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
+  const [salesForm, setSalesForm] = useState({ customer_id: '', order_id: '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '', gst_percent: '0' })
   const [salesItems, setSalesItems] = useState([])
   const [salesSaving, setSalesSaving] = useState(false)
   const [salesFormError, setSalesFormError] = useState(null)
@@ -451,7 +463,7 @@ export default function ReturnsPage() {
   const openSalesCreate = async (prefillCustomerId, prefillOrderId) => {
     setSalesCreateMode(true)
     setSalesFormError(null)
-    setSalesForm({ customer_id: prefillCustomerId || '', order_id: prefillOrderId || '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
+    setSalesForm({ customer_id: prefillCustomerId || '', order_id: prefillOrderId || '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '', gst_percent: '0' })
     setSalesItems([])
     setCustomerOrders([])
     try {
@@ -520,6 +532,8 @@ export default function ReturnsPage() {
     setSalesForm(f => ({ ...f, order_id: orderId }))
     if (!orderId) { setSalesItems([]); return }
     const order = customerOrders.find(o => o.id === orderId)
+    // Auto-populate GST from order
+    if (order?.gst_percent != null) setSalesForm(f => ({ ...f, order_id: orderId, gst_percent: String(order.gst_percent) }))
     if (!order || !order.items) { setSalesItems([]); return }
     setSalesItems(order.items
       .map(oi => {
@@ -593,6 +607,7 @@ export default function ReturnsPage() {
         lr_number: salesForm.lr_number?.trim() || null,
         lr_date: salesForm.lr_date || null,
         reason_summary: salesForm.reason_summary?.trim() || null,
+        gst_percent: parseFloat(salesForm.gst_percent) || 0,
         items: checkedItems.map(it => ({
           sku_id: it.sku_id,
           quantity_returned: it.qty,
@@ -636,6 +651,12 @@ export default function ReturnsPage() {
     } finally { setActioning(false) }
   }
 
+  /* ═══════════════════════════ PRINT OVERLAYS ═══════════════════════════ */
+  const co = companyFull || company || {}
+  if (printNote) return <ReturnNotePrint note={printNote} company={co} onClose={() => setPrintNote(null)} />
+  if (printSalesReturn) return <SalesReturnPrint salesReturn={printSalesReturn} company={co} onClose={() => setPrintSalesReturn(null)} />
+  if (printCreditNote) return <CreditNotePrint salesReturn={printCreditNote} company={co} onClose={() => setPrintCreditNote(null)} />
+
   /* ═══════════════════════════ SALES RETURN DETAIL ═══════════════════════════ */
   if (detail && category === 'sales') {
     const sr = detail
@@ -652,8 +673,16 @@ export default function ReturnsPage() {
               {sr.credit_note_no && <span className="ml-2 bg-white/20 rounded px-1.5 py-0.5 text-xs">{sr.credit_note_no}</span>}
             </p>
           </div>
-          <button onClick={() => { setDetail(null); setInspectMode(false); setSearchParams(category === 'supplier' ? {} : { tab: category }) }}
-            className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          <div className="flex gap-2">
+            <button onClick={() => { setPrintSalesReturn(sr); setDetail(null) }}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+            {sr.credit_note_no && (
+              <button onClick={() => { setPrintCreditNote(sr); setDetail(null) }}
+                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print CN</button>
+            )}
+            <button onClick={() => { setDetail(null); setInspectMode(false); setSearchParams(category === 'supplier' ? {} : { tab: category }) }}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          </div>
         </div>
 
         {detailLoading ? (
@@ -948,7 +977,11 @@ export default function ReturnsPage() {
               {n.return_type === 'roll_return' ? 'Roll Return' : 'SKU Return'} &middot; <StatusBadge status={n.status} />
             </p>
           </div>
-          <button onClick={() => setDetail(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          <div className="flex gap-2">
+            <button onClick={() => { setPrintNote(n); setDetail(null) }}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+            <button onClick={() => setDetail(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          </div>
         </div>
 
         {detailLoading ? (
@@ -1350,7 +1383,13 @@ export default function ReturnsPage() {
                 <label className="typo-label-sm">L.R. DATE</label>
                 <input type="date" className="typo-input" value={salesForm.lr_date} onChange={e => setSalesForm(f => ({ ...f, lr_date: e.target.value }))} />
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="typo-label-sm">GST %</label>
+                <FilterSelect full value={salesForm.gst_percent}
+                  onChange={v => setSalesForm(f => ({ ...f, gst_percent: v }))}
+                  options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+              </div>
+              <div className="md:col-span-3">
                 <label className="typo-label-sm">REASON SUMMARY</label>
                 <input className="typo-input" value={salesForm.reason_summary} onChange={e => setSalesForm(f => ({ ...f, reason_summary: e.target.value }))} placeholder="Brief reason for return" />
               </div>
@@ -1456,6 +1495,34 @@ export default function ReturnsPage() {
               </div>
             )}
           </div>
+
+          {/* Summary card */}
+          {(() => {
+            const checked = salesItems.filter(i => i.checked)
+            const subtotal = checked.reduce((s, i) => s + (parseFloat(i.unit_price) || 0) * (i.qty || 0), 0)
+            const gstPct = parseFloat(salesForm.gst_percent) || 0
+            const taxAmt = subtotal * gstPct / 100
+            const total = subtotal + taxAmt
+            return (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                  <div className="px-3 py-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Summary</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex justify-end">
+                  <div className="w-64 space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-semibold">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    {gstPct > 0 && (<>
+                      <div className="flex justify-between"><span className="text-gray-500">CGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">SGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    </>)}
+                    <div className="flex justify-between pt-1 border-t-2 border-emerald-600 font-bold text-base"><span>Total</span><span>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Notes card */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">

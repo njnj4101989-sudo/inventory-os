@@ -43,6 +43,9 @@ class SalesReturn(Base):
     lr_date: Mapped[datetime | None] = mapped_column(Date)
     reason_summary: Mapped[str | None] = mapped_column(Text)
     qc_notes: Mapped[str | None] = mapped_column(Text)
+    gst_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    subtotal: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     credit_note_no: Mapped[str | None] = mapped_column(String(50))
     fy_id: Mapped[uuid.UUID | None] = mapped_column(

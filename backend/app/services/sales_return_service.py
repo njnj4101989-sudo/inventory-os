@@ -124,6 +124,13 @@ class SalesReturnService:
 
         srn_no = await next_sales_return_number(self.db, fy_id)
 
+        # Determine GST: from request, or from linked order, or 0
+        gst_pct = Decimal(str(float(req.gst_percent))) if req.gst_percent is not None else None
+        if gst_pct is None and order and order.gst_percent:
+            gst_pct = Decimal(str(float(order.gst_percent)))
+        if gst_pct is None:
+            gst_pct = Decimal("0")
+
         sr = SalesReturn(
             srn_no=srn_no,
             order_id=req.order_id,
@@ -134,6 +141,7 @@ class SalesReturnService:
             lr_number=req.lr_number,
             lr_date=req.lr_date,
             reason_summary=req.reason_summary,
+            gst_percent=gst_pct,
             created_by=user_id,
             fy_id=fy_id,
         )
@@ -180,7 +188,9 @@ class SalesReturnService:
             if item_unit_price:
                 total_amount += item_unit_price * item_req.quantity_returned
 
-        sr.total_amount = total_amount
+        sr.subtotal = total_amount
+        sr.tax_amount = (total_amount * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+        sr.total_amount = sr.subtotal + sr.tax_amount
 
         # Update order status if order-linked
         if order:
@@ -455,6 +465,9 @@ class SalesReturnService:
             "lr_date": sr.lr_date.isoformat() if sr.lr_date else None,
             "reason_summary": sr.reason_summary,
             "qc_notes": sr.qc_notes,
+            "gst_percent": float(sr.gst_percent) if sr.gst_percent else 0,
+            "subtotal": float(sr.subtotal) if sr.subtotal else 0,
+            "tax_amount": float(sr.tax_amount) if sr.tax_amount else 0,
             "total_amount": float(sr.total_amount) if sr.total_amount else 0,
             "credit_note_no": sr.credit_note_no,
             "created_by_user": {

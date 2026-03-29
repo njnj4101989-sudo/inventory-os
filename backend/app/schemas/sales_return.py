@@ -33,6 +33,7 @@ class SalesReturnCreate(BaseModel):
     lr_number: str | None = None
     lr_date: date | None = None
     reason_summary: str | None = None
+    gst_percent: Decimal | None = None  # auto-populated from order if linked, else user-specified
     items: list[SalesReturnItemInput]
 
 
@@ -60,6 +61,7 @@ class SalesReturnItemResponse(BaseSchema):
     id: UUID
     order_item: dict | None = None
     sku: dict | None = None
+    unit_price: Decimal | None = None
     quantity_returned: int
     quantity_restocked: int = 0
     quantity_damaged: int = 0
@@ -83,6 +85,9 @@ class SalesReturnResponse(BaseSchema):
     lr_date: date | None = None
     reason_summary: str | None = None
     qc_notes: str | None = None
+    gst_percent: Decimal | None = None
+    subtotal: Decimal | None = None
+    tax_amount: Decimal | None = None
     total_amount: Decimal | None = None
     credit_note_no: str | None = None
     created_by_user: dict | None = None
