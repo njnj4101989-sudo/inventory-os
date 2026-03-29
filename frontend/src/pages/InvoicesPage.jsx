@@ -1093,8 +1093,8 @@ export default function InvoicesPage() {
               {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
               {/* Invoice details */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50 rounded-t-xl">
                   <div className="px-3 py-2 flex items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Invoice Details</span>
                     <span className="text-[10px] text-gray-300">&middot;</span>
@@ -1104,7 +1104,7 @@ export default function InvoicesPage() {
                 <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
                   <div className="col-span-2">
                     <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
-                    <FilterSelect full data-master="customer" value={invForm.customer_id}
+                    <FilterSelect autoFocus searchable full data-master="customer" value={invForm.customer_id}
                       onChange={v => {
                         setInvForm(f => ({ ...f, customer_id: v }))
                         const cust = customers.find(c => c.id === v)
@@ -1145,7 +1145,7 @@ export default function InvoicesPage() {
               </div>
 
               {/* Line items */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items</span>
                   <button onClick={addInvItem} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
@@ -1168,7 +1168,7 @@ export default function InvoicesPage() {
                     {invItems.map((item, i) => (
                       <tr key={i} className="border-b border-gray-100 hover:bg-gray-50/50">
                           <td className="px-2 py-1.5">
-                            <FilterSelect full value={item.sku_id}
+                            <FilterSelect searchable full value={item.sku_id}
                               onChange={v => {
                                 const sku = allSKUs.find(s => s.id === v)
                                 updateInvItem(i, 'sku_id', v)

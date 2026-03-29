@@ -1113,7 +1113,7 @@ export default function OrdersPage() {
             <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="sm:col-span-2">
                 <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
-                <FilterSelect full value={customerForm.customer_id}
+                <FilterSelect autoFocus searchable full value={customerForm.customer_id}
                   data-master="customer"
                   onChange={(v) => setCustomerForm(f => ({ ...f, customer_id: v }))}
                   options={[{ value: '', label: 'Select customer (Shift+M to create)' }, ...customers.map(c => ({ value: c.id, label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}` }))]} />
@@ -1179,7 +1179,7 @@ export default function OrdersPage() {
           ) : (
             <>
               {/* ── Line Items — inline row-based ── */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({orderLines.filter(l => l.sku_id).length} items)</span>
                   <button onClick={addOrderLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
