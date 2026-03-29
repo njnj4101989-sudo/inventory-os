@@ -1,0 +1,475 @@
+"""SalesReturn service — CRUD + 5-status lifecycle + inventory/ledger integration."""
+
+from datetime import datetime, timezone
+from decimal import Decimal
+from uuid import UUID
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.sales_return import SalesReturn, SalesReturnItem
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.schemas.sales_return import (
+    InspectRequest,
+    SalesReturnCreate,
+    SalesReturnFilterParams,
+    SalesReturnUpdate,
+)
+from app.core.code_generator import next_sales_return_number, next_credit_note_number
+from app.core.exceptions import (
+    NotFoundError,
+    InvalidStateTransitionError,
+    ValidationError,
+)
+
+
+class SalesReturnService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    # ── List ──
+
+    async def list_sales_returns(self, params: SalesReturnFilterParams, fy_id: UUID) -> dict:
+        stmt = (
+            select(SalesReturn)
+            .options(
+                selectinload(SalesReturn.order),
+                selectinload(SalesReturn.customer),
+                selectinload(SalesReturn.created_by_user),
+                selectinload(SalesReturn.items).selectinload(SalesReturnItem.sku),
+            )
+            .order_by(SalesReturn.created_at.desc())
+        )
+
+        if fy_id:
+            stmt = stmt.where(
+                or_(
+                    SalesReturn.fy_id == fy_id,
+                    SalesReturn.status.in_(("draft", "received", "inspected", "restocked")),
+                )
+            )
+        if params.status:
+            stmt = stmt.where(SalesReturn.status == params.status)
+        if params.customer_id:
+            stmt = stmt.where(SalesReturn.customer_id == params.customer_id)
+        if params.order_id:
+            stmt = stmt.where(SalesReturn.order_id == params.order_id)
+        if params.search:
+            q = f"%{params.search}%"
+            stmt = stmt.where(
+                or_(
+                    SalesReturn.srn_no.ilike(q),
+                    SalesReturn.reason_summary.ilike(q),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await self.db.execute(count_stmt)).scalar() or 0
+
+        page = params.page
+        page_size = params.page_size
+        pages = max(1, (total + page_size - 1) // page_size)
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+
+        result = await self.db.execute(stmt)
+        returns = result.scalars().all()
+
+        return {
+            "data": [self._to_response(sr) for sr in returns],
+            "total": total,
+            "page": page,
+            "pages": pages,
+        }
+
+    # ── Get ──
+
+    async def get_sales_return(self, sr_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        return self._to_response(sr)
+
+    # ── Create ──
+
+    async def create_sales_return(self, req: SalesReturnCreate, user_id: UUID, fy_id: UUID) -> dict:
+        # Load order with items + FOR UPDATE lock on order items
+        order = (await self.db.execute(
+            select(Order)
+            .where(Order.id == req.order_id)
+            .options(selectinload(Order.items).selectinload(OrderItem.sku))
+        )).scalar_one_or_none()
+        if not order:
+            raise NotFoundError("Order not found")
+
+        allowed = ("shipped", "partially_shipped", "delivered", "partially_returned")
+        if order.status not in allowed:
+            raise InvalidStateTransitionError(
+                f"Cannot create return for order in '{order.status}' status"
+            )
+
+        if not req.items:
+            raise ValidationError("At least one return item is required")
+
+        # Build order_item lookup
+        oi_map = {str(oi.id): oi for oi in order.items}
+
+        srn_no = await next_sales_return_number(self.db, fy_id)
+
+        sr = SalesReturn(
+            srn_no=srn_no,
+            order_id=order.id,
+            customer_id=order.customer_id,
+            status="draft",
+            return_date=req.return_date or datetime.now(timezone.utc).date(),
+            transport_id=req.transport_id,
+            lr_number=req.lr_number,
+            lr_date=req.lr_date,
+            reason_summary=req.reason_summary,
+            created_by=user_id,
+            fy_id=fy_id,
+        )
+        self.db.add(sr)
+        await self.db.flush()
+
+        total_amount = Decimal("0")
+
+        for item_req in req.items:
+            oi = oi_map.get(str(item_req.order_item_id))
+            if not oi:
+                raise ValidationError(f"Order item {item_req.order_item_id} not found in this order")
+
+            max_returnable = (oi.fulfilled_qty or 0) - (oi.returned_qty or 0)
+            if item_req.quantity_returned <= 0:
+                raise ValidationError("Return quantity must be > 0")
+            if item_req.quantity_returned > max_returnable:
+                sku_code = oi.sku.sku_code if oi.sku else str(item_req.sku_id)
+                raise ValidationError(
+                    f"Cannot return {item_req.quantity_returned} for {sku_code} — only {max_returnable} returnable"
+                )
+
+            sri = SalesReturnItem(
+                sales_return_id=sr.id,
+                order_item_id=item_req.order_item_id,
+                sku_id=item_req.sku_id,
+                quantity_returned=item_req.quantity_returned,
+                reason=item_req.reason,
+                notes=item_req.notes,
+            )
+            self.db.add(sri)
+
+            # Reservation: update returned_qty immediately to prevent double-claiming
+            oi.returned_qty = (oi.returned_qty or 0) + item_req.quantity_returned
+
+            # Calculate amount from order item unit price
+            total_amount += Decimal(str(float(oi.unit_price))) * item_req.quantity_returned
+
+        sr.total_amount = total_amount
+
+        # Update order status
+        self._recalculate_order_status(order)
+        await self.db.flush()
+
+        await self._emit("sales_return_created", sr, user_id)
+        return await self.get_sales_return(sr.id)
+
+    # ── Update (draft only) ──
+
+    async def update_sales_return(self, sr_id: UUID, req: SalesReturnUpdate) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status != "draft":
+            raise InvalidStateTransitionError("Can only edit drafts")
+
+        if req.transport_id is not None:
+            sr.transport_id = req.transport_id or None
+        if req.lr_number is not None:
+            sr.lr_number = req.lr_number or None
+        if req.lr_date is not None:
+            sr.lr_date = req.lr_date or None
+        if req.reason_summary is not None:
+            sr.reason_summary = req.reason_summary or None
+
+        await self.db.flush()
+        return await self.get_sales_return(sr_id)
+
+    # ── Receive: draft → received ──
+
+    async def receive_sales_return(self, sr_id: UUID, user_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status != "draft":
+            raise InvalidStateTransitionError(f"Cannot receive from '{sr.status}' (expected 'draft')")
+
+        sr.status = "received"
+        sr.received_date = datetime.now(timezone.utc).date()
+        sr.received_by = user_id
+        await self.db.flush()
+
+        await self._emit("sales_return_received", sr, user_id)
+        return await self.get_sales_return(sr_id)
+
+    # ── Inspect: received → inspected ──
+
+    async def inspect_sales_return(self, sr_id: UUID, req: InspectRequest, user_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status != "received":
+            raise InvalidStateTransitionError(f"Cannot inspect from '{sr.status}' (expected 'received')")
+
+        item_map = {str(item.id): item for item in sr.items}
+
+        for insp in req.items:
+            item = item_map.get(str(insp.item_id))
+            if not item:
+                raise ValidationError(f"Sales return item {insp.item_id} not found")
+
+            if insp.condition not in ("good", "damaged", "rejected"):
+                raise ValidationError(f"Invalid condition '{insp.condition}' — expected good/damaged/rejected")
+
+            if insp.quantity_restocked + insp.quantity_damaged > item.quantity_returned:
+                raise ValidationError(
+                    f"Restocked ({insp.quantity_restocked}) + damaged ({insp.quantity_damaged}) "
+                    f"exceeds returned qty ({item.quantity_returned})"
+                )
+
+            item.condition = insp.condition
+            item.quantity_restocked = insp.quantity_restocked
+            item.quantity_damaged = insp.quantity_damaged
+            if insp.notes:
+                item.notes = insp.notes
+
+        sr.status = "inspected"
+        sr.inspected_date = datetime.now(timezone.utc).date()
+        sr.inspected_by = user_id
+        sr.qc_notes = req.qc_notes
+        await self.db.flush()
+
+        return await self.get_sales_return(sr_id)
+
+    # ── Restock: inspected → restocked ──
+
+    async def restock_sales_return(self, sr_id: UUID, user_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status != "inspected":
+            raise InvalidStateTransitionError(f"Cannot restock from '{sr.status}' (expected 'inspected')")
+
+        from app.services.inventory_service import InventoryService
+        inv_svc = InventoryService(self.db)
+
+        for item in sr.items:
+            if item.quantity_restocked > 0:
+                await inv_svc.create_event(
+                    event_type="return",
+                    item_type="finished_goods",
+                    reference_type="sales_return",
+                    reference_id=sr.id,
+                    sku_id=item.sku_id,
+                    quantity=item.quantity_restocked,
+                    performed_by=user_id,
+                    metadata={
+                        "srn_no": sr.srn_no,
+                        "order_number": sr.order.order_number if sr.order else None,
+                        "reason": item.reason,
+                        "condition": item.condition,
+                    },
+                )
+
+        sr.status = "restocked"
+        sr.restocked_date = datetime.now(timezone.utc).date()
+        await self.db.flush()
+
+        return await self.get_sales_return(sr_id)
+
+    # ── Close: restocked → closed ──
+
+    async def close_sales_return(self, sr_id: UUID, user_id: UUID, fy_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status != "restocked":
+            raise InvalidStateTransitionError(f"Cannot close from '{sr.status}' (expected 'restocked')")
+
+        cn_no = await next_credit_note_number(self.db, fy_id)
+        sr.credit_note_no = cn_no
+        sr.status = "closed"
+        await self.db.flush()
+
+        # Credit customer ledger
+        if sr.customer_id and sr.total_amount and float(sr.total_amount) > 0:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=datetime.now(timezone.utc).date(),
+                party_type="customer",
+                party_id=sr.customer_id,
+                entry_type="credit_note",
+                reference_type="sales_return",
+                reference_id=sr.id,
+                debit=0,
+                credit=float(sr.total_amount),
+                description=f"Credit Note {cn_no} against {sr.srn_no} — ₹{float(sr.total_amount):,.2f}",
+                fy_id=sr.fy_id or fy_id,
+                created_by=user_id,
+            ))
+            await self.db.flush()
+
+        return await self.get_sales_return(sr_id)
+
+    # ── Cancel: draft/received → cancelled ──
+
+    async def cancel_sales_return(self, sr_id: UUID) -> dict:
+        sr = await self._get_or_404(sr_id)
+        if sr.status not in ("draft", "received"):
+            raise InvalidStateTransitionError(f"Cannot cancel from '{sr.status}' (only draft or received)")
+
+        # Reverse returned_qty reservation on order items
+        order = (await self.db.execute(
+            select(Order)
+            .where(Order.id == sr.order_id)
+            .options(selectinload(Order.items))
+        )).scalar_one_or_none()
+
+        if order:
+            oi_map = {str(oi.id): oi for oi in order.items}
+            for item in sr.items:
+                oi = oi_map.get(str(item.order_item_id))
+                if oi:
+                    oi.returned_qty = max(0, (oi.returned_qty or 0) - item.quantity_returned)
+
+            self._recalculate_order_status(order)
+
+        sr.status = "cancelled"
+        await self.db.flush()
+        return await self.get_sales_return(sr_id)
+
+    # ── Internal ──
+
+    def _recalculate_order_status(self, order: Order):
+        """Recalculate order status based on returned_qty vs fulfilled_qty."""
+        has_fulfilled = False
+        all_returned = True
+        any_returned = False
+
+        for item in order.items:
+            fulfilled = item.fulfilled_qty or 0
+            if fulfilled > 0:
+                has_fulfilled = True
+                returned = item.returned_qty or 0
+                if returned >= fulfilled:
+                    any_returned = True
+                else:
+                    all_returned = False
+                    if returned > 0:
+                        any_returned = True
+
+        if has_fulfilled and all_returned and any_returned:
+            order.status = "returned"
+        elif any_returned:
+            order.status = "partially_returned"
+        elif order.status in ("partially_returned", "returned"):
+            # Revert: no items returned anymore (cancel scenario)
+            all_shipped = all(
+                (item.fulfilled_qty or 0) >= item.quantity
+                for item in order.items
+            )
+            order.status = "shipped" if all_shipped else "partially_shipped"
+
+    async def _get_or_404(self, sr_id: UUID) -> SalesReturn:
+        stmt = (
+            select(SalesReturn)
+            .where(SalesReturn.id == sr_id)
+            .options(
+                selectinload(SalesReturn.order),
+                selectinload(SalesReturn.customer),
+                selectinload(SalesReturn.transport),
+                selectinload(SalesReturn.created_by_user),
+                selectinload(SalesReturn.received_by_user),
+                selectinload(SalesReturn.inspected_by_user),
+                selectinload(SalesReturn.items).selectinload(SalesReturnItem.sku),
+                selectinload(SalesReturn.items).selectinload(SalesReturnItem.order_item),
+            )
+        )
+        result = await self.db.execute(stmt)
+        sr = result.scalar_one_or_none()
+        if not sr:
+            raise NotFoundError(f"Sales return {sr_id} not found")
+        return sr
+
+    async def _emit(self, event_type: str, sr: SalesReturn, user_id: UUID):
+        from app.core.event_bus import event_bus
+        customer_name = sr.customer.name if sr.customer else "—"
+        await event_bus.emit(event_type, {
+            "srn_no": sr.srn_no,
+            "customer": customer_name,
+            "order_number": sr.order.order_number if sr.order else None,
+            "status": sr.status,
+            "item_count": len(sr.items) if sr.items else 0,
+        }, str(user_id))
+
+    def _to_response(self, sr: SalesReturn) -> dict:
+        return {
+            "id": str(sr.id),
+            "srn_no": sr.srn_no,
+            "order": {
+                "id": str(sr.order.id),
+                "order_number": sr.order.order_number,
+                "status": sr.order.status,
+            } if sr.order else None,
+            "customer": {
+                "id": str(sr.customer.id),
+                "name": sr.customer.name,
+                "phone": sr.customer.phone,
+                "city": sr.customer.city,
+            } if sr.customer else None,
+            "status": sr.status,
+            "return_date": sr.return_date.isoformat() if sr.return_date else None,
+            "received_date": sr.received_date.isoformat() if sr.received_date else None,
+            "inspected_date": sr.inspected_date.isoformat() if sr.inspected_date else None,
+            "restocked_date": sr.restocked_date.isoformat() if sr.restocked_date else None,
+            "transport": {
+                "id": str(sr.transport.id),
+                "name": sr.transport.name,
+            } if sr.transport else None,
+            "lr_number": sr.lr_number,
+            "lr_date": sr.lr_date.isoformat() if sr.lr_date else None,
+            "reason_summary": sr.reason_summary,
+            "qc_notes": sr.qc_notes,
+            "total_amount": float(sr.total_amount) if sr.total_amount else 0,
+            "credit_note_no": sr.credit_note_no,
+            "created_by_user": {
+                "id": str(sr.created_by_user.id),
+                "full_name": sr.created_by_user.full_name,
+            } if sr.created_by_user else None,
+            "received_by_user": {
+                "id": str(sr.received_by_user.id),
+                "full_name": sr.received_by_user.full_name,
+            } if sr.received_by_user else None,
+            "inspected_by_user": {
+                "id": str(sr.inspected_by_user.id),
+                "full_name": sr.inspected_by_user.full_name,
+            } if sr.inspected_by_user else None,
+            "created_at": sr.created_at.isoformat() if sr.created_at else None,
+            "items": [
+                {
+                    "id": str(item.id),
+                    "order_item": {
+                        "id": str(item.order_item.id),
+                        "quantity": item.order_item.quantity,
+                        "unit_price": float(item.order_item.unit_price) if item.order_item.unit_price else 0,
+                        "fulfilled_qty": item.order_item.fulfilled_qty or 0,
+                        "returned_qty": item.order_item.returned_qty or 0,
+                    } if item.order_item else None,
+                    "sku": {
+                        "id": str(item.sku.id),
+                        "sku_code": item.sku.sku_code,
+                        "product_name": item.sku.product_name,
+                        "color": item.sku.color,
+                        "size": item.sku.size,
+                        "base_price": float(item.sku.base_price) if item.sku.base_price else None,
+                    } if item.sku else None,
+                    "quantity_returned": item.quantity_returned,
+                    "quantity_restocked": item.quantity_restocked,
+                    "quantity_damaged": item.quantity_damaged,
+                    "reason": item.reason,
+                    "condition": item.condition,
+                    "notes": item.notes,
+                }
+                for item in (sr.items or [])
+            ],
+        }

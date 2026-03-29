@@ -52,6 +52,10 @@ const COLORS = {
   // Processing log statuses
   sent:     'bg-orange-100 text-orange-700',
   received: 'bg-green-100 text-green-700',
+
+  // Sales return statuses
+  inspected:  'bg-purple-100 text-purple-700',
+  restocked:  'bg-teal-100 text-teal-700',
 }
 
 /**

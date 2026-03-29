@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, returnOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
+import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
+import { createSalesReturn } from '../api/salesReturns'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -471,6 +472,7 @@ export default function OrdersPage() {
         const maxReturnable = (item.fulfilled_qty || 0) - (item.returned_qty || 0)
         if (maxReturnable <= 0) return null
         return {
+          order_item_id: item.id,
           sku_id: item.sku?.id,
           sku_code: item.sku?.sku_code || '—',
           color: item.sku?.color,
@@ -498,26 +500,30 @@ export default function OrdersPage() {
         setActioning(false)
         return
       }
-      await returnOrder(detailOrder.id, {
+      const res = await createSalesReturn({
+        order_id: detailOrder.id,
+        return_date: new Date().toISOString().split('T')[0],
+        reason_summary: returnNotes.trim() || null,
         items: checkedItems.map(ri => ({
+          order_item_id: ri.order_item_id,
           sku_id: ri.sku_id,
-          quantity: ri.qty,
+          quantity_returned: ri.qty,
           reason: ri.reason || null,
         })),
-        return_date: new Date().toISOString().split('T')[0],
-        return_notes: returnNotes.trim() || null,
       })
+      const srn = res.data?.data || res.data
       // Refresh order detail
       try {
-        const res = await getOrder(detailOrder.id)
-        setDetailOrder(res.data?.data || res.data)
+        const refreshRes = await getOrder(detailOrder.id)
+        setDetailOrder(refreshRes.data?.data || refreshRes.data)
       } catch {
         setDetailOrder(null)
       }
       setReturnModalOpen(false)
       fetchData()
+      if (srn?.srn_no) setReturnError(null)
     } catch (err) {
-      setReturnError(err.response?.data?.detail || 'Failed to process return')
+      setReturnError(err.response?.data?.detail || 'Failed to create sales return')
     } finally {
       setActioning(false)
     }
@@ -884,7 +890,7 @@ export default function OrdersPage() {
                 {canReturn && (
                   <button onClick={handleReturnAction} disabled={actioning}
                     className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors">
-                    Return Items
+                    Create Sales Return
                   </button>
                 )}
                 {canAct && (
@@ -1009,12 +1015,12 @@ export default function OrdersPage() {
             </Modal>
 
             {/* Return Modal */}
-            <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Return Items" wide actions={
+            <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Create Sales Return" wide actions={
               <>
                 <button onClick={() => setReturnModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
                 <button onClick={handleReturnConfirm} disabled={actioning}
                   className="rounded-lg bg-orange-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-orange-700 disabled:opacity-50">
-                  {actioning ? 'Processing...' : `Return ${returnItems.filter(ri => ri.checked).reduce((s, ri) => s + ri.qty, 0)} pcs`}
+                  {actioning ? 'Creating...' : `Create Return (${returnItems.filter(ri => ri.checked).reduce((s, ri) => s + ri.qty, 0)} pcs)`}
                 </button>
               </>
             }>
@@ -1127,6 +1133,35 @@ export default function OrdersPage() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+
+            {/* Sales Returns linked to this order */}
+            {o.sales_returns?.length > 0 && (
+              <div className="pt-3 border-t space-y-2">
+                <p className="typo-label-sm">Sales Returns ({o.sales_returns.length})</p>
+                {o.sales_returns.map(sr => (
+                  <div key={sr.id} className="border rounded-lg p-3 border-gray-200 bg-gray-50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="typo-data font-semibold text-emerald-700">{sr.srn_no}</span>
+                          <StatusBadge status={sr.status} />
+                          {sr.credit_note_no && <span className="typo-badge bg-green-100 text-green-700 rounded-full px-2 py-0.5">{sr.credit_note_no}</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-gray-500">
+                          {sr.return_date && <span>Date: <span className="font-medium text-gray-700">{new Date(sr.return_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span></span>}
+                          {sr.total_amount > 0 && <span>Amount: <span className="font-medium text-gray-700">₹{sr.total_amount.toLocaleString('en-IN')}</span></span>}
+                          {sr.item_count > 0 && <span>{sr.item_count} items</span>}
+                        </div>
+                      </div>
+                      <button onClick={() => navigate(`/returns?tab=sales&open=${sr.id}`)}
+                        className="rounded border border-gray-300 text-gray-600 px-2.5 py-1 typo-btn-sm hover:bg-gray-100 transition-colors whitespace-nowrap flex-shrink-0">
+                        View
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

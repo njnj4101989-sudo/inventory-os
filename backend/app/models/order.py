@@ -61,3 +61,4 @@ class Order(Base):
     invoices: Mapped[list[Invoice]] = relationship(back_populates="order")
     shipments: Mapped[list[Shipment]] = relationship(back_populates="order")
     reservations: Mapped[list[Reservation]] = relationship(back_populates="order")
+    sales_returns = relationship("SalesReturn", back_populates="order")

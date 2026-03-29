@@ -64,6 +64,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
+                selectinload(Order.sales_returns),
             )
             .order_by(order)
             .offset((params.page - 1) * params.page_size)
@@ -549,6 +550,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
+                selectinload(Order.sales_returns),
             )
         )
         result = await self.db.execute(stmt)
@@ -676,5 +678,17 @@ class OrderService:
                 }
                 for shp in (o.shipments or [])
             ],
+            "sales_returns": [
+                {
+                    "id": str(sr.id),
+                    "srn_no": sr.srn_no,
+                    "status": sr.status,
+                    "return_date": sr.return_date.isoformat() if sr.return_date else None,
+                    "total_amount": float(sr.total_amount) if sr.total_amount else 0,
+                    "credit_note_no": sr.credit_note_no,
+                    "item_count": len(sr.items) if hasattr(sr, 'items') and sr.items else 0,
+                }
+                for sr in (o.sales_returns or [])
+            ] if hasattr(o, 'sales_returns') and o.sales_returns else [],
             "created_at": o.created_at.isoformat() if o.created_at else None,
         }

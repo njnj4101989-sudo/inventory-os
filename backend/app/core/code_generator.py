@@ -186,6 +186,26 @@ async def next_reservation_code(db: AsyncSession) -> str:
     return f"RES-{current + 1:04d}"
 
 
+async def next_sales_return_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next SRN-XXXX code, scoped to financial year."""
+    from app.models.sales_return import SalesReturn
+    current = _extract_number(
+        await _max_code(db, SalesReturn.srn_no, extra_where=SalesReturn.fy_id == fy_id),
+        "SRN-",
+    )
+    return f"SRN-{current + 1:04d}"
+
+
+async def next_credit_note_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next CN-XXXX code, scoped to financial year."""
+    from app.models.sales_return import SalesReturn
+    current = _extract_number(
+        await _max_code(db, SalesReturn.credit_note_no, extra_where=SalesReturn.fy_id == fy_id),
+        "CN-",
+    )
+    return f"CN-{current + 1:04d}"
+
+
 async def next_return_note_number(db: AsyncSession, fy_id: UUID) -> str:
     """Generate next RN-XXXX code, scoped to financial year."""
     from app.models.return_note import ReturnNote
