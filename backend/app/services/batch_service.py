@@ -366,7 +366,7 @@ class BatchService:
                 if approved <= 0:
                     continue
 
-                sku_code = f"{product_type}-{design_no}-{color}-{batch.size or 'Free'}{va_suffix}"
+                sku_code = f"{product_type}-{design_no}-{color}-{batch.size or 'Free'}"
                 product_name = f"Design {design_no} {color} {batch.size or 'Free'}"
                 if va_names:
                     product_name += " + " + " + ".join(va_names)
@@ -386,6 +386,7 @@ class BatchService:
                         "batch_code": batch.batch_code,
                         "color": color,
                         "pack_reference": req.pack_reference or "N/A",
+                        "va_codes": va_codes if va_codes else None,
                     },
                 )
 

@@ -5,6 +5,7 @@ import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
+import { getSKUPassport } from '../api/skus'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
 
@@ -14,11 +15,12 @@ import CameraScanner from '../components/common/CameraScanner'
  * Tailors can claim batches if logged in.
  */
 export default function ScanPage() {
-  const { rollCode, batchCode } = useParams()
+  const { rollCode, batchCode, skuCode } = useParams()
   const navigate = useNavigate()
 
   const [passport, setPassport] = useState(null)
   const [batchPassport, setBatchPassport] = useState(null)
+  const [skuPassport, setSkuPassport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showScanner, setShowScanner] = useState(false)
@@ -51,11 +53,13 @@ export default function ScanPage() {
       fetchRollPassport(rollCode)
     } else if (batchCode) {
       fetchBatchPassport(batchCode)
+    } else if (skuCode) {
+      fetchSKUPassport(skuCode)
     } else {
       setShowScanner(true)
       setLoading(false)
     }
-  }, [rollCode, batchCode])
+  }, [rollCode, batchCode, skuCode])
 
   async function fetchRollPassport(code) {
     setLoading(true); setError(null); setBatchPassport(null)
@@ -78,6 +82,17 @@ export default function ScanPage() {
       setShowRejectMode(false)
     } catch (err) {
       setError(err?.response?.data?.detail || `Batch "${code}" not found`)
+    } finally { setLoading(false) }
+  }
+
+  async function fetchSKUPassport(code) {
+    setLoading(true); setError(null); setPassport(null); setBatchPassport(null)
+    try {
+      const res = await getSKUPassport(code)
+      const data = res?.data?.data || res?.data || res
+      setSkuPassport(data)
+    } catch (err) {
+      setError(err?.response?.data?.detail || `SKU "${code}" not found`)
     } finally { setLoading(false) }
   }
 
@@ -234,7 +249,12 @@ export default function ScanPage() {
 
   function handleScan(decodedText) {
     setShowScanner(false)
-    // Detect batch or roll URL
+    // Detect SKU, batch, or roll URL
+    const skuMatch = decodedText.match(/\/scan\/sku\/([^/?\s]+)/)
+    if (skuMatch) {
+      navigate(`/scan/sku/${encodeURIComponent(decodeURIComponent(skuMatch[1]))}`)
+      return
+    }
     const batchMatch = decodedText.match(/\/scan\/batch\/([^/?\s]+)/)
     if (batchMatch) {
       navigate(`/scan/batch/${encodeURIComponent(batchMatch[1])}`)
@@ -872,6 +892,122 @@ export default function ScanPage() {
           </div>
         )}
       </div>
+
+      {/* ── SKU Passport ── */}
+      {skuPassport && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
+            {/* SKU Identity Card */}
+            <div className="rounded-xl overflow-hidden shadow-lg border border-emerald-200">
+              <div className="bg-gradient-to-br from-emerald-600 to-teal-600 px-5 py-4 text-white">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-emerald-100 text-[10px] font-semibold uppercase tracking-wider">Finished Good</p>
+                    <h2 className="text-xl font-bold tracking-tight mt-0.5">{skuPassport.sku_code}</h2>
+                    <p className="text-emerald-100 text-sm mt-0.5">{skuPassport.product_name}</p>
+                  </div>
+                  <QRCodeSVG value={`${window.location.origin}/scan/sku/${encodeURIComponent(skuPassport.sku_code)}`} size={64} level="H" bgColor="transparent" fgColor="#fff" />
+                </div>
+              </div>
+              <div className="bg-white px-5 py-3 grid grid-cols-3 gap-3 text-center border-t">
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Color</p>
+                  <p className="text-sm font-bold text-gray-900">{skuPassport.color || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Size</p>
+                  <p className="text-sm font-bold text-gray-900">{skuPassport.size || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Price</p>
+                  <p className="text-sm font-bold text-gray-900">{skuPassport.base_price ? `₹${skuPassport.base_price}` : '—'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stock Info */}
+            {skuPassport.stock && (
+              <Section title="Inventory">
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    { label: 'Total', val: skuPassport.stock.total_qty, color: 'text-gray-900' },
+                    { label: 'Available', val: skuPassport.stock.available_qty, color: 'text-green-600' },
+                    { label: 'Reserved', val: skuPassport.stock.reserved_qty, color: 'text-amber-600' },
+                    { label: 'Pipeline', val: skuPassport.stock.pipeline_qty || 0, color: 'text-blue-600' },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <p className="text-[10px] text-gray-400 uppercase font-semibold">{s.label}</p>
+                      <p className={`text-lg font-bold ${s.color}`}>{s.val}</p>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Source Breakdown */}
+            {skuPassport.source_breakdown && (
+              <Section title="Source Breakdown">
+                <div className="grid grid-cols-2 gap-2">
+                  <InfoRow label="From Production" value={`${skuPassport.source_breakdown.production_qty} pcs`} />
+                  <InfoRow label="From Purchase" value={`${skuPassport.source_breakdown.purchase_qty} pcs`} />
+                  <InfoRow label="Returned" value={`${skuPassport.source_breakdown.returned_qty} pcs`} />
+                  <InfoRow label="Sold" value={`${skuPassport.source_breakdown.sold_qty} pcs`} />
+                </div>
+              </Section>
+            )}
+
+            {/* Production Chain */}
+            {skuPassport.source_batches?.length > 0 && (
+              <Section title={`Production History (${skuPassport.source_batches.length} batches)`}>
+                <div className="space-y-2">
+                  {skuPassport.source_batches.map(b => (
+                    <div key={b.id} className="border rounded-lg p-2.5 bg-gray-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-700">{b.batch_code}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${b.status === 'packed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{b.status}</span>
+                      </div>
+                      {b.lot && <InfoRow label="Lot" value={b.lot.lot_code} />}
+                      {b.size && <InfoRow label="Size" value={b.size} />}
+                      {b.approved_qty > 0 && <InfoRow label="Approved" value={`${b.approved_qty} pcs`} />}
+                      {b.tailor && <InfoRow label="Tailor" value={b.tailor.full_name} />}
+                      {b.processing_logs?.length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-gray-200">
+                          <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Value Additions</p>
+                          {b.processing_logs.filter(p => p.value_addition).map(p => (
+                            <div key={p.id} className="flex items-center justify-between text-xs py-0.5">
+                              <span className="font-medium">{p.value_addition.name} <span className="text-gray-400">({p.value_addition.short_code})</span></span>
+                              <span className={`font-semibold ${p.status === 'received' ? 'text-green-600' : 'text-orange-500'}`}>{p.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Purchase History */}
+            {skuPassport.purchase_invoices?.length > 0 && (
+              <Section title={`Purchase History (${skuPassport.purchase_invoices.length} invoices)`}>
+                <div className="space-y-1.5">
+                  {skuPassport.purchase_invoices.map(pi => (
+                    <div key={pi.id} className="flex items-center justify-between text-xs border rounded p-2 bg-gray-50/50">
+                      <span className="font-semibold">{pi.invoice_no || '—'}</span>
+                      <span className="text-gray-500">{pi.invoice_date || '—'}</span>
+                      <span className="font-bold">₹{(pi.total_amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            <p className="text-center text-xs text-gray-400 pb-4">
+              Inventory-OS • SKU Passport
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Camera scanner overlay */}
       {showScanner && (

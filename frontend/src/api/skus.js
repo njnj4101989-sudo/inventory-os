@@ -95,3 +95,11 @@ export async function getPurchaseInvoices(params = {}) {
   }
   return client.get('/skus/purchase-invoices', { params })
 }
+
+export async function getSKUPassport(skuCode) {
+  return client.get(`/skus/passport/${encodeURIComponent(skuCode)}`)
+}
+
+export async function getSKUByCode(skuCode) {
+  return client.get(`/skus/by-code/${encodeURIComponent(skuCode)}`)
+}

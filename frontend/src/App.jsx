@@ -36,6 +36,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/scan/roll/:rollCode" element={<ScanPage />} />
         <Route path="/scan/batch/:batchCode" element={<ScanPage />} />
+        <Route path="/scan/sku/:skuCode" element={<ScanPage />} />
         <Route path="/scan" element={<ScanPage />} />
 
         {/* Mobile layout — tailor/checker get bottom tabs */}

@@ -55,6 +55,29 @@ async def list_skus(
     return {"success": True, **result}
 
 
+@router.get("/passport/{sku_code:path}", response_model=None)
+async def get_sku_passport(
+    sku_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public SKU passport — full chain traceability. No auth required."""
+    svc = SKUService(db)
+    result = await svc.get_sku_passport(sku_code)
+    return {"success": True, "data": result}
+
+
+@router.get("/by-code/{sku_code:path}", response_model=None)
+async def get_sku_by_code(
+    sku_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Lookup SKU by code — for sales return form auto-fill."""
+    svc = SKUService(db)
+    result = await svc.get_sku_by_code(sku_code)
+    return {"success": True, "data": result}
+
+
 @router.get("/{sku_id}", response_model=None)
 async def get_sku(
     sku_id: UUID,

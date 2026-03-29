@@ -6,7 +6,7 @@ import { getSuppliers } from '../api/suppliers'
 import { getAllTransports } from '../api/transports'
 import { getOrders } from '../api/orders'
 import { getAllCustomers } from '../api/customers'
-import { getSKUs } from '../api/skus'
+import { getSKUs, getSKUByCode } from '../api/skus'
 import { getRolls } from '../api/rolls'
 import CameraScanner from '../components/common/CameraScanner'
 import DataTable from '../components/common/DataTable'
@@ -164,6 +164,7 @@ export default function ReturnsPage() {
   const [salesItems, setSalesItems] = useState([])
   const [salesSaving, setSalesSaving] = useState(false)
   const [salesFormError, setSalesFormError] = useState(null)
+  const [salesScanRowIdx, setSalesScanRowIdx] = useState(null)
 
   // Sales return inspect mode (inline in detail)
   const [inspectMode, setInspectMode] = useState(false)
@@ -515,12 +516,45 @@ export default function ReturnsPage() {
   }
 
   const addManualItem = () => setSalesItems(prev => [...prev, {
-    order_item_id: null, sku_id: '', sku_code: '', color: '', size: '',
+    order_item_id: null, sku_id: '', sku_code: '', sku_detail: null, color: '', size: '',
     fulfilled: 0, already_returned: 0, max_qty: 0, qty: 1, unit_price: '',
     reason: '', checked: true, fromOrder: false,
   }])
 
   const removeManualItem = (idx) => setSalesItems(prev => prev.filter((_, i) => i !== idx))
+
+  const resolveSKUCode = async (idx, code) => {
+    if (!code) return
+    try {
+      const res = await getSKUByCode(code)
+      const sku = res.data?.data || res.data
+      if (sku) {
+        setSalesItems(prev => prev.map((it, i) => i === idx ? {
+          ...it,
+          sku_id: sku.id,
+          sku_code: sku.sku_code,
+          sku_detail: sku,
+          color: sku.color || '',
+          size: sku.size || '',
+          unit_price: sku.base_price || sku.sale_rate || '',
+        } : it))
+      }
+    } catch {
+      setSalesItems(prev => prev.map((it, i) => i === idx ? {
+        ...it, sku_id: '', sku_detail: null, sku_code: code,
+      } : it))
+    }
+  }
+
+  const handleSalesScanResult = (rawValue) => {
+    if (salesScanRowIdx !== null) {
+      // Extract sku_code from URL if scanned
+      const skuMatch = rawValue.match(/\/scan\/sku\/([^/?\s]+)/)
+      const code = skuMatch ? decodeURIComponent(skuMatch[1]) : rawValue.trim()
+      resolveSKUCode(salesScanRowIdx, code)
+      setSalesScanRowIdx(null)
+    }
+  }
 
   const handleSalesCreate = async () => {
     if (!salesForm.customer_id) { setSalesFormError('Select a customer'); return }
@@ -1336,14 +1370,20 @@ export default function ReturnsPage() {
                         {si.fromOrder ? (
                           <span className="font-semibold">{si.sku_code}{si.color ? ` · ${si.color}` : ''}{si.size ? ` · ${si.size}` : ''}</span>
                         ) : (
-                          <FilterSelect searchable full value={si.sku_id}
-                            onChange={v => {
-                              const sku = skus.find(s => s.id === v)
-                              setSalesItems(prev => prev.map((it, i) => i === idx ? {
-                                ...it, sku_id: v, sku_code: sku?.sku_code || '', color: sku?.color || '', size: sku?.size || '',
-                              } : it))
-                            }}
-                            options={[{ value: '', label: 'Select SKU...' }, ...skus.map(s => ({ value: s.id, label: `${s.sku_code} · ${s.color} · ${s.size}` }))]} />
+                          <div className="flex items-center gap-1">
+                            <input className="typo-input-sm flex-1"
+                              placeholder="Scan or type SKU code"
+                              value={si.sku_code}
+                              onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, sku_code: e.target.value } : it))}
+                              onBlur={e => { if (e.target.value.trim()) resolveSKUCode(idx, e.target.value.trim()) }}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveSKUCode(idx, e.target.value.trim()) } }} />
+                            <button onClick={() => setSalesScanRowIdx(idx)} title="Scan QR"
+                              className="rounded p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                            </button>
+                            {si.sku_detail && <span className="text-green-500 flex-shrink-0">✓</span>}
+                            {si.sku_code && !si.sku_detail && si.sku_code.length > 3 && <span className="text-red-400 flex-shrink-0 text-[10px]">Not found</span>}
+                          </div>
                         )}
                       </td>
                       {hasOrderItems && <td className="px-2 py-2 text-right">{si.fulfilled}</td>}
@@ -1407,6 +1447,14 @@ export default function ReturnsPage() {
             </div>
           </div>
         </div>
+
+        {/* QR Scanner overlay for sales returns */}
+        {salesScanRowIdx !== null && (
+          <CameraScanner
+            onScan={handleSalesScanResult}
+            onClose={() => setSalesScanRowIdx(null)}
+          />
+        )}
       </div>
     )
   }

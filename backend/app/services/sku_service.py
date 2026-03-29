@@ -15,6 +15,7 @@ from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
 from app.models.lot import Lot
 from app.models.inventory_state import InventoryState
+from app.models.inventory_event import InventoryEvent
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
 from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest
@@ -366,6 +367,101 @@ class SKUService:
             "item_count": len(items),
             "total_amount": float(total_amount),
         }
+
+    async def get_sku_by_code(self, sku_code: str) -> dict:
+        """Lookup SKU by code — returns SKU + stock + price. Used by sales return form."""
+        stmt = select(SKU).where(SKU.sku_code == sku_code)
+        result = await self.db.execute(stmt)
+        sku = result.scalar_one_or_none()
+        if not sku:
+            raise NotFoundError(f"SKU '{sku_code}' not found")
+
+        inv = (await self.db.execute(
+            select(InventoryState).where(InventoryState.sku_id == sku.id)
+        )).scalar_one_or_none()
+
+        return self._to_response(sku, inv)
+
+    async def get_sku_passport(self, sku_code: str) -> dict:
+        """Full SKU passport — details, stock, source breakdown, production chain."""
+        stmt = select(SKU).where(SKU.sku_code == sku_code)
+        result = await self.db.execute(stmt)
+        sku = result.scalar_one_or_none()
+        if not sku:
+            raise NotFoundError(f"SKU '{sku_code}' not found")
+
+        # Inventory state
+        inv = (await self.db.execute(
+            select(InventoryState).where(InventoryState.sku_id == sku.id)
+        )).scalar_one_or_none()
+
+        # Inventory events for source breakdown
+        events_result = await self.db.execute(
+            select(InventoryEvent)
+            .where(InventoryEvent.sku_id == sku.id)
+            .order_by(InventoryEvent.performed_at.desc())
+        )
+        events = events_result.scalars().all()
+
+        production_qty = sum(e.quantity for e in events if e.reference_type == "batch")
+        purchase_qty = sum(e.quantity for e in events if e.reference_type == "purchase_invoice")
+        returned_qty = sum(e.quantity for e in events if e.event_type == "return")
+        sold_qty = sum(e.quantity for e in events if e.event_type == "stock_out")
+
+        # Source batches with full chain
+        batch_ids = [e.reference_id for e in events if e.reference_type == "batch"]
+        source_batches = []
+        if batch_ids:
+            batch_stmt = (
+                select(Batch)
+                .where(Batch.id.in_(batch_ids))
+                .options(
+                    selectinload(Batch.lot),
+                    selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+                    selectinload(Batch.processing_logs).selectinload(BatchProcessing.value_addition),
+                )
+            )
+            batch_result = await self.db.execute(batch_stmt)
+            source_batches = [self._batch_brief(b) for b in batch_result.scalars().all()]
+
+        # Purchase invoices
+        purchase_events = [e for e in events if e.reference_type == "purchase_invoice"]
+        purchase_info = []
+        if purchase_events:
+            inv_ids = [e.reference_id for e in purchase_events]
+            pi_result = await self.db.execute(
+                select(SupplierInvoice).where(SupplierInvoice.id.in_(inv_ids))
+            )
+            for si in pi_result.scalars().all():
+                purchase_info.append({
+                    "id": str(si.id),
+                    "invoice_no": si.invoice_no,
+                    "supplier_id": str(si.supplier_id) if si.supplier_id else None,
+                    "total_amount": float(si.total_amount) if si.total_amount else 0,
+                    "invoice_date": si.invoice_date.isoformat() if si.invoice_date else None,
+                })
+
+        resp = self._to_response(sku, inv)
+        resp["source_breakdown"] = {
+            "production_qty": production_qty,
+            "purchase_qty": purchase_qty,
+            "returned_qty": returned_qty,
+            "sold_qty": sold_qty,
+        }
+        resp["source_batches"] = source_batches
+        resp["purchase_invoices"] = purchase_info
+        resp["events"] = [
+            {
+                "id": str(e.id),
+                "event_type": e.event_type,
+                "reference_type": e.reference_type,
+                "quantity": e.quantity,
+                "performed_at": e.performed_at.isoformat() if e.performed_at else None,
+                "metadata": e.metadata_ if hasattr(e, 'metadata_') else None,
+            }
+            for e in events[:20]  # Last 20 events
+        ]
+        return resp
 
     def _batch_brief(self, b: Batch) -> dict:
         """Compact batch info for SKU detail view."""
