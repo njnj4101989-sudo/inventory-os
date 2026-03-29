@@ -428,15 +428,33 @@ class OrderService:
 
     async def return_order(self, order_id: UUID, req: ReturnRequest, user_id: UUID) -> dict:
         order = await self._get_or_404(order_id)
-        if order.status != "shipped":
+        allowed = ("shipped", "partially_shipped", "delivered")
+        if order.status not in allowed:
             raise InvalidStateTransitionError(
-                f"Cannot return order in '{order.status}' status (expected 'shipped')"
+                f"Cannot return order in '{order.status}' status (expected one of {allowed})"
             )
 
         from app.services.inventory_service import InventoryService
         inv_svc = InventoryService(self.db)
 
+        return_total_amount = 0
+
         for return_item in req.items:
+            # Find matching order item and validate qty
+            matched = None
+            for item in order.items:
+                if item.sku_id == return_item.sku_id:
+                    matched = item
+                    break
+            if not matched:
+                raise ValidationError(f"SKU {return_item.sku_id} not found in this order")
+
+            max_returnable = (matched.fulfilled_qty or 0) - (matched.returned_qty or 0)
+            if return_item.quantity > max_returnable:
+                raise ValidationError(
+                    f"Cannot return {return_item.quantity} — only {max_returnable} returnable for SKU {matched.sku.sku_code if matched.sku else return_item.sku_id}"
+                )
+
             await inv_svc.create_event(
                 event_type="return",
                 item_type="finished_goods",
@@ -451,13 +469,41 @@ class OrderService:
                 },
             )
 
-            # Update fulfilled_qty
-            for item in order.items:
-                if item.sku_id == return_item.sku_id:
-                    item.fulfilled_qty = max(0, (item.fulfilled_qty or 0) - return_item.quantity)
+            # Track returned_qty (separate from fulfilled_qty)
+            matched.returned_qty = (matched.returned_qty or 0) + return_item.quantity
 
-        order.status = "returned"
+            # Accumulate return value for credit note
+            return_total_amount += float(matched.unit_price) * return_item.quantity
+
+        # Determine status: all fulfilled items returned → returned, else partially_returned
+        all_returned = all(
+            (item.returned_qty or 0) >= (item.fulfilled_qty or 0)
+            for item in order.items
+            if (item.fulfilled_qty or 0) > 0
+        )
+        order.status = "returned" if all_returned else "partially_returned"
         await self.db.flush()
+
+        # Create credit_note ledger entry for customer
+        cust_id = order.customer_id
+        if cust_id and return_total_amount > 0:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            return_date = req.return_date or datetime.now(timezone.utc).date()
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=return_date,
+                party_type="customer",
+                party_id=cust_id,
+                entry_type="credit_note",
+                reference_type="order_return",
+                reference_id=order.id,
+                debit=0,
+                credit=return_total_amount,
+                description=f"Return against {order.order_number} — {sum(ri.quantity for ri in req.items)} pcs",
+                fy_id=order.fy_id,
+            ))
+            await self.db.flush()
 
         return await self.get_order(order_id)
 
@@ -573,6 +619,7 @@ class OrderService:
                     "unit_price": float(item.unit_price) if item.unit_price else 0,
                     "total_price": float(item.total_price) if item.total_price else 0,
                     "fulfilled_qty": item.fulfilled_qty or 0,
+                    "returned_qty": item.returned_qty or 0,
                     "short_qty": item.short_qty or 0,
                 }
                 for item in (o.items or [])

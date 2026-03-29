@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
+import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, returnOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -125,10 +125,11 @@ const TABS = [
   { key: '', label: 'All' },
   { key: 'pending', label: 'Pending' },
   { key: 'processing', label: 'Processing' },
-  { key: 'partially_shipped', label: 'Partial' },
+  { key: 'partially_shipped', label: 'Partial Ship' },
   { key: 'shipped', label: 'Shipped' },
-  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'partially_returned', label: 'Partial Return' },
   { key: 'returned', label: 'Returned' },
+  { key: 'cancelled', label: 'Cancelled' },
 ]
 
 const SOURCE_OPTIONS = [
@@ -174,6 +175,11 @@ export default function OrdersPage() {
   const [updateShipMode, setUpdateShipMode] = useState(false)
   const [updateShipmentId, setUpdateShipmentId] = useState(null) // shipment ID when updating a specific shipment
   const [shipError, setShipError] = useState(null)
+  // Return modal
+  const [returnModalOpen, setReturnModalOpen] = useState(false)
+  const [returnItems, setReturnItems] = useState([]) // [{sku_id, sku_code, color, size, max_qty, qty, checked, reason}]
+  const [returnNotes, setReturnNotes] = useState('')
+  const [returnError, setReturnError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
@@ -241,7 +247,7 @@ export default function OrdersPage() {
         handleCreate()
       }
       if (e.key === 'Escape') {
-        if (quickMasterOpen || shipModalOpen) return
+        if (quickMasterOpen || shipModalOpen || returnModalOpen) return
         e.preventDefault()
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()
@@ -249,7 +255,7 @@ export default function OrdersPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, returnModalOpen])
 
   /* ── Auto-focus Customer field on overlay open ── */
   useEffect(() => {
@@ -458,6 +464,65 @@ export default function OrdersPage() {
     }
   }
 
+  /* ── Return action ── */
+  const handleReturnAction = () => {
+    const items = (detailOrder.items || [])
+      .map(item => {
+        const maxReturnable = (item.fulfilled_qty || 0) - (item.returned_qty || 0)
+        if (maxReturnable <= 0) return null
+        return {
+          sku_id: item.sku?.id,
+          sku_code: item.sku?.sku_code || '—',
+          color: item.sku?.color,
+          size: item.sku?.size,
+          max_qty: maxReturnable,
+          qty: maxReturnable,
+          checked: true,
+          reason: '',
+        }
+      })
+      .filter(Boolean)
+    setReturnItems(items)
+    setReturnNotes('')
+    setReturnError(null)
+    setReturnModalOpen(true)
+  }
+
+  const handleReturnConfirm = async () => {
+    setActioning(true)
+    setReturnError(null)
+    try {
+      const checkedItems = returnItems.filter(ri => ri.checked && ri.qty > 0)
+      if (!checkedItems.length) {
+        setReturnError('Select at least one item to return')
+        setActioning(false)
+        return
+      }
+      await returnOrder(detailOrder.id, {
+        items: checkedItems.map(ri => ({
+          sku_id: ri.sku_id,
+          quantity: ri.qty,
+          reason: ri.reason || null,
+        })),
+        return_date: new Date().toISOString().split('T')[0],
+        return_notes: returnNotes.trim() || null,
+      })
+      // Refresh order detail
+      try {
+        const res = await getOrder(detailOrder.id)
+        setDetailOrder(res.data?.data || res.data)
+      } catch {
+        setDetailOrder(null)
+      }
+      setReturnModalOpen(false)
+      fetchData()
+    } catch (err) {
+      setReturnError(err.response?.data?.detail || 'Failed to process return')
+    } finally {
+      setActioning(false)
+    }
+  }
+
   /* ── Create overlay: load SKUs ── */
   const openCreate = async () => {
     setCreateMode(true)
@@ -602,6 +667,8 @@ export default function OrdersPage() {
   if (detailOrder) {
     const o = detailOrder
     const canAct = o.status === 'pending' || o.status === 'processing' || o.status === 'partially_shipped'
+    const canReturn = ['shipped', 'partially_shipped', 'delivered', 'partially_returned'].includes(o.status)
+      && o.items?.some(item => ((item.fulfilled_qty || 0) - (item.returned_qty || 0)) > 0)
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
         {/* Header */}
@@ -720,6 +787,7 @@ export default function OrdersPage() {
                     <th className="px-2 py-1.5 typo-th text-right">Price</th>
                     <th className="px-2 py-1.5 typo-th text-right">Total</th>
                     <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Returned</th>
                     <th className="px-2 py-1.5 typo-th text-right">Short</th>
                   </tr>
                 </thead>
@@ -745,6 +813,12 @@ export default function OrdersPage() {
                           : (item.fulfilled_qty || 0) > 0
                             ? <span className="text-amber-600 font-semibold">{item.fulfilled_qty}<span className="text-gray-400 font-normal">/{item.quantity}</span></span>
                             : <span className="text-gray-400">0</span>
+                        }
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        {(item.returned_qty || 0) > 0
+                          ? <span className="text-orange-600 font-semibold">{item.returned_qty}</span>
+                          : <span className="text-gray-300">—</span>
                         }
                       </td>
                       <td className="px-2 py-1.5 text-right">
@@ -799,7 +873,7 @@ export default function OrdersPage() {
             })()}
 
             {/* Actions */}
-            {canAct && (
+            {(canAct || canReturn) && (
               <div className="flex justify-end gap-2 pt-3 border-t">
                 {(o.status === 'pending' || o.status === 'processing') && (
                   <button onClick={() => handleAction('cancel')} disabled={actioning}
@@ -807,10 +881,18 @@ export default function OrdersPage() {
                     {actioning ? 'Processing...' : 'Cancel Order'}
                   </button>
                 )}
-                <button onClick={() => handleAction('ship')} disabled={actioning}
-                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                  {actioning ? 'Processing...' : o.status === 'partially_shipped' ? 'Ship More' : 'Ship Items'}
-                </button>
+                {canReturn && (
+                  <button onClick={handleReturnAction} disabled={actioning}
+                    className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors">
+                    Return Items
+                  </button>
+                )}
+                {canAct && (
+                  <button onClick={() => handleAction('ship')} disabled={actioning}
+                    className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                    {actioning ? 'Processing...' : o.status === 'partially_shipped' ? 'Ship More' : 'Ship Items'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -923,6 +1005,86 @@ export default function OrdersPage() {
                       onChange={e => setShipForm(f => ({ ...f, eway_bill_date: e.target.value }))} />
                   </div>
                 </div>
+              </div>
+            </Modal>
+
+            {/* Return Modal */}
+            <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Return Items" wide actions={
+              <>
+                <button onClick={() => setReturnModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleReturnConfirm} disabled={actioning}
+                  className="rounded-lg bg-orange-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-orange-700 disabled:opacity-50">
+                  {actioning ? 'Processing...' : `Return ${returnItems.filter(ri => ri.checked).reduce((s, ri) => s + ri.qty, 0)} pcs`}
+                </button>
+              </>
+            }>
+              {returnError && <ErrorAlert message={returnError} onDismiss={() => setReturnError(null)} />}
+
+              {returnItems.length > 0 && (
+                <div className="mb-3">
+                  <p className="typo-label-sm mb-1.5">Items to Return</p>
+                  <div className="border rounded overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-2 py-1.5 typo-th w-8"></th>
+                          <th className="px-2 py-1.5 typo-th text-left">SKU</th>
+                          <th className="px-2 py-1.5 typo-th text-left">Color</th>
+                          <th className="px-2 py-1.5 typo-th text-left">Size</th>
+                          <th className="px-2 py-1.5 typo-th text-right">Returnable</th>
+                          <th className="px-2 py-1.5 typo-th text-right">Return Qty</th>
+                          <th className="px-2 py-1.5 typo-th text-left">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {returnItems.map((ri, idx) => (
+                          <tr key={ri.sku_id} className={ri.checked ? '' : 'opacity-40'}>
+                            <td className="px-2 py-1.5 text-center">
+                              <input type="checkbox" checked={ri.checked}
+                                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                                onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, checked: e.target.checked } : r))} />
+                            </td>
+                            <td className="px-2 py-1.5"><SKUCodeDisplay code={ri.sku_code} /></td>
+                            <td className="px-2 py-1.5">
+                              {ri.color ? <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-gray-200" style={{ backgroundColor: colorHex(ri.color) }} />{ri.color}</span> : '—'}
+                            </td>
+                            <td className="px-2 py-1.5 font-semibold">{ri.size || '—'}</td>
+                            <td className="px-2 py-1.5 text-right text-gray-500">{ri.max_qty}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              <input type="number" min={1} max={ri.max_qty}
+                                className="typo-input-sm w-16 text-right"
+                                value={ri.qty}
+                                disabled={!ri.checked}
+                                onChange={e => {
+                                  const v = Math.min(Math.max(1, parseInt(e.target.value) || 0), ri.max_qty)
+                                  setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: v } : r))
+                                }} />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <select className="typo-input-sm w-full" value={ri.reason} disabled={!ri.checked}
+                                onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, reason: e.target.value } : r))}>
+                                <option value="">Select reason</option>
+                                <option value="defective">Defective</option>
+                                <option value="wrong_item">Wrong Item</option>
+                                <option value="size_mismatch">Size Mismatch</option>
+                                <option value="color_mismatch">Color Mismatch</option>
+                                <option value="damaged_in_transit">Damaged in Transit</option>
+                                <option value="customer_changed_mind">Customer Changed Mind</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="typo-label-sm">Notes</label>
+                <textarea className="typo-input w-full" rows={2} value={returnNotes}
+                  onChange={e => setReturnNotes(e.target.value)} placeholder="Return notes (optional)" />
               </div>
             </Modal>
 

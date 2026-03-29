@@ -59,7 +59,157 @@
 
 ---
 
-## Current State (Session 91 — 2026-03-29)
+## S92: Full Return Management System + VA Partner Ledger Integration
+
+**Goal:** Build complete return/reverse flows for all 5 external touchpoints, with proper stock reversal, ledger entries, credit notes, and approval tracking. VA Partners get full ledger parity with Suppliers/Customers.
+
+**Design Decisions:**
+- Single `ReturnOrder` model handles customer sale returns (not reusing Order)
+- `DebitNote` model for supplier/VA returns (mirror of credit note concept)
+- VA Partner ledger already works (job_challan + batch_challan create entries on receive) — enhance with return reversals
+- Damage tracking added to VA receive flows (not a separate model — fields on existing processing models)
+- Return statuses: `requested → approved → received → closed` (4-step approval)
+- Stock reversal: `RETURN` event (already supported in inventory_service) for customer returns, `STOCK_IN` reversal for supplier returns
+- Ledger impact: every return creates a reversal entry (credit_note for customer, debit_note for supplier/VA)
+
+---
+
+### Phase 1: Customer Sale Returns (Backend exists, needs UI + ledger fix)
+
+#### Backend Fixes
+- [x] **1a.** Fix `return_order()` in order_service.py — create credit_note ledger entry for customer (currently missing)
+- [x] **1b.** Fix `return_order()` — support `partially_shipped`, `delivered`, `partially_returned` status (was only `shipped`)
+- [x] **1c.** Add `return_date`, `return_notes` fields to ReturnRequest schema
+- [x] **1d.** Add `returned_qty` tracking per OrderItem (new field, separate from `fulfilled_qty`)
+- [x] **1e.** New status `partially_returned` on Order + `returned_qty` in _to_response + OrderItemResponse
+- [ ] **1f.** Link return to specific Shipment — add `shipment_id` to ReturnRequest (future enhancement)
+- [ ] **1g.** Create return-related invoice adjustment — credit note invoice per return (future enhancement)
+
+#### Frontend — Order Return UI
+- [x] **1h.** "Return Items" button on order detail overlay (visible when canReturn — shipped/delivered/partially_shipped/partially_returned with returnable items)
+- [x] **1i.** Return modal: show returnable items → qty picker per item (max = fulfilled - already returned) → reason per item → notes → "Return N pcs" button
+- [x] **1j.** Return reason dropdown: `defective`, `wrong_item`, `size_mismatch`, `color_mismatch`, `damaged_in_transit`, `customer_changed_mind`, `other`
+- [x] **1k.** Items table: "Returned" column showing returned_qty (orange)
+- [x] **1l.** StatusBadge: `partially_returned` → orange badge
+- [x] **1m.** "Partial Return" + "Returned" tabs in order filter pills
+- [x] **1n.** Add `returnOrder(orderId, data)` to frontend `api/orders.js`
+
+#### Migration
+- [x] **1o.** Migration `r2s3t4u5v6w7`: ALTER orders CHECK (add `partially_returned`), ALTER order_items ADD `returned_qty` INT DEFAULT 0 — run on dev
+
+---
+
+### Phase 2: VA Damage Tracking on Receive (Rolls + Batches)
+
+#### Backend — Roll VA (Job Challan Receive)
+- [x] **2a.** Add `weight_damaged` (Numeric 10,3), `damage_reason` (String 50) fields to RollProcessing model
+- [x] **2b.** Update JobChallanReceiveEntry schema — add `weight_damaged`, `damage_reason` per roll entry
+- [x] **2c.** Update `receive_challan()` in job_challan_service — stores damage on log, includes in _to_response
+- [x] **2d.** Ledger adjustment on damage — `entry_type="adjustment"`, `reference_type="damage_claim"`, debit against VA party (proportional to processing cost)
+
+#### Backend — Batch VA (Batch Challan Receive)
+- [x] **2e.** Add `pieces_damaged` (Integer), `damage_reason` (String 50) fields to BatchProcessing model
+- [x] **2f.** Update BatchChallanReceiveEntry schema — add `pieces_damaged`, `damage_reason` per batch entry
+- [x] **2g.** Update `receive_challan()` in batch_challan_service — stores damage, includes in _to_response
+- [x] **2h.** Ledger debit for damage — proportional cost per damaged piece against VA party
+
+#### Frontend — Damage Tracking UI
+- [x] **2i.** Job Challan receive modal: "Damaged" weight column + reason dropdown per roll
+- [x] **2j.** Batch Challan receive modal (ReceiveFromVAModal): "Damaged" pieces column + reason dropdown per batch
+- [x] **2k.** Damage reason options: `shrinkage`, `color_bleeding`, `stain`, `tear`, `wrong_process`, `lost`, `other`
+- [x] **2l.** Batch challan detail: "Damaged" column in items table (red font with tooltip for reason)
+- [ ] **2m.** VA Party detail: damage history section (future — needs aggregation endpoint)
+
+#### Migration
+- [x] **2n.** Migration `s3t4u5v6w7x8`: ALTER roll_processing ADD `weight_damaged`, `damage_reason`; ALTER batch_processing ADD `pieces_damaged`, `damage_reason` — run on dev
+
+---
+
+### Phase 3: Supplier Returns (Rolls + Purchased SKUs)
+
+#### Backend — Model
+- [x] **3a.** Create `ReturnNote` model (39th): return_note_no, return_type, supplier_id FK, 6-status workflow, return_date, approved_by/at, dispatch_date, transport_id, lr_number, total_amount, fy_id
+- [x] **3b.** Create `ReturnNoteItem` model (40th): return_note_id FK (CASCADE), roll_id FK (nullable), sku_id FK (nullable), quantity, weight, unit_price, amount, reason, condition
+- [x] Registered both in models/__init__.py
+
+#### Backend — Schema + Service
+- [x] **3c.** Create schemas: ReturnNoteCreate, ReturnNoteItemInput, ReturnNoteResponse, ReturnNoteUpdate, ReturnNoteFilterParams
+- [x] **3d.** Create ReturnNoteService: list, get, create, update, approve, dispatch (stock_out for SKUs, status→returned for rolls), acknowledge, close (debit supplier ledger), cancel
+- [x] **3e.** Code generator: `next_return_note_number()` — RN-XXXX per FY
+- [x] **3f.** Roll return: dispatch sets roll.status = "returned" (new status in CHECK)
+- [x] **3g.** SKU return: dispatch creates stock_out event with reference_type "supplier_return"
+
+#### Backend — API Routes
+- [x] **3h.** 10 endpoints: GET list, GET /next-number, GET /{id}, POST create, PATCH update, POST approve/dispatch/acknowledge/close/cancel
+- [x] **3i.** Registered in router.py
+
+#### Frontend — Return Notes Page
+- [x] **3j.** ReturnsPage.jsx — full page with status tabs + type tabs (Roll Returns / SKU Returns)
+- [x] **3k-l.** KPI cards (Total, Draft, Approved, Dispatched, Closed, Value), DataTable, Pagination
+- [ ] **3m.** Customer Returns tab (deferred — will come with dedicated ReturnsPage tabs expansion)
+- [x] **3n.** Create overlay: supplier picker, transport, LR, items table with qty/weight/price/reason
+- [x] **3o.** Detail overlay: status timeline, info cards, items table, action buttons per status (Approve, Dispatch, Acknowledge, Close & Debit, Cancel)
+- [ ] **3p.** Print template (deferred — future)
+- [x] **3q.** api/returns.js — all 9 CRUD + status functions
+- [x] **3r.** Sidebar "Returns" link in Commerce section + route in routes.js
+- [x] StatusBadge: draft/approved/dispatched/acknowledged/closed styles added
+
+#### Migration
+- [x] **3s.** Migration `t4u5v6w7x8y9`: CREATE TABLE return_notes + return_note_items, ALTER rolls CHECK (add `returned`) — run on dev
+
+---
+
+### Phase 4: VA Partner Ledger Enhancement
+
+#### Backend
+- [ ] **4a.** Add `entry_type="debit_note"` support to LedgerEntry model CHECK constraint (for damage/return reversals against VA parties)
+- [ ] **4b.** Add `reference_type="va_return"`, `"damage_claim"` to LedgerEntry
+- [ ] **4c.** VA Party payment: already works via `POST /ledger/payment` with `party_type="va_party"` — verify and test
+- [ ] **4d.** VA Party balance in PartyMastersPage: already shows balance — verify accuracy with new debit_note entries
+- [ ] **4e.** Add `GET /va-parties/{id}/summary` — outstanding balance, total challans, total cost, total damage, payment history count
+
+#### Frontend — VA Partner Ledger Panel Enhancement
+- [ ] **4f.** PartyMastersPage VA tab detail: enhance LedgerPanel with damage claims section
+- [ ] **4g.** VA Party detail: "Challans" tab showing all job + batch challans for this VA party
+- [ ] **4h.** VA Party detail: "Damage Claims" tab showing all damage entries (from Phase 2)
+- [ ] **4i.** VA Party detail: "Payments" tab showing payment history with TDS tracking
+- [ ] **4j.** VA Party detail: KPI strip (Total Processed, Total Cost, Outstanding, Damage Claims)
+
+#### Migration
+- [ ] **4k.** Migration: ALTER ledger_entries CHECK (add `debit_note` to entry_type, add `va_return`, `damage_claim` to reference_type) — if CHECK constraints exist
+
+---
+
+### Phase 5: Integration + Polish
+
+#### Cross-Cutting
+- [ ] **5a.** Dashboard: Returns KPI card (total returns this month, return rate %)
+- [ ] **5b.** Reports: Returns report (by customer, by reason, by SKU, by period)
+- [ ] **5c.** SSE events: emit on return creation, approval, dispatch (real-time notifications)
+- [ ] **5d.** Permissions: `return_create`, `return_approve`, `return_dispatch` (role-based)
+
+#### Documentation
+- [ ] **5e.** Update API_REFERENCE.md — all new endpoints, schemas, response shapes
+- [ ] **5f.** Update CLAUDE.md — S92 session summary
+
+---
+
+### Summary
+
+| Phase | What | New Models | Files (~) |
+|-------|------|-----------|-----------|
+| **P1** | Customer Sale Returns | 0 (enhance existing) | ~8 |
+| **P2** | VA Damage Tracking | 0 (add fields) | ~10 |
+| **P3** | Supplier Returns | 2 (ReturnNote + ReturnNoteItem) | ~12 |
+| **P4** | VA Partner Ledger Enhancement | 0 | ~6 |
+| **P5** | Integration + Polish | 0 | ~5 |
+| **Total** | | **2 new models (39th, 40th)** | **~41 files** |
+
+**Phases are independent — can stop after any phase. P1 is highest business impact.**
+
+---
+
+## Previous State (Session 91 — 2026-03-29)
 
 ### S91: Partial Order Support (Shipment Model)
 

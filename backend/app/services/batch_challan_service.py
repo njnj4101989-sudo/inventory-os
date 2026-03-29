@@ -182,6 +182,8 @@ class BatchChallanService:
                 continue  # already received — skip
 
             bp.pieces_received = entry.pieces_received
+            bp.pieces_damaged = entry.pieces_damaged
+            bp.damage_reason = entry.damage_reason
             bp.cost = entry.cost
             bp.status = "received"
             if entry.cost:
@@ -233,6 +235,31 @@ class BatchChallanService:
                     created_by=received_by,
                     fy_id=fy_id,
                 ))
+            await self.db.flush()
+
+        # Debit note for damage (VA party owes us for damaged pieces)
+        total_damaged_pcs = sum((bp.pieces_damaged or 0) for bp in challan.batch_items if bp.status == "received")
+        if total_damaged_pcs > 0 and challan.va_party_id and total_cost > 0:
+            total_received = sum((bp.pieces_received or 0) for bp in challan.batch_items if bp.status == "received")
+            cost_per_piece = total_cost / max(total_received, 1)
+            damage_amount = cost_per_piece * total_damaged_pcs
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger_svc = LedgerService(self.db)
+            va_name = challan.va_party.name if challan.va_party else "VA"
+            await ledger_svc.create_entry(LedgerEntryCreate(
+                entry_date=challan.received_date or datetime.now(timezone.utc).date(),
+                party_type="va_party",
+                party_id=challan.va_party_id,
+                entry_type="adjustment",
+                reference_type="damage_claim",
+                reference_id=challan.id,
+                debit=damage_amount,
+                credit=0,
+                description=f"Damage claim {challan.challan_no} {va_name} — {total_damaged_pcs} pcs, ₹{damage_amount:,.2f}",
+                created_by=received_by,
+                fy_id=fy_id,
+            ))
             await self.db.flush()
 
         from app.core.event_bus import event_bus
@@ -390,6 +417,8 @@ class BatchChallanService:
                 } if b else None,
                 "pieces_sent": bp.pieces_sent,
                 "pieces_received": bp.pieces_received,
+                "pieces_damaged": bp.pieces_damaged,
+                "damage_reason": bp.damage_reason,
                 "cost": float(bp.cost) if bp.cost else None,
                 "status": bp.status,
                 "phase": bp.phase,

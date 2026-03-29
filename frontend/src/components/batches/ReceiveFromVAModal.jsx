@@ -42,6 +42,8 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
     ;(challan.batch_items || []).forEach((item) => {
       defaults[item.batch?.id || item.id] = {
         pieces_received: item.pieces_sent,
+        pieces_damaged: '',
+        damage_reason: '',
         cost: '',
       }
     })
@@ -63,6 +65,8 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
     const batchEntries = Object.entries(receiveData).map(([batch_id, data]) => ({
       batch_id,
       pieces_received: parseInt(data.pieces_received) || 0,
+      pieces_damaged: data.pieces_damaged ? parseInt(data.pieces_damaged) : null,
+      damage_reason: data.damage_reason || null,
       cost: parseFloat(data.cost) || null,
     }))
 
@@ -165,6 +169,8 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                       <th className="typo-th text-left py-2 pl-3">Batch</th>
                       <th className="typo-th text-center py-2">Sent</th>
                       <th className="typo-th text-center py-2">Received</th>
+                      <th className="typo-th text-center py-2">Damaged</th>
+                      <th className="typo-th text-left py-2">Reason</th>
                       <th className="typo-th text-right py-2 pr-3">Cost (₹)</th>
                     </tr>
                   </thead>
@@ -183,14 +189,35 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                             <input type="number" min="0" max={item.pieces_sent}
                               value={data.pieces_received ?? item.pieces_sent}
                               onChange={(e) => updateItem(batchId, 'pieces_received', e.target.value)}
-                              className="w-16 rounded border border-gray-300 px-2 py-1 text-xs text-center" />
+                              className="w-16 typo-input-sm text-center" />
+                          </td>
+                          <td className="py-2 text-center">
+                            <input type="number" min="0" max={data.pieces_received || item.pieces_sent}
+                              value={data.pieces_damaged || ''}
+                              onChange={(e) => updateItem(batchId, 'pieces_damaged', e.target.value)}
+                              placeholder="0"
+                              className="w-16 typo-input-sm text-center" />
+                          </td>
+                          <td className="py-2">
+                            <select value={data.damage_reason || ''}
+                              onChange={(e) => updateItem(batchId, 'damage_reason', e.target.value)}
+                              className="typo-input-sm w-full">
+                              <option value="">—</option>
+                              <option value="shrinkage">Shrinkage</option>
+                              <option value="color_bleeding">Color Bleeding</option>
+                              <option value="stain">Stain</option>
+                              <option value="tear">Tear</option>
+                              <option value="wrong_process">Wrong Process</option>
+                              <option value="lost">Lost</option>
+                              <option value="other">Other</option>
+                            </select>
                           </td>
                           <td className="py-2 pr-3 text-right">
                             <input type="number" min="0" step="0.01"
                               value={data.cost || ''}
                               onChange={(e) => updateItem(batchId, 'cost', e.target.value)}
                               placeholder="0"
-                              className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right" />
+                              className="w-20 typo-input-sm text-right" />
                           </td>
                         </tr>
                       )

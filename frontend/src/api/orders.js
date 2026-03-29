@@ -106,3 +106,12 @@ export async function cancelOrder(id) {
   }
   return client.post(`/orders/${id}/cancel`)
 }
+
+export async function returnOrder(id, data) {
+  if (USE_MOCK) {
+    const order = orders.find((o) => o.id === id)
+    if (order) order.status = 'returned'
+    return mockResponse(order, 'Return processed')
+  }
+  return client.post(`/orders/${id}/return`, data)
+}

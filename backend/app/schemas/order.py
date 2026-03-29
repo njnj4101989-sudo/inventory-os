@@ -51,6 +51,7 @@ class OrderItemResponse(BaseSchema):
     total_price: Decimal
     fulfilled_qty: int = 0
     short_qty: int = 0
+    returned_qty: int = 0
 
 
 class ReturnItemInput(BaseModel):
@@ -58,7 +59,7 @@ class ReturnItemInput(BaseModel):
 
     sku_id: UUID
     quantity: int
-    reason: str | None = None
+    reason: str | None = None  # defective, wrong_item, size_mismatch, color_mismatch, damaged_in_transit, customer_changed_mind, other
 
 
 # --- Requests ---
@@ -115,6 +116,8 @@ class ReturnRequest(BaseModel):
     """POST /orders/{id}/return."""
 
     items: list[ReturnItemInput]
+    return_date: date | None = None  # defaults to today
+    return_notes: str | None = None
 
 
 # --- Response ---

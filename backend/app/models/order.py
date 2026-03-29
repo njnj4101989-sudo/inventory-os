@@ -14,7 +14,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'confirmed', 'processing', 'partially_shipped', 'shipped', 'delivered', 'cancelled', 'returned')",
+            "status IN ('pending', 'confirmed', 'processing', 'partially_shipped', 'shipped', 'delivered', 'cancelled', 'partially_returned', 'returned')",
             name="ord_valid_status",
         ),
     )

@@ -308,6 +308,8 @@ class JobChallanService:
             log.received_date = req.received_date
             log.weight_after = entry.weight_after
             log.processing_cost = entry.processing_cost
+            log.weight_damaged = entry.weight_damaged
+            log.damage_reason = entry.damage_reason
             log.status = "received"
             if entry.notes:
                 log.notes = (log.notes + " | " + entry.notes) if log.notes else entry.notes
@@ -399,6 +401,33 @@ class JobChallanService:
                     created_by=received_by,
                     fy_id=fy_id,
                 ))
+            await self.db.flush()
+
+        # 7b. Debit note for damage (VA party owes us for damaged material)
+        total_damage = sum(
+            float(log.weight_damaged or 0) * (float(log.processing_cost or 0) / float(log.weight_after or 1))
+            for log in challan.processing_logs
+            if log.status == "received" and log.weight_damaged and float(log.weight_damaged) > 0
+        )
+        if total_damage > 0 and challan.va_party_id:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger_svc = LedgerService(self.db)
+            va_name_str = challan.va_party.name if challan.va_party else "VA"
+            damaged_rolls = sum(1 for log in challan.processing_logs if log.weight_damaged and float(log.weight_damaged) > 0)
+            await ledger_svc.create_entry(LedgerEntryCreate(
+                entry_date=req.received_date or date.today(),
+                party_type="va_party",
+                party_id=challan.va_party_id,
+                entry_type="adjustment",
+                reference_type="damage_claim",
+                reference_id=challan.id,
+                debit=total_damage,
+                credit=0,
+                description=f"Damage claim {challan.challan_no} {va_name_str} — {damaged_rolls} rolls, ₹{total_damage:,.2f}",
+                created_by=received_by,
+                fy_id=fy_id,
+            ))
             await self.db.flush()
 
         # 8. SSE event
@@ -592,6 +621,8 @@ class JobChallanService:
                 "color": r.color,
                 "current_weight": float(r.current_weight) if r.current_weight else 0,
                 "weight_sent": float(log.weight_before) if log.weight_before else None,
+                "weight_damaged": float(log.weight_damaged) if log.weight_damaged else None,
+                "damage_reason": log.damage_reason,
                 "processing_id": str(log.id),
                 "processing_status": log.status,
             })

@@ -35,6 +35,7 @@ from app.models.user_company import UserCompany
 from app.models.shipment import Shipment
 from app.models.shipment_item import ShipmentItem
 from app.models.financial_year import FinancialYear
+from app.models.return_note import ReturnNote, ReturnNoteItem
 
 __all__ = [
     "Role",
@@ -74,4 +75,6 @@ __all__ = [
     "Shipment",
     "ShipmentItem",
     "FinancialYear",
+    "ReturnNote",
+    "ReturnNoteItem",
 ]

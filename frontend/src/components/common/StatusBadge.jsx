@@ -27,8 +27,16 @@ const COLORS = {
   partially_shipped:  'bg-amber-100 text-amber-700',
   shipped:            'bg-green-100 text-green-700',
   delivered:    'bg-green-100 text-green-700',
-  cancelled:    'bg-red-100 text-red-700',
-  returned:     'bg-orange-100 text-orange-700',
+  cancelled:          'bg-red-100 text-red-700',
+  partially_returned: 'bg-orange-100 text-orange-700',
+  returned:           'bg-orange-100 text-orange-700',
+
+  // Return note statuses
+  draft:              'bg-gray-100 text-gray-700',
+  approved:           'bg-blue-100 text-blue-700',
+  dispatched:         'bg-orange-100 text-orange-700',
+  acknowledged:       'bg-teal-100 text-teal-700',
+  closed:             'bg-green-100 text-green-700',
 
   // Invoice statuses
   issued:       'bg-yellow-100 text-yellow-700',

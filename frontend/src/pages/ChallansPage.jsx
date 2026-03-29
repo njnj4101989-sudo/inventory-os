@@ -163,6 +163,8 @@ export default function ChallansPage() {
         checked: true,
         weight_after: String(r.weight_sent || r.current_weight || r.total_weight || ''),
         processing_cost: '',
+        weight_damaged: '',
+        damage_reason: '',
         processing_id: r.processing_id,
       }
     }
@@ -193,6 +195,8 @@ export default function ChallansPage() {
         processing_id: row.processing_id,
         weight_after: parseFloat(row.weight_after),
         processing_cost: row.processing_cost ? parseFloat(row.processing_cost) : null,
+        weight_damaged: row.weight_damaged ? parseFloat(row.weight_damaged) : null,
+        damage_reason: row.damage_reason || null,
       }))
       await receiveJobChallan(recvChallan.id, { received_date: recvDate, rolls: rollsPayload })
       setRecvOpen(false)
@@ -418,6 +422,7 @@ export default function ChallansPage() {
                         <th className="py-2 px-4 text-left border-r border-emerald-500">Phase</th>
                         <th className="py-2 px-4 text-right border-r border-emerald-500">Pcs Sent</th>
                         <th className="py-2 px-4 text-right border-r border-emerald-500">Pcs Recv</th>
+                        <th className="py-2 px-4 text-right border-r border-emerald-500">Damaged</th>
                         <th className="py-2 px-4 text-left">Status</th>
                       </>
                     )}
@@ -444,6 +449,12 @@ export default function ChallansPage() {
                         <td className="px-4 py-2 text-gray-600 capitalize border-r border-gray-50">{bi.phase || '—'}</td>
                         <td className="px-4 py-2 text-right text-gray-500 tabular-nums border-r border-gray-50">{bi.pieces_sent}</td>
                         <td className="px-4 py-2 text-right font-medium text-gray-700 tabular-nums border-r border-gray-50">{bi.pieces_received ?? '—'}</td>
+                        <td className="px-4 py-2 text-right border-r border-gray-50">
+                          {(bi.pieces_damaged || 0) > 0
+                            ? <span className="text-red-600 font-semibold" title={bi.damage_reason || ''}>{bi.pieces_damaged}</span>
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
                         <td className="px-4 py-2">
                           <span className={`rounded-full px-2 py-0.5 typo-badge border ${biSt.bg} ${biSt.text} ${biSt.border}`}>
                             {biSt.label}
@@ -453,7 +464,7 @@ export default function ChallansPage() {
                     )
                   })}
                   {((isJob && !(detail.rolls || []).length) || (!isJob && !(detail.batch_items || []).length)) && (
-                    <tr><td colSpan={isJob ? 6 : 7} className="px-4 py-8 text-center text-gray-400">No items</td></tr>
+                    <tr><td colSpan={isJob ? 6 : 8} className="px-4 py-8 text-center text-gray-400">No items</td></tr>
                   )}
                 </tbody>
                 {/* Dark totals footer */}
@@ -608,6 +619,8 @@ export default function ChallansPage() {
                     <th className="py-2 px-3 text-left border-r border-emerald-500">Roll Code</th>
                     <th className="py-2 px-3 text-right border-r border-emerald-500">Sent Wt</th>
                     <th className="py-2 px-3 text-right border-r border-emerald-500">Weight After *</th>
+                    <th className="py-2 px-3 text-right border-r border-emerald-500">Damaged</th>
+                    <th className="py-2 px-3 text-left border-r border-emerald-500">Reason</th>
                     <th className="py-2 px-3 text-right">Cost (₹)</th>
                   </tr>
                 </thead>
@@ -627,6 +640,26 @@ export default function ChallansPage() {
                           <input type="number" step="0.001" value={row.weight_after}
                             onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], weight_after: e.target.value } }))}
                             className="w-28 typo-input-sm text-right tabular-nums !w-28" />
+                        </td>
+                        <td className="px-3 py-2 text-right border-r border-gray-50">
+                          <input type="number" step="0.001" value={row.weight_damaged}
+                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], weight_damaged: e.target.value } }))}
+                            placeholder="0"
+                            className="w-20 typo-input-sm text-right tabular-nums !w-20" />
+                        </td>
+                        <td className="px-3 py-2 border-r border-gray-50">
+                          <select value={row.damage_reason}
+                            onChange={e => setRecvRows(prev => ({ ...prev, [r.id]: { ...prev[r.id], damage_reason: e.target.value } }))}
+                            className="typo-input-sm w-full !w-28">
+                            <option value="">—</option>
+                            <option value="shrinkage">Shrinkage</option>
+                            <option value="color_bleeding">Color Bleeding</option>
+                            <option value="stain">Stain</option>
+                            <option value="tear">Tear</option>
+                            <option value="wrong_process">Wrong Process</option>
+                            <option value="lost">Lost</option>
+                            <option value="other">Other</option>
+                          </select>
                         </td>
                         <td className="px-3 py-2 text-right">
                           <input type="number" step="1" value={row.processing_cost}

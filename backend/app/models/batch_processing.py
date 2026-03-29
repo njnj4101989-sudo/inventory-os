@@ -34,6 +34,8 @@ class BatchProcessing(Base):
     )
     pieces_sent: Mapped[int] = mapped_column(Integer)
     pieces_received: Mapped[int | None] = mapped_column(Integer)
+    pieces_damaged: Mapped[int | None] = mapped_column(Integer)
+    damage_reason: Mapped[str | None] = mapped_column(String(50))
     cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     status: Mapped[str] = mapped_column(
         String(20), default="sent", server_default="'sent'", index=True

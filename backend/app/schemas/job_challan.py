@@ -46,6 +46,8 @@ class JobChallanReceiveEntry(BaseModel):
     processing_id: UUID
     weight_after: Decimal
     processing_cost: Decimal | None = None
+    weight_damaged: Decimal | None = None  # weight lost/damaged during VA
+    damage_reason: str | None = None  # shrinkage, color_bleeding, stain, tear, wrong_process, lost, other
     notes: str | None = None
 
 

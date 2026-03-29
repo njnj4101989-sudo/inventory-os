@@ -19,6 +19,7 @@ class OrderItem(Base):
     total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     fulfilled_qty: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     short_qty: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    returned_qty: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # Relationships
     order: Mapped[Order] = relationship(back_populates="items")

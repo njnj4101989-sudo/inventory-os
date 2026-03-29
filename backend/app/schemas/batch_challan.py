@@ -35,6 +35,8 @@ class BatchChallanReceiveEntry(BaseModel):
     """Input: one batch in a challan receive request."""
     batch_id: UUID
     pieces_received: int
+    pieces_damaged: int | None = None  # pieces lost/damaged during VA
+    damage_reason: str | None = None  # shrinkage, color_bleeding, stain, tear, wrong_process, lost, other
     cost: Decimal | None = None
 
 

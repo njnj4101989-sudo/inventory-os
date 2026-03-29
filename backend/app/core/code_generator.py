@@ -184,3 +184,13 @@ async def next_reservation_code(db: AsyncSession) -> str:
     """Generate next RES-XXXX code (not FY-scoped — reservations are transient)."""
     current = _extract_number(await _max_code(db, Reservation.reservation_code), "RES-")
     return f"RES-{current + 1:04d}"
+
+
+async def next_return_note_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next RN-XXXX code, scoped to financial year."""
+    from app.models.return_note import ReturnNote
+    current = _extract_number(
+        await _max_code(db, ReturnNote.return_note_no, extra_where=ReturnNote.fy_id == fy_id),
+        "RN-",
+    )
+    return f"RN-{current + 1:04d}"

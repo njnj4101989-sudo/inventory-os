@@ -16,7 +16,7 @@ class Roll(Base):
         CheckConstraint("total_weight > 0", name="positive_weight"),
         CheckConstraint("remaining_weight >= 0", name="non_negative_remaining"),
         CheckConstraint(
-            "status IN ('in_stock', 'sent_for_processing', 'in_cutting', 'remnant')",
+            "status IN ('in_stock', 'sent_for_processing', 'in_cutting', 'remnant', 'returned')",
             name="valid_status",
         ),
     )
@@ -87,6 +87,8 @@ class RollProcessing(Base):
     length_before: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     length_after: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     processing_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    weight_damaged: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    damage_reason: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(20), default="sent", server_default="'sent'", index=True)
     notes: Mapped[str | None] = mapped_column(Text)
     job_challan_id: Mapped[uuid.UUID | None] = mapped_column(

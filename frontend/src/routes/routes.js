@@ -13,6 +13,7 @@ const ChallansPage     = lazy(() => import('../pages/ChallansPage'))
 const InventoryPage    = lazy(() => import('../pages/InventoryPage'))
 const OrdersPage       = lazy(() => import('../pages/OrdersPage'))
 const InvoicesPage     = lazy(() => import('../pages/InvoicesPage'))
+const ReturnsPage      = lazy(() => import('../pages/ReturnsPage'))
 const ReportsPage      = lazy(() => import('../pages/ReportsPage'))
 const MastersPage      = lazy(() => import('../pages/MastersPage'))
 const SettingsPage     = lazy(() => import('../pages/SettingsPage'))
@@ -37,6 +38,7 @@ const routes = [
   { path: 'inventory',        element: InventoryPage,    requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'orders',           element: OrdersPage,       requiredRoles: ['admin', 'billing'] },
   { path: 'invoices',         element: InvoicesPage,     requiredRoles: ['admin', 'billing'] },
+  { path: 'returns',          element: ReturnsPage,      requiredRoles: ['admin', 'billing'] },
   { path: 'reports',          element: ReportsPage,      requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'masters',          element: MastersPage,      requiredRoles: ['admin', 'supervisor'] },
   { path: 'settings',         element: SettingsPage,     requiredRoles: ['admin'] },

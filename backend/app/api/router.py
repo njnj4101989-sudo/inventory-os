@@ -32,6 +32,7 @@ from app.api import (
     transports,
     ledger,
     company,
+    return_notes,
 )
 
 api_router = APIRouter()
@@ -60,3 +61,4 @@ api_router.include_router(brokers.router)
 api_router.include_router(transports.router)
 api_router.include_router(ledger.router)
 api_router.include_router(company.router)
+api_router.include_router(return_notes.router)
