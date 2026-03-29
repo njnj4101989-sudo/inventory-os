@@ -7,6 +7,8 @@ import { getAllTransports } from '../api/transports'
 import { getOrders } from '../api/orders'
 import { getAllCustomers } from '../api/customers'
 import { getSKUs } from '../api/skus'
+import { getRolls } from '../api/rolls'
+import CameraScanner from '../components/common/CameraScanner'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
@@ -145,9 +147,12 @@ export default function ReturnsPage() {
   const [suppliers, setSuppliers] = useState([])
   const [transports, setTransports] = useState([])
   const [form, setForm] = useState({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', notes: '' })
-  const [formItems, setFormItems] = useState([{ roll_id: '', sku_id: '', quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+  const [formItems, setFormItems] = useState([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [supplierRolls, setSupplierRolls] = useState([])
+  const [supplierSkus, setSupplierSkus] = useState([])
+  const [scanRowIdx, setScanRowIdx] = useState(null) // which row is scanning
 
   // Sales return create mode
   const [salesCreateMode, setSalesCreateMode] = useState(false)
@@ -277,15 +282,74 @@ export default function ReturnsPage() {
     setCreateMode(true)
     setFormError(null)
     setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', notes: '' })
-    setFormItems([{ roll_id: '', sku_id: '', quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+    setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+    setSupplierRolls([])
+    setSupplierSkus([])
     try {
-      const [supRes, transRes] = await Promise.all([getSuppliers({ is_active: true }), getAllTransports()])
+      const [supRes, transRes, skuRes] = await Promise.all([
+        getSuppliers({ is_active: true }),
+        getAllTransports(),
+        getSKUs({ page_size: 500 }),
+      ])
       setSuppliers(supRes.data?.data || [])
       setTransports(transRes.data?.data || [])
+      const skuData = skuRes.data?.data || skuRes.data
+      setSupplierSkus(Array.isArray(skuData) ? skuData : skuData?.data || [])
     } catch {}
   }
 
-  const addItem = () => setFormItems(prev => [...prev, { roll_id: '', sku_id: '', quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+  const handleSupplierChange = async (supplierId) => {
+    setForm(f => ({ ...f, supplier_id: supplierId }))
+    setSupplierRolls([])
+    if (supplierId && form.return_type === 'roll_return') {
+      try {
+        const res = await getRolls({ supplier_id: supplierId, page_size: 500, status: 'in_stock' })
+        const d = res.data?.data || res.data
+        setSupplierRolls(Array.isArray(d) ? d : d?.data || [])
+      } catch {}
+    }
+  }
+
+  const handleReturnTypeChange = async (type) => {
+    setForm(f => ({ ...f, return_type: type }))
+    setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+    if (type === 'roll_return' && form.supplier_id) {
+      try {
+        const res = await getRolls({ supplier_id: form.supplier_id, page_size: 500, status: 'in_stock' })
+        const d = res.data?.data || res.data
+        setSupplierRolls(Array.isArray(d) ? d : d?.data || [])
+      } catch {}
+    }
+  }
+
+  const resolveRollCode = (idx, code) => {
+    const roll = supplierRolls.find(r => r.roll_code === code)
+    if (roll) {
+      setFormItems(prev => prev.map((item, i) => i === idx ? {
+        ...item,
+        roll_id: roll.id,
+        roll_code: roll.roll_code,
+        roll_detail: roll,
+        weight: roll.current_weight || roll.total_weight || '',
+      } : item))
+    } else {
+      setFormItems(prev => prev.map((item, i) => i === idx ? {
+        ...item,
+        roll_id: '',
+        roll_code: code,
+        roll_detail: null,
+      } : item))
+    }
+  }
+
+  const handleScanResult = (rawValue) => {
+    if (scanRowIdx !== null) {
+      resolveRollCode(scanRowIdx, rawValue)
+      setScanRowIdx(null)
+    }
+  }
+
+  const addItem = () => setFormItems(prev => [...prev, { roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const removeItem = (idx) => setFormItems(prev => prev.filter((_, i) => i !== idx))
   const updateItem = (idx, field, value) => setFormItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item))
 
@@ -1040,13 +1104,13 @@ export default function ReturnsPage() {
               <div>
                 <label className="typo-label-sm">RETURN TYPE</label>
                 <FilterSelect full value={form.return_type}
-                  onChange={v => setForm(f => ({ ...f, return_type: v }))}
+                  onChange={handleReturnTypeChange}
                   options={[{ value: 'roll_return', label: 'Roll Return' }, { value: 'sku_return', label: 'SKU Return' }]} />
               </div>
               <div>
                 <label className="typo-label-sm">SUPPLIER *</label>
                 <FilterSelect searchable full value={form.supplier_id}
-                  onChange={v => setForm(f => ({ ...f, supplier_id: v }))}
+                  onChange={handleSupplierChange}
                   options={[{ value: '', label: 'Select Supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
               </div>
               <div>
@@ -1072,11 +1136,13 @@ export default function ReturnsPage() {
               <thead>
                 <tr className="bg-emerald-600">
                   <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[5%] border-r border-emerald-500">#</th>
-                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[35%] border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Roll ID' : 'SKU ID'}</th>
-                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Weight (kg)' : 'Qty'}</th>
-                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Rate (₹)</th>
-                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[25%] border-r border-emerald-500">Reason</th>
-                  <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[5%]"></th>
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Roll Code' : 'SKU'}</th>
+                  {form.return_type === 'roll_return' && <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Fabric</th>}
+                  {form.return_type === 'roll_return' && <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Color</th>}
+                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Weight (kg)' : 'Qty'}</th>
+                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Rate (₹)</th>
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[18%] border-r border-emerald-500">Reason</th>
+                  <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[4%]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -1084,11 +1150,33 @@ export default function ReturnsPage() {
                   <tr key={idx} className="hover:bg-gray-50">
                     <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-2">
-                      <input className="typo-input-sm w-full"
-                        placeholder={form.return_type === 'roll_return' ? 'Paste roll UUID' : 'Paste SKU UUID'}
-                        value={form.return_type === 'roll_return' ? item.roll_id : item.sku_id}
-                        onChange={e => updateItem(idx, form.return_type === 'roll_return' ? 'roll_id' : 'sku_id', e.target.value)} />
+                      {form.return_type === 'roll_return' ? (
+                        <div className="flex items-center gap-1">
+                          <input className="typo-input-sm flex-1"
+                            placeholder="Scan or type roll code"
+                            value={item.roll_code}
+                            onChange={e => updateItem(idx, 'roll_code', e.target.value)}
+                            onBlur={e => { if (e.target.value.trim()) resolveRollCode(idx, e.target.value.trim()) }}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()) } }} />
+                          <button onClick={() => setScanRowIdx(idx)} title="Scan QR"
+                            className="rounded p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                          </button>
+                          {item.roll_detail && <span className="text-green-500 flex-shrink-0">✓</span>}
+                          {item.roll_code && !item.roll_detail && item.roll_code.length > 3 && <span className="text-red-400 flex-shrink-0 text-[10px]">Not found</span>}
+                        </div>
+                      ) : (
+                        <FilterSelect searchable full value={item.sku_id}
+                          onChange={v => updateItem(idx, 'sku_id', v)}
+                          options={[{ value: '', label: 'Select SKU...' }, ...supplierSkus.map(s => ({ value: s.id, label: `${s.sku_code} · ${s.color} · ${s.size}` }))]} />
+                      )}
                     </td>
+                    {form.return_type === 'roll_return' && (
+                      <td className="px-2 py-2 text-gray-500">{item.roll_detail?.fabric_type || '—'}</td>
+                    )}
+                    {form.return_type === 'roll_return' && (
+                      <td className="px-2 py-2 text-gray-500">{item.roll_detail?.color || '—'}</td>
+                    )}
                     <td className="px-2 py-2">
                       <input type="number" className="typo-input-sm w-full text-right"
                         value={form.return_type === 'roll_return' ? item.weight : item.quantity}
@@ -1099,10 +1187,9 @@ export default function ReturnsPage() {
                         value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
                     </td>
                     <td className="px-2 py-2">
-                      <select className="typo-input-sm w-full" value={item.reason}
-                        onChange={e => updateItem(idx, 'reason', e.target.value)}>
-                        {REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      <FilterSelect full value={item.reason}
+                        onChange={v => updateItem(idx, 'reason', v)}
+                        options={REASON_OPTIONS} />
                     </td>
                     <td className="px-2 py-2 text-center">
                       {formItems.length > 1 && (
@@ -1129,6 +1216,14 @@ export default function ReturnsPage() {
             </div>
           </div>
         </div>
+
+        {/* QR Scanner overlay */}
+        {scanRowIdx !== null && (
+          <CameraScanner
+            onScan={handleScanResult}
+            onClose={() => setScanRowIdx(null)}
+          />
+        )}
       </div>
     )
   }
