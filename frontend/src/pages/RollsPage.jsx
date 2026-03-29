@@ -2491,8 +2491,8 @@ export default function RollsPage() {
               {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
               {/* ── Invoice Header ── */}
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50 rounded-t-xl">
                   <div className="px-3 py-2 flex items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Invoice Details</span>
                     <span className="text-[10px] text-gray-300">·</span>
@@ -2510,10 +2510,8 @@ export default function RollsPage() {
                   </div>
                   <div className="col-span-2 md:col-span-1">
                     <label className="typo-label-sm">Supplier <span className="text-red-500">*</span></label>
-                    <select data-master="supplier" data-supplier-input="true" value={invoiceHeader.supplier_id} onChange={(e) => setHeader('supplier_id', e.target.value)} className="typo-input-sm">
-                      <option value="">Select supplier</option>
-                      {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <FilterSelect searchable full data-master="supplier" value={invoiceHeader.supplier_id} onChange={(v) => setHeader('supplier_id', v)}
+                      options={[{ value: '', label: 'Select supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
                   </div>
                   <div>
                     <label className="typo-label-sm">Invoice No.</label>
@@ -2532,13 +2530,8 @@ export default function RollsPage() {
                   </div>
                   <div>
                     <label className="typo-label-sm">GST %</label>
-                    <select value={invoiceHeader.gst_percent} onChange={(e) => setHeader('gst_percent', e.target.value)} className="typo-input-sm">
-                      <option value="">0%</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
+                    <FilterSelect full value={invoiceHeader.gst_percent} onChange={(v) => setHeader('gst_percent', v)}
+                      options={[{ value: '', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
                   </div>
                 </div>
               </div>
@@ -2552,9 +2545,9 @@ export default function RollsPage() {
                 const grpValue = grpTotals.weight * (parseFloat(grp.cost_per_unit) || 0)
 
                 return (
-                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div key={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm">
                     {/* Design header bar */}
-                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-4 py-2">
+                    <div className="flex items-center justify-between bg-blue-50 border-b border-blue-100 px-4 py-2 rounded-t-xl">
                       <div className="flex items-center gap-2">
                         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">{gIdx + 1}</span>
                         <span className="text-xs font-semibold text-blue-800">
@@ -2580,10 +2573,8 @@ export default function RollsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                         <div>
                           <label className="typo-label-sm">Fabric / Design <span className="text-red-500">*</span></label>
-                          <select data-master="fabric" data-fabric-input="true" value={grp.fabric_type} onChange={(e) => setGroupField(gIdx, 'fabric_type', e.target.value)} className="typo-input-sm">
-                            <option value="">Select fabric</option>
-                            {masterFabrics.map((f) => <option key={f.id} value={f.name}>{f.name} ({f.code})</option>)}
-                          </select>
+                          <FilterSelect searchable full data-master="fabric" value={grp.fabric_type} onChange={(v) => setGroupField(gIdx, 'fabric_type', v)}
+                            options={[{ value: '', label: 'Select fabric' }, ...masterFabrics.map(f => ({ value: f.name, label: `${f.name} (${f.code})` }))]} />
                         </div>
                         <div>
                           <label className="typo-label-sm">Panna (″)</label>
