@@ -527,11 +527,6 @@ export default function RollsPage() {
   const [editError, setEditError] = useState(null)
 
   // Send for Processing modal
-  const [sendProcOpen, setSendProcOpen] = useState(false)
-  const [sendProcRoll, setSendProcRoll] = useState(null)
-  const [sendProcForm, setSendProcForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '', weight_to_send: '' })
-  const [sendProcSaving, setSendProcSaving] = useState(false)
-  const [sendProcError, setSendProcError] = useState(null)
   const [nextJCNo, setNextJCNo] = useState('')
 
   // Receive from Processing modal
@@ -591,18 +586,15 @@ export default function RollsPage() {
             }))
           }
         } else if (selectName === 'value_addition' && newItem?.id) {
-          // Could be single send or bulk send — check which form is open
-          if (sendProcOpen) setSendProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
-          else if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
+          if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
           else if (editProcOpen) setEditProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
         } else if (selectName === 'va_party' && newItem?.id) {
-          if (sendProcOpen) setSendProcForm((f) => ({ ...f, va_party_id: newItem.id }))
-          else if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, va_party_id: newItem.id }))
+          if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, va_party_id: newItem.id }))
           else if (editProcOpen) setEditProcForm((f) => ({ ...f, va_party_id: newItem.id }))
         }
       }, 200) // Wait for master list refresh
     }
-  }, [refreshMasters, sendProcOpen, bulkSendOpen, editProcOpen])
+  }, [refreshMasters, bulkSendOpen, editProcOpen])
 
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
 
@@ -1352,49 +1344,6 @@ export default function RollsPage() {
     getNextJCNumber()
       .then((res) => setNextJCNo(res.data?.data?.next_challan_no || res.data?.next_challan_no || ''))
       .catch(() => setNextJCNo(''))
-  }
-
-  const openSendProcessing = (roll) => {
-    setSendProcRoll(roll)
-    setSendProcForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '', weight_to_send: String(roll.remaining_weight || roll.current_weight || roll.total_weight) })
-    setSendProcError(null)
-    // Keep detailRoll open — modal layers on top, cancel returns to roll detail
-    fetchNextJCNo()
-    setSendProcOpen(true)
-  }
-
-  const handleSendProcessing = async () => {
-    if (!sendProcForm.value_addition_id) { setSendProcError('Value Addition is required'); return }
-    if (!sendProcForm.va_party_id) { setSendProcError('VA Party is required'); return }
-    if (!sendProcForm.sent_date) { setSendProcError('Sent date is required'); return }
-    const wts = parseFloat(sendProcForm.weight_to_send)
-    if (!wts || wts <= 0) { setSendProcError('Weight to send must be > 0'); return }
-    const maxWt = sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight
-    if (wts > maxWt) { setSendProcError(`Weight to send (${wts}) exceeds remaining (${maxWt})`); return }
-    setSendProcSaving(true)
-    setSendProcError(null)
-    try {
-      const res = await createJobChallan({
-        value_addition_id: sendProcForm.value_addition_id,
-        va_party_id: sendProcForm.va_party_id,
-        sent_date: sendProcForm.sent_date,
-        notes: sendProcForm.notes.trim() || null,
-        rolls: [{ roll_id: sendProcRoll.id, weight_to_send: wts }],
-        _rolls: [sendProcRoll],
-        _vaObj: masterValueAdditions.find((va) => va.id === sendProcForm.value_addition_id) || null,
-      })
-      const challan = res.data?.data || res.data
-      setJobChallanData(challan)
-      setSendProcOpen(false)
-      setDetailRoll(null)
-      setCameFromInvoice(null)
-      setShowJobChallan(true)
-      refreshAll()
-    } catch (err) {
-      setSendProcError(err.response?.data?.detail || 'Failed to send for processing')
-    } finally {
-      setSendProcSaving(false)
-    }
   }
 
   // ── Receive from Processing ──
@@ -3241,110 +3190,6 @@ export default function RollsPage() {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          SEND FOR PROCESSING Modal
-         ════════════════════════════════════════════════════════ */}
-      <Modal open={sendProcOpen} onClose={() => setSendProcOpen(false)}
-        title="" wide
-        actions={
-          <>
-            <button onClick={() => setSendProcOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSendProcessing} disabled={sendProcSaving}
-              className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50 shadow-sm">
-              {sendProcSaving ? 'Sending...' : 'Send for Processing'}
-            </button>
-          </>
-        }
-      >
-        {/* ── Custom gradient header ── */}
-        <div className="-mx-6 mb-5 rounded-t-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-4 text-white">
-          <h2 className="text-lg font-bold tracking-tight">Send for Value Addition</h2>
-          {sendProcRoll && (
-            <p className="text-sm text-teal-100 mt-0.5">{sendProcRoll.roll_code} · {sendProcRoll.fabric_type} · {sendProcRoll.color}</p>
-          )}
-        </div>
-
-        {sendProcError && <div className="mb-4"><ErrorAlert message={sendProcError} onDismiss={() => setSendProcError(null)} /></div>}
-
-        {/* Roll info + Challan — compact toolbar */}
-        {sendProcRoll && (
-          <div className="mb-5 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-end gap-0 bg-gray-50 border-b border-gray-200">
-              <div className="px-4 py-2 border-r border-gray-200">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Roll</label>
-                <div className="text-sm font-bold font-mono text-primary-700">{sendProcRoll.roll_code}</div>
-              </div>
-              <div className="px-4 py-2 border-r border-gray-200">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Remaining</label>
-                <div className="text-sm font-bold text-emerald-700">{sendProcRoll.remaining_weight} kg</div>
-              </div>
-              <div className="px-4 py-2 border-r border-gray-200">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Original</label>
-                <div className="text-sm text-gray-700">{sendProcRoll.total_weight} kg</div>
-              </div>
-              {nextJCNo && (
-                <div className="ml-auto px-4 py-2">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Challan No.</label>
-                  <div className="text-sm font-bold font-mono text-amber-700">{nextJCNo}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Form fields in grid ── */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="bg-emerald-600 px-4 py-2">
-            <span className="text-xs font-semibold text-white uppercase tracking-wider">Processing Details</span>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="typo-label-sm">Weight to Send (kg) <span className="text-red-500">*</span></label>
-                <div className="flex items-center gap-3">
-                  <input type="number" step="0.001" min="0.001"
-                    max={sendProcRoll ? (sendProcRoll.remaining_weight || sendProcRoll.current_weight || sendProcRoll.total_weight) : undefined}
-                    value={sendProcForm.weight_to_send} onChange={(e) => setSendProcForm((f) => ({ ...f, weight_to_send: e.target.value }))}
-                    className="typo-input-sm flex-1" />
-                  {sendProcRoll && (
-                    <button type="button" onClick={() => setSendProcForm((f) => ({ ...f, weight_to_send: String(sendProcRoll.remaining_weight || sendProcRoll.current_weight) }))}
-                      className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 whitespace-nowrap transition-colors">Send All</button>
-                  )}
-                </div>
-                {sendProcRoll && <p className="mt-1 text-xs text-gray-400">Max: {sendProcRoll.remaining_weight} kg remaining</p>}
-              </div>
-              <div>
-                <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
-                <input type="date" value={sendProcForm.sent_date} onChange={(e) => setSendProcForm((f) => ({ ...f, sent_date: e.target.value }))} className="typo-input-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
-                <select data-master="value_addition" value={sendProcForm.value_addition_id} onChange={(e) => setSendProcForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
-                  <option value="">Select value addition</option>
-                  {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-                </select>
-                <p className="mt-1 text-xs text-gray-400">Adds to roll code: +EMB, +DYE etc.</p>
-              </div>
-              <div>
-                <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
-                <select data-master="va_party" value={sendProcForm.va_party_id} onChange={(e) => setSendProcForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
-                  <option value="">Select VA Party…</option>
-                  {vaParties.filter(p => p.is_active !== false).map(p => (
-                    <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="typo-label-sm">Notes</label>
-              <textarea value={sendProcForm.notes} onChange={(e) => setSendProcForm((f) => ({ ...f, notes: e.target.value }))}
-                rows={2} placeholder="e.g. Chikan embroidery work on full body" className="typo-input-sm" />
-            </div>
-          </div>
-        </div>
-      </Modal>
-
       {/* ════════════════════════════════════════════════════════
           RECEIVE FROM PROCESSING Modal
          ════════════════════════════════════════════════════════ */}
