@@ -218,6 +218,7 @@ class ReturnNoteService:
 
         note.status = "acknowledged"
         await self.db.flush()
+        await self._emit("return_acknowledged", note)
         return await self.get_return_note(note_id)
 
     async def close_return_note(self, note_id: UUID, user_id: UUID) -> dict:
@@ -249,6 +250,7 @@ class ReturnNoteService:
             ))
             await self.db.flush()
 
+        await self._emit("return_closed", note, user_id)
         return await self.get_return_note(note_id)
 
     async def cancel_return_note(self, note_id: UUID) -> dict:
@@ -258,6 +260,7 @@ class ReturnNoteService:
 
         note.status = "cancelled"
         await self.db.flush()
+        await self._emit("return_cancelled", note)
         return await self.get_return_note(note_id)
 
     # ── Internal ──
@@ -281,7 +284,7 @@ class ReturnNoteService:
             raise NotFoundError(f"Return note {note_id} not found")
         return note
 
-    async def _emit(self, event_type: str, note: ReturnNote, user_id: UUID):
+    async def _emit(self, event_type: str, note: ReturnNote, user_id: UUID | None = None):
         from app.core.event_bus import event_bus
         supplier_name = note.supplier.name if note.supplier else "—"
         await event_bus.emit(event_type, {
@@ -290,7 +293,7 @@ class ReturnNoteService:
             "supplier": supplier_name,
             "status": note.status,
             "item_count": len(note.items) if note.items else 0,
-        }, str(user_id))
+        }, str(user_id) if user_id else None)
 
     def _to_response(self, n: ReturnNote) -> dict:
         return {

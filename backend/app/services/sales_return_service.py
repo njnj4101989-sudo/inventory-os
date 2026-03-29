@@ -260,6 +260,7 @@ class SalesReturnService:
         sr.qc_notes = req.qc_notes
         await self.db.flush()
 
+        await self._emit("sales_return_inspected", sr, user_id)
         return await self.get_sales_return(sr_id)
 
     # ── Restock: inspected → restocked ──
@@ -294,6 +295,7 @@ class SalesReturnService:
         sr.restocked_date = datetime.now(timezone.utc).date()
         await self.db.flush()
 
+        await self._emit("sales_return_restocked", sr, user_id)
         return await self.get_sales_return(sr_id)
 
     # ── Close: restocked → closed ──
@@ -328,6 +330,7 @@ class SalesReturnService:
             ))
             await self.db.flush()
 
+        await self._emit("sales_return_closed", sr, user_id)
         return await self.get_sales_return(sr_id)
 
     # ── Cancel: draft/received → cancelled ──
@@ -357,6 +360,7 @@ class SalesReturnService:
 
         sr.status = "cancelled"
         await self.db.flush()
+        await self._emit("sales_return_cancelled", sr)
         return await self.get_sales_return(sr_id)
 
     # ── Internal ──
@@ -412,7 +416,7 @@ class SalesReturnService:
             raise NotFoundError(f"Sales return {sr_id} not found")
         return sr
 
-    async def _emit(self, event_type: str, sr: SalesReturn, user_id: UUID):
+    async def _emit(self, event_type: str, sr: SalesReturn, user_id: UUID | None = None):
         from app.core.event_bus import event_bus
         customer_name = sr.customer.name if sr.customer else "—"
         await event_bus.emit(event_type, {
@@ -421,7 +425,7 @@ class SalesReturnService:
             "order_number": sr.order.order_number if sr.order else None,
             "status": sr.status,
             "item_count": len(sr.items) if sr.items else 0,
-        }, str(user_id))
+        }, str(user_id) if user_id else None)
 
     def _to_response(self, sr: SalesReturn) -> dict:
         return {

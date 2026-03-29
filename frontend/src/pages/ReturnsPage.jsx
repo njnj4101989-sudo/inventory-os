@@ -16,6 +16,8 @@ import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
+import QuickMasterModal from '../components/common/QuickMasterModal'
+import useQuickMaster from '../hooks/useQuickMaster'
 
 /* ── Supplier Returns constants ── */
 const SUPPLIER_TABS = [
@@ -173,6 +175,25 @@ export default function ReturnsPage() {
 
   // Confirm cancel
   const [confirmCancel, setConfirmCancel] = useState(false)
+
+  // Quick Master (Shift+M)
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
+    (type, newItem) => {
+      if (type === 'supplier') {
+        setSuppliers(prev => [...prev, newItem])
+        setForm(f => ({ ...f, supplier_id: newItem.id }))
+      }
+      if (type === 'customer') {
+        setCustomers(prev => [...prev, newItem])
+        setSalesForm(f => ({ ...f, customer_id: newItem.id }))
+      }
+      if (type === 'transport') {
+        setTransports(prev => [...prev, newItem])
+        if (createMode) setForm(f => ({ ...f, transport_id: newItem.id }))
+        if (salesCreateMode) setSalesForm(f => ({ ...f, transport_id: newItem.id }))
+      }
+    }
+  )
 
   // Deep-link: ?open=<id> or ?create=1&customer=X&order=Y
   useEffect(() => {
@@ -1143,13 +1164,13 @@ export default function ReturnsPage() {
               </div>
               <div>
                 <label className="typo-label-sm">SUPPLIER *</label>
-                <FilterSelect searchable full value={form.supplier_id}
+                <FilterSelect searchable full data-master="supplier" value={form.supplier_id}
                   onChange={handleSupplierChange}
                   options={[{ value: '', label: 'Select Supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
               </div>
               <div>
                 <label className="typo-label-sm">TRANSPORT</label>
-                <FilterSelect searchable full value={form.transport_id}
+                <FilterSelect searchable full data-master="transport" value={form.transport_id}
                   onChange={v => setForm(f => ({ ...f, transport_id: v }))}
                   options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
               </div>
@@ -1258,6 +1279,7 @@ export default function ReturnsPage() {
             onClose={() => setScanRowIdx(null)}
           />
         )}
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
@@ -1302,7 +1324,7 @@ export default function ReturnsPage() {
             <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="md:col-span-2">
                 <label className="typo-label-sm">CUSTOMER *</label>
-                <FilterSelect autoFocus searchable full value={salesForm.customer_id}
+                <FilterSelect autoFocus searchable full data-master="customer" value={salesForm.customer_id}
                   onChange={handleCustomerSelect}
                   options={[{ value: '', label: 'Select customer...' }, ...customers.map(c => ({ value: c.id, label: c.name }))]} />
               </div>
@@ -1316,7 +1338,7 @@ export default function ReturnsPage() {
               </div>
               <div>
                 <label className="typo-label-sm">TRANSPORT</label>
-                <FilterSelect searchable full value={salesForm.transport_id}
+                <FilterSelect searchable full data-master="transport" value={salesForm.transport_id}
                   onChange={v => setSalesForm(f => ({ ...f, transport_id: v }))}
                   options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
               </div>
@@ -1455,6 +1477,7 @@ export default function ReturnsPage() {
             onClose={() => setSalesScanRowIdx(null)}
           />
         )}
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
