@@ -1128,8 +1128,8 @@ export default function ReturnsPage() {
           {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
           {/* Return Details card */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50 rounded-t-xl">
               <div className="px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Return Details</span>
               </div>
@@ -1293,8 +1293,8 @@ export default function ReturnsPage() {
           {salesFormError && <ErrorAlert message={salesFormError} onDismiss={() => setSalesFormError(null)} />}
 
           {/* Return Details card */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50 rounded-t-xl">
               <div className="px-3 py-2">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Return Details</span>
               </div>
