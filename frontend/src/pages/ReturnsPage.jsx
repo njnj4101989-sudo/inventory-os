@@ -171,6 +171,7 @@ export default function ReturnsPage() {
   const [scanRowIdx, setScanRowIdx] = useState(null) // which row is scanning
   const [rollSuggestions, setRollSuggestions] = useState([]) // dropdown suggestions for roll code
   const [rollSuggestIdx, setRollSuggestIdx] = useState(null) // which row is showing suggestions
+  const [rollHighlight, setRollHighlight] = useState(-1) // highlighted suggestion index
   const rollDebounce = useRef(null)
 
   // Sales return create mode
@@ -370,6 +371,7 @@ export default function ReturnsPage() {
       const matches = supplierRolls.filter(r => r.roll_code.toLowerCase().includes(q)).slice(0, 8)
       setRollSuggestions(matches)
       setRollSuggestIdx(matches.length > 0 ? idx : null)
+      setRollHighlight(-1)
       // Auto-resolve on exact match
       const exact = supplierRolls.find(r => r.roll_code === code.trim())
       if (exact) selectRoll(idx, exact)
@@ -1289,13 +1291,21 @@ export default function ReturnsPage() {
                             value={item.roll_code}
                             onChange={e => handleRollCodeChange(idx, e.target.value)}
                             onBlur={() => setTimeout(() => { if (rollSuggestIdx === idx) { setRollSuggestions([]); setRollSuggestIdx(null) } }, 200)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()); setRollSuggestions([]); setRollSuggestIdx(null) } }} />
+                            onKeyDown={e => {
+                              if (rollSuggestIdx === idx && rollSuggestions.length > 0) {
+                                if (e.key === 'ArrowDown') { e.preventDefault(); setRollHighlight(h => Math.min(h + 1, rollSuggestions.length - 1)) }
+                                else if (e.key === 'ArrowUp') { e.preventDefault(); setRollHighlight(h => Math.max(h - 1, 0)) }
+                                else if (e.key === 'Enter') { e.preventDefault(); if (rollHighlight >= 0 && rollSuggestions[rollHighlight]) selectRoll(idx, rollSuggestions[rollHighlight]); else { resolveRollCode(idx, e.target.value.trim()); setRollSuggestions([]); setRollSuggestIdx(null) } }
+                                else if (e.key === 'Escape') { setRollSuggestions([]); setRollSuggestIdx(null) }
+                              } else if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()) }
+                            }} />
                           {rollSuggestIdx === idx && rollSuggestions.length > 0 && !item.roll_detail && (
                             <div className="absolute left-0 top-full z-50 mt-1 min-w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-0.5">
-                              {rollSuggestions.map(r => (
+                              {rollSuggestions.map((r, si) => (
                                 <button key={r.id} type="button"
                                   onMouseDown={() => selectRoll(idx, r)}
-                                  className="w-full text-left px-2 py-1.5 text-xs hover:bg-emerald-50 hover:text-emerald-700 transition-colors truncate">
+                                  onMouseEnter={() => setRollHighlight(si)}
+                                  className={`w-full text-left px-2 py-1.5 text-xs transition-colors truncate ${si === rollHighlight ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'hover:bg-gray-50'}`}>
                                   <span className="font-semibold">{r.roll_code}</span>
                                   <span className="text-gray-400 ml-2">{r.fabric_type || ''} · {r.color?.name || ''} · {r.current_weight || r.total_weight || '?'} kg</span>
                                 </button>
