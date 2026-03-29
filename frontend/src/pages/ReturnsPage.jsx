@@ -185,6 +185,10 @@ export default function ReturnsPage() {
   const [salesSaving, setSalesSaving] = useState(false)
   const [salesFormError, setSalesFormError] = useState(null)
   const [salesScanRowIdx, setSalesScanRowIdx] = useState(null)
+  const [skuSuggestions, setSkuSuggestions] = useState([])
+  const [skuSuggestIdx, setSkuSuggestIdx] = useState(null)
+  const [skuHighlight, setSkuHighlight] = useState(-1)
+  const skuDebounce = useRef(null)
 
   // Sales return inspect mode (inline in detail)
   const [inspectMode, setInspectMode] = useState(false)
@@ -593,6 +597,32 @@ export default function ReturnsPage() {
   }])
 
   const removeManualItem = (idx) => setSalesItems(prev => prev.filter((_, i) => i !== idx))
+
+  const handleSkuCodeChange = (idx, code) => {
+    setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, sku_code: code, sku_id: '', sku_detail: null, color: '', size: '', unit_price: '' } : it))
+    clearTimeout(skuDebounce.current)
+    if (!code.trim()) { setSkuSuggestions([]); setSkuSuggestIdx(null); return }
+    skuDebounce.current = setTimeout(() => {
+      const q = code.trim().toLowerCase()
+      const matches = skus.filter(s => s.sku_code.toLowerCase().includes(q) || (s.product_name || '').toLowerCase().includes(q)).slice(0, 8)
+      setSkuSuggestions(matches)
+      setSkuSuggestIdx(matches.length > 0 ? idx : null)
+      setSkuHighlight(-1)
+      // Auto-resolve on exact match
+      const exact = skus.find(s => s.sku_code === code.trim())
+      if (exact) selectSku(idx, exact)
+    }, 300)
+  }
+
+  const selectSku = (idx, sku) => {
+    setSalesItems(prev => prev.map((it, i) => i === idx ? {
+      ...it, sku_id: sku.id, sku_code: sku.sku_code, sku_detail: sku,
+      color: sku.color || '', size: sku.size || '',
+      unit_price: sku.base_price || sku.sale_rate || '',
+    } : it))
+    setSkuSuggestions([])
+    setSkuSuggestIdx(null)
+  }
 
   const resolveSKUCode = async (idx, code) => {
     if (!code) return
@@ -1525,13 +1555,33 @@ export default function ReturnsPage() {
                         {si.fromOrder ? (
                           <span className="font-semibold">{si.sku_code}{si.color ? ` · ${si.color}` : ''}{si.size ? ` · ${si.size}` : ''}</span>
                         ) : (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 relative">
                             <input className="typo-input-sm flex-1"
                               placeholder="Scan or type SKU code"
                               value={si.sku_code}
-                              onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, sku_code: e.target.value } : it))}
-                              onBlur={e => { if (e.target.value.trim()) resolveSKUCode(idx, e.target.value.trim()) }}
-                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveSKUCode(idx, e.target.value.trim()) } }} />
+                              onChange={e => handleSkuCodeChange(idx, e.target.value)}
+                              onBlur={() => setTimeout(() => { if (skuSuggestIdx === idx) { setSkuSuggestions([]); setSkuSuggestIdx(null) } }, 200)}
+                              onKeyDown={e => {
+                                if (skuSuggestIdx === idx && skuSuggestions.length > 0) {
+                                  if (e.key === 'ArrowDown') { e.preventDefault(); setSkuHighlight(h => Math.min(h + 1, skuSuggestions.length - 1)) }
+                                  else if (e.key === 'ArrowUp') { e.preventDefault(); setSkuHighlight(h => Math.max(h - 1, 0)) }
+                                  else if (e.key === 'Enter') { e.preventDefault(); if (skuHighlight >= 0 && skuSuggestions[skuHighlight]) selectSku(idx, skuSuggestions[skuHighlight]); else { resolveSKUCode(idx, e.target.value.trim()); setSkuSuggestions([]); setSkuSuggestIdx(null) } }
+                                  else if (e.key === 'Escape') { setSkuSuggestions([]); setSkuSuggestIdx(null) }
+                                } else if (e.key === 'Enter') { e.preventDefault(); resolveSKUCode(idx, e.target.value.trim()) }
+                              }} />
+                            {skuSuggestIdx === idx && skuSuggestions.length > 0 && (
+                              <div className="absolute left-0 top-full z-50 mt-1 min-w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-0.5">
+                                {skuSuggestions.map((s, si2) => (
+                                  <button key={s.id} type="button"
+                                    onMouseDown={() => selectSku(idx, s)}
+                                    onMouseEnter={() => setSkuHighlight(si2)}
+                                    className={`w-full text-left px-2 py-1.5 text-xs transition-colors truncate ${si2 === skuHighlight ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'hover:bg-gray-50'}`}>
+                                    <span className="font-semibold">{s.sku_code}</span>
+                                    <span className="text-gray-400 ml-2">{s.color || ''}{s.size ? ` · ${s.size}` : ''}{s.base_price ? ` · ₹${s.base_price}` : ''}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             <button onClick={() => setSalesScanRowIdx(idx)} title="Scan QR"
                               className="rounded p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0">
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
