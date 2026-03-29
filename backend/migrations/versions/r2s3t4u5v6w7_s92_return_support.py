@@ -19,6 +19,9 @@ def upgrade():
             ))
 
         # 2. Update orders CHECK constraint to include partially_returned
+        # Drop both possible constraint names (auto-generated ck_ prefix and named)
+        if constraint_exists(conn, s, 'ck_orders_ord_valid_status'):
+            conn.execute(text(f"ALTER TABLE {s}.orders DROP CONSTRAINT ck_orders_ord_valid_status"))
         if constraint_exists(conn, s, 'ord_valid_status'):
             conn.execute(text(f"ALTER TABLE {s}.orders DROP CONSTRAINT ord_valid_status"))
         conn.execute(text(f"""
