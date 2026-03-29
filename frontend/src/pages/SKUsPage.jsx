@@ -343,7 +343,7 @@ export default function SKUsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="sm:col-span-2">
                 <label className="typo-label-sm">Supplier <span className="typo-required">*</span></label>
-                <FilterSelect full value={purchaseHeader.supplier_id} onChange={v => setPurchaseHeader(p => ({ ...p, supplier_id: v }))}
+                <FilterSelect autoFocus searchable full value={purchaseHeader.supplier_id} onChange={v => setPurchaseHeader(p => ({ ...p, supplier_id: v }))}
                   options={[{ value: '', label: 'Select supplier...' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
               </div>
               <div>
