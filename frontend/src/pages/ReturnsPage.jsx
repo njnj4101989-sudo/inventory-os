@@ -364,6 +364,8 @@ export default function ReturnsPage() {
 
   const handleRollCodeChange = (idx, code) => {
     updateItem(idx, 'roll_code', code)
+    // Clear previous selection when user edits
+    setFormItems(prev => prev.map((item, i) => i === idx ? { ...item, roll_code: code, roll_id: '', roll_detail: null, weight: '' } : item))
     clearTimeout(rollDebounce.current)
     if (!code.trim()) { setRollSuggestions([]); setRollSuggestIdx(null); return }
     rollDebounce.current = setTimeout(() => {
@@ -1299,7 +1301,7 @@ export default function ReturnsPage() {
                                 else if (e.key === 'Escape') { setRollSuggestions([]); setRollSuggestIdx(null) }
                               } else if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()) }
                             }} />
-                          {rollSuggestIdx === idx && rollSuggestions.length > 0 && !item.roll_detail && (
+                          {rollSuggestIdx === idx && rollSuggestions.length > 0 && (
                             <div className="absolute left-0 top-full z-50 mt-1 min-w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-0.5">
                               {rollSuggestions.map((r, si) => (
                                 <button key={r.id} type="button"
