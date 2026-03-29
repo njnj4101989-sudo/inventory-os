@@ -168,6 +168,11 @@ export async function createVAParty(data) {
   return client.post('/masters/va-parties', data)
 }
 
+export async function getVAPartySummary(id) {
+  if (USE_MOCK) return mockResponse({ job_challans: { count: 0, total_cost: 0 }, batch_challans: { count: 0, total_cost: 0 }, total_processed_cost: 0, total_debit: 0, total_credit: 0, balance: 0, balance_type: 'cr', damage_claims: { count: 0, amount: 0 } })
+  return client.get(`/masters/va-parties/${id}/summary`)
+}
+
 export async function updateVAParty(id, data) {
   if (USE_MOCK) {
     const obj = vaParties.find((p) => p.id === id)

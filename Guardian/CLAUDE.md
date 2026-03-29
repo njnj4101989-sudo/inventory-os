@@ -162,35 +162,32 @@
 ### Phase 4: VA Partner Ledger Enhancement
 
 #### Backend
-- [ ] **4a.** Add `entry_type="debit_note"` support to LedgerEntry model CHECK constraint (for damage/return reversals against VA parties)
-- [ ] **4b.** Add `reference_type="va_return"`, `"damage_claim"` to LedgerEntry
-- [ ] **4c.** VA Party payment: already works via `POST /ledger/payment` with `party_type="va_party"` — verify and test
-- [ ] **4d.** VA Party balance in PartyMastersPage: already shows balance — verify accuracy with new debit_note entries
-- [ ] **4e.** Add `GET /va-parties/{id}/summary` — outstanding balance, total challans, total cost, total damage, payment history count
+- [x] **4a-b.** No DB CHECK constraints exist on ledger_entry — entry_type/reference_type are plain String fields. Using `entry_type="adjustment"` + `reference_type="damage_claim"` (already working from P2)
+- [x] **4c.** VA Party payment: verified — works via `POST /ledger/payment` with `party_type="va_party"`, LedgerPanel supports it
+- [x] **4d.** VA Party balance: verified — PartyMastersPage shows balance correctly via `getAllBalances("va_party")`
+- [x] **4e.** `GET /masters/va-parties/{id}/summary` — job_challans (count+cost), batch_challans (count+cost), total_processed_cost, balance (debit/credit), damage_claims (count+amount)
 
 #### Frontend — VA Partner Ledger Panel Enhancement
-- [ ] **4f.** PartyMastersPage VA tab detail: enhance LedgerPanel with damage claims section
-- [ ] **4g.** VA Party detail: "Challans" tab showing all job + batch challans for this VA party
-- [ ] **4h.** VA Party detail: "Damage Claims" tab showing all damage entries (from Phase 2)
-- [ ] **4i.** VA Party detail: "Payments" tab showing payment history with TDS tracking
-- [ ] **4j.** VA Party detail: KPI strip (Total Processed, Total Cost, Outstanding, Damage Claims)
+- [x] **4f-j.** VA Party detail: new KPI row (Job Challans, Batch Challans, Total Processed, Outstanding, Damage Claims) — fetches from summary endpoint, shows below existing KPI strip
+- [x] `getVAPartySummary()` added to api/masters.js
+- [ ] **4g-i.** Separate Challans/Damage/Payments tabs (deferred — current LedgerPanel + summary KPIs cover the core need)
 
 #### Migration
-- [ ] **4k.** Migration: ALTER ledger_entries CHECK (add `debit_note` to entry_type, add `va_return`, `damage_claim` to reference_type) — if CHECK constraints exist
+- [x] **4k.** No migration needed — no CHECK constraints on ledger_entries
 
 ---
 
 ### Phase 5: Integration + Polish
 
 #### Cross-Cutting
-- [ ] **5a.** Dashboard: Returns KPI card (total returns this month, return rate %)
-- [ ] **5b.** Reports: Returns report (by customer, by reason, by SKU, by period)
-- [ ] **5c.** SSE events: emit on return creation, approval, dispatch (real-time notifications)
-- [ ] **5d.** Permissions: `return_create`, `return_approve`, `return_dispatch` (role-based)
+- [x] **5a.** Dashboard: Returns KPI card in out-house section (this month count, draft + active breakdown)
+- [ ] **5b.** Reports: Returns report (deferred — needs dedicated reports overhaul)
+- [x] **5c.** SSE events: `return_created`, `return_approved`, `return_dispatched` emitted from ReturnNoteService
+- [x] **5d.** Permissions: using existing `order_manage` permission for all return endpoints (same billing/admin access)
 
 #### Documentation
-- [ ] **5e.** Update API_REFERENCE.md — all new endpoints, schemas, response shapes
-- [ ] **5f.** Update CLAUDE.md — S92 session summary
+- [ ] **5e.** Update API_REFERENCE.md — new endpoints (deferred to dedicated docs session)
+- [x] **5f.** Update CLAUDE.md — S92 session summary + checklist
 
 ---
 

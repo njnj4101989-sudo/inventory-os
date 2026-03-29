@@ -137,6 +137,7 @@ class ReturnNoteService:
         note.total_amount = total_amount
         await self.db.flush()
 
+        await self._emit("return_created", note, created_by)
         return await self.get_return_note(note.id)
 
     async def update_return_note(self, note_id: UUID, req: ReturnNoteUpdate) -> dict:
@@ -165,6 +166,7 @@ class ReturnNoteService:
         note.approved_by = user_id
         note.approved_at = datetime.now(timezone.utc)
         await self.db.flush()
+        await self._emit("return_approved", note, user_id)
         return await self.get_return_note(note_id)
 
     async def dispatch_return_note(self, note_id: UUID, user_id: UUID) -> dict:
@@ -206,6 +208,7 @@ class ReturnNoteService:
                         roll.status = "returned"
 
         await self.db.flush()
+        await self._emit("return_dispatched", note, user_id)
         return await self.get_return_note(note_id)
 
     async def acknowledge_return_note(self, note_id: UUID) -> dict:
@@ -277,6 +280,17 @@ class ReturnNoteService:
         if not note:
             raise NotFoundError(f"Return note {note_id} not found")
         return note
+
+    async def _emit(self, event_type: str, note: ReturnNote, user_id: UUID):
+        from app.core.event_bus import event_bus
+        supplier_name = note.supplier.name if note.supplier else "—"
+        await event_bus.emit(event_type, {
+            "return_note_no": note.return_note_no,
+            "return_type": note.return_type,
+            "supplier": supplier_name,
+            "status": note.status,
+            "item_count": len(note.items) if note.items else 0,
+        }, str(user_id))
 
     def _to_response(self, n: ReturnNote) -> dict:
         return {

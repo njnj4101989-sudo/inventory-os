@@ -218,6 +218,67 @@ async def create_va_party(
     return {"success": True, "data": VAPartyResponse.model_validate(obj)}
 
 
+@router.get("/va-parties/{party_id}/summary", response_model=None)
+async def va_party_summary(
+    party_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    """VA Party summary — balance, challans, cost, damage stats."""
+    from sqlalchemy import func, select
+    from app.models.job_challan import JobChallan
+    from app.models.batch_challan import BatchChallan
+    from app.models.ledger_entry import LedgerEntry
+
+    # Challan counts + cost
+    jc_stmt = select(
+        func.count().label("count"),
+        func.coalesce(func.sum(JobChallan.total_cost), 0).label("cost"),
+    ).where(JobChallan.va_party_id == party_id, JobChallan.status != "cancelled")
+    jc = (await db.execute(jc_stmt)).one()
+
+    bc_stmt = select(
+        func.count().label("count"),
+        func.coalesce(func.sum(BatchChallan.total_cost), 0).label("cost"),
+    ).where(BatchChallan.va_party_id == party_id, BatchChallan.status != "cancelled")
+    bc = (await db.execute(bc_stmt)).one()
+
+    # Ledger balance
+    ledger_stmt = select(
+        func.coalesce(func.sum(LedgerEntry.debit), 0).label("total_debit"),
+        func.coalesce(func.sum(LedgerEntry.credit), 0).label("total_credit"),
+    ).where(LedgerEntry.party_type == "va_party", LedgerEntry.party_id == party_id)
+    ledger = (await db.execute(ledger_stmt)).one()
+
+    # Damage claims
+    damage_stmt = select(
+        func.count().label("count"),
+        func.coalesce(func.sum(LedgerEntry.debit), 0).label("amount"),
+    ).where(
+        LedgerEntry.party_type == "va_party",
+        LedgerEntry.party_id == party_id,
+        LedgerEntry.reference_type == "damage_claim",
+    )
+    damage = (await db.execute(damage_stmt)).one()
+
+    total_debit = float(ledger.total_debit)
+    total_credit = float(ledger.total_credit)
+    balance = total_credit - total_debit  # positive = we owe them
+    return {
+        "success": True,
+        "data": {
+            "job_challans": {"count": jc.count, "total_cost": float(jc.cost)},
+            "batch_challans": {"count": bc.count, "total_cost": float(bc.cost)},
+            "total_processed_cost": float(jc.cost) + float(bc.cost),
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "balance": abs(balance),
+            "balance_type": "cr" if balance >= 0 else "dr",
+            "damage_claims": {"count": damage.count, "amount": float(damage.amount)},
+        },
+    }
+
+
 @router.patch("/va-parties/{party_id}", response_model=None)
 async def update_va_party(
     party_id: UUID,

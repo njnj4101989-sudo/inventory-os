@@ -73,6 +73,14 @@ const OUT_HOUSE_CARDS = [
     value: (s) => s.lots?.total || 0,
     format: (s) => `${s.lots?.open || 0} open, ${s.lots?.distributed || 0} distributed`,
   },
+  {
+    key: 'returns',
+    label: 'Returns',
+    icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
+    color: 'bg-amber-500',
+    value: (s) => s.returns?.this_month || 0,
+    format: (s) => `${s.returns?.draft || 0} draft, ${s.returns?.active || 0} active`,
+  },
 ]
 
 export default function DashboardPage() {

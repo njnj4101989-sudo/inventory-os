@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getSuppliers, createSupplier, updateSupplier } from '../api/suppliers'
-import { getVAParties, createVAParty, updateVAParty } from '../api/masters'
+import { getVAParties, createVAParty, updateVAParty, getVAPartySummary } from '../api/masters'
 import { getCustomers, createCustomer, updateCustomer } from '../api/customers'
 import { getBrokers, createBroker, updateBroker } from '../api/brokers'
 import { getTransports, createTransport, updateTransport } from '../api/transports'
@@ -324,6 +324,7 @@ export default function PartyMastersPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [vaSummary, setVaSummary] = useState(null)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY_FORMS.suppliers)
   const [saving, setSaving] = useState(false)
@@ -564,6 +565,10 @@ export default function PartyMastersPage() {
   const openDetail = (row) => {
     setSelected(row)
     setDetailOpen(true)
+    setVaSummary(null)
+    if (tab === 'va_parties') {
+      getVAPartySummary(row.id).then(r => setVaSummary(r.data?.data || r.data)).catch(() => {})
+    }
   }
 
   const openEditFromDetail = () => {
@@ -797,6 +802,40 @@ export default function PartyMastersPage() {
               </div>
             </div>
           </div>
+
+          {/* ── VA Summary KPIs (VA parties only) ── */}
+          {tab === 'va_parties' && vaSummary && (
+            <div className="px-5 py-2 bg-white border-b border-gray-100">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div className="rounded-lg bg-blue-50/80 border border-blue-100 px-3 py-2">
+                  <div className="typo-label-sm text-blue-500">Job Challans</div>
+                  <div className="typo-kpi-sm mt-0.5 text-gray-800">{vaSummary.job_challans.count}</div>
+                  <div className="typo-badge text-blue-400">₹{Number(vaSummary.job_challans.total_cost).toLocaleString('en-IN')}</div>
+                </div>
+                <div className="rounded-lg bg-purple-50/80 border border-purple-100 px-3 py-2">
+                  <div className="typo-label-sm text-purple-500">Batch Challans</div>
+                  <div className="typo-kpi-sm mt-0.5 text-gray-800">{vaSummary.batch_challans.count}</div>
+                  <div className="typo-badge text-purple-400">₹{Number(vaSummary.batch_challans.total_cost).toLocaleString('en-IN')}</div>
+                </div>
+                <div className="rounded-lg bg-emerald-50/80 border border-emerald-100 px-3 py-2">
+                  <div className="typo-label-sm text-emerald-500">Total Processed</div>
+                  <div className="typo-kpi-sm mt-0.5 text-gray-800">₹{Number(vaSummary.total_processed_cost).toLocaleString('en-IN')}</div>
+                </div>
+                <div className="rounded-lg bg-amber-50/80 border border-amber-100 px-3 py-2">
+                  <div className="typo-label-sm text-amber-500">Outstanding</div>
+                  <div className={`typo-kpi-sm mt-0.5 ${vaSummary.balance > 0 ? (vaSummary.balance_type === 'cr' ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
+                    {vaSummary.balance > 0 ? `₹${Number(vaSummary.balance).toLocaleString('en-IN')}` : '—'}
+                  </div>
+                  {vaSummary.balance > 0 && <div className="typo-badge text-amber-400">{vaSummary.balance_type.toUpperCase()}</div>}
+                </div>
+                <div className="rounded-lg bg-red-50/80 border border-red-100 px-3 py-2">
+                  <div className="typo-label-sm text-red-500">Damage Claims</div>
+                  <div className="typo-kpi-sm mt-0.5 text-gray-800">{vaSummary.damage_claims.count}</div>
+                  {vaSummary.damage_claims.amount > 0 && <div className="typo-badge text-red-400">₹{Number(vaSummary.damage_claims.amount).toLocaleString('en-IN')}</div>}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Content ── */}
           <div className="flex-1 overflow-y-auto px-5 py-3">

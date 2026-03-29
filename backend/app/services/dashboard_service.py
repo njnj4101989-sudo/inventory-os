@@ -18,6 +18,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.invoice import Invoice
 from app.models.user import User
+from app.models.return_note import ReturnNote
 
 
 class DashboardService:
@@ -125,6 +126,22 @@ class DashboardService:
             ).select_from(Lot)
         )).one()
 
+        # --- Returns: count by status + this month ---
+        return_agg = (await self.db.execute(
+            select(
+                func.count().label("total"),
+                func.count(case((ReturnNote.status == "draft", 1))).label("draft"),
+                func.count(case((ReturnNote.status.in_(("approved", "dispatched")), 1))).label("active"),
+                func.count(case((ReturnNote.status == "closed", 1))).label("closed"),
+                func.count(case((
+                    and_(
+                        ReturnNote.status != "cancelled",
+                        func.date(ReturnNote.created_at) >= first_of_month,
+                    ), 1
+                ))).label("this_month"),
+            ).select_from(ReturnNote)
+        )).one()
+
         return {
             "rolls": {
                 "total": roll_agg.total,
@@ -160,6 +177,13 @@ class DashboardService:
             },
             "revenue_today": float(rev_agg.today),
             "revenue_month": float(rev_agg.month),
+            "returns": {
+                "total": return_agg.total,
+                "draft": return_agg.draft,
+                "active": return_agg.active,
+                "closed": return_agg.closed,
+                "this_month": return_agg.this_month,
+            },
         }
 
     async def get_tailor_performance(
