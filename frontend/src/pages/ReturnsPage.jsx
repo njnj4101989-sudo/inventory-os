@@ -1004,113 +1004,129 @@ export default function ReturnsPage() {
   /* ═══════════════════════════ SUPPLIER CREATE OVERLAY ═══════════════════════════ */
   if (createMode) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
-        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
-          <div>
-            <h1 className="typo-modal-title text-white leading-tight">New Return Note</h1>
-            <p className="text-xs opacity-80">Create a supplier return</p>
-          </div>
-          <button onClick={() => setCreateMode(false)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
-        </div>
-
-        <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
-          {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setCreateMode(false)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
             <div>
-              <label className="typo-label">Return Type</label>
-              <FilterSelect full value={form.return_type}
-                onChange={v => setForm(f => ({ ...f, return_type: v }))}
-                options={[{ value: 'roll_return', label: 'Roll Return' }, { value: 'sku_return', label: 'SKU Return' }]} />
-            </div>
-            <div>
-              <label className="typo-label">Supplier</label>
-              <FilterSelect searchable full value={form.supplier_id}
-                onChange={v => setForm(f => ({ ...f, supplier_id: v }))}
-                options={[{ value: '', label: 'Select Supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
-            </div>
-            <div>
-              <label className="typo-label">Transport</label>
-              <FilterSelect searchable full value={form.transport_id}
-                onChange={v => setForm(f => ({ ...f, transport_id: v }))}
-                options={[{ value: '', label: 'Select Transport (optional)' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+              <h2 className="text-lg font-bold tracking-tight">New Return Note</h2>
+              <p className="text-xs text-emerald-100">Supplier return &mdash; rolls or SKUs</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="typo-label">L.R. Number</label>
-              <input className="typo-input" value={form.lr_number} onChange={e => setForm(f => ({ ...f, lr_number: e.target.value }))} placeholder="Optional" />
-            </div>
-            <div>
-              <label className="typo-label">Notes</label>
-              <input className="typo-input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Return reason / notes" />
-            </div>
-          </div>
-
-          {/* Items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="typo-label">Items</label>
-              <button onClick={addItem} className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700">+ Add Item</button>
-            </div>
-            <div className="border rounded overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-1.5 typo-th text-left">#</th>
-                    <th className="px-2 py-1.5 typo-th text-left">{form.return_type === 'roll_return' ? 'Roll ID' : 'SKU ID'}</th>
-                    <th className="px-2 py-1.5 typo-th text-right">{form.return_type === 'roll_return' ? 'Weight (kg)' : 'Qty'}</th>
-                    <th className="px-2 py-1.5 typo-th text-right">Unit Price</th>
-                    <th className="px-2 py-1.5 typo-th text-left">Reason</th>
-                    <th className="px-2 py-1.5 typo-th w-8"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {formItems.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="px-2 py-1.5 text-gray-400">{idx + 1}</td>
-                      <td className="px-2 py-1.5">
-                        <input className="typo-input-sm w-full"
-                          placeholder={form.return_type === 'roll_return' ? 'Paste roll UUID' : 'Paste SKU UUID'}
-                          value={form.return_type === 'roll_return' ? item.roll_id : item.sku_id}
-                          onChange={e => updateItem(idx, form.return_type === 'roll_return' ? 'roll_id' : 'sku_id', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="number" className="typo-input-sm w-20 text-right"
-                          value={form.return_type === 'roll_return' ? item.weight : item.quantity}
-                          onChange={e => updateItem(idx, form.return_type === 'roll_return' ? 'weight' : 'quantity', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input type="number" className="typo-input-sm w-20 text-right" placeholder="0"
-                          value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <select className="typo-input-sm w-full" value={item.reason}
-                          onChange={e => updateItem(idx, 'reason', e.target.value)}>
-                          {REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        {formItems.length > 1 && (
-                          <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <button onClick={() => setCreateMode(false)} className="rounded border border-gray-300 text-gray-700 px-4 py-1.5 typo-btn-sm hover:bg-gray-50">Cancel</button>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{formItems.length} items</span>
+            <button onClick={() => setCreateMode(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
             <button onClick={handleSupplierCreate} disabled={saving}
-              className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50">
+              className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
               {saving ? 'Creating...' : 'Create Return Note'}
             </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
+
+          {/* Return Details card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Return Details</span>
+              </div>
+            </div>
+            <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="typo-label-sm">RETURN TYPE</label>
+                <FilterSelect full value={form.return_type}
+                  onChange={v => setForm(f => ({ ...f, return_type: v }))}
+                  options={[{ value: 'roll_return', label: 'Roll Return' }, { value: 'sku_return', label: 'SKU Return' }]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">SUPPLIER *</label>
+                <FilterSelect searchable full value={form.supplier_id}
+                  onChange={v => setForm(f => ({ ...f, supplier_id: v }))}
+                  options={[{ value: '', label: 'Select Supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">TRANSPORT</label>
+                <FilterSelect searchable full value={form.transport_id}
+                  onChange={v => setForm(f => ({ ...f, transport_id: v }))}
+                  options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">L.R. NUMBER</label>
+                <input className="typo-input" value={form.lr_number} onChange={e => setForm(f => ({ ...f, lr_number: e.target.value }))} placeholder="Optional" />
+              </div>
+            </div>
+          </div>
+
+          {/* Line Items card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({formItems.length} items)</span>
+              <button onClick={addItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-emerald-600">
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[5%] border-r border-emerald-500">#</th>
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[35%] border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Roll ID' : 'SKU ID'}</th>
+                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">{form.return_type === 'roll_return' ? 'Weight (kg)' : 'Qty'}</th>
+                  <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Rate (₹)</th>
+                  <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[25%] border-r border-emerald-500">Reason</th>
+                  <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[5%]"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {formItems.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
+                    <td className="px-2 py-2">
+                      <input className="typo-input-sm w-full"
+                        placeholder={form.return_type === 'roll_return' ? 'Paste roll UUID' : 'Paste SKU UUID'}
+                        value={form.return_type === 'roll_return' ? item.roll_id : item.sku_id}
+                        onChange={e => updateItem(idx, form.return_type === 'roll_return' ? 'roll_id' : 'sku_id', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="number" className="typo-input-sm w-full text-right"
+                        value={form.return_type === 'roll_return' ? item.weight : item.quantity}
+                        onChange={e => updateItem(idx, form.return_type === 'roll_return' ? 'weight' : 'quantity', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="number" className="typo-input-sm w-full text-right" placeholder="0"
+                        value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <select className="typo-input-sm w-full" value={item.reason}
+                        onChange={e => updateItem(idx, 'reason', e.target.value)}>
+                        {REASON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      {formItems.length > 1 && (
+                        <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Notes card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
+              </div>
+            </div>
+            <div className="px-4 py-3">
+              <textarea className="typo-input w-full" rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." />
+            </div>
           </div>
         </div>
       </div>
@@ -1120,163 +1136,180 @@ export default function ReturnsPage() {
   /* ═══════════════════════════ SALES RETURN CREATE OVERLAY ═══════════════════════════ */
   if (salesCreateMode) {
     const hasOrderItems = salesItems.some(si => si.fromOrder)
+    const checkedCount = salesItems.filter(i => i.checked).reduce((s, i) => s + i.qty, 0)
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
-        <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
-          <div>
-            <h1 className="typo-modal-title text-white leading-tight">New Sales Return</h1>
-            <p className="text-xs opacity-80">Create a customer return</p>
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSalesCreateMode(false)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">New Sales Return</h2>
+              <p className="text-xs text-emerald-100">Customer return {salesForm.order_id ? '— linked to order' : '— standalone'}</p>
+            </div>
           </div>
-          <button onClick={() => setSalesCreateMode(false)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          <div className="flex items-center gap-3">
+            {checkedCount > 0 && <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{checkedCount} pcs</span>}
+            <button onClick={() => setSalesCreateMode(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
+            <button onClick={handleSalesCreate} disabled={salesSaving || checkedCount === 0}
+              className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+              {salesSaving ? 'Creating...' : `Create Sales Return (${checkedCount})`}
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           {salesFormError && <ErrorAlert message={salesFormError} onDismiss={() => setSalesFormError(null)} />}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="md:col-span-2">
-              <label className="typo-label">Customer</label>
-              <FilterSelect searchable full value={salesForm.customer_id}
-                onChange={handleCustomerSelect}
-                options={[{ value: '', label: 'Select Customer' }, ...customers.map(c => ({ value: c.id, label: c.name }))]} />
+          {/* Return Details card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Return Details</span>
+              </div>
             </div>
-            <div>
-              <label className="typo-label">Order (optional)</label>
-              <FilterSelect searchable full value={salesForm.order_id}
-                onChange={handleOrderSelect}
-                options={[{ value: '', label: 'No order link' }, ...customerOrders.map(o => ({
-                  value: o.id, label: `${o.order_number} (${o.status})`,
-                }))]} />
-            </div>
-            <div>
-              <label className="typo-label">Transport</label>
-              <FilterSelect searchable full value={salesForm.transport_id}
-                onChange={v => setSalesForm(f => ({ ...f, transport_id: v }))}
-                options={[{ value: '', label: 'Optional' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+            <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="md:col-span-2">
+                <label className="typo-label-sm">CUSTOMER *</label>
+                <FilterSelect searchable full value={salesForm.customer_id}
+                  onChange={handleCustomerSelect}
+                  options={[{ value: '', label: 'Select customer...' }, ...customers.map(c => ({ value: c.id, label: c.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">ORDER (OPTIONAL)</label>
+                <FilterSelect searchable full value={salesForm.order_id}
+                  onChange={handleOrderSelect}
+                  options={[{ value: '', label: 'No order link' }, ...customerOrders.map(o => ({
+                    value: o.id, label: `${o.order_number} (${o.status})`,
+                  }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">TRANSPORT</label>
+                <FilterSelect searchable full value={salesForm.transport_id}
+                  onChange={v => setSalesForm(f => ({ ...f, transport_id: v }))}
+                  options={[{ value: '', label: 'Select Transport' }, ...transports.map(t => ({ value: t.id, label: t.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">L.R. NUMBER</label>
+                <input className="typo-input" value={salesForm.lr_number} onChange={e => setSalesForm(f => ({ ...f, lr_number: e.target.value }))} placeholder="Optional" />
+              </div>
+              <div>
+                <label className="typo-label-sm">L.R. DATE</label>
+                <input type="date" className="typo-input" value={salesForm.lr_date} onChange={e => setSalesForm(f => ({ ...f, lr_date: e.target.value }))} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="typo-label-sm">REASON SUMMARY</label>
+                <input className="typo-input" value={salesForm.reason_summary} onChange={e => setSalesForm(f => ({ ...f, reason_summary: e.target.value }))} placeholder="Brief reason for return" />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="typo-label">L.R. Number</label>
-              <input className="typo-input" value={salesForm.lr_number} onChange={e => setSalesForm(f => ({ ...f, lr_number: e.target.value }))} placeholder="Optional" />
-            </div>
-            <div>
-              <label className="typo-label">L.R. Date</label>
-              <input type="date" className="typo-input" value={salesForm.lr_date} onChange={e => setSalesForm(f => ({ ...f, lr_date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="typo-label">Reason Summary</label>
-              <input className="typo-input" value={salesForm.reason_summary} onChange={e => setSalesForm(f => ({ ...f, reason_summary: e.target.value }))} placeholder="Brief reason" />
-            </div>
-          </div>
-
-          {/* Items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="typo-label">Items to Return</label>
+          {/* Line Items card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({salesItems.filter(i => i.checked).length} items)</span>
               {!hasOrderItems && (
-                <button onClick={addManualItem} className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700">+ Add Item</button>
+                <button onClick={addManualItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
               )}
             </div>
 
-            {salesItems.length > 0 && (
-              <div className="border rounded overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left">
-                      <th className="px-2 py-1.5 typo-th w-8"></th>
-                      <th className="px-2 py-1.5 typo-th">SKU</th>
-                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>}
-                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Already Ret.</th>}
-                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Returnable</th>}
-                      <th className="px-2 py-1.5 typo-th text-right">Return Qty</th>
-                      {!hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Unit Price</th>}
-                      <th className="px-2 py-1.5 typo-th">Reason</th>
-                      {!hasOrderItems && <th className="px-2 py-1.5 typo-th w-8"></th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {salesItems.map((si, idx) => (
-                      <tr key={si.order_item_id || idx} className={!si.checked ? 'opacity-40' : ''}>
-                        <td className="px-2 py-1.5">
-                          <input type="checkbox" checked={si.checked}
-                            onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: e.target.checked } : it))} />
+            {salesItems.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-emerald-600">
+                    <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[4%] border-r border-emerald-500"></th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">{hasOrderItems ? 'SKU' : 'SKU'}</th>
+                    {hasOrderItems && <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Fulfilled</th>}
+                    {hasOrderItems && <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Returned</th>}
+                    {hasOrderItems && <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Max</th>}
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Qty</th>
+                    {!hasOrderItems && <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Rate (₹)</th>}
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[20%] border-r border-emerald-500">Reason</th>
+                    {!hasOrderItems && <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[5%]"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {salesItems.map((si, idx) => (
+                    <tr key={si.order_item_id || idx} className={`hover:bg-gray-50 ${!si.checked ? 'opacity-40' : ''}`}>
+                      <td className="px-2 py-2">
+                        <input type="checkbox" checked={si.checked}
+                          onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: e.target.checked } : it))} />
+                      </td>
+                      <td className="px-2 py-2">
+                        {si.fromOrder ? (
+                          <span className="font-semibold">{si.sku_code}{si.color ? ` · ${si.color}` : ''}{si.size ? ` · ${si.size}` : ''}</span>
+                        ) : (
+                          <FilterSelect searchable full value={si.sku_id}
+                            onChange={v => {
+                              const sku = skus.find(s => s.id === v)
+                              setSalesItems(prev => prev.map((it, i) => i === idx ? {
+                                ...it, sku_id: v, sku_code: sku?.sku_code || '', color: sku?.color || '', size: sku?.size || '',
+                              } : it))
+                            }}
+                            options={[{ value: '', label: 'Select SKU...' }, ...skus.map(s => ({ value: s.id, label: `${s.sku_code} · ${s.color} · ${s.size}` }))]} />
+                        )}
+                      </td>
+                      {hasOrderItems && <td className="px-2 py-2 text-right">{si.fulfilled}</td>}
+                      {hasOrderItems && <td className="px-2 py-2 text-right text-orange-600">{si.already_returned || 0}</td>}
+                      {hasOrderItems && <td className="px-2 py-2 text-right font-semibold">{si.max_qty}</td>}
+                      <td className="px-2 py-2">
+                        <input type="number" className="typo-input-sm w-16 text-right" min={1}
+                          max={si.fromOrder ? si.max_qty : undefined}
+                          value={si.qty}
+                          onChange={e => {
+                            const v = Math.max(1, parseInt(e.target.value) || 1)
+                            const capped = si.fromOrder ? Math.min(v, si.max_qty) : v
+                            setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: capped } : it))
+                          }} />
+                      </td>
+                      {!hasOrderItems && (
+                        <td className="px-2 py-2">
+                          <input type="number" className="typo-input-sm w-full text-right" placeholder="0"
+                            value={si.unit_price}
+                            onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} />
                         </td>
-                        <td className="px-2 py-1.5">
-                          {si.fromOrder ? (
-                            <span className="font-semibold">{si.sku_code}{si.color ? ` · ${si.color}` : ''}{si.size ? ` · ${si.size}` : ''}</span>
-                          ) : (
-                            <FilterSelect searchable full value={si.sku_id}
-                              onChange={v => {
-                                const sku = skus.find(s => s.id === v)
-                                setSalesItems(prev => prev.map((it, i) => i === idx ? {
-                                  ...it, sku_id: v, sku_code: sku?.sku_code || '', color: sku?.color || '', size: sku?.size || '',
-                                } : it))
-                              }}
-                              options={[{ value: '', label: 'Select SKU' }, ...skus.map(s => ({ value: s.id, label: `${s.sku_code} · ${s.color} · ${s.size}` }))]} />
+                      )}
+                      <td className="px-2 py-2">
+                        <FilterSelect full value={si.reason}
+                          onChange={v => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, reason: v } : it))}
+                          options={SALES_REASON_OPTIONS} />
+                      </td>
+                      {!hasOrderItems && (
+                        <td className="px-2 py-2 text-center">
+                          {salesItems.length > 1 && (
+                            <button onClick={() => removeManualItem(idx)} className="text-red-400 hover:text-red-600">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
                           )}
                         </td>
-                        {hasOrderItems && <td className="px-2 py-1.5 text-right">{si.fulfilled}</td>}
-                        {hasOrderItems && <td className="px-2 py-1.5 text-right text-orange-600">{si.already_returned || 0}</td>}
-                        {hasOrderItems && <td className="px-2 py-1.5 text-right font-semibold">{si.max_qty}</td>}
-                        <td className="px-2 py-1.5">
-                          <input type="number" className="typo-input-sm w-16 text-right" min={1}
-                            max={si.fromOrder ? si.max_qty : undefined}
-                            value={si.qty}
-                            onChange={e => {
-                              const v = Math.max(1, parseInt(e.target.value) || 1)
-                              const capped = si.fromOrder ? Math.min(v, si.max_qty) : v
-                              setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: capped } : it))
-                            }} />
-                        </td>
-                        {!hasOrderItems && (
-                          <td className="px-2 py-1.5">
-                            <input type="number" className="typo-input-sm w-20 text-right" placeholder="0"
-                              value={si.unit_price}
-                              onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} />
-                          </td>
-                        )}
-                        <td className="px-2 py-1.5">
-                          <FilterSelect full value={si.reason}
-                            onChange={v => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, reason: v } : it))}
-                            options={SALES_REASON_OPTIONS} />
-                        </td>
-                        {!hasOrderItems && (
-                          <td className="px-2 py-1.5 text-center">
-                            {salesItems.length > 1 && (
-                              <button onClick={() => removeManualItem(idx)} className="text-red-400 hover:text-red-600">
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                              </button>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {salesForm.customer_id && !salesForm.order_id && salesItems.length === 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded p-4 text-xs text-gray-500 text-center">
-                Click "+ Add Item" to add SKU items for this return.
-              </div>
-            )}
-
-            {salesForm.order_id && salesItems.length === 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 text-center">
-                No returnable items — all items have been fully returned or none have been fulfilled.
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="px-4 py-8 text-center text-xs text-gray-400">
+                {salesForm.customer_id && !salesForm.order_id
+                  ? 'Click "+ Add Row" to add SKU items for this return.'
+                  : salesForm.order_id
+                    ? 'No returnable items — all items have been fully returned or none fulfilled.'
+                    : 'Select a customer to get started.'}
               </div>
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <button onClick={() => setSalesCreateMode(false)} className="rounded border border-gray-300 text-gray-700 px-4 py-1.5 typo-btn-sm hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSalesCreate} disabled={salesSaving || salesItems.filter(i => i.checked).length === 0}
-              className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50">
-              {salesSaving ? 'Creating...' : `Create Sales Return (${salesItems.filter(i => i.checked).reduce((s, i) => s + i.qty, 0)} pcs)`}
-            </button>
+          {/* Notes card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Notes</span>
+              </div>
+            </div>
+            <div className="px-4 py-3">
+              <textarea className="typo-input w-full" rows={2} value={salesForm.reason_summary} onChange={e => setSalesForm(f => ({ ...f, reason_summary: e.target.value }))} placeholder="Optional notes..." />
+            </div>
           </div>
         </div>
       </div>
