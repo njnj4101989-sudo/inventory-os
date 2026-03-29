@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getReturnNotes, getReturnNote, createReturnNote, approveReturnNote, dispatchReturnNote, acknowledgeReturnNote, closeReturnNote, cancelReturnNote } from '../api/returns'
 import { getSalesReturns, getSalesReturn, createSalesReturn, receiveSalesReturn, inspectSalesReturn, restockSalesReturn, closeSalesReturn, cancelSalesReturn } from '../api/salesReturns'
@@ -169,6 +169,9 @@ export default function ReturnsPage() {
   const [supplierRolls, setSupplierRolls] = useState([])
   const [supplierSkus, setSupplierSkus] = useState([])
   const [scanRowIdx, setScanRowIdx] = useState(null) // which row is scanning
+  const [rollSuggestions, setRollSuggestions] = useState([]) // dropdown suggestions for roll code
+  const [rollSuggestIdx, setRollSuggestIdx] = useState(null) // which row is showing suggestions
+  const rollDebounce = useRef(null)
 
   // Sales return create mode
   const [salesCreateMode, setSalesCreateMode] = useState(false)
@@ -356,6 +359,33 @@ export default function ReturnsPage() {
         setSupplierRolls(Array.isArray(d) ? d : d?.data || [])
       } catch {}
     }
+  }
+
+  const handleRollCodeChange = (idx, code) => {
+    updateItem(idx, 'roll_code', code)
+    clearTimeout(rollDebounce.current)
+    if (!code.trim()) { setRollSuggestions([]); setRollSuggestIdx(null); return }
+    rollDebounce.current = setTimeout(() => {
+      const q = code.trim().toLowerCase()
+      const matches = supplierRolls.filter(r => r.roll_code.toLowerCase().includes(q)).slice(0, 8)
+      setRollSuggestions(matches)
+      setRollSuggestIdx(matches.length > 0 ? idx : null)
+      // Auto-resolve on exact match
+      const exact = supplierRolls.find(r => r.roll_code === code.trim())
+      if (exact) selectRoll(idx, exact)
+    }, 300)
+  }
+
+  const selectRoll = (idx, roll) => {
+    setFormItems(prev => prev.map((item, i) => i === idx ? {
+      ...item,
+      roll_id: roll.id,
+      roll_code: roll.roll_code,
+      roll_detail: roll,
+      weight: roll.current_weight || roll.total_weight || '',
+    } : item))
+    setRollSuggestions([])
+    setRollSuggestIdx(null)
   }
 
   const resolveRollCode = (idx, code) => {
@@ -1253,13 +1283,25 @@ export default function ReturnsPage() {
                     <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
                     <td className="px-2 py-2">
                       {form.return_type === 'roll_return' ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 relative">
                           <input className="typo-input-sm flex-1"
                             placeholder="Scan or type roll code"
                             value={item.roll_code}
-                            onChange={e => updateItem(idx, 'roll_code', e.target.value)}
-                            onBlur={e => { if (e.target.value.trim()) resolveRollCode(idx, e.target.value.trim()) }}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()) } }} />
+                            onChange={e => handleRollCodeChange(idx, e.target.value)}
+                            onBlur={() => setTimeout(() => { if (rollSuggestIdx === idx) { setRollSuggestions([]); setRollSuggestIdx(null) } }, 200)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); resolveRollCode(idx, e.target.value.trim()); setRollSuggestions([]); setRollSuggestIdx(null) } }} />
+                          {rollSuggestIdx === idx && rollSuggestions.length > 0 && !item.roll_detail && (
+                            <div className="absolute left-0 top-full z-50 mt-1 min-w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-0.5">
+                              {rollSuggestions.map(r => (
+                                <button key={r.id} type="button"
+                                  onMouseDown={() => selectRoll(idx, r)}
+                                  className="w-full text-left px-2 py-1.5 text-xs hover:bg-emerald-50 hover:text-emerald-700 transition-colors truncate">
+                                  <span className="font-semibold">{r.roll_code}</span>
+                                  <span className="text-gray-400 ml-2">{r.fabric_type || ''} · {r.color?.name || ''} · {r.current_weight || r.total_weight || '?'} kg</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <button onClick={() => setScanRowIdx(idx)} title="Scan QR"
                             className="rounded p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex-shrink-0">
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
