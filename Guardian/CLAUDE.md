@@ -31,7 +31,93 @@
 
 ---
 
-## Current State (Session 90 — 2026-03-28)
+## Current State (Session 92 — 2026-03-29)
+
+### S92: Return Management System (P1-P5) + Invoice/Order Deep-Links + Constraint Fix
+
+**6 commits pushed. 3 migrations on dev + prod. 40 models total.**
+
+**Invoice/Order Deep-Links:**
+- Order detail → INV-xxxx button now deep-links to invoice detail (`/invoices?open=<id>`)
+- Invoice detail → ORD-xxxx link now deep-links to order detail (`/orders?open=<id>`)
+- Both pages support `?open=<id>` query param → auto-open detail overlay
+
+**P1 — Customer Sale Returns (quick action on Orders page):**
+- `return_order()` rewrite: validates returnable qty (fulfilled - returned), creates RETURN inventory event, tracks `returned_qty` per OrderItem, determines `partially_returned` vs `returned` status, creates `credit_note` ledger entry for customer
+- Return modal on OrdersPage: item picker, qty, reason dropdown (7 options), notes
+- "Returned" column in items table, "Partial Return" + "Returned" filter tabs
+- **NOTE:** This is a quick-action modal, NOT a full sales return document. Needs upgrade to proper SalesReturn model in S93.
+
+**P2 — VA Damage Tracking:**
+- `weight_damaged` + `damage_reason` on RollProcessing; `pieces_damaged` + `damage_reason` on BatchProcessing
+- Job & batch challan receive modals: Damaged + Reason columns
+- Auto debit ledger entry against VA party on damage (entry_type="adjustment", reference_type="damage_claim")
+
+**P3 — Supplier Returns (2 new models: ReturnNote 39th, ReturnNoteItem 40th):**
+- 6-status workflow: draft → approved → dispatched → acknowledged → closed (+cancelled)
+- ReturnNoteService: full CRUD + lifecycle with stock reversal (roll status→returned, SKU stock_out) + supplier ledger debit on close
+- 10 API endpoints, RN-XXXX code generator per FY
+- ReturnsPage: KPIs, status + type tabs, create overlay, detail overlay with status timeline + action buttons
+- Sidebar "Returns" link, StatusBadge styles, api/returns.js
+
+**P4 — VA Partner Ledger Enhancement:**
+- `GET /masters/va-parties/{id}/summary` — challans, costs, balance, damage claims
+- VA detail KPI row (Job Challans, Batch Challans, Total Processed, Outstanding, Damage Claims)
+
+**P5 — Integration & Polish:**
+- Dashboard: Returns KPI card (this month count, draft + active breakdown)
+- SSE: return_created, return_approved, return_dispatched events
+- Permissions: using existing order_manage for billing/admin access
+
+**Constraint Fix (critical):**
+- SQLAlchemy `create_all()` generates `ck_{table}_{name}` constraints that duplicate our named ones
+- Dropped 5 duplicate `ck_` constraints on prod (batch_challans, batch_processing, roll_processing, rolls, job_challans)
+- Added auto-cleanup in `create_tenant_tables()` — new companies won't have duplicates
+- Updated migration to drop both `ck_` and named variants
+
+**Migrations on dev + prod:**
+- `r2s3t4u5v6w7` — P1: returned_qty on order_items, partially_returned on orders CHECK
+- `s3t4u5v6w7x8` — P2: weight_damaged/damage_reason on roll_processing, pieces_damaged/damage_reason on batch_processing
+- `t4u5v6w7x8y9` — P3: return_notes + return_note_items tables, returned on rolls CHECK
+
+**NEXT SESSION (S93): Proper Sales Return System + Pagination Discussion**
+
+---
+
+## S93 Plan: Sales Return System (Upgrade P1 → Full Document Flow)
+
+**Problem:** Current customer return is a quick modal on the order page (picks qty, reason, done). No dedicated document, no return shipment tracking, no QC inspection, no credit note document, no proper form. Not industry standard.
+
+**What industry needs:**
+
+### Backend — SalesReturn Model (41st + 42nd)
+- [ ] `SalesReturn` model: srn_no (SRN-XXXX per FY), order_id FK, customer_id FK, status (`draft → received → inspected → restocked → closed`), return_date, received_date, transport_id, lr_number, lr_date, reason_summary, credit_note_id FK (linked invoice), qc_notes, total_amount, fy_id
+- [ ] `SalesReturnItem` model: sales_return_id FK, order_item_id FK, sku_id FK, quantity_returned, quantity_restocked (back to available), quantity_damaged (written off as loss), reason, condition (`good → restock`, `damaged → loss`, `rejected`), notes
+- [ ] `SalesReturnService`: create (from order, validates shipped/delivered), receive (mark goods received, update return_date), inspect (QC — mark items as restockable/damaged), restock (RETURN inventory event for good items, LOSS event for damaged), close (create credit note invoice, customer ledger credit)
+- [ ] Code generator: `next_sales_return_number()` — SRN-XXXX per FY
+- [ ] API: `GET /sales-returns`, `POST /sales-returns` (from order), `POST /{id}/receive`, `POST /{id}/inspect`, `POST /{id}/restock`, `POST /{id}/close`, `POST /{id}/cancel`
+- [ ] Credit note invoice: create a negative invoice linked to the return (proper CN document, not just ledger entry)
+
+### Frontend — Sales Returns
+- [ ] "Sales Returns" tab on ReturnsPage (alongside Roll Returns / SKU Returns)
+- [ ] Create from order: "Create Return Note" button on shipped/partially_returned order detail → opens form with return shipment details (transport, LR, date, items from order)
+- [ ] Sales Return detail overlay: status timeline (draft → received → inspected → restocked → closed), items table with condition (restockable/damaged), QC notes, credit note link
+- [ ] Print: Sales Return Note / Credit Note print template
+
+### Upgrade Existing P1 Flow
+- [ ] Replace current `return_order()` modal with "Create Sales Return" that creates proper SalesReturn document
+- [ ] Keep quick return validation (qty, reason) but feed into SalesReturn model instead of directly modifying order
+- [ ] Order detail: show linked SalesReturn notes (like we show shipments)
+- [ ] Migration: backfill existing returns (ORD-0003 has returned_qty=20) into SalesReturn records
+
+### Other S93 Tasks
+- [ ] **Pagination vs fetch-all discussion** — decide pattern for dropdowns across all pages
+- [ ] Update API_REFERENCE.md — all S92 new endpoints
+- [ ] Deploy S93 migrations to prod
+
+---
+
+## Previous State (Session 90 — 2026-03-28)
 
 ### S90: Modal ESC Isolation + Ship Without LR + E-Way Bill + FilterSelect Fixes
 
