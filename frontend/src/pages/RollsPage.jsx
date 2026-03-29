@@ -3620,18 +3620,16 @@ export default function RollsPage() {
                 </div>
 
                 {/* ── Processing Details Form ── */}
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                  <div className="bg-emerald-600 px-4 py-2">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <div className="bg-emerald-600 px-4 py-2 rounded-t-xl">
                     <span className="text-xs font-semibold text-white uppercase tracking-wider">Processing Details</span>
                   </div>
                   <div className="p-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="typo-label-sm">Value Addition <span className="text-red-500">*</span></label>
-                      <select data-master="value_addition" value={bulkSendForm.value_addition_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, value_addition_id: e.target.value }))} className="typo-input-sm">
-                        <option value="">Select value addition</option>
-                        {masterValueAdditions.map((va) => <option key={va.id} value={va.id}>{va.name} ({va.short_code})</option>)}
-                      </select>
+                      <FilterSelect full data-master="value_addition" value={bulkSendForm.value_addition_id} onChange={(v) => setBulkSendForm((f) => ({ ...f, value_addition_id: v }))}
+                        options={[{ value: '', label: 'Select value addition' }, ...masterValueAdditions.map(va => ({ value: va.id, label: `${va.name} (${va.short_code})` }))]} />
                     </div>
                     <div>
                       <label className="typo-label-sm">Sent Date <span className="text-red-500">*</span></label>
@@ -3639,12 +3637,8 @@ export default function RollsPage() {
                     </div>
                     <div>
                       <label className="typo-label-sm">VA Party <span className="text-red-500">*</span></label>
-                      <select data-master="va_party" value={bulkSendForm.va_party_id} onChange={(e) => setBulkSendForm((f) => ({ ...f, va_party_id: e.target.value }))} className="typo-input-sm">
-                        <option value="">Select VA Party…</option>
-                        {vaParties.filter(p => p.is_active !== false).map(p => (
-                          <option key={p.id} value={p.id}>{p.name}{p.city ? ` (${p.city})` : ''}</option>
-                        ))}
-                      </select>
+                      <FilterSelect searchable full data-master="va_party" value={bulkSendForm.va_party_id} onChange={(v) => setBulkSendForm((f) => ({ ...f, va_party_id: v }))}
+                        options={[{ value: '', label: 'Select VA Party...' }, ...vaParties.filter(p => p.is_active !== false).map(p => ({ value: p.id, label: `${p.name}${p.city ? ` (${p.city})` : ''}` }))]} />
                     </div>
                   </div>
                   <div>
