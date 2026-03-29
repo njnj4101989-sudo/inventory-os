@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
 import { getInvoices, getInvoice, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
 import { getSKUs } from '../api/skus'
@@ -101,6 +101,7 @@ const GST_OPTIONS = [
 
 export default function InvoicesPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { company } = useAuth()
   const [invoicesList, setInvoicesList] = useState([])
   const [total, setTotal] = useState(0)
@@ -168,6 +169,22 @@ export default function InvoicesPage() {
   }, [page, statusFilter, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  /* ── Deep-link: ?open=<invoiceId> → auto-open detail ── */
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    searchParams.delete('open')
+    setSearchParams(searchParams, { replace: true })
+    ;(async () => {
+      setDetailLoading(true)
+      try {
+        const res = await getInvoice(openId)
+        setDetailInvoice(res.data.data || res.data)
+      } catch { /* ignore — invoice may not exist */ }
+      finally { setDetailLoading(false) }
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── KPIs ── */
   const kpis = useMemo(() => {

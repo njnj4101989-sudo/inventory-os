@@ -91,7 +91,7 @@
 
 **Phase D noted:** Consolidated Dispatch (multi-order → 1 parcel → 1 invoice). Workaround: cancel remaining partials + create 1 new consolidated order.
 
-**NEXT:** Test full partial ship flow. Deploy to prod. Reports overhaul. Remnant roll UX.
+**NEXT:** Test partial ship flow on prod (13b-13d). Update API_REFERENCE.md (12a). Reports overhaul. Remnant roll UX.
 
 ---
 
@@ -189,9 +189,9 @@
 - [ ] **13b.** Test: create order → partial ship → verify invoice + fulfilled_qty → ship remaining → verify order status = shipped
 - [ ] **13c.** Test: backward compat — ship without items[] → ships all remaining
 - [ ] **13d.** Test: update shipment LR/eway days later
-- [ ] **13e.** Deploy migration to prod
-- [ ] **13f.** Deploy backend to prod
-- [ ] **13g.** Deploy frontend (Vercel auto)
+- [x] **13e.** Deploy migration to prod
+- [x] **13f.** Deploy backend to prod (CI/CD auto-deploy on push)
+- [x] **13g.** Deploy frontend (Vercel auto)
 
 **Total: 38 models, ~30 files changed (6 new + ~24 modified)**
 
