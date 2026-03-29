@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission, get_fy_id
+from app.dependencies import get_db, get_current_user, require_permission, get_fy_id
 from app.models.user import User
 from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
@@ -112,8 +112,9 @@ async def delete_roll(
 async def get_roll_passport(
     roll_code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Public roll passport — no auth required. Used for QR scan on factory floor."""
+    """Roll passport — any authenticated user can view. QR scan on factory floor."""
     svc = RollService(db)
     result = await svc.get_roll_passport(roll_code)
     return {"success": True, "data": result}

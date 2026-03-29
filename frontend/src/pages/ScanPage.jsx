@@ -61,19 +61,27 @@ export default function ScanPage() {
     }
   }, [rollCode, batchCode, skuCode])
 
+  const handlePassportError = (err, itemLabel) => {
+    if (err?.response?.status === 401) {
+      setError('LOGIN_REQUIRED')
+    } else {
+      setError(err?.response?.data?.detail || `${itemLabel} not found`)
+    }
+  }
+
   async function fetchRollPassport(code) {
-    setLoading(true); setError(null); setBatchPassport(null)
+    setLoading(true); setError(null); setBatchPassport(null); setSkuPassport(null)
     try {
       const res = await getRollPassport(code)
       const data = res?.data?.data || res?.data || res
       setPassport(data)
     } catch (err) {
-      setError(err?.response?.data?.detail || `Roll "${code}" not found`)
+      handlePassportError(err, `Roll "${code}"`)
     } finally { setLoading(false) }
   }
 
   async function fetchBatchPassport(code) {
-    setLoading(true); setError(null); setPassport(null); setClaimSuccess(false)
+    setLoading(true); setError(null); setPassport(null); setSkuPassport(null); setClaimSuccess(false)
     try {
       const res = await getBatchPassport(code)
       const data = res?.data?.data || res?.data || res
@@ -81,7 +89,7 @@ export default function ScanPage() {
       setRejects([])
       setShowRejectMode(false)
     } catch (err) {
-      setError(err?.response?.data?.detail || `Batch "${code}" not found`)
+      handlePassportError(err, `Batch "${code}"`)
     } finally { setLoading(false) }
   }
 
@@ -92,7 +100,7 @@ export default function ScanPage() {
       const data = res?.data?.data || res?.data || res
       setSkuPassport(data)
     } catch (err) {
-      setError(err?.response?.data?.detail || `SKU "${code}" not found`)
+      handlePassportError(err, `SKU "${code}"`)
     } finally { setLoading(false) }
   }
 
@@ -355,18 +363,29 @@ export default function ScanPage() {
 
         {/* Error */}
         {!loading && error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-8">
-            <h3 className="typo-data text-red-800 mb-1">Not Found</h3>
-            <p className="text-red-600 text-sm">{error}</p>
-            <button onClick={() => { setError(null); setShowScanner(true) }}
-              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
-              Scan Again
-            </button>
-          </div>
+          error === 'LOGIN_REQUIRED' ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center mt-8">
+              <h3 className="typo-data text-amber-800 mb-1">Login Required</h3>
+              <p className="text-amber-600 text-sm">Please log in to view item details.</p>
+              <a href={`/login?returnTo=${encodeURIComponent(window.location.pathname)}`}
+                className="mt-4 inline-block px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700">
+                Go to Login
+              </a>
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-8">
+              <h3 className="typo-data text-red-800 mb-1">Not Found</h3>
+              <p className="text-red-600 text-sm">{error}</p>
+              <button onClick={() => { setError(null); setShowScanner(true) }}
+                className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
+                Scan Again
+              </button>
+            </div>
+          )
         )}
 
         {/* No code — prompt to scan */}
-        {!loading && !error && !passport && !batchPassport && (
+        {!loading && !error && !passport && !batchPassport && !skuPassport && (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
             <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

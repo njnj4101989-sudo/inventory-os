@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, get_fy_id, require_permission
+from app.dependencies import get_db, get_current_user, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
 from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest
@@ -59,8 +59,9 @@ async def list_skus(
 async def get_sku_passport(
     sku_code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Public SKU passport — full chain traceability. No auth required."""
+    """SKU passport — any authenticated user can view. Full chain traceability."""
     svc = SKUService(db)
     result = await svc.get_sku_passport(sku_code)
     return {"success": True, "data": result}

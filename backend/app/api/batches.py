@@ -19,8 +19,9 @@ router = APIRouter(prefix="/batches", tags=["Batches"])
 async def get_batch_passport(
     batch_code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Public batch passport — no auth required. Workers scan QR to view batch info."""
+    """Batch passport — any authenticated user can view. Workers scan QR to view batch info."""
     svc = BatchService(db)
     result = await svc.get_batch_passport(batch_code)
     return {"success": True, "data": result}
