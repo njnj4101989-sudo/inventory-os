@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
 import { getInvoices, getInvoice, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
+import { getSalesReturns, getSalesReturn } from '../api/salesReturns'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers } from '../api/customers'
 import { getCompany } from '../api/company'
+import CreditNotePrint from '../components/common/CreditNotePrint'
 import FilterSelect from '../components/common/FilterSelect'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
@@ -142,6 +144,18 @@ export default function InvoicesPage() {
   const [actioning, setActioning] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
 
+  // Credit Notes tab
+  const [viewMode, setViewMode] = useState(searchParams.get('tab') || 'invoices') // invoices | credit_notes
+  const [cnList, setCnList] = useState([])
+  const [cnTotal, setCnTotal] = useState(0)
+  const [cnPage, setCnPage] = useState(1)
+  const [cnPages, setCnPages] = useState(1)
+  const [cnSearch, setCnSearch] = useState('')
+  const [cnLoading, setCnLoading] = useState(false)
+  const [cnDetail, setCnDetail] = useState(null)
+  const [cnDetailLoading, setCnDetailLoading] = useState(false)
+  const [printCreditNote, setPrintCreditNote] = useState(null)
+
   // Print overlay
   const [printInvoice, setPrintInvoice] = useState(null)
   const printRef = useRef(null)
@@ -169,6 +183,21 @@ export default function InvoicesPage() {
   }, [page, statusFilter, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  /* ── Credit notes fetch ── */
+  const fetchCreditNotes = useCallback(async () => {
+    setCnLoading(true)
+    try {
+      const res = await getSalesReturns({ page: cnPage, page_size: 20, status: 'closed', search: cnSearch || undefined })
+      const items = (res.data?.data || []).filter(sr => sr.credit_note_no)
+      setCnList(items)
+      setCnTotal(res.data?.total || 0)
+      setCnPages(res.data?.pages || 1)
+    } catch { setCnList([]) }
+    finally { setCnLoading(false) }
+  }, [cnPage, cnSearch])
+
+  useEffect(() => { if (viewMode === 'credit_notes') fetchCreditNotes() }, [viewMode, fetchCreditNotes])
 
   /* ── Deep-link: ?open=<invoiceId> → auto-open detail ── */
   useEffect(() => {
@@ -215,6 +244,17 @@ export default function InvoicesPage() {
       const res = await getInvoice(row.id)
       setDetailInvoice(res.data.data || res.data)
     } catch { /* fallback to list data */ } finally { setDetailLoading(false) }
+  }
+
+  /* ── CN row click ── */
+  const handleCnRowClick = async (row) => {
+    setCnDetailLoading(true)
+    setCnDetail(row)
+    try {
+      const res = await getSalesReturn(row.id)
+      setCnDetail(res.data?.data || res.data)
+    } catch { /* fallback */ }
+    finally { setCnDetailLoading(false) }
   }
 
   /* ── Mark paid ── */
@@ -298,6 +338,108 @@ export default function InvoicesPage() {
   const openPrint = () => { const inv = detailInvoice; setDetailInvoice(null); setPrintInvoice(inv) }
 
   const co = companyFull || company || {}
+
+  /* ═══════════════════════ CREDIT NOTE PRINT ═══════════════════════ */
+  if (printCreditNote) return <CreditNotePrint salesReturn={printCreditNote} company={co} onClose={() => setPrintCreditNote(null)} />
+
+  /* ═══════════════════════ CREDIT NOTE DETAIL ═══════════════════════ */
+  if (cnDetail) {
+    const cn = cnDetail
+    const gstPct = cn.gst_percent || 0
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
+          <div>
+            <h1 className="typo-modal-title text-white leading-tight">{cn.credit_note_no}</h1>
+            <p className="text-xs text-emerald-100">Credit Note &middot; Against {cn.srn_no}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setPrintCreditNote(cn); setCnDetail(null) }}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+            <button onClick={() => setCnDetail(null)}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          </div>
+        </div>
+
+        {cnDetailLoading ? (
+          <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+        ) : (
+          <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+            {/* Info cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Credit To</p>
+                <p className="typo-data">{cn.customer?.name || '—'}</p>
+                {cn.customer?.phone && <p className="text-xs text-gray-600 mt-0.5">Phone: {cn.customer.phone}</p>}
+                {cn.customer?.gst_no && <p className="text-xs text-gray-600 mt-0.5 font-medium">GSTIN: {cn.customer.gst_no}</p>}
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Reference</p>
+                <p className="typo-data">{cn.srn_no}</p>
+                {cn.order && <p className="text-xs text-gray-600 mt-0.5">Order: {cn.order.order_number}</p>}
+                <p className="text-xs text-gray-600 mt-0.5">Return Date: {fmtDate(cn.return_date)}</p>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Amount</p>
+                <p className="typo-kpi-sm text-emerald-600">{fmtCurrency(cn.total_amount)}</p>
+                {gstPct > 0 && <p className="text-xs text-gray-600 mt-0.5">GST {gstPct}% (₹{((cn.tax_amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })})</p>}
+              </div>
+            </div>
+
+            {/* Items table */}
+            <div className="border rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="text-left px-3 py-2 typo-th">#</th>
+                    <th className="text-left px-3 py-2 typo-th">SKU</th>
+                    <th className="text-left px-3 py-2 typo-th">Description</th>
+                    <th className="text-left px-3 py-2 typo-th">Size</th>
+                    <th className="text-right px-3 py-2 typo-th">Qty</th>
+                    <th className="text-right px-3 py-2 typo-th">Rate</th>
+                    <th className="text-right px-3 py-2 typo-th">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cn.items?.map((item, i) => {
+                    const qty = item.quantity_restocked || item.quantity_returned || 0
+                    const price = item.unit_price || item.order_item?.unit_price || 0
+                    return (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="px-3 py-2 typo-td-secondary">{i + 1}</td>
+                        <td className="px-3 py-2 typo-td font-semibold">{item.sku?.sku_code || '—'}</td>
+                        <td className="px-3 py-2 typo-td-secondary">{item.sku?.product_name || '—'}</td>
+                        <td className="px-3 py-2 typo-td font-semibold">{item.sku?.size || '—'}</td>
+                        <td className="px-3 py-2 typo-td text-right font-semibold">{qty}</td>
+                        <td className="px-3 py-2 typo-td-secondary text-right">{fmtCurrency(price)}</td>
+                        <td className="px-3 py-2 typo-td text-right font-semibold">{fmtCurrency(qty * price)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totals */}
+            <div className="flex justify-end">
+              <div className="w-64 text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-semibold">{fmtCurrency(cn.subtotal)}</span></div>
+                {gstPct > 0 && (<>
+                  <div className="flex justify-between"><span className="text-gray-500">CGST ({gstPct / 2}%)</span><span>{fmtCurrency((cn.tax_amount || 0) / 2)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">SGST ({gstPct / 2}%)</span><span>{fmtCurrency((cn.tax_amount || 0) / 2)}</span></div>
+                </>)}
+                <div className="flex justify-between pt-1 border-t-2 border-emerald-600 font-bold text-base"><span>Credit Amount</span><span>{fmtCurrency(cn.total_amount)}</span></div>
+              </div>
+            </div>
+
+            {cn.reason_summary && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800"><strong>Reason:</strong> {cn.reason_summary}</div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   /* ═══════════════════════ PRINT OVERLAY ═══════════════════════ */
   if (printInvoice) {
@@ -652,44 +794,86 @@ export default function InvoicesPage() {
           <h1 className="typo-page-title">Invoices</h1>
           <p className="mt-1 typo-caption">Track billing and payment status</p>
         </div>
-        <button onClick={openCreate}
-          className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm transition-colors flex items-center gap-1.5">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          New Invoice
-        </button>
-      </div>
-
-      {/* KPI strip — 6 cards */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <KPICard label="Total" value={kpis.total} color="slate" />
-        <KPICard label="Unpaid" value={kpis.unpaidCount} sub={fmtCurrency(kpis.unpaidAmt)} color="amber" />
-        <KPICard label="Paid" value={kpis.paidCount} sub={fmtCurrency(kpis.paidAmt)} color="green" />
-        <KPICard label="Cancelled" value={kpis.cancelledCount} color="red" />
-        <KPICard label="Overdue" value={kpis.overdueCount} color="amber" />
-        <KPICard label="This Month" value={fmtCurrency(kpis.monthRevenue)} color="emerald" />
-      </div>
-
-      {/* Tabs + search */}
-      <div className="mt-3 flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1.5 flex-wrap">
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
-              className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {t.label}
+        <div className="flex items-center gap-3">
+          {/* Category toggle */}
+          <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+            {[{ key: 'invoices', label: 'Invoices' }, { key: 'credit_notes', label: 'Credit Notes' }].map(t => (
+              <button key={t.key} onClick={() => setViewMode(t.key)}
+                className={`px-3 py-1.5 typo-btn-sm transition-colors ${viewMode === t.key ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {viewMode === 'invoices' && (
+            <button onClick={openCreate}
+              className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm transition-colors flex items-center gap-1.5">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              New Invoice
             </button>
-          ))}
-        </div>
-        <div className="ml-auto w-64">
-          <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search invoices..." />
+          )}
         </div>
       </div>
 
-      {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+      {viewMode === 'invoices' ? (<>
+        {/* KPI strip — 6 cards */}
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          <KPICard label="Total" value={kpis.total} color="slate" />
+          <KPICard label="Unpaid" value={kpis.unpaidCount} sub={fmtCurrency(kpis.unpaidAmt)} color="amber" />
+          <KPICard label="Paid" value={kpis.paidCount} sub={fmtCurrency(kpis.paidAmt)} color="green" />
+          <KPICard label="Cancelled" value={kpis.cancelledCount} color="red" />
+          <KPICard label="Overdue" value={kpis.overdueCount} color="amber" />
+          <KPICard label="This Month" value={fmtCurrency(kpis.monthRevenue)} color="emerald" />
+        </div>
 
-      <div className="mt-4">
-        <DataTable columns={COLUMNS} data={invoicesList} loading={loading} onRowClick={handleRowClick} emptyText="No invoices found." />
-        <Pagination page={page} pages={pages} total={total} onChange={setPage} />
-      </div>
+        {/* Tabs + search */}
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
+                className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto w-64">
+            <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search invoices..." />
+          </div>
+        </div>
+
+        {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
+
+        <div className="mt-4">
+          <DataTable columns={COLUMNS} data={invoicesList} loading={loading} onRowClick={handleRowClick} emptyText="No invoices found." />
+          <Pagination page={page} pages={pages} total={total} onChange={setPage} />
+        </div>
+      </>) : (<>
+        {/* Credit Notes view */}
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <div className="ml-auto w-64">
+            <SearchInput value={cnSearch} onChange={(v) => { setCnSearch(v); setCnPage(1) }} placeholder="Search credit notes..." />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <DataTable
+            columns={[
+              { key: 'credit_note_no', label: 'CN No.', render: (v) => <span className="font-semibold">{v}</span> },
+              { key: 'srn_no', label: 'Return No.' },
+              { key: 'customer', label: 'Customer', render: (v) => v?.name || '—' },
+              { key: 'gst_percent', label: 'GST %', render: (v) => `${v || 0}%` },
+              { key: 'subtotal', label: 'Subtotal', render: (v) => fmtCurrency(v) },
+              { key: 'tax_amount', label: 'Tax', render: (v) => fmtCurrency(v) },
+              { key: 'total_amount', label: 'Credit Amount', render: (v) => <span className="font-semibold text-emerald-600">{fmtCurrency(v)}</span> },
+              { key: 'return_date', label: 'Date', render: (v) => fmtDate(v) },
+            ]}
+            data={cnList}
+            loading={cnLoading}
+            onRowClick={handleCnRowClick}
+            emptyText="No credit notes found."
+          />
+          <Pagination page={cnPage} pages={cnPages} total={cnTotal} onChange={setCnPage} />
+        </div>
+      </>)}
 
       {/* ═══════════════════════ CREATE OVERLAY ═══════════════════════ */}
       {createMode && (() => {
