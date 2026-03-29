@@ -141,5 +141,25 @@ async def create_tenant_tables(schema_name: str) -> None:
         # find existing tables and skip creation in the tenant schema
         Base.metadata.create_all(sync_conn, tables=tenant_tables, checkfirst=False)
 
+        # Cleanup: SQLAlchemy create_all generates ck_{table}_{name} constraints
+        # that duplicate our explicitly named ones. Find pairs where both
+        # ck_{table}_{name} and {name} exist on the same table, drop the ck_ one.
+        dupes = sync_conn.execute(text(f"""
+            SELECT c1.conname, c1.conrelid::regclass::text
+            FROM pg_constraint c1
+            JOIN pg_namespace n1 ON n1.oid = c1.connamespace
+            WHERE n1.nspname = '{schema}' AND c1.contype = 'c' AND c1.conname LIKE 'ck\\_%'
+            AND EXISTS (
+                SELECT 1 FROM pg_constraint c2
+                JOIN pg_namespace n2 ON n2.oid = c2.connamespace
+                WHERE n2.nspname = '{schema}' AND c2.contype = 'c'
+                AND c2.conrelid = c1.conrelid
+                AND c2.conname NOT LIKE 'ck\\_%'
+                AND c1.conname = 'ck_' || REPLACE(c2.conrelid::regclass::text, '{schema}.', '') || '_' || c2.conname
+            )
+        """))
+        for row in dupes:
+            sync_conn.execute(text(f"ALTER TABLE {row[1]} DROP CONSTRAINT IF EXISTS {row[0]}"))
+
     async with engine.begin() as conn:
         await conn.run_sync(_create_tables)
