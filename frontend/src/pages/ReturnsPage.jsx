@@ -1161,8 +1161,8 @@ export default function ReturnsPage() {
           </div>
 
           {/* Line Items card */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({formItems.length} items)</span>
               <button onClick={addItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
             </div>
@@ -1336,8 +1336,8 @@ export default function ReturnsPage() {
           </div>
 
           {/* Line Items card */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({salesItems.filter(i => i.checked).length} items)</span>
               {!hasOrderItems && (
                 <button onClick={addManualItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
