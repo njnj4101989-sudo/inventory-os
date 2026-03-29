@@ -538,7 +538,7 @@ export default function InvoicesPage() {
               {inv.order && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">Linked Order</p>
-                  <button onClick={() => { setDetailInvoice(null); navigate('/orders') }} className="text-emerald-700 font-semibold text-sm hover:underline mt-0.5">
+                  <button onClick={() => { setDetailInvoice(null); navigate(`/orders?open=${inv.order.id}`) }} className="text-emerald-700 font-semibold text-sm hover:underline mt-0.5">
                     {inv.order.order_number} →
                   </button>
                 </div>

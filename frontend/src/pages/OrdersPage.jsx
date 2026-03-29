@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
@@ -140,6 +140,7 @@ const SOURCE_OPTIONS = [
 
 export default function OrdersPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { company } = useAuth()
   const [ordersList, setOrdersList] = useState([])
   const [total, setTotal] = useState(0)
@@ -283,6 +284,22 @@ export default function OrdersPage() {
   }, [page, statusFilter, sourceFilter, search])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  /* ── Deep-link: ?open=<orderId> → auto-open detail ── */
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    searchParams.delete('open')
+    setSearchParams(searchParams, { replace: true })
+    ;(async () => {
+      setDetailLoading(true)
+      try {
+        const res = await getOrder(openId)
+        setDetailOrder(res.data.data || res.data)
+      } catch { /* ignore */ }
+      finally { setDetailLoading(false) }
+    })()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── KPIs ── */
   const kpis = useMemo(() => {
