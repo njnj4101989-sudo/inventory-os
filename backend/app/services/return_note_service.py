@@ -17,7 +17,7 @@ from app.schemas.return_note import (
     ReturnNoteFilterParams,
     ReturnNoteUpdate,
 )
-from app.core.code_generator import next_return_note_number
+from app.core.code_generator import next_return_note_number, next_debit_note_number
 from app.core.exceptions import (
     NotFoundError,
     InvalidStateTransitionError,
@@ -96,6 +96,8 @@ class ReturnNoteService:
 
         note_no = await next_return_note_number(self.db, fy_id)
 
+        gst_percent = req.gst_percent if req.gst_percent is not None else Decimal("0")
+
         note = ReturnNote(
             return_note_no=note_no,
             return_type=req.return_type,
@@ -104,6 +106,7 @@ class ReturnNoteService:
             return_date=req.return_date or datetime.now(timezone.utc).date(),
             transport_id=req.transport_id,
             lr_number=req.lr_number,
+            gst_percent=gst_percent,
             notes=req.notes,
             created_by=created_by,
             fy_id=fy_id,
@@ -111,7 +114,7 @@ class ReturnNoteService:
         self.db.add(note)
         await self.db.flush()
 
-        total_amount = Decimal("0")
+        item_total = Decimal("0")
         for item_req in req.items:
             amount = Decimal("0")
             if item_req.unit_price and item_req.quantity:
@@ -132,9 +135,11 @@ class ReturnNoteService:
                 notes=item_req.notes,
             )
             self.db.add(rni)
-            total_amount += amount
+            item_total += amount
 
-        note.total_amount = total_amount
+        note.subtotal = item_total
+        note.tax_amount = item_total * gst_percent / Decimal("100")
+        note.total_amount = note.subtotal + note.tax_amount
         await self.db.flush()
 
         await self._emit("return_created", note, created_by)
@@ -228,6 +233,7 @@ class ReturnNoteService:
             raise InvalidStateTransitionError(f"Cannot close from '{note.status}'")
 
         note.status = "closed"
+        note.debit_note_no = await next_debit_note_number(self.db, note.fy_id)
         await self.db.flush()
 
         # Debit supplier ledger
@@ -320,6 +326,10 @@ class ReturnNoteService:
             } if n.transport else None,
             "lr_number": n.lr_number,
             "total_amount": float(n.total_amount) if n.total_amount else 0,
+            "gst_percent": float(n.gst_percent) if n.gst_percent else 0,
+            "subtotal": float(n.subtotal) if n.subtotal else 0,
+            "tax_amount": float(n.tax_amount) if n.tax_amount else 0,
+            "debit_note_no": n.debit_note_no,
             "notes": n.notes,
             "created_by_user": {
                 "id": str(n.created_by_user.id),

@@ -33,6 +33,7 @@ class ReturnNoteCreate(BaseModel):
     return_date: date | None = None
     transport_id: UUID | None = None
     lr_number: str | None = None
+    gst_percent: Decimal | None = None
     items: list[ReturnNoteItemInput]
     notes: str | None = None
 
@@ -70,6 +71,10 @@ class ReturnNoteResponse(BaseSchema):
     transport: dict | None = None
     lr_number: str | None = None
     total_amount: Decimal | None = None
+    gst_percent: Decimal | None = None
+    subtotal: Decimal | None = None
+    tax_amount: Decimal | None = None
+    debit_note_no: str | None = None
     notes: str | None = None
     created_by_user: dict | None = None
     created_at: datetime | None = None

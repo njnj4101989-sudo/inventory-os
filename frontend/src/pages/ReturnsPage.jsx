@@ -23,6 +23,7 @@ import useQuickMaster from '../hooks/useQuickMaster'
 import ReturnNotePrint from '../components/common/ReturnNotePrint'
 import SalesReturnPrint from '../components/common/SalesReturnPrint'
 import CreditNotePrint from '../components/common/CreditNotePrint'
+import DebitNotePrint from '../components/common/DebitNotePrint'
 
 /* ── Supplier Returns constants ── */
 const SUPPLIER_TABS = [
@@ -137,6 +138,7 @@ export default function ReturnsPage() {
   const [printNote, setPrintNote] = useState(null)       // supplier return print
   const [printSalesReturn, setPrintSalesReturn] = useState(null) // sales return print
   const [printCreditNote, setPrintCreditNote] = useState(null)   // credit note print
+  const [printDebitNote, setPrintDebitNote] = useState(null)     // debit note print
 
   useEffect(() => { getCompany().then(r => setCompanyFull(r.data?.data || r.data)).catch(() => {}) }, [])
 
@@ -160,7 +162,7 @@ export default function ReturnsPage() {
   const [createMode, setCreateMode] = useState(false)
   const [suppliers, setSuppliers] = useState([])
   const [transports, setTransports] = useState([])
-  const [form, setForm] = useState({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', notes: '' })
+  const [form, setForm] = useState({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', notes: '' })
   const [formItems, setFormItems] = useState([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -315,7 +317,7 @@ export default function ReturnsPage() {
   const openSupplierCreate = async () => {
     setCreateMode(true)
     setFormError(null)
-    setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', notes: '' })
+    setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', notes: '' })
     setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
     setSupplierRolls([])
     setSupplierSkus([])
@@ -400,6 +402,7 @@ export default function ReturnsPage() {
         return_date: new Date().toISOString().split('T')[0],
         transport_id: form.transport_id || null,
         lr_number: form.lr_number?.trim() || null,
+        gst_percent: parseFloat(form.gst_percent) || 0,
         notes: form.notes?.trim() || null,
         items: formItems.map(item => ({
           roll_id: item.roll_id || null,
@@ -656,6 +659,7 @@ export default function ReturnsPage() {
   if (printNote) return <ReturnNotePrint note={printNote} company={co} onClose={() => setPrintNote(null)} />
   if (printSalesReturn) return <SalesReturnPrint salesReturn={printSalesReturn} company={co} onClose={() => setPrintSalesReturn(null)} />
   if (printCreditNote) return <CreditNotePrint salesReturn={printCreditNote} company={co} onClose={() => setPrintCreditNote(null)} />
+  if (printDebitNote) return <DebitNotePrint note={printDebitNote} company={co} onClose={() => setPrintDebitNote(null)} />
 
   /* ═══════════════════════════ SALES RETURN DETAIL ═══════════════════════════ */
   if (detail && category === 'sales') {
@@ -980,6 +984,10 @@ export default function ReturnsPage() {
           <div className="flex gap-2">
             <button onClick={() => { setPrintNote(n); setDetail(null) }}
               className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+            {n.debit_note_no && (
+              <button onClick={() => { setPrintDebitNote(n); setDetail(null) }}
+                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print DN</button>
+            )}
             <button onClick={() => setDetail(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
         </div>
@@ -1211,6 +1219,12 @@ export default function ReturnsPage() {
                 <label className="typo-label-sm">L.R. NUMBER</label>
                 <input className="typo-input" value={form.lr_number} onChange={e => setForm(f => ({ ...f, lr_number: e.target.value }))} placeholder="Optional" />
               </div>
+              <div>
+                <label className="typo-label-sm">GST %</label>
+                <FilterSelect full value={form.gst_percent}
+                  onChange={v => setForm(f => ({ ...f, gst_percent: v }))}
+                  options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+              </div>
             </div>
           </div>
 
@@ -1291,6 +1305,33 @@ export default function ReturnsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Summary card */}
+          {(() => {
+            const subtotal = formItems.reduce((s, i) => s + (parseFloat(i.unit_price) || 0) * (form.return_type === 'roll_return' ? (parseFloat(i.weight) || 0) : (i.quantity || 0)), 0)
+            const gstPct = parseFloat(form.gst_percent) || 0
+            const taxAmt = subtotal * gstPct / 100
+            const total = subtotal + taxAmt
+            return (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
+                  <div className="px-3 py-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Summary</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex justify-end">
+                  <div className="w-64 space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-semibold">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    {gstPct > 0 && (<>
+                      <div className="flex justify-between"><span className="text-gray-500">CGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">SGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    </>)}
+                    <div className="flex justify-between pt-1 border-t-2 border-emerald-600 font-bold text-base"><span>Total</span><span>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Notes card */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">

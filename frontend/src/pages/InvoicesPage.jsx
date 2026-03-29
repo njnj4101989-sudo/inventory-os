@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
 import { getInvoices, getInvoice, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
 import { getSalesReturns, getSalesReturn } from '../api/salesReturns'
+import { getReturnNotes, getReturnNote } from '../api/returns'
+import DebitNotePrint from '../components/common/DebitNotePrint'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers } from '../api/customers'
 import { getCompany } from '../api/company'
@@ -156,6 +158,17 @@ export default function InvoicesPage() {
   const [cnDetailLoading, setCnDetailLoading] = useState(false)
   const [printCreditNote, setPrintCreditNote] = useState(null)
 
+  // Debit Notes tab
+  const [dnList, setDnList] = useState([])
+  const [dnTotal, setDnTotal] = useState(0)
+  const [dnPage, setDnPage] = useState(1)
+  const [dnPages, setDnPages] = useState(1)
+  const [dnSearch, setDnSearch] = useState('')
+  const [dnLoading, setDnLoading] = useState(false)
+  const [dnDetail, setDnDetail] = useState(null)
+  const [dnDetailLoading, setDnDetailLoading] = useState(false)
+  const [printDebitNote, setPrintDebitNote] = useState(null)
+
   // Print overlay
   const [printInvoice, setPrintInvoice] = useState(null)
   const printRef = useRef(null)
@@ -198,6 +211,21 @@ export default function InvoicesPage() {
   }, [cnPage, cnSearch])
 
   useEffect(() => { if (viewMode === 'credit_notes') fetchCreditNotes() }, [viewMode, fetchCreditNotes])
+
+  /* ── Debit notes fetch ── */
+  const fetchDebitNotes = useCallback(async () => {
+    setDnLoading(true)
+    try {
+      const res = await getReturnNotes({ page: dnPage, page_size: 20, status: 'closed', search: dnSearch || undefined })
+      const items = (res.data?.data || []).filter(rn => rn.debit_note_no)
+      setDnList(items)
+      setDnTotal(res.data?.total || 0)
+      setDnPages(res.data?.pages || 1)
+    } catch { setDnList([]) }
+    finally { setDnLoading(false) }
+  }, [dnPage, dnSearch])
+
+  useEffect(() => { if (viewMode === 'debit_notes') fetchDebitNotes() }, [viewMode, fetchDebitNotes])
 
   /* ── Deep-link: ?open=<invoiceId> → auto-open detail ── */
   useEffect(() => {
@@ -255,6 +283,17 @@ export default function InvoicesPage() {
       setCnDetail(res.data?.data || res.data)
     } catch { /* fallback */ }
     finally { setCnDetailLoading(false) }
+  }
+
+  /* ── DN row click ── */
+  const handleDnRowClick = async (row) => {
+    setDnDetailLoading(true)
+    setDnDetail(row)
+    try {
+      const res = await getReturnNote(row.id)
+      setDnDetail(res.data?.data || res.data)
+    } catch { /* fallback */ }
+    finally { setDnDetailLoading(false) }
   }
 
   /* ── Mark paid ── */
@@ -338,6 +377,118 @@ export default function InvoicesPage() {
   const openPrint = () => { const inv = detailInvoice; setDetailInvoice(null); setPrintInvoice(inv) }
 
   const co = companyFull || company || {}
+
+  /* ═══════════════════════ DEBIT NOTE PRINT ═══════════════════════ */
+  if (printDebitNote) return <DebitNotePrint note={printDebitNote} company={co} onClose={() => setPrintDebitNote(null)} />
+
+  /* ═══════════════════════ DEBIT NOTE DETAIL ═══════════════════════ */
+  if (dnDetail) {
+    const dn = dnDetail
+    const isRoll = dn.return_type === 'roll_return'
+    const gstPct = dn.gst_percent || 0
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
+          <div>
+            <h1 className="typo-modal-title text-white leading-tight">{dn.debit_note_no}</h1>
+            <p className="text-xs text-emerald-100">Debit Note &middot; Against {dn.return_note_no}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setPrintDebitNote(dn); setDnDetail(null) }}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+            <button onClick={() => setDnDetail(null)}
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
+          </div>
+        </div>
+
+        {dnDetailLoading ? (
+          <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
+        ) : (
+          <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Debit To (Supplier)</p>
+                <p className="typo-data">{dn.supplier?.name || '—'}</p>
+                {dn.supplier?.phone && <p className="text-xs text-gray-600 mt-0.5">Phone: {dn.supplier.phone}</p>}
+                {dn.supplier?.gst_no && <p className="text-xs text-gray-600 mt-0.5 font-medium">GSTIN: {dn.supplier.gst_no}</p>}
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Reference</p>
+                <p className="typo-data">{dn.return_note_no}</p>
+                <p className="text-xs text-gray-600 mt-0.5">{isRoll ? 'Roll Return' : 'SKU Return'}</p>
+                {dn.dispatch_date && <p className="text-xs text-gray-600 mt-0.5">Dispatched: {fmtDate(dn.dispatch_date)}</p>}
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <p className="typo-label-sm">Debit Amount</p>
+                <p className="typo-kpi-sm text-emerald-600">{fmtCurrency(dn.total_amount)}</p>
+                {gstPct > 0 && <p className="text-xs text-gray-600 mt-0.5">GST {gstPct}% (₹{(dn.tax_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })})</p>}
+              </div>
+            </div>
+
+            <div className="border rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="text-left px-3 py-2 typo-th">#</th>
+                    {isRoll ? (<>
+                      <th className="text-left px-3 py-2 typo-th">Roll Code</th>
+                      <th className="text-left px-3 py-2 typo-th">Fabric</th>
+                      <th className="text-left px-3 py-2 typo-th">Color</th>
+                      <th className="text-right px-3 py-2 typo-th">Weight</th>
+                    </>) : (<>
+                      <th className="text-left px-3 py-2 typo-th">SKU</th>
+                      <th className="text-left px-3 py-2 typo-th">Description</th>
+                      <th className="text-left px-3 py-2 typo-th">Size</th>
+                      <th className="text-right px-3 py-2 typo-th">Qty</th>
+                    </>)}
+                    <th className="text-right px-3 py-2 typo-th">Rate</th>
+                    <th className="text-right px-3 py-2 typo-th">Amount</th>
+                    <th className="text-left px-3 py-2 typo-th">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dn.items?.map((item, i) => (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="px-3 py-2 typo-td-secondary">{i + 1}</td>
+                      {isRoll ? (<>
+                        <td className="px-3 py-2 typo-td font-semibold">{item.roll?.roll_code || '—'}</td>
+                        <td className="px-3 py-2 typo-td-secondary">{item.roll?.fabric_type || '—'}</td>
+                        <td className="px-3 py-2 typo-td-secondary">{item.roll?.color?.name || '—'}</td>
+                        <td className="px-3 py-2 typo-td text-right font-semibold">{item.weight || '—'}</td>
+                      </>) : (<>
+                        <td className="px-3 py-2 typo-td font-semibold">{item.sku?.sku_code || '—'}</td>
+                        <td className="px-3 py-2 typo-td-secondary">{item.sku?.product_name || '—'}</td>
+                        <td className="px-3 py-2 typo-td font-semibold">{item.sku?.size || '—'}</td>
+                        <td className="px-3 py-2 typo-td text-right font-semibold">{item.quantity}</td>
+                      </>)}
+                      <td className="px-3 py-2 typo-td-secondary text-right">{fmtCurrency(item.unit_price)}</td>
+                      <td className="px-3 py-2 typo-td text-right font-semibold">{fmtCurrency(item.amount)}</td>
+                      <td className="px-3 py-2 typo-td-secondary">{item.reason || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end">
+              <div className="w-64 text-sm space-y-1">
+                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-semibold">{fmtCurrency(dn.subtotal)}</span></div>
+                {gstPct > 0 && (<>
+                  <div className="flex justify-between"><span className="text-gray-500">CGST ({gstPct / 2}%)</span><span>{fmtCurrency((dn.tax_amount || 0) / 2)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">SGST ({gstPct / 2}%)</span><span>{fmtCurrency((dn.tax_amount || 0) / 2)}</span></div>
+                </>)}
+                <div className="flex justify-between pt-1 border-t-2 border-emerald-600 font-bold text-base"><span>Debit Amount</span><span>{fmtCurrency(dn.total_amount)}</span></div>
+              </div>
+            </div>
+
+            {dn.notes && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800"><strong>Notes:</strong> {dn.notes}</div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   /* ═══════════════════════ CREDIT NOTE PRINT ═══════════════════════ */
   if (printCreditNote) return <CreditNotePrint salesReturn={printCreditNote} company={co} onClose={() => setPrintCreditNote(null)} />
@@ -797,7 +948,7 @@ export default function InvoicesPage() {
         <div className="flex items-center gap-3">
           {/* Category toggle */}
           <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-            {[{ key: 'invoices', label: 'Invoices' }, { key: 'credit_notes', label: 'Credit Notes' }].map(t => (
+            {[{ key: 'invoices', label: 'Invoices' }, { key: 'credit_notes', label: 'Credit Notes' }, { key: 'debit_notes', label: 'Debit Notes' }].map(t => (
               <button key={t.key} onClick={() => setViewMode(t.key)}
                 className={`px-3 py-1.5 typo-btn-sm transition-colors ${viewMode === t.key ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 {t.label}
@@ -846,7 +997,7 @@ export default function InvoicesPage() {
           <DataTable columns={COLUMNS} data={invoicesList} loading={loading} onRowClick={handleRowClick} emptyText="No invoices found." />
           <Pagination page={page} pages={pages} total={total} onChange={setPage} />
         </div>
-      </>) : (<>
+      </>) : viewMode === 'credit_notes' ? (<>
         {/* Credit Notes view */}
         <div className="mt-3 flex items-center gap-3 flex-wrap">
           <div className="ml-auto w-64">
@@ -873,7 +1024,35 @@ export default function InvoicesPage() {
           />
           <Pagination page={cnPage} pages={cnPages} total={cnTotal} onChange={setCnPage} />
         </div>
-      </>)}
+      </>) : viewMode === 'debit_notes' ? (<>
+        {/* Debit Notes view */}
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <div className="ml-auto w-64">
+            <SearchInput value={dnSearch} onChange={(v) => { setDnSearch(v); setDnPage(1) }} placeholder="Search debit notes..." />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <DataTable
+            columns={[
+              { key: 'debit_note_no', label: 'DN No.', render: (v) => <span className="font-semibold">{v}</span> },
+              { key: 'return_note_no', label: 'Return No.' },
+              { key: 'supplier', label: 'Supplier', render: (v) => v?.name || '—' },
+              { key: 'return_type', label: 'Type', render: (v) => v === 'roll_return' ? 'Roll' : 'SKU' },
+              { key: 'gst_percent', label: 'GST %', render: (v) => `${v || 0}%` },
+              { key: 'subtotal', label: 'Subtotal', render: (v) => fmtCurrency(v) },
+              { key: 'tax_amount', label: 'Tax', render: (v) => fmtCurrency(v) },
+              { key: 'total_amount', label: 'Debit Amount', render: (v) => <span className="font-semibold text-emerald-600">{fmtCurrency(v)}</span> },
+              { key: 'return_date', label: 'Date', render: (v) => fmtDate(v) },
+            ]}
+            data={dnList}
+            loading={dnLoading}
+            onRowClick={handleDnRowClick}
+            emptyText="No debit notes found."
+          />
+          <Pagination page={dnPage} pages={dnPages} total={dnTotal} onChange={setDnPage} />
+        </div>
+      </>) : null}
 
       {/* ═══════════════════════ CREATE OVERLAY ═══════════════════════ */}
       {createMode && (() => {
