@@ -5,6 +5,8 @@ import { getSalesReturns, getSalesReturn, createSalesReturn, receiveSalesReturn,
 import { getSuppliers } from '../api/suppliers'
 import { getAllTransports } from '../api/transports'
 import { getOrders } from '../api/orders'
+import { getAllCustomers } from '../api/customers'
+import { getSKUs } from '../api/skus'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
@@ -149,8 +151,11 @@ export default function ReturnsPage() {
 
   // Sales return create mode
   const [salesCreateMode, setSalesCreateMode] = useState(false)
+  const [customers, setCustomers] = useState([])
+  const [skus, setSkus] = useState([])
   const [orders, setOrders] = useState([])
-  const [salesForm, setSalesForm] = useState({ order_id: '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
+  const [customerOrders, setCustomerOrders] = useState([])
+  const [salesForm, setSalesForm] = useState({ customer_id: '', order_id: '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
   const [salesItems, setSalesItems] = useState([])
   const [salesSaving, setSalesSaving] = useState(false)
   const [salesFormError, setSalesFormError] = useState(null)
@@ -163,17 +168,21 @@ export default function ReturnsPage() {
   // Confirm cancel
   const [confirmCancel, setConfirmCancel] = useState(false)
 
-  // Deep-link: ?open=<id>
+  // Deep-link: ?open=<id> or ?create=1&customer=X&order=Y
   useEffect(() => {
     const openId = searchParams.get('open')
-    if (openId) {
-      const cat = searchParams.get('tab') || 'sales'
-      setCategory(cat)
-      if (cat === 'sales') {
-        setDetailLoading(true)
-        setDetail({ id: openId })
-        getSalesReturn(openId).then(res => setDetail(res.data?.data || res.data)).catch(() => {}).finally(() => setDetailLoading(false))
-      }
+    const createFlag = searchParams.get('create')
+    const cat = searchParams.get('tab') || 'supplier'
+    setCategory(cat)
+
+    if (openId && cat === 'sales') {
+      setDetailLoading(true)
+      setDetail({ id: openId })
+      getSalesReturn(openId).then(res => setDetail(res.data?.data || res.data)).catch(() => {}).finally(() => setDetailLoading(false))
+    } else if (createFlag === '1' && cat === 'sales') {
+      const prefillCustomer = searchParams.get('customer') || ''
+      const prefillOrder = searchParams.get('order') || ''
+      openSalesCreate(prefillCustomer, prefillOrder)
     }
   }, [])
 
@@ -353,68 +362,123 @@ export default function ReturnsPage() {
     } finally { setActioning(false) }
   }
 
-  const openSalesCreate = async () => {
+  const openSalesCreate = async (prefillCustomerId, prefillOrderId) => {
     setSalesCreateMode(true)
     setSalesFormError(null)
-    setSalesForm({ order_id: '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
+    setSalesForm({ customer_id: prefillCustomerId || '', order_id: prefillOrderId || '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '' })
     setSalesItems([])
+    setCustomerOrders([])
     try {
-      const [ordRes, transRes] = await Promise.all([
-        getOrders({ page_size: 200, status: undefined }),
+      const [custRes, transRes, skuRes] = await Promise.all([
+        getAllCustomers(),
         getAllTransports(),
+        getSKUs({ page_size: 500 }),
       ])
+      setCustomers(custRes.data?.data || [])
+      setTransports(transRes.data?.data || [])
+      const skuData = skuRes.data?.data || skuRes.data
+      setSkus(Array.isArray(skuData) ? skuData : skuData?.data || [])
+
+      // If pre-filling, load customer's orders
+      if (prefillCustomerId) {
+        const ordRes = await getOrders({ page_size: 200 })
+        const ordData = ordRes.data?.data || ordRes.data
+        const ordList = Array.isArray(ordData) ? ordData : ordData?.data || []
+        const custOrds = ordList.filter(o =>
+          o.customer_id === prefillCustomerId &&
+          ['shipped', 'partially_shipped', 'delivered', 'partially_returned'].includes(o.status)
+        )
+        setCustomerOrders(custOrds)
+
+        // If order pre-filled, auto-load items
+        if (prefillOrderId) {
+          const order = custOrds.find(o => o.id === prefillOrderId)
+          if (order?.items) {
+            setSalesItems(order.items
+              .map(oi => {
+                const maxReturn = (oi.fulfilled_qty || 0) - (oi.returned_qty || 0)
+                return {
+                  order_item_id: oi.id, sku_id: oi.sku?.id || '', sku_code: oi.sku?.sku_code || '',
+                  color: oi.sku?.color || '', size: oi.sku?.size || '',
+                  fulfilled: oi.fulfilled_qty || 0, already_returned: oi.returned_qty || 0,
+                  max_qty: maxReturn, qty: maxReturn, unit_price: oi.unit_price || '',
+                  reason: '', checked: maxReturn > 0, fromOrder: true,
+                }
+              })
+              .filter(it => it.max_qty > 0)
+            )
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const handleCustomerSelect = async (custId) => {
+    setSalesForm(f => ({ ...f, customer_id: custId, order_id: '' }))
+    setSalesItems([])
+    setCustomerOrders([])
+    if (!custId) return
+    try {
+      const ordRes = await getOrders({ page_size: 200 })
       const ordData = ordRes.data?.data || ordRes.data
       const ordList = Array.isArray(ordData) ? ordData : ordData?.data || []
-      const returnable = ordList.filter(o => ['shipped', 'partially_shipped', 'delivered', 'partially_returned'].includes(o.status))
-      setOrders(returnable)
-      setTransports(transRes.data?.data || [])
+      const custOrds = ordList.filter(o =>
+        o.customer_id === custId &&
+        ['shipped', 'partially_shipped', 'delivered', 'partially_returned'].includes(o.status)
+      )
+      setCustomerOrders(custOrds)
     } catch {}
   }
 
   const handleOrderSelect = (orderId) => {
     setSalesForm(f => ({ ...f, order_id: orderId }))
-    const order = orders.find(o => o.id === orderId)
+    if (!orderId) { setSalesItems([]); return }
+    const order = customerOrders.find(o => o.id === orderId)
     if (!order || !order.items) { setSalesItems([]); return }
-    const items = order.items
+    setSalesItems(order.items
       .map(oi => {
         const maxReturn = (oi.fulfilled_qty || 0) - (oi.returned_qty || 0)
         return {
-          order_item_id: oi.id,
-          sku_id: oi.sku?.id || '',
-          sku_code: oi.sku?.sku_code || '',
-          color: oi.sku?.color || '',
-          size: oi.sku?.size || '',
-          fulfilled: oi.fulfilled_qty || 0,
-          already_returned: oi.returned_qty || 0,
-          max_qty: maxReturn,
-          qty: maxReturn,
-          reason: '',
-          checked: maxReturn > 0,
+          order_item_id: oi.id, sku_id: oi.sku?.id || '', sku_code: oi.sku?.sku_code || '',
+          color: oi.sku?.color || '', size: oi.sku?.size || '',
+          fulfilled: oi.fulfilled_qty || 0, already_returned: oi.returned_qty || 0,
+          max_qty: maxReturn, qty: maxReturn, unit_price: oi.unit_price || '',
+          reason: '', checked: maxReturn > 0, fromOrder: true,
         }
       })
       .filter(it => it.max_qty > 0)
-    setSalesItems(items)
+    )
   }
 
+  const addManualItem = () => setSalesItems(prev => [...prev, {
+    order_item_id: null, sku_id: '', sku_code: '', color: '', size: '',
+    fulfilled: 0, already_returned: 0, max_qty: 0, qty: 1, unit_price: '',
+    reason: '', checked: true, fromOrder: false,
+  }])
+
+  const removeManualItem = (idx) => setSalesItems(prev => prev.filter((_, i) => i !== idx))
+
   const handleSalesCreate = async () => {
-    if (!salesForm.order_id) { setSalesFormError('Select an order'); return }
+    if (!salesForm.customer_id) { setSalesFormError('Select a customer'); return }
     const checkedItems = salesItems.filter(it => it.checked && it.qty > 0)
-    if (checkedItems.length === 0) { setSalesFormError('Select at least one item to return'); return }
+    if (checkedItems.length === 0) { setSalesFormError('Add at least one item to return'); return }
 
     setSalesSaving(true)
     setSalesFormError(null)
     try {
       await createSalesReturn({
-        order_id: salesForm.order_id,
+        customer_id: salesForm.customer_id,
+        order_id: salesForm.order_id || null,
         return_date: new Date().toISOString().split('T')[0],
         transport_id: salesForm.transport_id || null,
         lr_number: salesForm.lr_number?.trim() || null,
         lr_date: salesForm.lr_date || null,
         reason_summary: salesForm.reason_summary?.trim() || null,
         items: checkedItems.map(it => ({
-          order_item_id: it.order_item_id,
           sku_id: it.sku_id,
           quantity_returned: it.qty,
+          order_item_id: it.order_item_id || null,
+          unit_price: it.unit_price ? parseFloat(it.unit_price) : null,
           reason: it.reason || null,
         })),
       })
@@ -1055,13 +1119,13 @@ export default function ReturnsPage() {
 
   /* ═══════════════════════════ SALES RETURN CREATE OVERLAY ═══════════════════════════ */
   if (salesCreateMode) {
-    const selectedOrder = orders.find(o => o.id === salesForm.order_id)
+    const hasOrderItems = salesItems.some(si => si.fromOrder)
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-auto">
         <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-2.5 text-white flex items-center justify-between flex-shrink-0">
           <div>
             <h1 className="typo-modal-title text-white leading-tight">New Sales Return</h1>
-            <p className="text-xs opacity-80">Create a customer return from order</p>
+            <p className="text-xs opacity-80">Create a customer return</p>
           </div>
           <button onClick={() => setSalesCreateMode(false)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
         </div>
@@ -1069,14 +1133,19 @@ export default function ReturnsPage() {
         <div className="flex-1 p-4 max-w-4xl mx-auto w-full space-y-4">
           {salesFormError && <ErrorAlert message={salesFormError} onDismiss={() => setSalesFormError(null)} />}
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="md:col-span-2">
-              <label className="typo-label">Order</label>
+              <label className="typo-label">Customer</label>
+              <FilterSelect searchable full value={salesForm.customer_id}
+                onChange={handleCustomerSelect}
+                options={[{ value: '', label: 'Select Customer' }, ...customers.map(c => ({ value: c.id, label: c.name }))]} />
+            </div>
+            <div>
+              <label className="typo-label">Order (optional)</label>
               <FilterSelect searchable full value={salesForm.order_id}
                 onChange={handleOrderSelect}
-                options={[{ value: '', label: 'Select Order' }, ...orders.map(o => ({
-                  value: o.id,
-                  label: `${o.order_number} — ${o.customer?.name || o.customer_name || 'Unknown'} (${o.status})`,
+                options={[{ value: '', label: 'No order link' }, ...customerOrders.map(o => ({
+                  value: o.id, label: `${o.order_number} (${o.status})`,
                 }))]} />
             </div>
             <div>
@@ -1102,73 +1171,105 @@ export default function ReturnsPage() {
             </div>
           </div>
 
-          {selectedOrder && (
-            <div className="bg-gray-50 rounded p-2 flex gap-4 text-xs">
-              <span className="typo-data-label">Customer:</span>
-              <span className="typo-body font-semibold">{selectedOrder.customer?.name || selectedOrder.customer_name || '—'}</span>
-              <span className="typo-data-label ml-4">Status:</span>
-              <StatusBadge status={selectedOrder.status} />
+          {/* Items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="typo-label">Items to Return</label>
+              {!hasOrderItems && (
+                <button onClick={addManualItem} className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700">+ Add Item</button>
+              )}
             </div>
-          )}
 
-          {/* Return items from order */}
-          {salesItems.length > 0 && (
-            <div>
-              <label className="typo-label mb-2 block">Items to Return</label>
+            {salesItems.length > 0 && (
               <div className="border rounded overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50">
                     <tr className="text-left">
                       <th className="px-2 py-1.5 typo-th w-8"></th>
                       <th className="px-2 py-1.5 typo-th">SKU</th>
-                      <th className="px-2 py-1.5 typo-th">Color</th>
-                      <th className="px-2 py-1.5 typo-th">Size</th>
-                      <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>
-                      <th className="px-2 py-1.5 typo-th text-right">Already Ret.</th>
-                      <th className="px-2 py-1.5 typo-th text-right">Returnable</th>
+                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>}
+                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Already Ret.</th>}
+                      {hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Returnable</th>}
                       <th className="px-2 py-1.5 typo-th text-right">Return Qty</th>
+                      {!hasOrderItems && <th className="px-2 py-1.5 typo-th text-right">Unit Price</th>}
                       <th className="px-2 py-1.5 typo-th">Reason</th>
+                      {!hasOrderItems && <th className="px-2 py-1.5 typo-th w-8"></th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {salesItems.map((si, idx) => (
-                      <tr key={si.order_item_id} className={!si.checked ? 'opacity-40' : ''}>
+                      <tr key={si.order_item_id || idx} className={!si.checked ? 'opacity-40' : ''}>
                         <td className="px-2 py-1.5">
                           <input type="checkbox" checked={si.checked}
                             onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, checked: e.target.checked } : it))} />
                         </td>
-                        <td className="px-2 py-1.5 font-semibold">{si.sku_code}</td>
-                        <td className="px-2 py-1.5">{si.color}</td>
-                        <td className="px-2 py-1.5">{si.size}</td>
-                        <td className="px-2 py-1.5 text-right">{si.fulfilled}</td>
-                        <td className="px-2 py-1.5 text-right text-orange-600">{si.already_returned || 0}</td>
-                        <td className="px-2 py-1.5 text-right font-semibold">{si.max_qty}</td>
                         <td className="px-2 py-1.5">
-                          <input type="number" className="typo-input-sm w-16 text-right" min={1} max={si.max_qty}
+                          {si.fromOrder ? (
+                            <span className="font-semibold">{si.sku_code}{si.color ? ` · ${si.color}` : ''}{si.size ? ` · ${si.size}` : ''}</span>
+                          ) : (
+                            <FilterSelect searchable full value={si.sku_id}
+                              onChange={v => {
+                                const sku = skus.find(s => s.id === v)
+                                setSalesItems(prev => prev.map((it, i) => i === idx ? {
+                                  ...it, sku_id: v, sku_code: sku?.sku_code || '', color: sku?.color || '', size: sku?.size || '',
+                                } : it))
+                              }}
+                              options={[{ value: '', label: 'Select SKU' }, ...skus.map(s => ({ value: s.id, label: `${s.sku_code} · ${s.color} · ${s.size}` }))]} />
+                          )}
+                        </td>
+                        {hasOrderItems && <td className="px-2 py-1.5 text-right">{si.fulfilled}</td>}
+                        {hasOrderItems && <td className="px-2 py-1.5 text-right text-orange-600">{si.already_returned || 0}</td>}
+                        {hasOrderItems && <td className="px-2 py-1.5 text-right font-semibold">{si.max_qty}</td>}
+                        <td className="px-2 py-1.5">
+                          <input type="number" className="typo-input-sm w-16 text-right" min={1}
+                            max={si.fromOrder ? si.max_qty : undefined}
                             value={si.qty}
                             onChange={e => {
-                              const v = Math.max(1, Math.min(parseInt(e.target.value) || 1, si.max_qty))
-                              setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: v } : it))
+                              const v = Math.max(1, parseInt(e.target.value) || 1)
+                              const capped = si.fromOrder ? Math.min(v, si.max_qty) : v
+                              setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: capped } : it))
                             }} />
                         </td>
+                        {!hasOrderItems && (
+                          <td className="px-2 py-1.5">
+                            <input type="number" className="typo-input-sm w-20 text-right" placeholder="0"
+                              value={si.unit_price}
+                              onChange={e => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} />
+                          </td>
+                        )}
                         <td className="px-2 py-1.5">
                           <FilterSelect full value={si.reason}
                             onChange={v => setSalesItems(prev => prev.map((it, i) => i === idx ? { ...it, reason: v } : it))}
                             options={SALES_REASON_OPTIONS} />
                         </td>
+                        {!hasOrderItems && (
+                          <td className="px-2 py-1.5 text-center">
+                            {salesItems.length > 1 && (
+                              <button onClick={() => removeManualItem(idx)} className="text-red-400 hover:text-red-600">
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            )}
 
-          {salesForm.order_id && salesItems.length === 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 text-center">
-              No returnable items — all items have been fully returned or none have been fulfilled.
-            </div>
-          )}
+            {salesForm.customer_id && !salesForm.order_id && salesItems.length === 0 && (
+              <div className="bg-gray-50 border border-gray-200 rounded p-4 text-xs text-gray-500 text-center">
+                Click "+ Add Item" to add SKU items for this return.
+              </div>
+            )}
+
+            {salesForm.order_id && salesItems.length === 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 text-center">
+                No returnable items — all items have been fully returned or none have been fulfilled.
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t">
             <button onClick={() => setSalesCreateMode(false)} className="rounded border border-gray-300 text-gray-700 px-4 py-1.5 typo-btn-sm hover:bg-gray-50">Cancel</button>

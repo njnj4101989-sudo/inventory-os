@@ -25,8 +25,8 @@ class SalesReturn(Base):
     )
 
     srn_no: Mapped[str] = mapped_column(String(50), unique=True)
-    order_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("orders.id", ondelete="RESTRICT"), index=True
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), index=True
@@ -74,12 +74,13 @@ class SalesReturnItem(Base):
     sales_return_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("sales_returns.id", ondelete="CASCADE"), index=True
     )
-    order_item_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("order_items.id", ondelete="RESTRICT"), index=True
+    order_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("order_items.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     sku_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("skus.id", ondelete="RESTRICT"), index=True
     )
+    unit_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     quantity_returned: Mapped[int] = mapped_column(Integer)
     quantity_restocked: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     quantity_damaged: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

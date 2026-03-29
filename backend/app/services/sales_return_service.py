@@ -11,6 +11,8 @@ from sqlalchemy.orm import selectinload
 from app.models.sales_return import SalesReturn, SalesReturnItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.customer import Customer
+from app.models.sku import SKU
 from app.schemas.sales_return import (
     InspectRequest,
     SalesReturnCreate,
@@ -92,33 +94,40 @@ class SalesReturnService:
     # ── Create ──
 
     async def create_sales_return(self, req: SalesReturnCreate, user_id: UUID, fy_id: UUID) -> dict:
-        # Load order with items + FOR UPDATE lock on order items
-        order = (await self.db.execute(
-            select(Order)
-            .where(Order.id == req.order_id)
-            .options(selectinload(Order.items).selectinload(OrderItem.sku))
+        # Validate customer exists
+        customer = (await self.db.execute(
+            select(Customer).where(Customer.id == req.customer_id)
         )).scalar_one_or_none()
-        if not order:
-            raise NotFoundError("Order not found")
-
-        allowed = ("shipped", "partially_shipped", "delivered", "partially_returned")
-        if order.status not in allowed:
-            raise InvalidStateTransitionError(
-                f"Cannot create return for order in '{order.status}' status"
-            )
+        if not customer:
+            raise NotFoundError("Customer not found")
 
         if not req.items:
             raise ValidationError("At least one return item is required")
 
-        # Build order_item lookup
-        oi_map = {str(oi.id): oi for oi in order.items}
+        # If order-linked, load order and build lookup
+        order = None
+        oi_map = {}
+        if req.order_id:
+            order = (await self.db.execute(
+                select(Order)
+                .where(Order.id == req.order_id)
+                .options(selectinload(Order.items).selectinload(OrderItem.sku))
+            )).scalar_one_or_none()
+            if not order:
+                raise NotFoundError("Order not found")
+            allowed = ("shipped", "partially_shipped", "delivered", "partially_returned")
+            if order.status not in allowed:
+                raise InvalidStateTransitionError(
+                    f"Cannot create return for order in '{order.status}' status"
+                )
+            oi_map = {str(oi.id): oi for oi in order.items}
 
         srn_no = await next_sales_return_number(self.db, fy_id)
 
         sr = SalesReturn(
             srn_no=srn_no,
-            order_id=order.id,
-            customer_id=order.customer_id,
+            order_id=req.order_id,
+            customer_id=req.customer_id,
             status="draft",
             return_date=req.return_date or datetime.now(timezone.utc).date(),
             transport_id=req.transport_id,
@@ -134,39 +143,49 @@ class SalesReturnService:
         total_amount = Decimal("0")
 
         for item_req in req.items:
-            oi = oi_map.get(str(item_req.order_item_id))
-            if not oi:
-                raise ValidationError(f"Order item {item_req.order_item_id} not found in this order")
-
-            max_returnable = (oi.fulfilled_qty or 0) - (oi.returned_qty or 0)
             if item_req.quantity_returned <= 0:
                 raise ValidationError("Return quantity must be > 0")
-            if item_req.quantity_returned > max_returnable:
-                sku_code = oi.sku.sku_code if oi.sku else str(item_req.sku_id)
-                raise ValidationError(
-                    f"Cannot return {item_req.quantity_returned} for {sku_code} — only {max_returnable} returnable"
-                )
+
+            item_unit_price = item_req.unit_price
+            oi = None
+
+            # Order-linked item: validate returnable qty + reserve
+            if item_req.order_item_id and oi_map:
+                oi = oi_map.get(str(item_req.order_item_id))
+                if not oi:
+                    raise ValidationError(f"Order item {item_req.order_item_id} not found in this order")
+                max_returnable = (oi.fulfilled_qty or 0) - (oi.returned_qty or 0)
+                if item_req.quantity_returned > max_returnable:
+                    sku_code = oi.sku.sku_code if oi.sku else str(item_req.sku_id)
+                    raise ValidationError(
+                        f"Cannot return {item_req.quantity_returned} for {sku_code} — only {max_returnable} returnable"
+                    )
+                # Reserve returned_qty on order item
+                oi.returned_qty = (oi.returned_qty or 0) + item_req.quantity_returned
+                # Use order item price if not explicitly provided
+                if item_unit_price is None and oi.unit_price:
+                    item_unit_price = Decimal(str(float(oi.unit_price)))
 
             sri = SalesReturnItem(
                 sales_return_id=sr.id,
                 order_item_id=item_req.order_item_id,
                 sku_id=item_req.sku_id,
+                unit_price=item_unit_price,
                 quantity_returned=item_req.quantity_returned,
                 reason=item_req.reason,
                 notes=item_req.notes,
             )
             self.db.add(sri)
 
-            # Reservation: update returned_qty immediately to prevent double-claiming
-            oi.returned_qty = (oi.returned_qty or 0) + item_req.quantity_returned
-
-            # Calculate amount from order item unit price
-            total_amount += Decimal(str(float(oi.unit_price))) * item_req.quantity_returned
+            if item_unit_price:
+                total_amount += item_unit_price * item_req.quantity_returned
 
         sr.total_amount = total_amount
 
-        # Update order status
-        self._recalculate_order_status(order)
+        # Update order status if order-linked
+        if order:
+            self._recalculate_order_status(order)
+
         await self.db.flush()
 
         await self._emit("sales_return_created", sr, user_id)
@@ -318,21 +337,23 @@ class SalesReturnService:
         if sr.status not in ("draft", "received"):
             raise InvalidStateTransitionError(f"Cannot cancel from '{sr.status}' (only draft or received)")
 
-        # Reverse returned_qty reservation on order items
-        order = (await self.db.execute(
-            select(Order)
-            .where(Order.id == sr.order_id)
-            .options(selectinload(Order.items))
-        )).scalar_one_or_none()
+        # Reverse returned_qty reservation on order items (only for order-linked returns)
+        if sr.order_id:
+            order = (await self.db.execute(
+                select(Order)
+                .where(Order.id == sr.order_id)
+                .options(selectinload(Order.items))
+            )).scalar_one_or_none()
 
-        if order:
-            oi_map = {str(oi.id): oi for oi in order.items}
-            for item in sr.items:
-                oi = oi_map.get(str(item.order_item_id))
-                if oi:
-                    oi.returned_qty = max(0, (oi.returned_qty or 0) - item.quantity_returned)
+            if order:
+                oi_map = {str(oi.id): oi for oi in order.items}
+                for item in sr.items:
+                    if item.order_item_id:
+                        oi = oi_map.get(str(item.order_item_id))
+                        if oi:
+                            oi.returned_qty = max(0, (oi.returned_qty or 0) - item.quantity_returned)
 
-            self._recalculate_order_status(order)
+                self._recalculate_order_status(order)
 
         sr.status = "cancelled"
         await self.db.flush()
@@ -463,6 +484,7 @@ class SalesReturnService:
                         "size": item.sku.size,
                         "base_price": float(item.sku.base_price) if item.sku.base_price else None,
                     } if item.sku else None,
+                    "unit_price": float(item.unit_price) if item.unit_price else None,
                     "quantity_returned": item.quantity_returned,
                     "quantity_restocked": item.quantity_restocked,
                     "quantity_damaged": item.quantity_damaged,

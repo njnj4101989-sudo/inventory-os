@@ -17,15 +17,17 @@ class SalesReturnFilterParams(PaginatedParams):
 
 
 class SalesReturnItemInput(BaseModel):
-    order_item_id: UUID
     sku_id: UUID
     quantity_returned: int
+    order_item_id: UUID | None = None  # optional — set when return is linked to a specific order
+    unit_price: Decimal | None = None  # required for standalone returns (no order), optional if order-linked
     reason: str | None = None  # defective, wrong_item, size_mismatch, color_mismatch, damaged_in_transit, customer_changed_mind, other
     notes: str | None = None
 
 
 class SalesReturnCreate(BaseModel):
-    order_id: UUID
+    customer_id: UUID
+    order_id: UUID | None = None  # optional — link to source order
     return_date: date | None = None
     transport_id: UUID | None = None
     lr_number: str | None = None

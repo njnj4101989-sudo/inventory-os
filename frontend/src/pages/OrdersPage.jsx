@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
-import { createSalesReturn } from '../api/salesReturns'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -177,10 +176,7 @@ export default function OrdersPage() {
   const [updateShipmentId, setUpdateShipmentId] = useState(null) // shipment ID when updating a specific shipment
   const [shipError, setShipError] = useState(null)
   // Return modal
-  const [returnModalOpen, setReturnModalOpen] = useState(false)
-  const [returnItems, setReturnItems] = useState([]) // [{sku_id, sku_code, color, size, max_qty, qty, checked, reason}]
-  const [returnNotes, setReturnNotes] = useState('')
-  const [returnError, setReturnError] = useState(null)
+  // Return modal removed — now navigates to ReturnsPage
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
@@ -248,7 +244,7 @@ export default function OrdersPage() {
         handleCreate()
       }
       if (e.key === 'Escape') {
-        if (quickMasterOpen || shipModalOpen || returnModalOpen) return
+        if (quickMasterOpen || shipModalOpen) return
         e.preventDefault()
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()
@@ -256,7 +252,7 @@ export default function OrdersPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, returnModalOpen])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen])
 
   /* ── Auto-focus Customer field on overlay open ── */
   useEffect(() => {
@@ -467,66 +463,10 @@ export default function OrdersPage() {
 
   /* ── Return action ── */
   const handleReturnAction = () => {
-    const items = (detailOrder.items || [])
-      .map(item => {
-        const maxReturnable = (item.fulfilled_qty || 0) - (item.returned_qty || 0)
-        if (maxReturnable <= 0) return null
-        return {
-          order_item_id: item.id,
-          sku_id: item.sku?.id,
-          sku_code: item.sku?.sku_code || '—',
-          color: item.sku?.color,
-          size: item.sku?.size,
-          max_qty: maxReturnable,
-          qty: maxReturnable,
-          checked: true,
-          reason: '',
-        }
-      })
-      .filter(Boolean)
-    setReturnItems(items)
-    setReturnNotes('')
-    setReturnError(null)
-    setReturnModalOpen(true)
-  }
-
-  const handleReturnConfirm = async () => {
-    setActioning(true)
-    setReturnError(null)
-    try {
-      const checkedItems = returnItems.filter(ri => ri.checked && ri.qty > 0)
-      if (!checkedItems.length) {
-        setReturnError('Select at least one item to return')
-        setActioning(false)
-        return
-      }
-      const res = await createSalesReturn({
-        order_id: detailOrder.id,
-        return_date: new Date().toISOString().split('T')[0],
-        reason_summary: returnNotes.trim() || null,
-        items: checkedItems.map(ri => ({
-          order_item_id: ri.order_item_id,
-          sku_id: ri.sku_id,
-          quantity_returned: ri.qty,
-          reason: ri.reason || null,
-        })),
-      })
-      const srn = res.data?.data || res.data
-      // Refresh order detail
-      try {
-        const refreshRes = await getOrder(detailOrder.id)
-        setDetailOrder(refreshRes.data?.data || refreshRes.data)
-      } catch {
-        setDetailOrder(null)
-      }
-      setReturnModalOpen(false)
-      fetchData()
-      if (srn?.srn_no) setReturnError(null)
-    } catch (err) {
-      setReturnError(err.response?.data?.detail || 'Failed to create sales return')
-    } finally {
-      setActioning(false)
-    }
+    // Navigate to ReturnsPage with customer + order pre-fill
+    const custId = detailOrder.customer_id || ''
+    const ordId = detailOrder.id || ''
+    navigate(`/returns?tab=sales&create=1&customer=${custId}&order=${ordId}`)
   }
 
   /* ── Create overlay: load SKUs ── */
@@ -1011,86 +951,6 @@ export default function OrdersPage() {
                       onChange={e => setShipForm(f => ({ ...f, eway_bill_date: e.target.value }))} />
                   </div>
                 </div>
-              </div>
-            </Modal>
-
-            {/* Return Modal */}
-            <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Create Sales Return" wide actions={
-              <>
-                <button onClick={() => setReturnModalOpen(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleReturnConfirm} disabled={actioning}
-                  className="rounded-lg bg-orange-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-orange-700 disabled:opacity-50">
-                  {actioning ? 'Creating...' : `Create Return (${returnItems.filter(ri => ri.checked).reduce((s, ri) => s + ri.qty, 0)} pcs)`}
-                </button>
-              </>
-            }>
-              {returnError && <ErrorAlert message={returnError} onDismiss={() => setReturnError(null)} />}
-
-              {returnItems.length > 0 && (
-                <div className="mb-3">
-                  <p className="typo-label-sm mb-1.5">Items to Return</p>
-                  <div className="border rounded overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-2 py-1.5 typo-th w-8"></th>
-                          <th className="px-2 py-1.5 typo-th text-left">SKU</th>
-                          <th className="px-2 py-1.5 typo-th text-left">Color</th>
-                          <th className="px-2 py-1.5 typo-th text-left">Size</th>
-                          <th className="px-2 py-1.5 typo-th text-right">Returnable</th>
-                          <th className="px-2 py-1.5 typo-th text-right">Return Qty</th>
-                          <th className="px-2 py-1.5 typo-th text-left">Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {returnItems.map((ri, idx) => (
-                          <tr key={ri.sku_id} className={ri.checked ? '' : 'opacity-40'}>
-                            <td className="px-2 py-1.5 text-center">
-                              <input type="checkbox" checked={ri.checked}
-                                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                                onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, checked: e.target.checked } : r))} />
-                            </td>
-                            <td className="px-2 py-1.5"><SKUCodeDisplay code={ri.sku_code} /></td>
-                            <td className="px-2 py-1.5">
-                              {ri.color ? <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-gray-200" style={{ backgroundColor: colorHex(ri.color) }} />{ri.color}</span> : '—'}
-                            </td>
-                            <td className="px-2 py-1.5 font-semibold">{ri.size || '—'}</td>
-                            <td className="px-2 py-1.5 text-right text-gray-500">{ri.max_qty}</td>
-                            <td className="px-2 py-1.5 text-right">
-                              <input type="number" min={1} max={ri.max_qty}
-                                className="typo-input-sm w-16 text-right"
-                                value={ri.qty}
-                                disabled={!ri.checked}
-                                onChange={e => {
-                                  const v = Math.min(Math.max(1, parseInt(e.target.value) || 0), ri.max_qty)
-                                  setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, qty: v } : r))
-                                }} />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <select className="typo-input-sm w-full" value={ri.reason} disabled={!ri.checked}
-                                onChange={e => setReturnItems(prev => prev.map((r, i) => i === idx ? { ...r, reason: e.target.value } : r))}>
-                                <option value="">Select reason</option>
-                                <option value="defective">Defective</option>
-                                <option value="wrong_item">Wrong Item</option>
-                                <option value="size_mismatch">Size Mismatch</option>
-                                <option value="color_mismatch">Color Mismatch</option>
-                                <option value="damaged_in_transit">Damaged in Transit</option>
-                                <option value="customer_changed_mind">Customer Changed Mind</option>
-                                <option value="other">Other</option>
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="typo-label-sm">Notes</label>
-                <textarea className="typo-input w-full" rows={2} value={returnNotes}
-                  onChange={e => setReturnNotes(e.target.value)} placeholder="Return notes (optional)" />
               </div>
             </Modal>
 
