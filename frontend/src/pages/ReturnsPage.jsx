@@ -363,8 +363,7 @@ export default function ReturnsPage() {
   }
 
   const handleRollCodeChange = (idx, code) => {
-    updateItem(idx, 'roll_code', code)
-    // Clear previous selection when user edits
+    // Update code + clear previous selection so dropdown reappears
     setFormItems(prev => prev.map((item, i) => i === idx ? { ...item, roll_code: code, roll_id: '', roll_detail: null, weight: '' } : item))
     clearTimeout(rollDebounce.current)
     if (!code.trim()) { setRollSuggestions([]); setRollSuggestIdx(null); return }
