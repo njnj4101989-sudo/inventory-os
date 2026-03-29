@@ -2910,7 +2910,16 @@ export default function RollsPage() {
                     Print
                   </button>
                   {detailRoll?.status === 'in_stock' && (
-                    <button onClick={() => openSendProcessing(detailRoll)}
+                    <button onClick={() => {
+                      const r = detailRoll
+                      setBulkSendRolls([r])
+                      setBulkSendForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+                      setBulkSendWeights({ [r.id]: String(r.remaining_weight || r.current_weight || r.total_weight) })
+                      setBulkSendError(null)
+                      fetchNextJCNo()
+                      setDetailRoll(null)
+                      setBulkSendOpen(true)
+                    }}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
