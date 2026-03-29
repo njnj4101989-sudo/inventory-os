@@ -2510,7 +2510,7 @@ export default function RollsPage() {
                   </div>
                   <div className="col-span-2 md:col-span-1">
                     <label className="typo-label-sm">Supplier <span className="text-red-500">*</span></label>
-                    <FilterSelect searchable full data-master="supplier" value={invoiceHeader.supplier_id} onChange={(v) => setHeader('supplier_id', v)}
+                    <FilterSelect autoFocus searchable full data-master="supplier" value={invoiceHeader.supplier_id} onChange={(v) => setHeader('supplier_id', v)}
                       options={[{ value: '', label: 'Select supplier' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
                   </div>
                   <div>
