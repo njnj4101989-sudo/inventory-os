@@ -1137,7 +1137,7 @@ export default function ReturnsPage() {
             <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="typo-label-sm">RETURN TYPE</label>
-                <FilterSelect full value={form.return_type}
+                <FilterSelect autoFocus full value={form.return_type}
                   onChange={handleReturnTypeChange}
                   options={[{ value: 'roll_return', label: 'Roll Return' }, { value: 'sku_return', label: 'SKU Return' }]} />
               </div>
@@ -1302,7 +1302,7 @@ export default function ReturnsPage() {
             <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="md:col-span-2">
                 <label className="typo-label-sm">CUSTOMER *</label>
-                <FilterSelect searchable full value={salesForm.customer_id}
+                <FilterSelect autoFocus searchable full value={salesForm.customer_id}
                   onChange={handleCustomerSelect}
                   options={[{ value: '', label: 'Select customer...' }, ...customers.map(c => ({ value: c.id, label: c.name }))]} />
               </div>

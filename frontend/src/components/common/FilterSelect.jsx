@@ -10,11 +10,12 @@ import { useState, useRef, useEffect, useCallback } from 'react'
  *  full      — full-width form mode (default false = compact filter mode)
  *  className — optional extra classes on the wrapper
  */
-export default function FilterSelect({ value, onChange, options = [], full = false, searchable = false, className = '', ...rest }) {
+export default function FilterSelect({ value, onChange, options = [], full = false, searchable = false, autoFocus = false, className = '', ...rest }) {
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
   const [search, setSearch] = useState('')
   const ref = useRef(null)
+  const btnRef = useRef(null)
   const listRef = useRef(null)
   const searchRef = useRef(null)
   const typeBuffer = useRef('')
@@ -35,6 +36,13 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  useEffect(() => {
+    if (autoFocus && btnRef.current) {
+      const t = setTimeout(() => btnRef.current?.focus(), 100)
+      return () => clearTimeout(t)
+    }
+  }, [autoFocus])
+
   // Scroll highlighted item into view
   useEffect(() => {
     if (open && highlight >= 0 && listRef.current) {
@@ -53,10 +61,15 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
     }
   }, [open])
 
+  const closeAndRefocus = useCallback(() => {
+    setOpen(false)
+    setSearch('')
+    if (searchable) setTimeout(() => btnRef.current?.focus(), 0)
+  }, [searchable])
+
   const handleKey = useCallback((e) => {
     if (e.key === 'Escape') {
-      setOpen(false)
-      setSearch('')
+      closeAndRefocus()
       return
     }
 
@@ -64,8 +77,7 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
       e.preventDefault()
       if (open && highlight >= 0 && filteredOptions[highlight]) {
         onChange(filteredOptions[highlight].value)
-        setOpen(false)
-        setSearch('')
+        closeAndRefocus()
       } else {
         setOpen(v => !v)
       }
@@ -102,6 +114,8 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
       onChange(filteredOptions[highlight].value)
       setOpen(false)
       setSearch('')
+      // Refocus button so Tab moves to the next field naturally
+      if (searchable) btnRef.current?.focus()
       return // let default Tab behavior proceed
     }
 
@@ -122,11 +136,12 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
         }
       }
     }
-  }, [open, highlight, options, filteredOptions, onChange, searchable])
+  }, [open, highlight, options, filteredOptions, onChange, searchable, closeAndRefocus])
 
   return (
     <div ref={ref} className={`relative ${className}`} {...rest}>
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen(v => !v)}
         onKeyDown={!searchable || !open ? handleKey : undefined}
@@ -169,7 +184,7 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
             <button
               key={opt.value}
               type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); setSearch('') }}
+              onClick={() => { onChange(opt.value); closeAndRefocus() }}
               onMouseEnter={() => setHighlight(i)}
               className={`w-full text-left px-2 py-1 text-sm truncate transition-colors ${
                 i === highlight
