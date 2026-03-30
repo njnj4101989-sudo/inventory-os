@@ -197,3 +197,19 @@ async def purchase_report(
     svc = DashboardService(db)
     result = await svc.get_purchase_report(fd, td, fy_id)
     return {"success": True, "data": result}
+
+
+@router.get("/returns-report", response_model=None)
+async def returns_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Returns analysis: customer returns by SKU/customer, supplier returns, recovery rate."""
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_returns_report(fd, td, fy_id)
+    return {"success": True, "data": result}

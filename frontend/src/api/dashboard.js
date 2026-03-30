@@ -82,3 +82,7 @@ export async function getVAReport(params = {}) {
 export async function getPurchaseReport(params = {}) {
   return client.get('/dashboard/purchase-report', { params })
 }
+
+export async function getReturnsReport(params = {}) {
+  return client.get('/dashboard/returns-report', { params })
+}

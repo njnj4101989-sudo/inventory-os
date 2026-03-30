@@ -1680,3 +1680,243 @@ class DashboardService:
             "supplier_quality": supplier_quality,
             "fabric_utilization": fabric_utilization,
         }
+
+    # ═══════════════════════════════════════════════════════
+    #  RETURNS ANALYSIS REPORT (P3.1)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_returns_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """Returns analysis — customer returns by SKU/customer, supplier returns, restock vs damage."""
+
+        # --- Customer return rate ---
+        # Total orders in period
+        ord_fy = [Order.fy_id == fy_id] if fy_id else []
+        total_orders = (await self.db.execute(
+            select(func.count()).select_from(Order).where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+        )).scalar() or 0
+
+        # Sales returns in period
+        sr_agg = (await self.db.execute(
+            select(
+                func.count().label("total"),
+                func.count(case((SalesReturn.status == "closed", 1))).label("closed"),
+                func.coalesce(func.sum(case((SalesReturn.status == "closed", SalesReturn.total_amount))), 0).label("credit_total"),
+            )
+            .where(
+                SalesReturn.status != "cancelled",
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+        )).one()
+        customer_return_rate = round(sr_agg.total / total_orders * 100, 1) if total_orders > 0 else 0.0
+        total_credit_notes = float(sr_agg.credit_total)
+
+        # Supplier returns in period
+        rn_agg = (await self.db.execute(
+            select(
+                func.count().label("total"),
+                func.coalesce(func.sum(case((ReturnNote.status == "closed", ReturnNote.total_amount))), 0).label("debit_total"),
+            )
+            .where(
+                ReturnNote.status != "cancelled",
+                func.date(ReturnNote.created_at) >= from_date,
+                func.date(ReturnNote.created_at) <= to_date,
+            )
+        )).one()
+
+        # Total rolls received for supplier return rate
+        total_rolls = (await self.db.execute(
+            select(func.count()).select_from(Roll).where(
+                func.date(Roll.received_at) >= from_date,
+                func.date(Roll.received_at) <= to_date,
+            )
+        )).scalar() or 0
+        supplier_return_rate = round(rn_agg.total / total_rolls * 100, 1) if total_rolls > 0 else 0.0
+
+        # Recovery rate (restock vs damage from sales return items)
+        recovery_agg = (await self.db.execute(
+            select(
+                func.coalesce(func.sum(SalesReturnItem.quantity_restocked), 0).label("restocked"),
+                func.coalesce(func.sum(SalesReturnItem.quantity_damaged), 0).label("damaged"),
+                func.coalesce(func.sum(SalesReturnItem.quantity_returned), 0).label("total_returned"),
+            )
+            .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+            .where(
+                SalesReturn.status.in_(["restocked", "closed"]),
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+        )).one()
+        total_restocked = int(recovery_agg.restocked)
+        total_damaged = int(recovery_agg.damaged)
+        recovery_rate = round(total_restocked / (total_restocked + total_damaged) * 100, 1) if (total_restocked + total_damaged) > 0 else 0.0
+
+        # --- Returns by SKU ---
+        sku_stmt = (
+            select(
+                SKU.sku_code,
+                SKU.product_name,
+                func.coalesce(func.sum(SalesReturnItem.quantity_returned), 0).label("returned"),
+                func.coalesce(func.sum(SalesReturnItem.quantity_restocked), 0).label("restocked"),
+                func.coalesce(func.sum(SalesReturnItem.quantity_damaged), 0).label("damaged"),
+            )
+            .join(SalesReturnItem, SalesReturnItem.sku_id == SKU.id)
+            .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+            .where(
+                SalesReturn.status != "cancelled",
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+            .group_by(SKU.sku_code, SKU.product_name)
+            .order_by(func.coalesce(func.sum(SalesReturnItem.quantity_returned), 0).desc())
+            .limit(30)
+        )
+        sku_rows = (await self.db.execute(sku_stmt)).all()
+
+        # Get sold qty per SKU in same period for return rate
+        sold_stmt = (
+            select(
+                SKU.sku_code,
+                func.coalesce(func.sum(OrderItem.fulfilled_qty), 0).label("sold"),
+            )
+            .join(OrderItem, OrderItem.sku_id == SKU.id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+            .group_by(SKU.sku_code)
+        )
+        sold_rows = (await self.db.execute(sold_stmt)).all()
+        sold_map = {r.sku_code: int(r.sold) for r in sold_rows}
+
+        # Top reason per SKU
+        reason_stmt = (
+            select(
+                SKU.sku_code,
+                SalesReturnItem.reason,
+                func.count().label("cnt"),
+            )
+            .join(SalesReturnItem, SalesReturnItem.sku_id == SKU.id)
+            .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+            .where(
+                SalesReturn.status != "cancelled",
+                SalesReturnItem.reason != None,
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+            .group_by(SKU.sku_code, SalesReturnItem.reason)
+            .order_by(func.count().desc())
+        )
+        reason_rows = (await self.db.execute(reason_stmt)).all()
+        top_reason_map = {}
+        for r in reason_rows:
+            if r.sku_code not in top_reason_map:
+                top_reason_map[r.sku_code] = r.reason
+
+        by_sku = []
+        for r in sku_rows:
+            sold = sold_map.get(r.sku_code, 0)
+            returned = int(r.returned)
+            rate = round(returned / sold * 100, 1) if sold > 0 else 0.0
+            by_sku.append({
+                "sku_code": r.sku_code,
+                "product_name": r.product_name,
+                "sold_qty": sold,
+                "returned_qty": returned,
+                "return_rate_pct": rate,
+                "restocked": int(r.restocked),
+                "damaged": int(r.damaged),
+                "top_reason": top_reason_map.get(r.sku_code, "—"),
+            })
+
+        # --- Returns by Customer ---
+        cust_stmt = (
+            select(
+                Customer.name,
+                func.count(func.distinct(SalesReturn.id)).label("return_count"),
+                func.coalesce(func.sum(SalesReturn.total_amount), 0).label("credit_amount"),
+            )
+            .join(SalesReturn, SalesReturn.customer_id == Customer.id)
+            .where(
+                SalesReturn.status != "cancelled",
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+            .group_by(Customer.name)
+            .order_by(func.coalesce(func.sum(SalesReturn.total_amount), 0).desc())
+        )
+        cust_rows = (await self.db.execute(cust_stmt)).all()
+
+        # Orders per customer for rate
+        cust_ord_stmt = (
+            select(
+                Customer.name,
+                func.count(func.distinct(Order.id)).label("order_count"),
+            )
+            .join(Order, Order.customer_id == Customer.id)
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+            .group_by(Customer.name)
+        )
+        cust_ord_rows = (await self.db.execute(cust_ord_stmt)).all()
+        cust_ord_map = {r.name: r.order_count for r in cust_ord_rows}
+
+        by_customer = []
+        for r in cust_rows:
+            orders = cust_ord_map.get(r.name, 0)
+            rate = round(r.return_count / orders * 100, 1) if orders > 0 else 0.0
+            by_customer.append({
+                "customer_name": r.name,
+                "order_count": orders,
+                "return_count": r.return_count,
+                "return_rate_pct": rate,
+                "credit_amount": float(r.credit_amount),
+            })
+
+        # --- Supplier Returns ---
+        sup_ret_stmt = (
+            select(
+                Supplier.name,
+                func.count(func.distinct(ReturnNote.id)).label("return_count"),
+                func.coalesce(func.sum(ReturnNote.total_amount), 0).label("debit_value"),
+            )
+            .join(ReturnNote, ReturnNote.supplier_id == Supplier.id)
+            .where(
+                ReturnNote.status != "cancelled",
+                func.date(ReturnNote.created_at) >= from_date,
+                func.date(ReturnNote.created_at) <= to_date,
+            )
+            .group_by(Supplier.name)
+            .order_by(func.coalesce(func.sum(ReturnNote.total_amount), 0).desc())
+        )
+        sup_ret_rows = (await self.db.execute(sup_ret_stmt)).all()
+
+        supplier_returns = [{
+            "supplier_name": r.name,
+            "return_count": r.return_count,
+            "debit_value": float(r.debit_value),
+        } for r in sup_ret_rows]
+
+        return {
+            "kpis": {
+                "customer_return_rate_pct": customer_return_rate,
+                "supplier_return_rate_pct": supplier_return_rate,
+                "recovery_rate_pct": recovery_rate,
+                "total_credit_notes": total_credit_notes,
+                "total_debit_notes": float(rn_agg.debit_total),
+                "total_restocked": total_restocked,
+                "total_damaged": total_damaged,
+            },
+            "by_sku": by_sku,
+            "by_customer": by_customer,
+            "supplier_returns": supplier_returns,
+        }
