@@ -122,6 +122,14 @@ class FYClosingService:
         if old_fy.status == "closed":
             raise ValidationError(f"{old_fy.code} is already closed")
 
+        today = date.today()
+        if today < old_fy.end_date:
+            days_left = (old_fy.end_date - today).days
+            raise ValidationError(
+                f"Cannot close {old_fy.code} before its end date ({old_fy.end_date.strftime('%d %b %Y')}). "
+                f"{days_left} day(s) remaining. Closing early will result in incomplete stock valuation."
+            )
+
         if new_start_date >= new_end_date:
             raise ValidationError("New FY start date must be before end date")
 
