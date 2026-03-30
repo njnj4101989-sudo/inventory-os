@@ -90,3 +90,7 @@ export async function getPurchaseReport(params = {}) {
 export async function getReturnsReport(params = {}) {
   return client.get('/dashboard/returns-report', { params })
 }
+
+export async function getClosingStockReport(params = {}) {
+  return client.get('/dashboard/closing-stock-report', { params })
+}

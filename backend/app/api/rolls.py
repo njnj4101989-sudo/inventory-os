@@ -11,6 +11,7 @@ from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
     ReceiveFromProcessing, UpdateProcessingLog,
     BulkStockIn, SupplierInvoiceParams, SupplierInvoiceUpdate,
+    OpeningRollStockRequest,
 )
 from app.services.roll_service import RollService
 
@@ -54,6 +55,19 @@ async def bulk_stock_in(
     svc = RollService(db)
     result = await svc.bulk_stock_in(req, current_user.id, fy_id)
     return {"success": True, "data": result, "message": f"{result['count']} rolls stocked in"}
+
+
+@router.post("/opening-stock", response_model=None, status_code=201)
+async def opening_roll_stock(
+    req: OpeningRollStockRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Bulk opening roll stock entry — no supplier invoice, no ledger entry."""
+    fy_id = get_fy_id(current_user)
+    svc = RollService(db)
+    result = await svc.opening_stock(req.rolls, current_user.id, fy_id)
+    return {"success": True, "data": result, "message": result["message"]}
 
 
 @router.get("/supplier-invoices", response_model=None)

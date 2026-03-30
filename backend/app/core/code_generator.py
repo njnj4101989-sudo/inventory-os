@@ -224,3 +224,13 @@ async def next_return_note_number(db: AsyncSession, fy_id: UUID) -> str:
         "RN-",
     )
     return f"RN-{current + 1:04d}"
+
+
+async def next_verification_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next SV-XXXX code, scoped to financial year."""
+    from app.models.stock_verification import StockVerification
+    current = _extract_number(
+        await _max_code(db, StockVerification.verification_no, extra_where=StockVerification.fy_id == fy_id),
+        "SV-",
+    )
+    return f"SV-{current + 1:04d}"

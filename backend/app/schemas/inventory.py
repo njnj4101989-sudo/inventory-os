@@ -34,6 +34,20 @@ class AdjustRequest(BaseModel):
     reason: str
 
 
+class OpeningStockItem(BaseModel):
+    """Single SKU entry for opening stock."""
+
+    sku_id: UUID
+    quantity: int
+    unit_cost: float | None = None  # WAC cost per unit for valuation
+
+
+class OpeningStockRequest(BaseModel):
+    """POST /inventory/opening-stock — bulk opening stock entry."""
+
+    items: list[OpeningStockItem]
+
+
 # --- Responses ---
 
 

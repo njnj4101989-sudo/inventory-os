@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import JobChallan from '../components/common/JobChallan'
@@ -512,6 +512,13 @@ export default function RollsPage() {
   const [bulkSendError, setBulkSendError] = useState(null)
   const [showJobChallan, setShowJobChallan] = useState(false)
   const [jobChallanData, setJobChallanData] = useState(null)
+
+  // Opening stock modal
+  const [openingRollOpen, setOpeningRollOpen] = useState(false)
+  const EMPTY_OPENING_ROW = { fabric_type: '', color: '', total_weight: '', cost_per_unit: '', color_id: '', fabric_code: '', color_code: '', color_no: '', at_va: false, va_party_id: '', value_addition_id: '', sent_date: '', weight_sent: '' }
+  const [openingRollRows, setOpeningRollRows] = useState([{ ...EMPTY_OPENING_ROW }])
+  const [openingRollSaving, setOpeningRollSaving] = useState(false)
+  const [openingRollError, setOpeningRollError] = useState(null)
 
   // Invoice detail modal
   const [selectedInvoice, setSelectedInvoice] = useState(null)
@@ -1472,6 +1479,76 @@ export default function RollsPage() {
     return base
   })()
 
+  // ── Opening Roll Stock handlers ──
+  const handleOpeningRollRowChange = (idx, field, value) => {
+    setOpeningRollRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const updated = { ...r, [field]: value }
+      // Auto-resolve fabric/color codes from masters
+      if (field === 'fabric_type') {
+        const fab = masterFabrics.find(f => f.name === value)
+        if (fab) updated.fabric_code = fab.code
+      }
+      if (field === 'color') {
+        const col = masterColors.find(c => c.name === value)
+        if (col) { updated.color_code = col.code; updated.color_id = col.id; updated.color_no = col.color_no }
+      }
+      return updated
+    }))
+  }
+
+  const handleAddOpeningRollRow = () => {
+    setOpeningRollRows(prev => [...prev, { ...EMPTY_OPENING_ROW }])
+  }
+
+  const handleRemoveOpeningRollRow = (idx) => {
+    setOpeningRollRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+  }
+
+  const handleSubmitOpeningRolls = async () => {
+    const validRows = openingRollRows.filter(r => r.fabric_type && r.color && r.total_weight)
+    if (validRows.length === 0) { setOpeningRollError('Add at least one roll with fabric, color, and weight'); return }
+    // Validate VA rows
+    for (let i = 0; i < validRows.length; i++) {
+      const r = validRows[i]
+      if (r.at_va) {
+        if (!r.va_party_id) { setOpeningRollError(`Row ${i + 1}: Select a VA Party for rolls at VA vendor`); return }
+        if (!r.value_addition_id) { setOpeningRollError(`Row ${i + 1}: Select a Value Addition type for rolls at VA vendor`); return }
+        if (!r.sent_date) { setOpeningRollError(`Row ${i + 1}: Enter the date when roll was sent to VA vendor`); return }
+      }
+    }
+    setOpeningRollSaving(true)
+    setOpeningRollError(null)
+    try {
+      const res = await createOpeningRollStock({
+        rolls: validRows.map(r => ({
+          fabric_type: r.fabric_type,
+          color: r.color,
+          color_id: r.color_id || undefined,
+          total_weight: parseFloat(r.total_weight),
+          cost_per_unit: r.cost_per_unit ? parseFloat(r.cost_per_unit) : undefined,
+          fabric_code: r.fabric_code || undefined,
+          color_code: r.color_code || undefined,
+          color_no: r.color_no || undefined,
+          at_va: r.at_va || false,
+          va_party_id: r.at_va ? r.va_party_id : undefined,
+          value_addition_id: r.at_va ? r.value_addition_id : undefined,
+          sent_date: r.at_va ? r.sent_date : undefined,
+          weight_sent: r.at_va && r.weight_sent ? parseFloat(r.weight_sent) : undefined,
+        })),
+      })
+      setOpeningRollOpen(false)
+      setOpeningRollRows([{ ...EMPTY_OPENING_ROW }])
+      setError(null)
+      alert(res.data.message)
+      fetchRolls()
+    } catch (err) {
+      setOpeningRollError(err.response?.data?.detail || 'Opening stock entry failed')
+    } finally {
+      setOpeningRollSaving(false)
+    }
+  }
+
   return (
     <div>
       {/* ── Print Labels Sheet overlay ── */}
@@ -1513,6 +1590,10 @@ export default function RollsPage() {
               Print Labels ({lastSavedRolls.length})
             </button>
           )}
+          <button onClick={() => { setOpeningRollError(null); setOpeningRollOpen(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+            Opening Stock
+          </button>
           <button onClick={openStockIn} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             New Purchase
@@ -3620,6 +3701,140 @@ export default function RollsPage() {
 
       {/* Shift+M Quick Master Create */}
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+
+      {/* Opening Roll Stock Modal */}
+      <Modal
+        open={openingRollOpen}
+        onClose={() => setOpeningRollOpen(false)}
+        title=""
+        extraWide
+        actions={
+          <>
+            <button onClick={() => setOpeningRollOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleSubmitOpeningRolls} disabled={openingRollSaving}
+              className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+              {openingRollSaving ? 'Saving...' : `Add ${openingRollRows.filter(r => r.fabric_type && r.color && r.total_weight).length} Opening Rolls`}
+            </button>
+          </>
+        }
+      >
+        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4">
+          <h2 className="text-lg font-bold text-white">Opening Roll Stock</h2>
+          <p className="text-sm text-amber-100 mt-0.5">Enter existing fabric rolls in godown — no supplier invoice needed</p>
+        </div>
+
+        {openingRollError && <div className="mb-4"><ErrorAlert message={openingRollError} onDismiss={() => setOpeningRollError(null)} /></div>}
+
+        <div className="space-y-3 max-h-[500px] overflow-y-auto">
+          {openingRollRows.map((row, idx) => (
+            <div key={idx} className="rounded-lg border border-gray-200 p-3 bg-white">
+              {/* Main row: Fabric, Color, Weight, Rate, Remove */}
+              <div className="grid grid-cols-[1fr_1fr_100px_100px_40px] gap-3 items-center">
+                <FilterSelect
+                  full searchable
+                  value={row.fabric_type}
+                  onChange={(v) => handleOpeningRollRowChange(idx, 'fabric_type', v)}
+                  options={[{ value: '', label: 'Fabric...' }, ...masterFabrics.map(f => ({ value: f.name, label: f.name }))]}
+                />
+                <FilterSelect
+                  full searchable
+                  value={row.color}
+                  onChange={(v) => handleOpeningRollRowChange(idx, 'color', v)}
+                  options={[{ value: '', label: 'Color...' }, ...masterColors.map(c => ({ value: c.name, label: c.name }))]}
+                />
+                <input
+                  type="number" min="0.001" step="0.001"
+                  value={row.total_weight}
+                  onChange={(e) => handleOpeningRollRowChange(idx, 'total_weight', e.target.value)}
+                  className="typo-input" placeholder="kg"
+                />
+                <input
+                  type="number" min="0" step="0.01"
+                  value={row.cost_per_unit}
+                  onChange={(e) => handleOpeningRollRowChange(idx, 'cost_per_unit', e.target.value)}
+                  className="typo-input" placeholder="Rs/kg"
+                />
+                <button onClick={() => handleRemoveOpeningRollRow(idx)}
+                  className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Remove">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* At VA toggle */}
+              <div className="mt-2 flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={row.at_va}
+                    onChange={(e) => handleOpeningRollRowChange(idx, 'at_va', e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                  />
+                  <span className="text-xs font-medium text-orange-700">Currently at VA vendor</span>
+                </label>
+              </div>
+
+              {/* VA fields — shown when at_va is checked */}
+              {row.at_va && (
+                <div className="mt-2 grid grid-cols-[1fr_1fr_120px_100px] gap-3 items-end rounded-lg bg-orange-50 border border-orange-200 p-3">
+                  <div>
+                    <label className="typo-label-sm">VA Party</label>
+                    <FilterSelect
+                      full searchable
+                      value={row.va_party_id}
+                      onChange={(v) => handleOpeningRollRowChange(idx, 'va_party_id', v)}
+                      options={[{ value: '', label: 'Select VA Party...' }, ...vaParties.map(v => ({ value: v.id, label: v.name }))]}
+                    />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Value Addition</label>
+                    <FilterSelect
+                      full searchable
+                      value={row.value_addition_id}
+                      onChange={(v) => handleOpeningRollRowChange(idx, 'value_addition_id', v)}
+                      options={[{ value: '', label: 'Select VA Type...' }, ...masterValueAdditions.map(va => ({ value: va.id, label: `${va.short_code} — ${va.name}` }))]}
+                    />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Sent Date</label>
+                    <input
+                      type="date"
+                      value={row.sent_date}
+                      onChange={(e) => handleOpeningRollRowChange(idx, 'sent_date', e.target.value)}
+                      className="typo-input-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Wt Sent</label>
+                    <input
+                      type="number" min="0.001" step="0.001"
+                      value={row.weight_sent}
+                      onChange={(e) => handleOpeningRollRowChange(idx, 'weight_sent', e.target.value)}
+                      className="typo-input-sm"
+                      placeholder={row.total_weight || 'kg'}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={handleAddOpeningRollRow}
+          className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 typo-btn-sm text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors w-full justify-center">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Another Roll
+        </button>
+
+        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            <strong>Opening Stock</strong> is for Day 1 setup — entering existing fabric rolls. No supplier invoice or ledger entry is created. Check "Currently at VA vendor" for rolls that are with a VA party — this creates the processing log so you can receive them normally later.
+          </p>
+        </div>
+      </Modal>
     </div>
   )
 }

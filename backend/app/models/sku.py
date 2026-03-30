@@ -26,6 +26,8 @@ class SKU(Base):
     gst_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     mrp: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     sale_rate: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    stitching_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))  # tailor charges per piece
+    other_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))  # thread, lining, packing, misc per piece
     unit: Mapped[str | None] = mapped_column(String(20))  # pcs / meters / kg
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 

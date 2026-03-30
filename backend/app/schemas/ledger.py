@@ -41,6 +41,23 @@ class PaymentCreate(BaseModel):
     notes: str | None = None
 
 
+class OpeningBalanceEntry(BaseModel):
+    """Single party opening balance."""
+
+    party_type: str   # supplier / customer / va_party / broker
+    party_id: UUID
+    amount: Decimal
+    balance_type: str  # "dr" or "cr"
+    entry_date: date | None = None   # defaults to FY start_date
+    notes: str | None = None
+
+
+class OpeningBalanceBulkRequest(BaseModel):
+    """POST /ledger/opening-balance/bulk — multiple parties at once."""
+
+    entries: list[OpeningBalanceEntry]
+
+
 class LedgerEntryCreate(BaseModel):
     """Internal use — auto-created entries from services."""
 

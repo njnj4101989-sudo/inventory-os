@@ -21,3 +21,19 @@ export async function getAllBalances(partyType) {
 export async function recordPayment(data) {
   return client.post('/ledger/payment', data)
 }
+
+export async function createOpeningBalance(data, force = false) {
+  return client.post(`/ledger/opening-balance?force=${force}`, data)
+}
+
+export async function createOpeningBalanceBulk(data) {
+  return client.post('/ledger/opening-balance/bulk', data)
+}
+
+export async function getOpeningBalanceStatus() {
+  return client.get('/ledger/opening-balance/status')
+}
+
+export async function getPartyConfirmation(partyType, partyId) {
+  return client.get(`/ledger/party-confirmation/${partyType}/${partyId}`)
+}

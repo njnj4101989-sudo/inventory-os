@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 25 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-30 (Session 95 — Shipments, Supplier Returns, Sales Returns, Credit/Debit Notes, VA damage tracking, partial ship, GST on returns)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-30 (Session 96 — +8 dashboard endpoints: enhanced, sales-report, accounting-report, raw-material-summary, wip-summary, va-report, purchase-report, returns-report)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -461,6 +461,59 @@ Same as `GET /rolls` with status filter pre-applied.
 - `422` — validation error (weight <= 0, missing required fields)
 - `400` — business rule violation
 - On ANY error, entire transaction rolls back (no partial saves)
+
+### POST `/rolls/opening-stock` — NEW S96
+**Auth:** `stock_in` permission required
+**Purpose:** Bulk opening roll stock entry for Day 1 setup. No supplier invoice, no ledger entry. Supports both in-godown and at-VA rolls.
+**Request:**
+```json
+{
+  "rolls": [
+    {
+      "fabric_type": "Cotton",
+      "color": "Green",
+      "color_id": "uuid | null",
+      "total_weight": 18.800,
+      "cost_per_unit": 120.0,
+      "sr_no": null,
+      "panna": 44,
+      "gsm": 180,
+      "notes": null,
+      "fabric_code": "COT",
+      "color_code": "GREEN",
+      "color_no": 1,
+      "at_va": false
+    },
+    {
+      "fabric_type": "Silk",
+      "color": "Red",
+      "total_weight": 22.500,
+      "cost_per_unit": 250.0,
+      "at_va": true,
+      "va_party_id": "uuid",
+      "value_addition_id": "uuid",
+      "sent_date": "2026-03-15",
+      "weight_sent": 22.500
+    }
+  ]
+}
+```
+**Response:**
+```json
+{
+  "count": 5,
+  "in_stock_count": 3,
+  "at_va_count": 2,
+  "roll_codes": ["OPEN-COT-GREEN/01-01", "OPEN-SLK-RED/02-01", ...],
+  "message": "5 opening stock rolls created (3 in godown, 2 at VA vendor)"
+}
+```
+**Notes:**
+- Rolls in godown: `status="in_stock"`, `remaining_weight=total_weight`
+- Rolls at VA: `status="sent_for_processing"`, `remaining_weight=0`, creates `RollProcessing` log with `status="sent"` — so the normal receive flow works when VA vendor returns them
+- `at_va=true` requires: `va_party_id`, `value_addition_id`, `sent_date`; `weight_sent` defaults to `total_weight` if omitted
+- No `supplier_invoice_id`, no ledger entry. Max 200 rolls per request.
+- Roll codes use "OPEN" as challan prefix. Notes prefixed with `[Opening Stock]` / `[At VA]`.
 
 ### GET `/rolls/supplier-invoices` (Supplier Invoice Grouping — server-side)
 **Auth:** `stock_in` permission required
@@ -996,6 +1049,27 @@ When `sku` is present:
 **Request:** `{ sku_id, event_type, quantity }`
 **Response:** Updated inventory state object
 
+### POST `/inventory/opening-stock` — NEW S96
+**Auth:** `inventory_adjust`
+**Purpose:** Bulk opening stock entry for Day 1 setup. Creates `opening_stock` events.
+**Request:**
+```json
+{
+  "items": [
+    { "sku_id": "uuid", "quantity": 500, "unit_cost": 450.0 }
+  ]
+}
+```
+**Response:**
+```json
+{
+  "created": 3,
+  "skipped": ["BLS-101-Red-M"],
+  "message": "3 SKU opening stock entries created, 1 skipped (already exist)"
+}
+```
+**Notes:** Each SKU can only have one `opening_stock` event (duplicate prevention). `unit_cost` is optional but recommended for closing stock valuation (WAC computation). Events are created with `event_type="opening_stock"`, `reference_type="opening_stock"`, `metadata.is_opening_stock=true`.
+
 ### POST `/inventory/reconcile`
 **Request:** `{}`
 **Response:** `{ message: "Reconciliation complete" }`
@@ -1251,7 +1325,15 @@ When `sku` is present:
 
 ---
 
-## 12. Dashboard (`/api/v1/dashboard`)
+## 12. Dashboard & Reports (`/api/v1/dashboard`)
+
+> All analytics endpoints share the `/dashboard/` route prefix but serve 3 different pages:
+>
+> | Page | Endpoints |
+> |------|-----------|
+> | **DashboardPage** | `summary`, `enhanced` |
+> | **ReportsPage** (9 tabs) | `production-report`, `financial-report`, `tailor-performance`, `inventory-movement`, `sales-report`, `accounting-report`, `va-report`, `purchase-report`, `returns-report` |
+> | **InventoryPage** (3 tabs) | `inventory-summary`, `raw-material-summary`, `wip-summary` |
 
 ### GET `/dashboard/summary`
 **Response:**
@@ -1408,6 +1490,385 @@ When `sku` is present:
   ],
   "revenue_by_period": [
     { "date": "2026-02-07", "revenue": 3230 }
+  ]
+}
+```
+
+### GET `/dashboard/enhanced`
+**Auth:** `report_view`
+**Response:**
+```json
+{
+  "alerts": [
+    {
+      "severity": "critical|warning|info",
+      "title": "Unclaimed Batches",
+      "message": "3 batches waiting 24h+ — no tailor has scanned",
+      "count": 3
+    }
+  ],
+  "revenue_trend": [
+    {
+      "date": "2026-03-24",
+      "day_label": "Mon",
+      "amount": 12500.0,
+      "invoices": 3
+    }
+  ],
+  "gauges": {
+    "lot_load": {
+      "value": 4,
+      "max": 10,
+      "level": "normal|busy|overloaded",
+      "label": "Lot Load"
+    },
+    "tailor_util": {
+      "value": 75,
+      "max": 100,
+      "level": "low|normal|busy|overloaded",
+      "label": "Tailor Load",
+      "detail": "3/4 tailors active, 1 idle"
+    },
+    "qc_throughput": {
+      "value": 80,
+      "max": 100,
+      "level": "normal|busy|overloaded",
+      "label": "QC Flow",
+      "detail": "4 checked today, 1 in queue"
+    }
+  },
+  "invoice_split": {
+    "paid": 25000.0,
+    "pending": 12500.0,
+    "total": 37500.0
+  }
+}
+```
+
+**Alert types (6):** unclaimed batches >24h, lots piling up (3+), VA overdue >7d, overdue invoices, low stock SKUs (<10), QC bottleneck >48h. Sorted by severity (critical → warning → info).
+
+**Gauge levels:** lot_load: ≥7 overloaded, ≥4 busy, else normal. tailor_util: ≥90% overloaded, ≥60% busy, <30% low, else normal. qc_throughput: >5 submitted + 0 checked = overloaded, <50% = busy, else normal.
+
+### GET `/dashboard/sales-report`
+**Auth:** `report_view`
+**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Response:**
+```json
+{
+  "kpis": {
+    "total_orders": 25,
+    "total_revenue": 150000.0,
+    "avg_fulfillment_days": 2.3,
+    "return_rate_pct": 4.0,
+    "orders_by_status": {
+      "pending": 3,
+      "processing": 5,
+      "shipped": 10,
+      "delivered": 5,
+      "cancelled": 2
+    }
+  },
+  "customer_ranking": [
+    {
+      "customer_id": "uuid",
+      "customer_name": "Fashion Hub",
+      "order_count": 8,
+      "total_revenue": 45000.0,
+      "total_returns": 2000.0,
+      "net_revenue": 43000.0,
+      "avg_order_value": 5625.0
+    }
+  ],
+  "fulfillment": {
+    "total_orders": 25,
+    "pending": 3,
+    "processing": 5,
+    "partially_shipped": 2,
+    "shipped": 10,
+    "delivered": 5,
+    "cancelled": 2,
+    "avg_days_to_ship": 2.3,
+    "partial_ship_pct": 11.8,
+    "items_ordered": 500,
+    "items_fulfilled": 420,
+    "items_returned": 20,
+    "fulfillment_rate_pct": 84.0
+  },
+  "broker_commission": [
+    {
+      "broker_id": "uuid",
+      "broker_name": "Ramesh Broker",
+      "order_count": 5,
+      "total_order_value": 75000.0,
+      "commission_rate": 3.0,
+      "commission_earned": 2250.0
+    }
+  ]
+}
+```
+
+### GET `/dashboard/accounting-report`
+**Auth:** `report_view`
+**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Response:**
+```json
+{
+  "receivables": {
+    "total_receivable": 85000.0,
+    "overdue_amount": 25000.0,
+    "aging_buckets": { "0-30": 45000.0, "31-60": 20000.0, "61-90": 12000.0, "90+": 8000.0 },
+    "by_customer": [
+      {
+        "customer_name": "Fashion Hub",
+        "invoice_count": 3,
+        "total_amount": 25000.0,
+        "overdue_amount": 8000.0,
+        "oldest_due_date": "2026-02-15"
+      }
+    ]
+  },
+  "payables": {
+    "total_payable_suppliers": 45000.0,
+    "total_payable_va": 12000.0,
+    "by_party": [
+      {
+        "party_type": "supplier|va_party",
+        "party_name": "Ratan Fabrics",
+        "balance": 25000.0,
+        "balance_type": "cr|dr"
+      }
+    ]
+  },
+  "gst_summary": {
+    "output_tax": 15300.0,
+    "input_tax": 9800.0,
+    "net_payable": 5500.0,
+    "by_rate": [
+      {
+        "gst_percent": 18.0,
+        "taxable_value": 85000.0,
+        "cgst": 7650.0,
+        "sgst": 7650.0,
+        "total_tax": 15300.0,
+        "type": "output|input"
+      }
+    ]
+  },
+  "credit_debit_notes": [
+    {
+      "note_no": "CN-0001",
+      "type": "CN|DN",
+      "date": "2026-03-15",
+      "party_name": "Fashion Hub",
+      "linked_return": "SRN-0001",
+      "amount": 5000.0,
+      "gst": 900.0
+    }
+  ]
+}
+```
+
+### GET `/dashboard/raw-material-summary`
+**Auth:** `report_view`
+**Response:**
+```json
+{
+  "total_rolls": 120,
+  "total_weight_kg": 5400.50,
+  "total_value": 810075.0,
+  "rolls_in_stock": 80,
+  "rolls_at_va": 25,
+  "rolls_in_cutting": 10,
+  "remnant_rolls": 5,
+  "weight_in_stock": 3600.25,
+  "weight_at_va": 1125.0,
+  "by_fabric": [
+    {
+      "fabric_type": "Cotton",
+      "roll_count": 45,
+      "total_weight": 2025.0,
+      "value": 303750.0,
+      "in_stock": 30,
+      "at_va": 10
+    }
+  ],
+  "by_supplier": [
+    {
+      "supplier_name": "Ratan Fabrics",
+      "roll_count": 35,
+      "total_weight": 1575.0,
+      "value": 236250.0
+    }
+  ]
+}
+```
+
+### GET `/dashboard/wip-summary`
+**Auth:** `report_view`
+**Response:**
+```json
+{
+  "total_batches": 18,
+  "total_pieces": 3240,
+  "by_status": {
+    "created": { "count": 2, "pieces": 360 },
+    "assigned": { "count": 3, "pieces": 540 },
+    "in_progress": { "count": 5, "pieces": 900 },
+    "submitted": { "count": 4, "pieces": 720 },
+    "checked": { "count": 2, "pieces": 360 },
+    "packing": { "count": 2, "pieces": 360 }
+  },
+  "pieces_at_va": 180,
+  "batches_at_va": 1,
+  "avg_days_in_pipeline": 4.2,
+  "by_product_type": [
+    { "product_type": "FBL", "batch_count": 10, "piece_count": 1800 }
+  ],
+  "by_tailor": [
+    {
+      "tailor_name": "Amit Singh",
+      "batch_count": 4,
+      "piece_count": 720,
+      "in_progress": 2,
+      "submitted": 1
+    }
+  ]
+}
+```
+
+### GET `/dashboard/va-report`
+**Auth:** `report_view`
+**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Response:**
+```json
+{
+  "kpis": {
+    "total_va_spend": 45000.0,
+    "avg_turnaround_days": 3.5,
+    "damage_rate_pct": 2.1,
+    "active_challans": 8
+  },
+  "by_vendor": [
+    {
+      "va_party_name": "Sonu Works",
+      "roll_challans": 5,
+      "batch_challans": 3,
+      "roll_cost": 15000.0,
+      "batch_cost": 8000.0,
+      "total_weight": 225.0,
+      "total_pieces": 540,
+      "avg_cost_per_kg": 66.67,
+      "avg_cost_per_piece": 14.81,
+      "damage_count": 2,
+      "damage_weight": 1.5,
+      "damage_pieces": 5
+    }
+  ],
+  "by_va_type": [
+    {
+      "name": "Embroidery",
+      "short_code": "EMB",
+      "roll_challans": 8,
+      "batch_challans": 0,
+      "total_spend": 22000.0
+    }
+  ],
+  "turnaround": [
+    {
+      "va_party_name": "Sonu Works",
+      "va_type": "EMB",
+      "challan_type": "Roll (JC)|Batch (BC)",
+      "avg_days": 4.2,
+      "total_challans": 5
+    }
+  ]
+}
+```
+
+### GET `/dashboard/purchase-report`
+**Auth:** `report_view`
+**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Response:**
+```json
+{
+  "kpis": {
+    "total_purchased": 810000.0,
+    "rolls_received": 120,
+    "suppliers_active": 8,
+    "avg_waste_pct": 4.5
+  },
+  "by_supplier": [
+    {
+      "supplier_name": "Ratan Fabrics",
+      "roll_count": 35,
+      "total_weight": 1575.0,
+      "total_value": 236250.0
+    }
+  ],
+  "supplier_quality": [
+    {
+      "supplier_name": "Ratan Fabrics",
+      "rolls_received": 35,
+      "rolls_returned": 1,
+      "damage_claims": 2,
+      "return_value": 5000.0,
+      "quality_score": 91.4
+    }
+  ],
+  "fabric_utilization": [
+    {
+      "fabric_type": "Cotton",
+      "purchased_kg": 2025.0,
+      "used_kg": 1800.0,
+      "waste_kg": 85.0,
+      "waste_pct": 4.7
+    }
+  ]
+}
+```
+
+### GET `/dashboard/returns-report`
+**Auth:** `report_view`
+**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Response:**
+```json
+{
+  "kpis": {
+    "customer_return_rate_pct": 4.0,
+    "supplier_return_rate_pct": 1.5,
+    "recovery_rate_pct": 85.0,
+    "total_credit_notes": 15000.0,
+    "total_debit_notes": 5000.0,
+    "total_restocked": 170,
+    "total_damaged": 30
+  },
+  "by_sku": [
+    {
+      "sku_code": "BLS-101-Red-M",
+      "product_name": "Design 101 Red Medium",
+      "sold_qty": 200,
+      "returned_qty": 8,
+      "return_rate_pct": 4.0,
+      "restocked": 6,
+      "damaged": 2,
+      "top_reason": "size_mismatch"
+    }
+  ],
+  "by_customer": [
+    {
+      "customer_name": "Fashion Hub",
+      "order_count": 8,
+      "return_count": 2,
+      "return_rate_pct": 25.0,
+      "credit_amount": 8000.0
+    }
+  ],
+  "supplier_returns": [
+    {
+      "supplier_name": "Ratan Fabrics",
+      "return_count": 1,
+      "debit_value": 5000.0
+    }
   ]
 }
 ```
@@ -2068,6 +2529,55 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 ```
 **Response:** Created ledger entry object
 **Auto-entry wiring (S74):** Stock-in → supplier debit, Invoice → customer debit, JC/BC receive → VA party debit
+
+### POST `/ledger/opening-balance` — NEW S96
+**Auth:** `supplier_manage`
+**Query:** `force` (boolean, default false) — override existing opening balance
+**Request:**
+```json
+{
+  "party_type": "supplier",
+  "party_id": "uuid",
+  "amount": 50000.00,
+  "balance_type": "cr",
+  "entry_date": "2026-04-01",
+  "notes": "Carry-forward from Tally"
+}
+```
+**Response:**
+```json
+{ "created": true, "party_name": "Krishna Textiles", "message": "Opening balance set for Krishna Textiles: ₹50,000.00 CR" }
+```
+**Notes:** `balance_type`: `cr` = we owe them (supplier/VA default), `dr` = they owe us (customer default). `entry_date` defaults to FY start date if omitted. Without `force=true`, returns `existing: true` if opening already exists.
+
+### POST `/ledger/opening-balance/bulk` — NEW S96
+**Auth:** `supplier_manage`
+**Request:**
+```json
+{
+  "entries": [
+    { "party_type": "supplier", "party_id": "uuid", "amount": 50000, "balance_type": "cr" },
+    { "party_type": "customer", "party_id": "uuid", "amount": 25000, "balance_type": "dr" }
+  ]
+}
+```
+**Response:**
+```json
+{ "created": 12, "skipped": [], "total_debit": 75000.0, "total_credit": 125000.0, "message": "12 opening balances saved (₹75,000 Dr, ₹1,25,000 Cr)" }
+```
+**Notes:** Bulk always overwrites existing opening entries (force=true). Single transaction.
+
+### GET `/ledger/opening-balance/status` — NEW S96
+**Auth:** `supplier_manage`
+**Response:**
+```json
+{
+  "supplier": { "total": 15, "with_opening": 12, "without_opening": 3 },
+  "customer": { "total": 20, "with_opening": 18, "without_opening": 2 },
+  "va_party": { "total": 8, "with_opening": 8, "without_opening": 0 },
+  "broker": { "total": 3, "with_opening": 0, "without_opening": 3 }
+}
+```
 
 ---
 

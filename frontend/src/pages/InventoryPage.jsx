@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getInventory, getEvents, adjust, reconcile } from '../api/inventory'
+import { getInventory, getEvents, adjust, reconcile, createOpeningStock, getVerifications, createVerification, getVerification, updateVerificationCounts, completeVerification, approveVerification } from '../api/inventory'
+import { getSKUs } from '../api/skus'
 import { getInventorySummary, getRawMaterialSummary, getWIPSummary } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import DataTable from '../components/common/DataTable'
@@ -407,6 +408,22 @@ export default function InventoryPage() {
   const [adjusting, setAdjusting] = useState(false)
   const [adjustError, setAdjustError] = useState(null)
 
+  // Opening stock modal
+  const [openingOpen, setOpeningOpen] = useState(false)
+  const [openingRows, setOpeningRows] = useState([{ sku_id: '', quantity: '', unit_cost: '' }])
+  const [openingSaving, setOpeningSaving] = useState(false)
+  const [openingError, setOpeningError] = useState(null)
+  const [allSkus, setAllSkus] = useState([])
+
+  // Verification state
+  const [verifyOpen, setVerifyOpen] = useState(false)
+  const [verifyList, setVerifyList] = useState([])
+  const [verifyDetail, setVerifyDetail] = useState(null)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [verifySaving, setVerifySaving] = useState(false)
+  const [verifyError, setVerifyError] = useState(null)
+  const [verifyCountEdits, setVerifyCountEdits] = useState({}) // {item_id: physical_qty}
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -483,6 +500,140 @@ export default function InventoryPage() {
     }
   }
 
+  const handleOpenOpening = async () => {
+    setOpeningError(null)
+    setOpeningOpen(true)
+    if (allSkus.length === 0) {
+      try {
+        const res = await getSKUs({ is_active: true, page_size: 500 })
+        setAllSkus(res.data.data || [])
+      } catch { /* ignore */ }
+    }
+  }
+
+  const handleOpeningRowChange = (idx, field, value) => {
+    setOpeningRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  }
+
+  const handleAddOpeningRow = () => {
+    setOpeningRows(prev => [...prev, { sku_id: '', quantity: '', unit_cost: '' }])
+  }
+
+  const handleRemoveOpeningRow = (idx) => {
+    setOpeningRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+  }
+
+  const handleSubmitOpening = async () => {
+    const validRows = openingRows.filter(r => r.sku_id && r.quantity)
+    if (validRows.length === 0) { setOpeningError('Add at least one SKU with quantity'); return }
+    setOpeningSaving(true)
+    setOpeningError(null)
+    try {
+      const res = await createOpeningStock({
+        items: validRows.map(r => ({
+          sku_id: r.sku_id,
+          quantity: parseInt(r.quantity),
+          unit_cost: r.unit_cost ? parseFloat(r.unit_cost) : null,
+        })),
+      })
+      setOpeningOpen(false)
+      setOpeningRows([{ sku_id: '', quantity: '', unit_cost: '' }])
+      setSuccessMsg(res.data.message)
+      fetchData()
+      setTimeout(() => setSuccessMsg(null), 4000)
+    } catch (err) {
+      setOpeningError(err.response?.data?.detail || 'Opening stock entry failed')
+    } finally {
+      setOpeningSaving(false)
+    }
+  }
+
+  // ── Verification handlers ──────────────────────────────
+  const handleOpenVerify = async () => {
+    setVerifyOpen(true)
+    setVerifyDetail(null)
+    setVerifyError(null)
+    setVerifyLoading(true)
+    try {
+      const res = await getVerifications()
+      setVerifyList(res.data.data || [])
+    } catch { setVerifyList([]) }
+    finally { setVerifyLoading(false) }
+  }
+
+  const handleCreateVerify = async (type) => {
+    setVerifyLoading(true)
+    setVerifyError(null)
+    try {
+      const res = await createVerification({ verification_type: type })
+      setVerifyDetail(res.data.data)
+      setVerifyCountEdits({})
+      // Refresh list
+      const listRes = await getVerifications()
+      setVerifyList(listRes.data.data || [])
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Failed to create verification')
+    } finally { setVerifyLoading(false) }
+  }
+
+  const handleOpenVerifyDetail = async (id) => {
+    setVerifyLoading(true)
+    setVerifyError(null)
+    try {
+      const res = await getVerification(id)
+      setVerifyDetail(res.data.data)
+      setVerifyCountEdits({})
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Failed to load verification')
+    } finally { setVerifyLoading(false) }
+  }
+
+  const handleSaveCounts = async () => {
+    if (!verifyDetail) return
+    const counts = Object.entries(verifyCountEdits)
+      .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+      .map(([id, qty]) => ({ item_id: id, physical_qty: parseFloat(qty) }))
+    if (counts.length === 0) return
+    setVerifySaving(true)
+    setVerifyError(null)
+    try {
+      const res = await updateVerificationCounts(verifyDetail.id, { counts })
+      setVerifyDetail(res.data.data)
+      setVerifyCountEdits({})
+      setSuccessMsg(`${counts.length} count(s) saved`)
+      setTimeout(() => setSuccessMsg(null), 3000)
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Failed to save counts')
+    } finally { setVerifySaving(false) }
+  }
+
+  const handleCompleteVerify = async () => {
+    if (!verifyDetail) return
+    setVerifySaving(true)
+    try {
+      const res = await completeVerification(verifyDetail.id)
+      setVerifyDetail(res.data.data)
+      setSuccessMsg('Verification completed — ready for approval')
+      setTimeout(() => setSuccessMsg(null), 3000)
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Failed to complete')
+    } finally { setVerifySaving(false) }
+  }
+
+  const handleApproveVerify = async () => {
+    if (!verifyDetail) return
+    setVerifySaving(true)
+    try {
+      const res = await approveVerification(verifyDetail.id)
+      setVerifyDetail(res.data.data)
+      setSuccessMsg(`Verification approved — ${res.data.data.adjustments_created || 0} adjustment(s) created`)
+      fetchData() // refresh inventory
+      setTimeout(() => setSuccessMsg(null), 4000)
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Failed to approve')
+    } finally { setVerifySaving(false) }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -492,12 +643,28 @@ export default function InventoryPage() {
           <p className="mt-1 typo-caption">Real-time stock levels, health tracking, and adjustments</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={handleOpenVerify} className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 typo-btn-sm text-blue-700 hover:bg-blue-100 transition-colors">
+            <span className="flex items-center gap-1.5">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              Physical Verification
+            </span>
+          </button>
           <button onClick={handleReconcile} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50 transition-colors">
             <span className="flex items-center gap-1.5">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Reconcile
+            </span>
+          </button>
+          <button onClick={handleOpenOpening} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
+            <span className="flex items-center gap-1.5">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Opening Stock
             </span>
           </button>
           <button onClick={() => { setAdjustError(null); setAdjustOpen(true) }} className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 transition-colors">
@@ -698,6 +865,294 @@ export default function InventoryPage() {
               placeholder="Reason for this adjustment..." />
           </div>
         </div>
+      </Modal>
+
+      {/* Opening Stock Modal */}
+      <Modal
+        open={openingOpen}
+        onClose={() => setOpeningOpen(false)}
+        title=""
+        extraWide
+        actions={
+          <>
+            <button onClick={() => setOpeningOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleSubmitOpening} disabled={openingSaving}
+              className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+              {openingSaving ? 'Saving...' : `Add ${openingRows.filter(r => r.sku_id && r.quantity).length} SKU Opening Stock`}
+            </button>
+          </>
+        }
+      >
+        {/* Emerald gradient header */}
+        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4">
+          <h2 className="text-lg font-bold text-white">Opening Stock Entry</h2>
+          <p className="text-sm text-amber-100 mt-0.5">Enter existing finished goods inventory for Day 1 setup</p>
+        </div>
+
+        {openingError && <div className="mb-4"><ErrorAlert message={openingError} onDismiss={() => setOpeningError(null)} /></div>}
+
+        {/* Column headers */}
+        <div className="grid grid-cols-[1fr_100px_120px_40px] gap-3 mb-2 px-1">
+          <span className="typo-label">SKU</span>
+          <span className="typo-label">Quantity</span>
+          <span className="typo-label">Unit Cost</span>
+          <span />
+        </div>
+
+        {/* Rows */}
+        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          {openingRows.map((row, idx) => (
+            <div key={idx} className="grid grid-cols-[1fr_100px_120px_40px] gap-3 items-center">
+              <FilterSelect
+                full
+                searchable
+                value={row.sku_id}
+                onChange={(v) => handleOpeningRowChange(idx, 'sku_id', v)}
+                options={[{ value: '', label: 'Select SKU...' }, ...allSkus.map(s => ({
+                  value: s.id, label: `${s.sku_code} — ${s.product_name}`,
+                }))]}
+                autoFocus={idx === 0}
+              />
+              <input
+                type="number"
+                min="1"
+                value={row.quantity}
+                onChange={(e) => handleOpeningRowChange(idx, 'quantity', e.target.value)}
+                className="typo-input"
+                placeholder="Qty"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={row.unit_cost}
+                onChange={(e) => handleOpeningRowChange(idx, 'unit_cost', e.target.value)}
+                className="typo-input"
+                placeholder="Cost/pc"
+              />
+              <button
+                onClick={() => handleRemoveOpeningRow(idx)}
+                className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Remove row"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add row button */}
+        <button
+          onClick={handleAddOpeningRow}
+          className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 typo-btn-sm text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors w-full justify-center"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Another SKU
+        </button>
+
+        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            <strong>Opening Stock</strong> is for entering existing inventory on Day 1. Each SKU can only have one opening stock entry.
+            Unit cost is optional but recommended for accurate closing stock valuation.
+          </p>
+        </div>
+      </Modal>
+
+      {/* Physical Verification Modal */}
+      <Modal
+        open={verifyOpen}
+        onClose={() => { setVerifyOpen(false); setVerifyDetail(null) }}
+        title=""
+        extraWide
+        actions={
+          verifyDetail ? (
+            <>
+              <button onClick={() => setVerifyDetail(null)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Back to List</button>
+              {verifyDetail.status === 'draft' || verifyDetail.status === 'in_progress' ? (
+                <>
+                  <button onClick={handleSaveCounts} disabled={verifySaving || Object.keys(verifyCountEdits).length === 0}
+                    className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                    {verifySaving ? 'Saving...' : 'Save Counts'}
+                  </button>
+                  <button onClick={handleCompleteVerify} disabled={verifySaving}
+                    className="rounded-lg bg-blue-600 px-4 py-2 typo-btn-sm text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    Complete
+                  </button>
+                </>
+              ) : verifyDetail.status === 'completed' ? (
+                <button onClick={handleApproveVerify} disabled={verifySaving}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                  {verifySaving ? 'Approving...' : 'Approve & Adjust Stock'}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <button onClick={() => setVerifyOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Close</button>
+          )
+        }
+      >
+        {/* Header */}
+        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+          <h2 className="text-lg font-bold text-white">Physical Stock Verification</h2>
+          <p className="text-sm text-blue-100 mt-0.5">Count physical stock, compare with system records, and adjust mismatches</p>
+        </div>
+
+        {verifyError && <div className="mb-4"><ErrorAlert message={verifyError} onDismiss={() => setVerifyError(null)} /></div>}
+
+        {verifyLoading ? (
+          <div className="flex justify-center py-12"><LoadingSpinner size="lg" text="Loading..." /></div>
+        ) : verifyDetail ? (
+          /* ── Detail View ──────────────────────────────── */
+          <div className="space-y-4">
+            {/* Info strip */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="font-bold text-lg">{verifyDetail.verification_no}</span>
+              <StatusBadge status={verifyDetail.status} />
+              <span className="typo-caption">{verifyDetail.verification_type === 'finished_goods' ? 'Finished Goods' : 'Raw Material'}</span>
+              <span className="typo-caption">{new Date(verifyDetail.verification_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            </div>
+
+            {/* Summary cards */}
+            {verifyDetail.summary && (
+              <div className="grid gap-3 sm:grid-cols-5">
+                <div className="rounded-lg bg-gray-50 p-3 border border-gray-100 text-center">
+                  <p className="typo-data-label">Total Items</p>
+                  <p className="typo-kpi-sm mt-1">{verifyDetail.summary.total_items}</p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-100 text-center">
+                  <p className="typo-data-label">Counted</p>
+                  <p className="typo-kpi-sm text-emerald-700 mt-1">{verifyDetail.summary.counted}</p>
+                </div>
+                <div className="rounded-lg bg-green-50 p-3 border border-green-100 text-center">
+                  <p className="typo-data-label">Match</p>
+                  <p className="typo-kpi-sm text-green-700 mt-1">{verifyDetail.summary.matches}</p>
+                </div>
+                <div className="rounded-lg bg-red-50 p-3 border border-red-100 text-center">
+                  <p className="typo-data-label">Shortage</p>
+                  <p className="typo-kpi-sm text-red-700 mt-1">{verifyDetail.summary.shortages}</p>
+                </div>
+                <div className="rounded-lg bg-blue-50 p-3 border border-blue-100 text-center">
+                  <p className="typo-data-label">Excess</p>
+                  <p className="typo-kpi-sm text-blue-700 mt-1">{verifyDetail.summary.excesses}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Items table */}
+            <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr className="text-left text-gray-500">
+                    <th className="px-4 py-3 font-medium">{verifyDetail.verification_type === 'finished_goods' ? 'SKU Code' : 'Roll Code'}</th>
+                    <th className="px-4 py-3 font-medium text-right">Book {verifyDetail.verification_type === 'raw_material' ? 'Weight' : 'Qty'}</th>
+                    <th className="px-4 py-3 font-medium text-right">Physical {verifyDetail.verification_type === 'raw_material' ? 'Weight' : 'Qty'}</th>
+                    <th className="px-4 py-3 font-medium text-right">Variance</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {verifyDetail.items.map((item) => {
+                    const editable = verifyDetail.status === 'draft' || verifyDetail.status === 'in_progress'
+                    const editVal = verifyCountEdits[item.id]
+                    const displayPhysical = editVal !== undefined ? editVal : (item.physical_qty !== null ? item.physical_qty : '')
+                    return (
+                      <tr key={item.id} className={`border-t hover:bg-gray-50 ${item.adjustment_type === 'shortage' ? 'bg-red-50/30' : item.adjustment_type === 'excess' ? 'bg-blue-50/30' : ''}`}>
+                        <td className="px-4 py-2.5 font-semibold">{item.item_label}</td>
+                        <td className="px-4 py-2.5 text-right">{item.book_qty}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          {editable ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step={verifyDetail.verification_type === 'raw_material' ? '0.001' : '1'}
+                              value={displayPhysical}
+                              onChange={(e) => setVerifyCountEdits(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              className="typo-input-sm w-24 text-right ml-auto"
+                              placeholder="Count"
+                            />
+                          ) : (
+                            <span>{item.physical_qty !== null ? item.physical_qty : '—'}</span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${item.variance < 0 ? 'text-red-600' : item.variance > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                          {item.variance !== null ? (item.variance > 0 ? `+${item.variance}` : item.variance) : '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {item.adjustment_type === 'shortage' && <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Shortage</span>}
+                          {item.adjustment_type === 'excess' && <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">Excess</span>}
+                          {item.adjustment_type === 'match' && <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Match</span>}
+                          {!item.adjustment_type && <span className="text-gray-400 text-xs">Uncounted</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          /* ── List View + Create ───────────────────────── */
+          <div className="space-y-6">
+            {/* Create buttons */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <button
+                onClick={() => handleCreateVerify('finished_goods')}
+                className="rounded-xl border-2 border-dashed border-emerald-300 p-6 text-center hover:border-emerald-500 hover:bg-emerald-50/50 transition-all"
+              >
+                <svg className="mx-auto h-8 w-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                <p className="mt-2 font-semibold text-gray-900">Finished Goods Count</p>
+                <p className="text-sm text-gray-500 mt-1">Count SKU pieces against system stock</p>
+              </button>
+              <button
+                onClick={() => handleCreateVerify('raw_material')}
+                className="rounded-xl border-2 border-dashed border-blue-300 p-6 text-center hover:border-blue-500 hover:bg-blue-50/50 transition-all"
+              >
+                <svg className="mx-auto h-8 w-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <p className="mt-2 font-semibold text-gray-900">Raw Material Count</p>
+                <p className="text-sm text-gray-500 mt-1">Weigh rolls against system records</p>
+              </button>
+            </div>
+
+            {/* History */}
+            {verifyList.length > 0 && (
+              <>
+                <h3 className="typo-section-title">Verification History</h3>
+                <div className="space-y-2">
+                  {verifyList.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => handleOpenVerifyDetail(v.id)}
+                      className="w-full rounded-lg border border-gray-200 p-4 text-left hover:bg-gray-50 transition-colors flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold">{v.verification_no}</span>
+                        <StatusBadge status={v.status} />
+                        <span className="typo-caption">{v.verification_type === 'finished_goods' ? 'Finished Goods' : 'Raw Material'}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-500">{v.total_items} items</span>
+                        {v.mismatches > 0 && <span className="text-sm text-red-600 font-medium">{v.mismatches} mismatches</span>}
+                        <span className="typo-caption">{new Date(v.verification_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {verifyList.length === 0 && (
+              <p className="typo-empty py-4 text-center">No verifications yet. Create your first count above.</p>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   )

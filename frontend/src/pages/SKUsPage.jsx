@@ -644,6 +644,7 @@ export default function SKUsPage() {
   // ── Main List View ──
   const TABS = [
     { key: 'skus', label: 'All SKUs' },
+    { key: 'cost_breakdown', label: 'Cost Breakdown' },
     { key: 'purchases', label: 'Purchase Invoices' },
   ]
 
@@ -709,6 +710,80 @@ export default function SKUsPage() {
             <Pagination page={page} pages={pages} total={total} onChange={setPage} />
           </div>
         </>
+      )}
+
+      {activeTab === 'cost_breakdown' && (
+        <div className="mt-4">
+          <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+            {/* Info header */}
+            <div className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600">
+              <h3 className="text-white font-bold">SKU Cost Breakdown</h3>
+              <p className="text-emerald-100 text-xs mt-0.5">Cost per piece = Material + Roll VA + Stitching + Batch VA + Other</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-gray-500 border-b">
+                    <th className="px-4 py-3 font-medium">SKU Code</th>
+                    <th className="px-4 py-3 font-medium">Type</th>
+                    <th className="px-4 py-3 font-medium text-right">Material</th>
+                    <th className="px-4 py-3 font-medium text-right">Roll VA</th>
+                    <th className="px-4 py-3 font-medium text-right">Stitching</th>
+                    <th className="px-4 py-3 font-medium text-right">Batch VA</th>
+                    <th className="px-4 py-3 font-medium text-right">Other</th>
+                    <th className="px-4 py-3 font-medium text-right">Total Cost/pc</th>
+                    <th className="px-4 py-3 font-medium text-right">Sale Rate</th>
+                    <th className="px-4 py-3 font-medium text-right">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((row) => {
+                    const s = row
+                    const bp = s.base_price || 0
+                    const stitch = s.stitching_cost || 0
+                    const other = s.other_cost || 0
+                    const sr = s.sale_rate || 0
+                    // Material approximation: base_price - stitching - other (when no event breakdown)
+                    const material = bp > 0 ? Math.max(0, bp - stitch - other) : 0
+                    const margin = sr > 0 && bp > 0 ? Math.round(((sr - bp) / sr) * 100) : null
+                    const fmtR = (v) => v > 0 ? `\u20B9${v.toFixed(2)}` : '\u20B90'
+                    const zeroStyle = 'text-gray-300'
+                    return (
+                      <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-2.5 font-semibold text-emerald-600">{s.sku_code}</td>
+                        <td className="px-4 py-2.5">{s.product_type}</td>
+                        <td className={`px-4 py-2.5 text-right ${material === 0 ? zeroStyle : ''}`}>{fmtR(material)}</td>
+                        <td className={`px-4 py-2.5 text-right ${zeroStyle}`}>{fmtR(0)}</td>
+                        <td className={`px-4 py-2.5 text-right ${stitch === 0 ? zeroStyle : ''}`}>{fmtR(stitch)}</td>
+                        <td className={`px-4 py-2.5 text-right ${zeroStyle}`}>{fmtR(0)}</td>
+                        <td className={`px-4 py-2.5 text-right ${other === 0 ? zeroStyle : ''}`}>{fmtR(other)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold">{bp > 0 ? fmtR(bp) : <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Not set</span>}</td>
+                        <td className={`px-4 py-2.5 text-right ${sr === 0 ? zeroStyle : ''}`}>{fmtR(sr)}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          {margin !== null
+                            ? <span className={`font-medium ${margin >= 30 ? 'text-emerald-600' : margin >= 15 ? 'text-amber-600' : 'text-red-600'}`}>{margin}%</span>
+                            : <span className="text-gray-300">—</span>
+                          }
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {items.length === 0 && <p className="typo-empty py-8 text-center">No SKUs found.</p>}
+          </div>
+          <Pagination page={page} pages={pages} total={total} onChange={setPage} />
+
+          {/* Formula note */}
+          <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+            <p className="text-xs font-semibold text-gray-600 mb-1">Cost Formula (per piece)</p>
+            <p className="text-xs text-gray-500">
+              <strong>Total Cost</strong> = Material (fabric weight &times; rate / pieces) + Roll VA (embroidery, dying) + Stitching (tailor charges) + Batch VA (handstitch, buttons) + Other (thread, lining, packing, misc)
+            </p>
+            <p className="text-xs text-gray-400 mt-1">Material &amp; VA costs auto-computed at pack time from lot&rarr;roll chain and challan records. Stitching &amp; Other are set per SKU — edit on SKU detail to update.</p>
+          </div>
+        </div>
       )}
 
       {activeTab === 'purchases' && (

@@ -18,8 +18,9 @@ from app.models.batch_assignment import BatchAssignment
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.batch_roll_consumption import BatchRollConsumption
-from app.models.lot import Lot
-from app.models.roll import Roll
+from app.models.lot import Lot, LotRoll
+from app.models.roll import Roll, RollProcessing
+from app.models.sku import SKU
 from app.schemas.batch import (
     BatchCreate,
     BatchAssign,
@@ -42,6 +43,80 @@ from app.core.exceptions import (
 class BatchService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # --- Cost Computation ---
+
+    async def _compute_cost_breakdown(self, batch: Batch) -> dict:
+        """Compute 5-component cost per piece for a batch at pack time.
+
+        Components:
+        1. material_cost   — fabric weight × rate from lot→roll chain
+        2. roll_va_cost    — pre-cut VA (embroidery, dying on fabric)
+        3. stitching_cost  — from SKU.stitching_cost (tailor charges)
+        4. batch_va_cost   — post-stitch VA (handstitch, buttons on garment)
+        5. other_cost      — from SKU.other_cost (thread, lining, packing, misc)
+        """
+        lot = batch.lot
+        piece_count = batch.piece_count or 1
+
+        # 1. Material cost: SUM(lot_roll.weight_used × roll.cost_per_unit) / lot.total_pieces
+        material_per_piece = 0.0
+        if lot:
+            lot_total_pieces = lot.total_pieces or 1
+            mat_rows = (await self.db.execute(
+                select(
+                    func.coalesce(func.sum(LotRoll.weight_used * Roll.cost_per_unit), 0).label("total")
+                )
+                .join(Roll, Roll.id == LotRoll.roll_id)
+                .where(LotRoll.lot_id == lot.id)
+            )).scalar() or 0
+            material_per_piece = float(mat_rows) / lot_total_pieces
+
+        # 2. Roll VA cost: SUM(RollProcessing.processing_cost for lot rolls, status=received) / lot.total_pieces
+        roll_va_per_piece = 0.0
+        if lot:
+            lot_roll_ids = (await self.db.execute(
+                select(LotRoll.roll_id).where(LotRoll.lot_id == lot.id)
+            )).scalars().all()
+            if lot_roll_ids:
+                roll_va_total = (await self.db.execute(
+                    select(func.coalesce(func.sum(RollProcessing.processing_cost), 0))
+                    .where(RollProcessing.roll_id.in_(lot_roll_ids), RollProcessing.status == "received")
+                )).scalar() or 0
+                roll_va_per_piece = float(roll_va_total) / (lot.total_pieces or 1)
+
+        # 3. Stitching cost: from SKU.stitching_cost (filled by user per SKU type)
+        stitching_per_piece = 0.0
+        # Will be set per-SKU when we have the SKU reference
+
+        # 4. Batch VA cost: SUM(BatchProcessing.cost for this batch, status=received) / piece_count
+        batch_va_total = (await self.db.execute(
+            select(func.coalesce(func.sum(BatchProcessing.cost), 0))
+            .where(BatchProcessing.batch_id == batch.id, BatchProcessing.status == "received")
+        )).scalar() or 0
+        batch_va_per_piece = float(batch_va_total) / piece_count
+
+        # 5. Other cost: from SKU.other_cost (filled by user per SKU type)
+        other_per_piece = 0.0
+        # Will be set per-SKU when we have the SKU reference
+
+        return {
+            "material_cost": round(material_per_piece, 2),
+            "roll_va_cost": round(roll_va_per_piece, 2),
+            "stitching_cost": round(stitching_per_piece, 2),
+            "batch_va_cost": round(batch_va_per_piece, 2),
+            "other_cost": round(other_per_piece, 2),
+        }
+
+    def _finalize_cost_with_sku(self, cost: dict, sku) -> dict:
+        """Add SKU-level costs (stitching + other) to the breakdown."""
+        cost["stitching_cost"] = round(float(sku.stitching_cost or 0), 2)
+        cost["other_cost"] = round(float(sku.other_cost or 0), 2)
+        cost["total_cost_per_piece"] = round(
+            cost["material_cost"] + cost["roll_va_cost"] + cost["stitching_cost"]
+            + cost["batch_va_cost"] + cost["other_cost"], 2
+        )
+        return cost
 
     # --- Helpers ---
 
@@ -344,6 +419,9 @@ class BatchService:
 
         lot = batch.lot
 
+        # Compute cost breakdown ONCE for this batch (shared across all per-color SKUs)
+        cost_breakdown = await self._compute_cost_breakdown(batch)
+
         if batch.color_qc and lot:
             # Per-color SKU generation
             from app.services.sku_service import SKUService
@@ -374,6 +452,14 @@ class BatchService:
                 sku = await sku_svc.find_or_create(
                     sku_code, product_type, product_name, color, batch.size or "Free"
                 )
+
+                # Finalize cost with SKU-level stitching + other
+                sku_cost = self._finalize_cost_with_sku({**cost_breakdown}, sku)
+
+                # Set base_price on SKU if not already set
+                if sku.base_price is None and sku_cost["total_cost_per_piece"] > 0:
+                    sku.base_price = sku_cost["total_cost_per_piece"]
+
                 await inv_svc.create_event(
                     event_type="ready_stock_in",
                     item_type="finished_goods",
@@ -387,6 +473,8 @@ class BatchService:
                         "color": color,
                         "pack_reference": req.pack_reference or "N/A",
                         "va_codes": va_codes if va_codes else None,
+                        "cost_breakdown": sku_cost,
+                        "unit_cost": sku_cost["total_cost_per_piece"],
                     },
                 )
 
@@ -397,6 +485,14 @@ class BatchService:
             from app.services.inventory_service import InventoryService
 
             inv_svc = InventoryService(self.db)
+
+            # Get SKU for cost fields
+            sku = (await self.db.execute(select(SKU).where(SKU.id == batch.sku_id))).scalar_one_or_none()
+            sku_cost = self._finalize_cost_with_sku({**cost_breakdown}, sku) if sku else cost_breakdown
+
+            if sku and sku.base_price is None and sku_cost.get("total_cost_per_piece", 0) > 0:
+                sku.base_price = sku_cost["total_cost_per_piece"]
+
             await inv_svc.create_event(
                 event_type="ready_stock_in",
                 item_type="finished_goods",
@@ -408,6 +504,8 @@ class BatchService:
                 metadata={
                     "batch_code": batch.batch_code,
                     "pack_reference": req.pack_reference or "N/A",
+                    "cost_breakdown": sku_cost,
+                    "unit_cost": sku_cost.get("total_cost_per_piece", 0),
                 },
             )
             await self.db.flush()

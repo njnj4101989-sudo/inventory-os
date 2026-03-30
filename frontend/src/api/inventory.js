@@ -60,3 +60,32 @@ export async function reconcile() {
   }
   return client.post('/inventory/reconcile')
 }
+
+export async function createOpeningStock(data) {
+  return client.post('/inventory/opening-stock', data)
+}
+
+// ── Stock Verification ────────────────────────────────
+export async function getVerifications(params = {}) {
+  return client.get('/inventory/verifications', { params })
+}
+
+export async function createVerification(data) {
+  return client.post('/inventory/verifications', data)
+}
+
+export async function getVerification(id) {
+  return client.get(`/inventory/verifications/${id}`)
+}
+
+export async function updateVerificationCounts(id, data) {
+  return client.post(`/inventory/verifications/${id}/counts`, data)
+}
+
+export async function completeVerification(id) {
+  return client.post(`/inventory/verifications/${id}/complete`)
+}
+
+export async function approveVerification(id) {
+  return client.post(`/inventory/verifications/${id}/approve`)
+}

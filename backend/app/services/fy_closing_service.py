@@ -12,8 +12,16 @@ from app.models.ledger_entry import LedgerEntry
 from app.models.supplier import Supplier
 from app.models.customer import Customer
 from app.models.va_party import VAParty
+from app.models.broker import Broker
 from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
+from app.models.roll import Roll
+from app.models.invoice import Invoice
+from app.models.inventory_state import InventoryState
+from app.models.inventory_event import InventoryEvent
+from app.models.sku import SKU
+from app.models.lot import Lot, LotRoll
+from app.models.batch import Batch
 from app.core.exceptions import BusinessRuleViolationError, NotFoundError, ValidationError
 
 
@@ -49,6 +57,34 @@ class FYClosingService:
         bc_count = open_bc.scalar() or 0
         if bc_count > 0:
             warnings.append(f"{bc_count} batch challan(s) still open (sent/partially received)")
+
+        # Rolls still in stock (informational — will carry over)
+        active_rolls = (await self.db.execute(
+            select(func.count()).select_from(Roll)
+            .where(Roll.status.in_(["in_stock", "sent_for_processing", "remnant", "in_cutting"]))
+        )).scalar() or 0
+        if active_rolls > 0:
+            warnings.append(f"{active_rolls} roll(s) in active status (will carry over to new FY)")
+
+        # Unpaid invoices
+        unpaid_inv = (await self.db.execute(
+            select(
+                func.count().label("cnt"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("total"),
+            ).where(Invoice.status == "issued")
+        )).one()
+        if unpaid_inv.cnt > 0:
+            warnings.append(f"{unpaid_inv.cnt} unpaid invoice(s) totaling \u20B9{float(unpaid_inv.total):,.0f} (receivables carry over)")
+
+        # SKU stock (informational)
+        sku_stock = (await self.db.execute(
+            select(
+                func.count().label("skus"),
+                func.coalesce(func.sum(InventoryState.available_qty), 0).label("pieces"),
+            ).where(InventoryState.available_qty > 0)
+        )).one()
+        if sku_stock.skus > 0:
+            warnings.append(f"{int(sku_stock.pieces)} pieces across {sku_stock.skus} SKU(s) in finished goods stock (perpetual — no action needed)")
 
         # Compute party balances for preview
         balances = await self._compute_all_balances()
@@ -98,12 +134,17 @@ class FYClosingService:
         # Snapshot balances (read-only — no writes yet)
         balances = await self._compute_all_balances()
 
+        # Snapshot stock values AS OF FY end date (not "now" — handles late close)
+        stock_snapshot = await self._compute_stock_snapshot(as_of_date=old_fy.end_date)
+
         closing_snapshot = {
             "closed_at": datetime.now(timezone.utc).isoformat(),
             "supplier_balances": balances["suppliers"],
             "customer_balances": balances["customers"],
             "va_party_balances": balances["va_parties"],
+            "broker_balances": balances["brokers"],
             "summary": balances["summary"],
+            "stock_valuation": stock_snapshot,
         }
 
         # === MUTATION PHASE (all in one transaction, commits at route level) ===
@@ -137,6 +178,104 @@ class FYClosingService:
             "snapshot": closing_snapshot,
         }
 
+    async def _compute_stock_snapshot(self, as_of_date: date) -> dict:
+        """Compute closing stock values AS OF a specific date.
+
+        Finished goods: event replay up to as_of_date (accurate even if close is late).
+        Raw materials: rolls created on/before as_of_date with remaining stock.
+        WIP: lots/batches created on/before as_of_date.
+        """
+        from collections import defaultdict
+        from datetime import datetime, time
+
+        cutoff = datetime.combine(as_of_date, time(23, 59, 59))
+
+        # 1. Raw materials: rolls created on/before cutoff with remaining stock
+        active_statuses = ("in_stock", "sent_for_processing", "in_cutting", "remnant")
+        rm_rows = (await self.db.execute(
+            select(
+                Roll.status,
+                func.count().label("rolls"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+            )
+            .where(Roll.status.in_(active_statuses), Roll.remaining_weight > 0, Roll.created_at <= cutoff)
+            .group_by(Roll.status)
+        )).all()
+
+        rm_total = sum(float(r.value) for r in rm_rows)
+        rm_by_status = {r.status: {"rolls": r.rolls, "weight": round(float(r.weight), 2), "value": round(float(r.value), 2)} for r in rm_rows}
+
+        # 2. WIP: lots/batches created on/before cutoff
+        lot_wip = (await self.db.execute(
+            select(func.coalesce(func.sum(LotRoll.weight_used * Roll.cost_per_unit), 0))
+            .join(Roll, Roll.id == LotRoll.roll_id)
+            .join(Lot, Lot.id == LotRoll.lot_id)
+            .where(Lot.status.in_(("open", "cutting")), Lot.created_at <= cutoff)
+        )).scalar() or 0
+
+        batch_wip = (await self.db.execute(
+            select(func.count().label("cnt"), func.coalesce(func.sum(Batch.piece_count), 0).label("pcs"))
+            .where(Batch.status != "packed", Batch.created_at <= cutoff)
+        )).one()
+
+        wip_total = round(float(lot_wip), 2)
+
+        # 3. Finished goods: REPLAY inventory events up to cutoff date
+        # This is the key — gives accurate stock as of March 31 even if close happens April 5
+        event_rows = (await self.db.execute(
+            select(
+                InventoryEvent.sku_id,
+                InventoryEvent.event_type,
+                func.sum(InventoryEvent.quantity).label("total"),
+            )
+            .where(InventoryEvent.performed_at <= cutoff)
+            .group_by(InventoryEvent.sku_id, InventoryEvent.event_type)
+        )).all()
+
+        # Compute per-SKU stock from events
+        sku_totals = defaultdict(int)
+        for row in event_rows:
+            if not row.sku_id:
+                continue
+            qty = int(row.total or 0)
+            if row.event_type in ("stock_in", "return", "ready_stock_in", "opening_stock", "adjustment"):
+                sku_totals[row.sku_id] += qty
+            elif row.event_type in ("stock_out", "loss"):
+                sku_totals[row.sku_id] -= qty
+
+        # Get SKU details for those with positive stock
+        sku_ids_with_stock = [sid for sid, qty in sku_totals.items() if qty > 0]
+        fg_total = 0.0
+        fg_items = []
+        fg_total_pieces = 0
+
+        if sku_ids_with_stock:
+            sku_details = (await self.db.execute(
+                select(SKU.id, SKU.sku_code, SKU.base_price)
+                .where(SKU.id.in_(sku_ids_with_stock))
+            )).all()
+
+            for s in sku_details:
+                qty = max(0, sku_totals[s.id])
+                if qty <= 0:
+                    continue
+                price = float(s.base_price) if s.base_price else 0
+                value = round(price * qty, 2)
+                fg_total += value
+                fg_total_pieces += qty
+                fg_items.append({"sku_code": s.sku_code, "qty": qty, "rate": price, "value": value})
+
+        grand_total = round(rm_total + wip_total + fg_total, 2)
+
+        return {
+            "snapshot_date": str(as_of_date),
+            "raw_materials": {"total_value": round(rm_total, 2), "by_status": rm_by_status},
+            "work_in_progress": {"total_value": wip_total, "batches": batch_wip.cnt or 0, "pieces": int(batch_wip.pcs or 0)},
+            "finished_goods": {"total_value": round(fg_total, 2), "skus": len(fg_items), "pieces": fg_total_pieces, "items": fg_items},
+            "grand_total": grand_total,
+        }
+
     async def _get_fy(self, fy_id: UUID, for_update: bool = False) -> FinancialYear:
         stmt = select(FinancialYear).where(FinancialYear.id == fy_id)
         if for_update:
@@ -153,6 +292,7 @@ class FYClosingService:
             ("supplier", "suppliers"),
             ("customer", "customers"),
             ("va_party", "va_parties"),
+            ("broker", "brokers"),
         ]
 
         result = {}
@@ -204,7 +344,7 @@ class FYClosingService:
         return result
 
     async def _get_party_name(self, party_type: str, party_id: UUID) -> str:
-        model = {"supplier": Supplier, "customer": Customer, "va_party": VAParty}.get(party_type)
+        model = {"supplier": Supplier, "customer": Customer, "va_party": VAParty, "broker": Broker}.get(party_type)
         if not model:
             return "Unknown"
         result = await self.db.execute(select(model.name).where(model.id == party_id))
@@ -217,7 +357,7 @@ class FYClosingService:
         """Create opening balance ledger entries for each party with a balance."""
         count = 0
 
-        for party_type, key in [("supplier", "suppliers"), ("customer", "customers"), ("va_party", "va_parties")]:
+        for party_type, key in [("supplier", "suppliers"), ("customer", "customers"), ("va_party", "va_parties"), ("broker", "brokers")]:
             for entry in balances.get(key, []):
                 net = Decimal(str(entry["net"]))
                 if abs(net) < Decimal("0.01"):

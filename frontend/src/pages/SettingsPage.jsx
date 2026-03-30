@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCompany, updateCompany, getFinancialYears, createFinancialYear, updateFinancialYear, deleteFinancialYear, getCompanies, createNewCompany, setDefaultCompany, closeFYPreview, closeFY } from '../api/company'
+import { getOpeningBalanceStatus, createOpeningBalanceBulk } from '../api/ledger'
+import { getSuppliers } from '../api/suppliers'
+import { getAllCustomers } from '../api/customers'
+import { getAllVAParties } from '../api/masters'
+import { getAllBrokers } from '../api/brokers'
 import { useAuth } from '../hooks/useAuth'
 import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
@@ -23,6 +28,7 @@ export default function SettingsPage() {
   const TABS = [
     { key: 'company', label: 'Company Profile', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
     { key: 'fy', label: 'Financial Years', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+    { key: 'opening', label: 'Opening Balances', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
     ...(isAdmin ? [{ key: 'companies', label: 'Companies', icon: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064' }] : []),
   ]
 
@@ -56,6 +62,15 @@ export default function SettingsPage() {
   const [closeForm, setCloseForm] = useState({ new_fy_code: '', new_start_date: '', new_end_date: '' })
   const [closing, setClosing] = useState(false)
 
+  // Opening Balances
+  const [obStatus, setOBStatus] = useState(null)
+  const [obParties, setOBParties] = useState({})   // { supplier: [...], customer: [...], ... }
+  const [obAmounts, setOBAmounts] = useState({})    // { "partyId": { amount: "", balance_type: "cr" } }
+  const [obSubTab, setOBSubTab] = useState('supplier')
+  const [obSaving, setOBSaving] = useState(false)
+  const [obError, setOBError] = useState(null)
+  const [obLoading, setOBLoading] = useState(false)
+
   // Companies list + create wizard
   const [allCompanies, setAllCompanies] = useState([])
   const [showWizard, setShowWizard] = useState(false)
@@ -81,6 +96,25 @@ export default function SettingsPage() {
       getFinancialYears().then((res) => setFYs(res.data.data || [])).catch((err) => setError(err.response?.data?.detail || 'Failed to load financial years'))
     } else if (tab === 'companies') {
       getCompanies().then((res) => setAllCompanies(res.data.data || [])).catch((err) => setError(err.response?.data?.detail || 'Failed to load companies'))
+    } else if (tab === 'opening') {
+      setOBLoading(true)
+      setOBError(null)
+      const PARTY_FETCHERS = {
+        supplier: () => getSuppliers({ page_size: 500 }).then(r => (r.data.data || [])),
+        customer: () => getAllCustomers().then(r => (r.data.data || [])),
+        va_party: () => getAllVAParties().then(r => (r.data.data || [])),
+        broker: () => getAllBrokers().then(r => (r.data.data || [])),
+      }
+      Promise.all([
+        getOpeningBalanceStatus(),
+        ...Object.entries(PARTY_FETCHERS).map(([type, fn]) => fn().then(data => ({ type, data }))),
+      ]).then(([statusRes, ...partyResults]) => {
+        setOBStatus(statusRes.data.data)
+        const parties = {}
+        for (const { type, data } of partyResults) parties[type] = data
+        setOBParties(parties)
+      }).catch((err) => setOBError(err.response?.data?.detail || 'Failed to load opening balance data'))
+        .finally(() => setOBLoading(false))
     }
   }, [tab, activeCompany?.id])
 
@@ -96,6 +130,51 @@ export default function SettingsPage() {
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to save')
     } finally { setCompanySaving(false) }
+  }
+
+  const OB_TABS = [
+    { key: 'supplier', label: 'Suppliers', defaultBt: 'cr' },
+    { key: 'customer', label: 'Customers', defaultBt: 'dr' },
+    { key: 'va_party', label: 'VA Parties', defaultBt: 'cr' },
+    { key: 'broker', label: 'Brokers', defaultBt: 'cr' },
+  ]
+
+  const handleOBAmountChange = (partyId, field, value) => {
+    setOBAmounts(prev => ({
+      ...prev,
+      [partyId]: { ...(prev[partyId] || {}), [field]: value },
+    }))
+  }
+
+  const handleOBSaveAll = async () => {
+    const entries = []
+    for (const [partyId, val] of Object.entries(obAmounts)) {
+      const amt = parseFloat(val.amount)
+      if (!amt || amt <= 0) continue
+      // Find which party_type this belongs to
+      let foundType = null
+      for (const [type, list] of Object.entries(obParties)) {
+        if (list.some(p => p.id === partyId)) { foundType = type; break }
+      }
+      if (!foundType) continue
+      entries.push({
+        party_type: foundType,
+        party_id: partyId,
+        amount: amt,
+        balance_type: val.balance_type || OB_TABS.find(t => t.key === foundType)?.defaultBt || 'cr',
+      })
+    }
+    if (entries.length === 0) { setOBError('Enter at least one opening balance amount'); return }
+    setOBSaving(true)
+    setOBError(null)
+    try {
+      const res = await createOpeningBalanceBulk({ entries })
+      showSuccess(res.data.message)
+      // Refresh status
+      getOpeningBalanceStatus().then(r => setOBStatus(r.data.data)).catch(() => {})
+    } catch (err) {
+      setOBError(err.response?.data?.detail || 'Failed to save opening balances')
+    } finally { setOBSaving(false) }
   }
 
   // After any FY change, refresh the JWT so header badge updates
@@ -466,7 +545,7 @@ export default function SettingsPage() {
                   {/* Balance Summary */}
                   <div>
                     <h4 className="typo-label-sm mb-2">Closing Balances</h4>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <div className="rounded-lg bg-gray-50 p-2.5 text-center">
                         <p className="text-lg font-bold text-gray-800">{closePreview.balances?.suppliers?.length || 0}</p>
                         <p className="text-[10px] text-gray-500 uppercase">Suppliers</p>
@@ -478,6 +557,10 @@ export default function SettingsPage() {
                       <div className="rounded-lg bg-gray-50 p-2.5 text-center">
                         <p className="text-lg font-bold text-gray-800">{closePreview.balances?.va_parties?.length || 0}</p>
                         <p className="text-[10px] text-gray-500 uppercase">VA Parties</p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-2.5 text-center">
+                        <p className="text-lg font-bold text-gray-800">{closePreview.balances?.brokers?.length || 0}</p>
+                        <p className="text-[10px] text-gray-500 uppercase">Brokers</p>
                       </div>
                     </div>
                     {(closePreview.balances?.summary?.parties_with_balance || 0) > 0 && (
@@ -519,6 +602,123 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Opening Balances Tab ── */}
+      {tab === 'opening' && (
+        <div className="mt-4">
+          <div className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4 mb-5">
+            <h2 className="text-lg font-bold text-white">Opening Balances</h2>
+            <p className="text-sm text-amber-100 mt-0.5">Enter outstanding balances for parties from your previous accounting system</p>
+          </div>
+
+          {obError && <div className="mb-4"><ErrorAlert message={obError} onDismiss={() => setOBError(null)} /></div>}
+
+          {obLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+            </div>
+          ) : (
+            <>
+              {/* Status cards */}
+              {obStatus && (
+                <div className="grid gap-3 sm:grid-cols-4 mb-5">
+                  {OB_TABS.map(t => {
+                    const s = obStatus[t.key] || { total: 0, with_opening: 0 }
+                    const pct = s.total > 0 ? Math.round(s.with_opening / s.total * 100) : 0
+                    return (
+                      <div key={t.key} className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                        <p className="typo-data-label">{t.label}</p>
+                        <p className="text-lg font-bold text-gray-900">{s.with_opening}/{s.total}</p>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">{pct}% done</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Sub-tabs */}
+              <div className="flex gap-4 border-b border-gray-200 mb-4">
+                {OB_TABS.map(t => (
+                  <button key={t.key} onClick={() => setOBSubTab(t.key)}
+                    className={`pb-2.5 typo-tab border-b-2 transition-colors ${
+                      obSubTab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}>{t.label}</button>
+                ))}
+              </div>
+
+              {/* Party table */}
+              <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left typo-th">Party Name</th>
+                      <th className="px-4 py-2.5 text-left typo-th w-20">Phone</th>
+                      <th className="px-4 py-2.5 text-right typo-th w-40">Opening Amount</th>
+                      <th className="px-4 py-2.5 text-center typo-th w-20">Dr/Cr</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(obParties[obSubTab] || []).map(party => {
+                      const val = obAmounts[party.id] || {}
+                      const defaultBt = OB_TABS.find(t => t.key === obSubTab)?.defaultBt || 'cr'
+                      return (
+                        <tr key={party.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 typo-td font-medium text-gray-900">{party.name}</td>
+                          <td className="px-4 py-2 typo-td-secondary">{party.phone || '—'}</td>
+                          <td className="px-4 py-2 text-right">
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={val.amount || ''}
+                              onChange={(e) => handleOBAmountChange(party.id, 'amount', e.target.value)}
+                              className="typo-input-sm w-36 text-right ml-auto"
+                              placeholder="0.00"
+                            />
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => handleOBAmountChange(party.id, 'balance_type', (val.balance_type || defaultBt) === 'cr' ? 'dr' : 'cr')}
+                              className={`inline-flex h-7 w-10 items-center justify-center rounded-md text-xs font-bold transition-colors ${
+                                (val.balance_type || defaultBt) === 'cr'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {(val.balance_type || defaultBt).toUpperCase()}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {(obParties[obSubTab] || []).length === 0 && (
+                      <tr><td colSpan={4} className="px-4 py-8 text-center typo-empty">No {OB_TABS.find(t => t.key === obSubTab)?.label.toLowerCase()} found. Add them in Party Masters first.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Save button */}
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  {Object.values(obAmounts).filter(v => parseFloat(v.amount) > 0).length} parties with amounts entered
+                </p>
+                <button onClick={handleOBSaveAll} disabled={obSaving}
+                  className="rounded-lg bg-emerald-600 px-6 py-2.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                  {obSaving ? 'Saving...' : 'Save All Opening Balances'}
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <p className="text-sm text-amber-700">
+                  <strong>Default:</strong> Suppliers & VA Parties default to <strong>Cr</strong> (we owe them). Customers default to <strong>Dr</strong> (they owe us). Click Dr/Cr to toggle. Saving overwrites any previous opening balance for that party in the current FY.
+                </p>
+              </div>
+            </>
           )}
         </div>
       )}

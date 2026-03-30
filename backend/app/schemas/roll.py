@@ -85,6 +85,37 @@ class BulkStockIn(BaseModel):
     rolls: list[BulkRollEntry]
 
 
+class OpeningRollEntry(BaseModel):
+    """Single roll for opening stock (no supplier/invoice)."""
+
+    fabric_type: str
+    color: str
+    color_id: UUID | None = None
+    total_weight: Decimal
+    unit: str = "kg"
+    cost_per_unit: Decimal | None = None
+    total_length: Decimal | None = None
+    sr_no: str | None = None
+    panna: Decimal | None = None
+    gsm: Decimal | None = None
+    notes: str | None = None
+    fabric_code: str | None = None
+    color_code: str | None = None
+    color_no: int | None = None
+    # VA fields — when roll is currently at a VA vendor
+    at_va: bool = False
+    va_party_id: UUID | None = None
+    value_addition_id: UUID | None = None
+    sent_date: date | None = None          # when it was originally sent
+    weight_sent: Decimal | None = None     # weight sent (defaults to total_weight)
+
+
+class OpeningRollStockRequest(BaseModel):
+    """POST /rolls/opening-stock — bulk opening roll entry without supplier invoice."""
+
+    rolls: list[OpeningRollEntry]
+
+
 class SupplierInvoiceParams(PaginatedParams):
     """GET /rolls/supplier-invoices query parameters."""
 

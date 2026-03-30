@@ -18,7 +18,8 @@
 | `guardian.md` | Protocols, rules, coding standards | Before any coding |
 | `API_REFERENCE.md` | **THE** source of truth for API shapes | Before any frontend↔backend work |
 | `REPORTS_AND_INVENTORY_PLAN.md` | Reports overhaul + Inventory upgrade (3 phases) | Before any reports/inventory work |
-| `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) | Before any masters/FY work |
+| `FY_TRANSITION_PLAN.md` | Opening stock + FY closing fixes + valuation + verification (6 phases) | Before any FY/opening stock work |
+| `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) — COMPLETE | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
@@ -32,7 +33,55 @@
 
 ---
 
-## Current State (Session 95 — 2026-03-30)
+## Current State (Session 96 — 2026-03-30)
+
+### S96: FY Transition P1-P3 (Opening Stock + Opening Balances + Broker Fix) + API_REFERENCE Update
+
+**0 commits pushed yet. 0 migrations. 42 models (no new models).**
+
+**FY_TRANSITION_PLAN.md Created:**
+- 6-phase production-grade plan: Opening Stock, Opening Balances, Broker Fix, Closing Valuation, Physical Verification, Reconciliation
+- Industry standards research (AS-2, Tally behavior, WAC, GST, WIP valuation)
+- Current system audit with exact file:line references
+- 10 design decisions with reasoning
+
+**Phase 1 — Opening Stock Entry (Day 1 Setup):**
+- `POST /inventory/opening-stock` — bulk SKU entry: [{sku_id, quantity, unit_cost}], creates `opening_stock` events, duplicate prevention per SKU
+- `POST /rolls/opening-stock` — bulk roll entry without supplier invoice, supports in-godown (`in_stock`) AND at-VA (`sent_for_processing`) rolls with RollProcessing log
+- `opening_stock` event type added to InventoryService (valid_types, create_event addition group, reconcile formula)
+- `adjustment` event type bug fixed — was no-op (fell through without modifying total_qty), now adds to stock
+- InventoryPage: "Opening Stock" button + modal with SKU picker + qty + cost per row
+- RollsPage: "Opening Stock" button + modal with fabric/color/weight/cost + "At VA" toggle with VA Party/VA Type/Sent Date fields
+- Frontend API: `createOpeningStock()`, `createOpeningRollStock()`
+
+**Phase 2 — Party Opening Balance Entry:**
+- `POST /ledger/opening-balance` — single party entry with force override, user-friendly messages
+- `POST /ledger/opening-balance/bulk` — multi-party single transaction, always overwrites
+- `GET /ledger/opening-balance/status` — per party_type progress (with/without opening, all 4 types including broker)
+- SettingsPage: "Opening Balances" tab with gradient header, 4 progress cards, sub-tabs per party type, inline amount entry, Dr/Cr toggle, "Save All" bulk submit
+- `get_all_balances` balance_type bug fixed — supplier/VA else branch returned "cr" in both cases
+
+**Phase 3 — FY Closing Broker Fix + Enhanced Preview:**
+- Broker added to `_compute_all_balances`, `_create_opening_entries`, `_get_party_name`, `closing_snapshot`
+- Close-preview enhanced: +4 informational warnings (active rolls, unpaid invoices, SKU stock, open challans)
+- Frontend close-preview: grid 3→4 cols to show Brokers count
+
+**API_REFERENCE.md Updated:**
+- +8 dashboard endpoints documented (§12 — enhanced, sales, accounting, raw-material, wip, va, purchase, returns)
+- +page-consumption routing table added to §12 header
+- +2 new opening stock endpoints (§5 rolls, §9 inventory)
+- +3 new opening balance endpoints (§19 ledger)
+
+**Backend files modified (7):** inventory_service.py, inventory.py (API), roll_service.py, rolls.py (API), ledger_service.py, ledger.py (API), fy_closing_service.py
+**Schema files modified (3):** inventory.py, roll.py, ledger.py
+**Frontend files modified (6):** inventory.js, rolls.js, ledger.js, InventoryPage.jsx, RollsPage.jsx, SettingsPage.jsx
+**Doc files modified (3):** API_REFERENCE.md, CLAUDE.md, FY_TRANSITION_PLAN.md
+
+**NEXT:** Commit + push S96. Phase 4 (Closing Stock Valuation Report), Phase 5 (Physical Verification), Phase 6 (Reconciliation Report). BatchesPage print SKU labels after pack. Test full flow on prod.
+
+---
+
+## Previous State (Session 95 — 2026-03-30)
 
 ### S95: Reports & Inventory Overhaul (P1-P3) + WOW Dashboard + API_REFERENCE Update
 
@@ -61,23 +110,6 @@
 - Batch pipeline with connecting arrows and accent-colored stage labels
 - Gradient KPI cards matching Orders/Invoices/Returns pattern
 - All text dark/bold/readable — no gray-400 on dashboard
-
-**Typography Fix (global):**
-- `typo-kpi-label`: `font-semibold text-gray-400` → `font-bold text-gray-500` — affects 14+ pages
-
-**Backend: 8 new methods + 8 new endpoints on /dashboard/:**
-- `GET /dashboard/sales-report` — sales KPIs, customer ranking, fulfillment, broker commission
-- `GET /dashboard/accounting-report` — receivables, payables, GST, CN/DN
-- `GET /dashboard/raw-material-summary` — roll inventory aggregation
-- `GET /dashboard/wip-summary` — batch pipeline aggregation
-- `GET /dashboard/va-report` — VA cost, turnaround, damage
-- `GET /dashboard/purchase-report` — purchases, supplier quality, fabric utilization
-- `GET /dashboard/returns-report` — return analysis across customer+supplier
-- `GET /dashboard/enhanced` — smart alerts, 7-day revenue, gauges, invoice split
-
-**Plan doc:** `Guardian/REPORTS_AND_INVENTORY_PLAN.md` — all 3 phases complete
-
-**Tables covered in reports:** 8 → 34 of 42
 
 **NEXT:** Update API_REFERENCE.md with 8 new dashboard endpoints, BatchesPage print SKU labels after pack, test full flow on prod
 

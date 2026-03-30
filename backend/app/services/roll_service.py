@@ -634,6 +634,120 @@ class RollService:
 
         return self._to_response(roll)
 
+    async def opening_stock(self, rolls_data: list, received_by: UUID, fy_id: UUID) -> dict:
+        """Bulk opening roll stock — no supplier invoice, no ledger entry.
+        Supports rolls in godown (in_stock) and rolls currently at VA (sent_for_processing)."""
+        if not rolls_data:
+            raise ValidationError("Please add at least one roll to create opening stock")
+        if len(rolls_data) > 200:
+            raise ValidationError("Maximum 200 rolls per request. Please split into smaller batches.")
+
+        created_in_stock = []
+        created_at_va = []
+
+        for i, entry in enumerate(rolls_data, 1):
+            row_label = f"Row {i} ({entry.fabric_type}/{entry.color})"
+
+            if not entry.fabric_type or not entry.fabric_type.strip():
+                raise ValidationError(f"{row_label}: Fabric type is required")
+            if not entry.color or not entry.color.strip():
+                raise ValidationError(f"{row_label}: Color is required")
+            if not entry.total_weight or float(entry.total_weight) <= 0:
+                raise ValidationError(f"{row_label}: Weight must be greater than 0")
+
+            # VA validation
+            is_at_va = entry.at_va
+            if is_at_va:
+                if not entry.va_party_id:
+                    raise ValidationError(f"{row_label}: VA Party is required when roll is at VA vendor")
+                if not entry.value_addition_id:
+                    raise ValidationError(f"{row_label}: Value Addition type is required when roll is at VA vendor")
+                if not entry.sent_date:
+                    raise ValidationError(f"{row_label}: Sent date is required when roll is at VA vendor")
+
+            roll_code = await next_roll_code(
+                self.db,
+                challan_no=entry.sr_no or "OPEN",
+                fabric_type=entry.fabric_type,
+                color=entry.color,
+                fabric_code=entry.fabric_code,
+                color_code=entry.color_code,
+                color_no=entry.color_no,
+            )
+
+            status = "sent_for_processing" if is_at_va else "in_stock"
+            weight_sent = float(entry.weight_sent or entry.total_weight)
+            remaining = 0 if is_at_va else float(entry.total_weight)
+
+            note_parts = ["[Opening Stock]"]
+            if is_at_va:
+                note_parts.append("[At VA]")
+            if entry.notes:
+                note_parts.append(entry.notes)
+
+            roll = Roll(
+                roll_code=roll_code,
+                fabric_type=entry.fabric_type,
+                color=entry.color,
+                color_id=entry.color_id,
+                total_weight=entry.total_weight,
+                remaining_weight=remaining,
+                current_weight=entry.total_weight,
+                unit=entry.unit or "kg",
+                cost_per_unit=entry.cost_per_unit,
+                total_length=entry.total_length,
+                sr_no=entry.sr_no,
+                panna=entry.panna,
+                gsm=entry.gsm,
+                received_by=received_by,
+                received_at=datetime.now(timezone.utc),
+                status=status,
+                notes=" ".join(note_parts),
+                fy_id=fy_id,
+            )
+            self.db.add(roll)
+            await self.db.flush()
+
+            # Create RollProcessing log for rolls at VA
+            if is_at_va:
+                processing = RollProcessing(
+                    roll_id=roll.id,
+                    value_addition_id=entry.value_addition_id,
+                    va_party_id=entry.va_party_id,
+                    sent_date=entry.sent_date,
+                    weight_before=weight_sent,
+                    status="sent",
+                    notes="[Opening Stock] Roll was at VA vendor on system go-live",
+                )
+                self.db.add(processing)
+                await self.db.flush()
+                created_at_va.append(roll.roll_code)
+            else:
+                created_in_stock.append(roll.roll_code)
+
+        all_codes = created_in_stock + created_at_va
+        parts = []
+        if created_in_stock:
+            parts.append(f"{len(created_in_stock)} in godown")
+        if created_at_va:
+            parts.append(f"{len(created_at_va)} at VA vendor")
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("rolls_opening_stock", {
+            "count": len(all_codes),
+            "in_stock": len(created_in_stock),
+            "at_va": len(created_at_va),
+            "roll_codes": all_codes[:5],
+        }, str(received_by))
+
+        return {
+            "count": len(all_codes),
+            "in_stock_count": len(created_in_stock),
+            "at_va_count": len(created_at_va),
+            "roll_codes": all_codes,
+            "message": f"{len(all_codes)} opening stock rolls created ({', '.join(parts)})",
+        }
+
     async def update_supplier_invoice(self, invoice_id: UUID, updates) -> dict:
         """Update a SupplierInvoice record (e.g. gst_percent, invoice_no, etc.)."""
         stmt = (

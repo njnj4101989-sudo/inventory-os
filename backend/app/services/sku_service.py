@@ -591,6 +591,12 @@ class SKUService:
             "size": s.size,
             "description": s.description,
             "base_price": float(s.base_price) if s.base_price else 0,
+            "hsn_code": s.hsn_code,
+            "gst_percent": float(s.gst_percent) if s.gst_percent else None,
+            "mrp": float(s.mrp) if s.mrp else None,
+            "sale_rate": float(s.sale_rate) if s.sale_rate else None,
+            "stitching_cost": float(s.stitching_cost) if s.stitching_cost else None,
+            "other_cost": float(s.other_cost) if s.other_cost else None,
             "is_active": s.is_active,
             "stock": {
                 "total_qty": inv.total_qty if inv else 0,

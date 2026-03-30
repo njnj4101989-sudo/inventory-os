@@ -352,3 +352,7 @@ export async function receiveFromProcessing(rollId, processingId, data) {
   }
   return client.patch(`/rolls/${rollId}/processing/${processingId}`, data)
 }
+
+export async function createOpeningRollStock(data) {
+  return client.post('/rolls/opening-stock', data)
+}

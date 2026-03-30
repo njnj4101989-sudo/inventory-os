@@ -209,16 +209,27 @@ class DashboardService:
         )
         tailors = (await self.db.execute(tailor_stmt)).scalars().all()
 
-        # Query 2: Get ALL completed batches in date range (single query instead of N)
+        # Query 2: Get ALL completed batches in date range with SKU + lot info for costing
         batch_stmt = (
             select(
                 BatchAssignment.tailor_id,
+                Batch.id.label("batch_id"),
+                Batch.batch_code,
                 Batch.approved_qty,
                 Batch.rejected_qty,
+                Batch.piece_count,
                 Batch.started_at,
                 Batch.completed_at,
+                Batch.checked_at,
+                Batch.design_no,
+                Batch.size,
+                SKU.sku_code,
+                SKU.stitching_cost,
+                Lot.product_type,
             )
             .join(Batch, Batch.id == BatchAssignment.batch_id)
+            .outerjoin(SKU, SKU.id == Batch.sku_id)
+            .outerjoin(Lot, Lot.id == Batch.lot_id)
             .where(
                 Batch.status.in_(["checked", "packing", "packed"]),
                 func.date(Batch.checked_at) >= from_date,
@@ -227,7 +238,7 @@ class DashboardService:
         )
         batch_rows = (await self.db.execute(batch_stmt)).all()
 
-        # Group by tailor_id in Python (trivial — just dict building)
+        # Group by tailor_id in Python
         tailor_batches = defaultdict(list)
         for row in batch_rows:
             tailor_batches[row.tailor_id].append(row)
@@ -241,11 +252,38 @@ class DashboardService:
             rejection_rate = round((total_rejected / total_produced * 100), 1) if total_produced > 0 else 0.0
 
             durations = []
+            total_stitching_cost = 0.0
+            batch_details = []
+
             for r in rows:
                 if r.started_at and r.completed_at:
                     days = (r.completed_at - r.started_at).total_seconds() / 86400
                     durations.append(days)
+
+                rate = float(r.stitching_cost or 0)
+                approved = r.approved_qty or 0
+                cost = round(rate * approved, 2)
+                total_stitching_cost += cost
+
+                rate_pending = r.stitching_cost is None
+                batch_details.append({
+                    "batch_code": r.batch_code,
+                    "sku_code": r.sku_code or f"{r.product_type or '?'}-{r.design_no or '?'}",
+                    "product_type": r.product_type,
+                    "design_no": r.design_no,
+                    "size": r.size,
+                    "pieces": approved,
+                    "rejected": r.rejected_qty or 0,
+                    "stitching_rate": rate,
+                    "stitching_cost": cost,
+                    "rate_pending": rate_pending,
+                    "completed_date": r.checked_at.strftime("%Y-%m-%d") if r.checked_at else None,
+                })
+
             avg_days = round(sum(durations) / len(durations), 1) if durations else 0.0
+            avg_rate = round(total_stitching_cost / pieces_completed, 2) if pieces_completed > 0 else 0.0
+
+            pending_rate_count = sum(1 for bd in batch_details if bd["rate_pending"])
 
             performances.append({
                 "tailor": {
@@ -256,6 +294,10 @@ class DashboardService:
                 "pieces_completed": pieces_completed,
                 "avg_completion_days": avg_days,
                 "rejection_rate": rejection_rate,
+                "total_stitching_cost": round(total_stitching_cost, 2),
+                "avg_stitching_rate": avg_rate,
+                "pending_rate_count": pending_rate_count,
+                "batch_details": sorted(batch_details, key=lambda x: x.get("completed_date") or "", reverse=True),
             })
 
         return performances
@@ -2111,4 +2153,301 @@ class DashboardService:
                 "qc_throughput": qc_throughput,
             },
             "invoice_split": invoice_split,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  CLOSING STOCK VALUATION REPORT (FY Transition P4)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_closing_stock_report(self, as_of_date: date | None = None) -> dict:
+        """Closing stock valuation — Raw Materials + WIP + Finished Goods.
+
+        Valuation method: Weighted Average Cost (AS-2 / Ind AS 2).
+        Raw materials: roll.remaining_weight × roll.cost_per_unit
+        WIP: material cost only (simplified AS-2 for Indian garment SMEs)
+        Finished goods: WAC from inventory events with cost metadata
+        """
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        # ── 1. RAW MATERIALS (rolls with remaining stock) ───────
+        active_statuses = ("in_stock", "sent_for_processing", "in_cutting", "remnant")
+
+        # Status-wise aggregation
+        rm_status_rows = (await self.db.execute(
+            select(
+                Roll.status,
+                func.count().label("rolls"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+            )
+            .where(Roll.status.in_(active_statuses), Roll.remaining_weight > 0)
+            .group_by(Roll.status)
+        )).all()
+
+        by_status = {}
+        for r in rm_status_rows:
+            by_status[r.status] = {
+                "rolls": r.rolls,
+                "weight": round(float(r.weight), 2),
+                "value": round(float(r.value), 2),
+            }
+
+        rm_total_rolls = sum(v["rolls"] for v in by_status.values())
+        rm_total_weight = sum(v["weight"] for v in by_status.values())
+        rm_total_value = sum(v["value"] for v in by_status.values())
+
+        # Fabric-wise breakdown
+        rm_fabric_rows = (await self.db.execute(
+            select(
+                Roll.fabric_type,
+                func.count().label("rolls"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+            )
+            .where(Roll.status.in_(active_statuses), Roll.remaining_weight > 0)
+            .group_by(Roll.fabric_type)
+            .order_by(func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).desc())
+        )).all()
+
+        by_fabric = [{
+            "fabric_type": r.fabric_type,
+            "rolls": r.rolls,
+            "weight": round(float(r.weight), 2),
+            "value": round(float(r.value), 2),
+        } for r in rm_fabric_rows]
+
+        raw_materials = {
+            "total_rolls": rm_total_rolls,
+            "total_weight_kg": round(rm_total_weight, 2),
+            "total_value": round(rm_total_value, 2),
+            "by_status": by_status,
+            "by_fabric": by_fabric,
+        }
+
+        # ── 2. WORK-IN-PROGRESS (lots in cutting + batches not packed) ──
+        # WIP = material cost only (AS-2 simplified)
+        # Approach: for each active lot, sum(lot_roll.weight_used × roll.cost_per_unit)
+
+        # Lots in cutting (open/cutting status)
+        lot_wip_rows = (await self.db.execute(
+            select(
+                Lot.id,
+                Lot.lot_code,
+                Lot.status.label("lot_status"),
+                Lot.total_pieces,
+                func.coalesce(func.sum(LotRoll.weight_used * Roll.cost_per_unit), 0).label("material_value"),
+            )
+            .join(LotRoll, LotRoll.lot_id == Lot.id)
+            .join(Roll, Roll.id == LotRoll.roll_id)
+            .where(Lot.status.in_(("open", "cutting")))
+            .group_by(Lot.id, Lot.lot_code, Lot.status, Lot.total_pieces)
+        )).all()
+
+        lots_in_cutting_value = sum(float(r.material_value) for r in lot_wip_rows)
+        lots_in_cutting_count = len(lot_wip_rows)
+
+        # Batches not packed — group by stage
+        # First get material cost per lot (for proportional allocation to batches)
+        lot_cost_rows = (await self.db.execute(
+            select(
+                Lot.id.label("lot_id"),
+                Lot.total_pieces.label("lot_total_pieces"),
+                func.coalesce(func.sum(LotRoll.weight_used * Roll.cost_per_unit), 0).label("lot_material_cost"),
+            )
+            .join(LotRoll, LotRoll.lot_id == Lot.id)
+            .join(Roll, Roll.id == LotRoll.roll_id)
+            .where(Lot.status == "distributed")
+            .group_by(Lot.id, Lot.total_pieces)
+        )).all()
+
+        lot_cost_map = {}
+        for r in lot_cost_rows:
+            total_pcs = r.lot_total_pieces or 1
+            lot_cost_map[r.lot_id] = {
+                "total_pieces": total_pcs,
+                "material_cost": float(r.lot_material_cost),
+                "cost_per_piece": float(r.lot_material_cost) / total_pcs if total_pcs > 0 else 0,
+            }
+
+        # Batches not packed
+        batch_rows = (await self.db.execute(
+            select(Batch.id, Batch.status, Batch.lot_id, Batch.piece_count)
+            .where(Batch.status != "packed")
+        )).all()
+
+        batch_stage_map = {}
+        total_batch_wip_value = 0.0
+        for b in batch_rows:
+            lot_info = lot_cost_map.get(b.lot_id)
+            if lot_info:
+                batch_value = lot_info["cost_per_piece"] * (b.piece_count or 0)
+            else:
+                batch_value = 0.0
+            total_batch_wip_value += batch_value
+
+            stage = b.status
+            if stage not in batch_stage_map:
+                batch_stage_map[stage] = {"count": 0, "pieces": 0, "material_value": 0.0}
+            batch_stage_map[stage]["count"] += 1
+            batch_stage_map[stage]["pieces"] += (b.piece_count or 0)
+            batch_stage_map[stage]["material_value"] += batch_value
+
+        # Round stage values
+        by_stage = {}
+        for stage, vals in batch_stage_map.items():
+            by_stage[stage] = {
+                "count": vals["count"],
+                "pieces": vals["pieces"],
+                "material_value": round(vals["material_value"], 2),
+            }
+
+        wip_total = round(lots_in_cutting_value + total_batch_wip_value, 2)
+
+        work_in_progress = {
+            "lots_in_cutting": {"count": lots_in_cutting_count, "material_value": round(lots_in_cutting_value, 2)},
+            "batches_in_pipeline": {
+                "total_batches": len(batch_rows),
+                "total_pieces": sum(b.piece_count or 0 for b in batch_rows),
+                "total_value": round(total_batch_wip_value, 2),
+                "by_stage": by_stage,
+            },
+            "total_value": wip_total,
+            "valuation_note": "Valued at raw material cost only (AS-2 simplified method)",
+        }
+
+        # ── 3. FINISHED GOODS (SKUs with stock) ────────────────
+        # WAC = total cost of stock-in events / total qty from those events
+        # Events with cost: opening_stock (metadata.unit_cost), ready_stock_in, stock_in
+
+        # Get all SKUs with available stock
+        sku_rows = (await self.db.execute(
+            select(
+                InventoryState.sku_id,
+                InventoryState.total_qty,
+                InventoryState.available_qty,
+                InventoryState.reserved_qty,
+                SKU.sku_code,
+                SKU.product_type,
+                SKU.sale_rate,
+                SKU.base_price,
+            )
+            .join(SKU, SKU.id == InventoryState.sku_id)
+            .where(InventoryState.total_qty > 0)
+        )).all()
+
+        # Get cost data from events (opening_stock + ready_stock_in + stock_in)
+        cost_events = (await self.db.execute(
+            select(
+                InventoryEvent.sku_id,
+                InventoryEvent.event_type,
+                InventoryEvent.quantity,
+                InventoryEvent.metadata_,
+            )
+            .where(InventoryEvent.event_type.in_(("opening_stock", "ready_stock_in", "stock_in")))
+        )).all()
+
+        # Build WAC per SKU: {sku_id: {total_cost, total_qty, breakdown}}
+        from collections import defaultdict
+        sku_cost_acc = defaultdict(lambda: {"total_cost": 0.0, "total_qty": 0, "breakdown_sum": {
+            "material_cost": 0.0, "roll_va_cost": 0.0, "stitching_cost": 0.0, "batch_va_cost": 0.0, "other_cost": 0.0,
+        }})
+        for evt in cost_events:
+            unit_cost = None
+            meta = evt.metadata_ or {}
+            if "unit_cost" in meta:
+                unit_cost = float(meta["unit_cost"])
+            elif "cost_per_piece" in meta:
+                unit_cost = float(meta["cost_per_piece"])
+
+            if unit_cost is not None and evt.quantity > 0:
+                acc = sku_cost_acc[evt.sku_id]
+                acc["total_cost"] += unit_cost * evt.quantity
+                acc["total_qty"] += evt.quantity
+
+                # Accumulate breakdown (weighted by qty for averaging later)
+                cb = meta.get("cost_breakdown", {})
+                for key in ("material_cost", "roll_va_cost", "stitching_cost", "batch_va_cost", "other_cost"):
+                    acc["breakdown_sum"][key] += float(cb.get(key, 0)) * evt.quantity
+
+        fg_items = []
+        fg_total_value = 0.0
+        fg_total_pieces = 0
+        unpriced_skus = 0
+        pt_agg = defaultdict(lambda: {"skus": 0, "pieces": 0, "value": 0.0})
+
+        for s in sku_rows:
+            acc = sku_cost_acc.get(s.sku_id)
+            cost_source = None
+            breakdown = {"material_cost": 0, "roll_va_cost": 0, "stitching_cost": 0, "batch_va_cost": 0, "other_cost": 0}
+
+            if acc and acc["total_qty"] > 0:
+                wac = acc["total_cost"] / acc["total_qty"]
+                cost_source = "event_history"
+                # Average breakdown per piece
+                for key in breakdown:
+                    breakdown[key] = round(acc["breakdown_sum"][key] / acc["total_qty"], 2)
+            elif s.base_price and float(s.base_price) > 0:
+                wac = float(s.base_price)
+                cost_source = "base_price"
+                # Use SKU-level fields if available
+                breakdown["stitching_cost"] = round(float(s.stitching_cost or 0), 2) if hasattr(s, "stitching_cost") else 0
+                breakdown["other_cost"] = round(float(s.other_cost or 0), 2) if hasattr(s, "other_cost") else 0
+                breakdown["material_cost"] = round(wac - breakdown["stitching_cost"] - breakdown["other_cost"], 2)
+            else:
+                wac = 0.0
+                cost_source = "missing"
+                unpriced_skus += 1
+
+            value = round(wac * s.total_qty, 2)
+            fg_total_value += value
+            fg_total_pieces += s.total_qty
+
+            fg_items.append({
+                "sku_code": s.sku_code,
+                "product_type": s.product_type,
+                "total_qty": s.total_qty,
+                "available_qty": s.available_qty,
+                "reserved_qty": s.reserved_qty,
+                "wac_per_unit": round(wac, 2),
+                "value": value,
+                "cost_source": cost_source,
+                "cost_breakdown": breakdown,
+            })
+
+            pt_agg[s.product_type]["skus"] += 1
+            pt_agg[s.product_type]["pieces"] += s.total_qty
+            pt_agg[s.product_type]["value"] += value
+
+        by_product_type = [{
+            "product_type": pt,
+            "skus": v["skus"],
+            "pieces": v["pieces"],
+            "value": round(v["value"], 2),
+        } for pt, v in sorted(pt_agg.items(), key=lambda x: -x[1]["value"])]
+
+        finished_goods = {
+            "total_skus": len(sku_rows),
+            "total_pieces": fg_total_pieces,
+            "total_value": round(fg_total_value, 2),
+            "unpriced_skus": unpriced_skus,
+            "by_product_type": by_product_type,
+            "items": sorted(fg_items, key=lambda x: -x["value"]),
+        }
+
+        # ── 4. GRAND TOTAL ──────────────────────────────────────
+        grand_total = {
+            "raw_materials": round(rm_total_value, 2),
+            "work_in_progress": wip_total,
+            "finished_goods": round(fg_total_value, 2),
+            "total_closing_stock": round(rm_total_value + wip_total + fg_total_value, 2),
+        }
+
+        return {
+            "as_of_date": as_of_date.isoformat(),
+            "valuation_method": "weighted_average_cost",
+            "raw_materials": raw_materials,
+            "work_in_progress": work_in_progress,
+            "finished_goods": finished_goods,
+            "grand_total": grand_total,
         }

@@ -12,6 +12,7 @@ import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import LedgerPanel from '../components/common/LedgerPanel'
+import { getPartyConfirmation } from '../api/ledger'
 
 // ── Constants ────────────────────────────────────────────
 
@@ -332,6 +333,95 @@ export default function PartyMastersPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [balances, setBalances] = useState({}) // { party_id: { balance, balance_type } }
   const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [confirmLoading, setConfirmLoading] = useState(false)
+
+  const handlePrintConfirmation = async () => {
+    if (!selected) return
+    setConfirmLoading(true)
+    try {
+      const res = await getPartyConfirmation(partyTypeMap[tab], selected.id)
+      const d = res.data.data
+      const fmt = (v) => `\u20B9${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const printWin = window.open('', '_blank', 'width=800,height=600')
+      printWin.document.write(`<!DOCTYPE html><html><head><title>Balance Confirmation — ${d.party.name}</title>
+        <style>
+          body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1a1a; font-size: 13px; line-height: 1.5; }
+          h1 { font-size: 20px; margin: 0 0 4px; }
+          h2 { font-size: 15px; margin: 24px 0 8px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+          .header { border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px; }
+          .meta { color: #666; font-size: 12px; }
+          .party-box { background: #f8f8f8; padding: 12px; border-radius: 6px; margin: 12px 0; }
+          table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+          th, td { padding: 6px 10px; border: 1px solid #ddd; text-align: left; font-size: 12px; }
+          th { background: #f3f4f6; font-weight: 600; }
+          .right { text-align: right; }
+          .total-row { background: #f0fdf4; font-weight: 700; }
+          .closing { background: #059669; color: white; padding: 12px; border-radius: 6px; margin: 16px 0; text-align: center; }
+          .closing .amount { font-size: 22px; font-weight: 700; }
+          .footer { margin-top: 40px; font-size: 11px; color: #666; border-top: 1px solid #ddd; padding-top: 12px; }
+          .sig-line { margin-top: 60px; display: flex; justify-content: space-between; }
+          .sig-line div { width: 200px; border-top: 1px solid #333; padding-top: 4px; text-align: center; font-size: 11px; }
+          @media print { body { padding: 20px; } }
+        </style></head><body>
+        <div class="header">
+          <h1>Balance Confirmation Statement</h1>
+          <p class="meta">Financial Year: ${d.fy.code} (${new Date(d.fy.start_date).toLocaleDateString('en-IN')} — ${new Date(d.fy.end_date).toLocaleDateString('en-IN')})</p>
+        </div>
+        <div class="party-box">
+          <strong>${d.party.name}</strong><br/>
+          ${d.party.address || ''} ${d.party.city ? ', ' + d.party.city : ''}<br/>
+          ${d.party.gst_no ? 'GSTIN: ' + d.party.gst_no : ''} ${d.party.phone ? ' | Ph: ' + d.party.phone : ''}
+        </div>
+        <p>Dear Sir/Madam,</p>
+        <p>As per our books of accounts, the balance standing in your account as on <strong>${new Date(d.fy.end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</strong> is as follows:</p>
+
+        <h2>Account Summary</h2>
+        <table>
+          <tr><th>Opening Balance</th><td class="right">${d.opening_balance.net >= 0 ? fmt(d.opening_balance.net) + ' Dr' : fmt(Math.abs(d.opening_balance.net)) + ' Cr'}</td></tr>
+          <tr><th>Total Debits (during FY)</th><td class="right">${fmt(d.summary.total_debit)}</td></tr>
+          <tr><th>Total Credits (during FY)</th><td class="right">${fmt(d.summary.total_credit)}</td></tr>
+          <tr><th>Transactions</th><td class="right">${d.summary.transaction_count}</td></tr>
+        </table>
+
+        <div class="closing">
+          <div>Closing Balance</div>
+          <div class="amount">${fmt(d.closing_balance.amount)} ${d.closing_balance.type === 'dr' ? 'Debit' : 'Credit'}</div>
+        </div>
+
+        ${d.transactions.length > 0 ? `
+          <h2>Transaction Details</h2>
+          <table>
+            <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="right">Debit</th><th class="right">Credit</th></tr></thead>
+            <tbody>
+              ${d.transactions.map(t => `<tr><td>${new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td><td>${t.entry_type}</td><td>${t.description}</td><td class="right">${t.debit > 0 ? fmt(t.debit) : ''}</td><td class="right">${t.credit > 0 ? fmt(t.credit) : ''}</td></tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+
+        ${d.unpaid_invoices.length > 0 ? `
+          <h2>Unpaid Invoices</h2>
+          <table>
+            <thead><tr><th>Invoice No</th><th>Date</th><th class="right">Amount</th><th>Due Date</th></tr></thead>
+            <tbody>
+              ${d.unpaid_invoices.map(inv => `<tr><td>${inv.invoice_no}</td><td>${inv.date ? new Date(inv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}</td><td class="right">${fmt(inv.amount)}</td><td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-IN') : '—'}</td></tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+
+        <p class="footer">Please confirm the above balance or communicate discrepancies within 15 days of receipt of this statement. If no response is received, the balance as stated above will be considered confirmed.</p>
+
+        <div class="sig-line">
+          <div>For ${d.party.name}</div>
+          <div>Authorized Signatory</div>
+        </div>
+      </body></html>`)
+      printWin.document.close()
+      printWin.focus()
+      setTimeout(() => printWin.print(), 500)
+    } catch (err) {
+      console.error('Failed to generate confirmation:', err)
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
 
   const labels = TAB_LABELS[tab]
   const baseColumns = COLUMNS_MAP[tab]
@@ -752,6 +842,9 @@ export default function PartyMastersPage() {
                 </button>
                 <button onClick={() => { setDetailOpen(false); setLedgerOpen(true) }} className="rounded bg-white/10 px-3 py-1 typo-btn-sm hover:bg-white/20 transition-colors">
                   Ledger
+                </button>
+                <button onClick={handlePrintConfirmation} disabled={confirmLoading} className="rounded bg-white/10 px-3 py-1 typo-btn-sm hover:bg-white/20 transition-colors">
+                  {confirmLoading ? 'Loading...' : 'Balance Confirmation'}
                 </button>
                 <button onClick={openEditFromDetail} className="rounded bg-white px-3 py-1 typo-btn-sm text-emerald-700 hover:bg-emerald-50 transition-colors">
                   Edit

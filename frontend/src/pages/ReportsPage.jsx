@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport } from '../api/dashboard'
+import React, { useState, useEffect, useCallback } from 'react'
+import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
@@ -13,6 +13,7 @@ const TABS = [
   { key: 'va', label: 'VA Processing', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
   { key: 'purchases', label: 'Purchases', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z' },
   { key: 'returns', label: 'Returns', icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6' },
+  { key: 'closing_stock', label: 'Closing Stock', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { key: 'tailor', label: 'Tailor Performance', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
 
@@ -366,88 +367,141 @@ function FinancialTab({ data }) {
 //  TAILOR PERFORMANCE TAB
 // ═══════════════════════════════════════════════════════
 function TailorTab({ data }) {
+  const [expandedTailor, setExpandedTailor] = useState(null)
+
   if (!data || data.length === 0) return <p className="typo-empty py-8 text-center">No tailor performance data.</p>
 
   const maxPieces = Math.max(...data.map((t) => t.pieces_completed), 1)
   const avgRejection = data.length > 0 ? (data.reduce((s, t) => s + t.rejection_rate, 0) / data.length).toFixed(1) : 0
   const totalPieces = data.reduce((s, t) => s + t.pieces_completed, 0)
-  const topTailor = [...data].sort((a, b) => b.efficiency_score - a.efficiency_score)[0]
+  const totalCost = data.reduce((s, t) => s + (t.total_stitching_cost || 0), 0)
+
+  const fmt = (v) => `\u20B9${(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  const fmtDec = (v) => `\u20B9${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   return (
     <div className="space-y-6">
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Active Tailors" value={data.length} sub={`${data.filter((t) => t.current_batch).length} currently working`}
+        <KpiCard label="Active Tailors" value={data.length} sub={`${data.reduce((s, t) => s + t.batches_completed, 0)} batches completed`}
           color="bg-blue-500" icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        <KpiCard label="Total Pieces" value={totalPieces.toLocaleString()} sub={`${data.reduce((s, t) => s + t.batches_completed, 0)} batches completed`}
+        <KpiCard label="Total Pieces" value={totalPieces.toLocaleString()} sub={`Avg rejection: ${avgRejection}%`}
           color="bg-purple-500" icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        <KpiCard label="Avg Rejection" value={`${avgRejection}%`} sub={parseFloat(avgRejection) <= 3 ? 'Within acceptable range' : 'Needs attention'}
-          color={parseFloat(avgRejection) <= 3 ? 'bg-emerald-500' : 'bg-amber-500'} icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        <KpiCard label="Top Performer" value={topTailor?.tailor?.full_name || '—'} sub={`Score: ${topTailor?.efficiency_score || 0}/100`}
-          color="bg-emerald-500" icon="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+        <KpiCard label="Total Stitching Cost" value={fmt(totalCost)} sub={`Avg ${fmtDec(totalPieces > 0 ? totalCost / totalPieces : 0)}/pc`}
+          color="bg-emerald-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Rate Pending" value={data.reduce((s, t) => s + (t.pending_rate_count || 0), 0)} sub="Batches without stitching rate"
+          color={data.reduce((s, t) => s + (t.pending_rate_count || 0), 0) > 0 ? 'bg-amber-500' : 'bg-gray-400'} icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </div>
 
-      {/* Tailor Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {data.map((t, i) => {
-          const rejColor = t.rejection_rate > 5 ? 'text-red-600' : t.rejection_rate > 3 ? 'text-amber-600' : 'text-emerald-600'
-          const effColor = t.efficiency_score >= 90 ? 'bg-emerald-500' : t.efficiency_score >= 70 ? 'bg-amber-500' : 'bg-red-500'
-          return (
-            <div key={i} className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
-                  {t.tailor.full_name.split(' ').map((n) => n[0]).join('')}
-                </div>
-                <div className="flex-1">
-                  <p className="typo-data">{t.tailor.full_name}</p>
-                  <p className="typo-caption">{t.speciality}</p>
-                </div>
-                {t.current_batch && (
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 typo-badge text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                    Active
-                  </span>
-                )}
-              </div>
-
-              {/* Efficiency bar */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="typo-data-label">Efficiency Score</span>
-                  <span className="typo-data">{t.efficiency_score}/100</span>
-                </div>
-                <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${effColor}`} style={{ width: `${t.efficiency_score}%` }} />
-                </div>
-              </div>
-
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-                <div>
-                  <p className="typo-data-label">Batches</p>
-                  <p className="typo-data">{t.batches_completed}</p>
-                </div>
-                <div>
-                  <p className="typo-data-label">Pieces</p>
-                  <p className="typo-data">{t.pieces_completed.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="typo-data-label">Avg Days</p>
-                  <p className="typo-data">{t.avg_completion_days}d</p>
-                </div>
-                <div>
-                  <p className="typo-data-label">Rejection</p>
-                  <p className={`typo-data ${rejColor}`}>{t.rejection_rate}%</p>
-                </div>
-              </div>
-
-              {/* Pieces bar */}
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <HBar value={t.pieces_completed} max={maxPieces} color="bg-emerald-500" label="Output" />
-              </div>
-            </div>
-          )
-        })}
+      {/* Tailor Summary Table */}
+      <div className="rounded-xl bg-white shadow-sm border border-gray-100">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <h3 className="typo-section-title">Tailor-wise Summary</h3>
+          <p className="typo-caption mt-0.5">Click any row to see batch-wise detail</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-left text-gray-500 border-b">
+              <th className="px-4 py-3 font-medium">Tailor</th>
+              <th className="px-4 py-3 font-medium text-right">Batches</th>
+              <th className="px-4 py-3 font-medium text-right">Pieces</th>
+              <th className="px-4 py-3 font-medium text-right">Avg Days</th>
+              <th className="px-4 py-3 font-medium text-right">Rejection</th>
+              <th className="px-4 py-3 font-medium text-right">Avg Rate/pc</th>
+              <th className="px-4 py-3 font-medium text-right">Total Cost</th>
+              <th className="px-4 py-3 font-medium text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((t, i) => {
+              const isOpen = expandedTailor === i
+              const rejColor = t.rejection_rate > 5 ? 'text-red-600' : t.rejection_rate > 3 ? 'text-amber-600' : 'text-emerald-600'
+              return (
+                <React.Fragment key={i}>
+                  <tr onClick={() => setExpandedTailor(isOpen ? null : i)} className="border-b hover:bg-gray-50 cursor-pointer transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs">
+                          {t.tailor.full_name.split(' ').map((n) => n[0]).join('')}
+                        </div>
+                        <span className="font-semibold">{t.tailor.full_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">{t.batches_completed}</td>
+                    <td className="px-4 py-3 text-right font-medium">{t.pieces_completed.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">{t.avg_completion_days}d</td>
+                    <td className={`px-4 py-3 text-right font-medium ${rejColor}`}>{t.rejection_rate}%</td>
+                    <td className="px-4 py-3 text-right">{t.avg_stitching_rate > 0 ? fmtDec(t.avg_stitching_rate) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-right font-medium text-emerald-700">{t.total_stitching_cost > 0 ? fmt(t.total_stitching_cost) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-center">
+                      {t.pending_rate_count > 0
+                        ? <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">{t.pending_rate_count} pending</span>
+                        : <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Complete</span>
+                      }
+                    </td>
+                  </tr>
+                  {/* Expanded batch detail */}
+                  {isOpen && t.batch_details && t.batch_details.length > 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-0">
+                        <div className="bg-gray-50 px-6 py-3 border-b">
+                          <p className="typo-data-label mb-2">Batch-wise Detail — {t.tailor.full_name}</p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-left text-gray-500">
+                                <th className="pb-2 font-medium">Batch</th>
+                                <th className="pb-2 font-medium">SKU / Design</th>
+                                <th className="pb-2 font-medium">Size</th>
+                                <th className="pb-2 font-medium text-right">Pieces</th>
+                                <th className="pb-2 font-medium text-right">Rejected</th>
+                                <th className="pb-2 font-medium text-right">Rate/pc</th>
+                                <th className="pb-2 font-medium text-right">Cost</th>
+                                <th className="pb-2 font-medium">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {t.batch_details.map((bd, j) => (
+                                <tr key={j} className="border-t border-gray-200">
+                                  <td className="py-1.5 font-semibold text-emerald-600">{bd.batch_code}</td>
+                                  <td className="py-1.5">{bd.sku_code}</td>
+                                  <td className="py-1.5">{bd.size || '—'}</td>
+                                  <td className="py-1.5 text-right">{bd.pieces}</td>
+                                  <td className="py-1.5 text-right">{bd.rejected > 0 ? <span className="text-red-600">{bd.rejected}</span> : '0'}</td>
+                                  <td className="py-1.5 text-right">
+                                    {bd.rate_pending
+                                      ? <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">Rate pending</span>
+                                      : fmtDec(bd.stitching_rate)
+                                    }
+                                  </td>
+                                  <td className="py-1.5 text-right font-medium">
+                                    {bd.rate_pending
+                                      ? <span className="text-amber-500">—</span>
+                                      : fmt(bd.stitching_cost)
+                                    }
+                                  </td>
+                                  <td className="py-1.5 text-gray-500">{bd.completed_date ? new Date(bd.completed_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}</td>
+                                </tr>
+                              ))}
+                              {/* Total row */}
+                              <tr className="border-t-2 border-gray-300 font-bold text-xs">
+                                <td className="py-1.5" colSpan={3}>Total</td>
+                                <td className="py-1.5 text-right">{t.batch_details.reduce((s, b) => s + b.pieces, 0)}</td>
+                                <td className="py-1.5 text-right">{t.batch_details.reduce((s, b) => s + b.rejected, 0)}</td>
+                                <td className="py-1.5 text-right">{fmtDec(t.avg_stitching_rate)}</td>
+                                <td className="py-1.5 text-right text-emerald-700">{fmt(t.total_stitching_cost)}</td>
+                                <td />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -1206,6 +1260,273 @@ function ReturnsTab({ data }) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  CLOSING STOCK VALUATION TAB
+// ═══════════════════════════════════════════════════════
+function ClosingStockTab({ data }) {
+  if (!data) return null
+
+  const { raw_materials: rm, work_in_progress: wip, finished_goods: fg, grand_total: gt } = data
+  const fmt = (v) => `\u20B9${(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  const fmtDec = (v) => `\u20B9${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const STATUS_LABELS = {
+    in_stock: 'In Godown',
+    sent_for_processing: 'At VA',
+    in_cutting: 'In Cutting',
+    remnant: 'Remnant',
+  }
+  const STAGE_LABELS = {
+    created: 'Created',
+    assigned: 'Assigned',
+    in_progress: 'In Progress',
+    submitted: 'Submitted',
+    checked: 'QC Done',
+    packing: 'Packing',
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold">Closing Stock Valuation</h2>
+            <p className="mt-1 text-emerald-100">As of {new Date(data.as_of_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} &middot; Weighted Average Cost (AS-2)</p>
+          </div>
+          <div className="text-right">
+            <p className="text-emerald-100 text-sm font-medium">Total Closing Stock</p>
+            <p className="text-3xl font-bold">{fmt(gt.total_closing_stock)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Source indicator */}
+      {data.source === 'fy_closing_snapshot' ? (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-start gap-3">
+          <svg className="h-5 w-5 text-emerald-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <p className="text-sm text-emerald-800"><strong>Frozen snapshot</strong> from FY close ({data.fy_code}). These values were captured at the time of year-end closing and cannot change.</p>
+        </div>
+      ) : (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3">
+          <svg className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-amber-800"><strong>Live data</strong> — shows current stock levels. For year-end closing values, this is automatically frozen when you close the financial year from Settings.</p>
+        </div>
+      )}
+
+      {/* Grand Total Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard label="Raw Materials" value={fmt(gt.raw_materials)} sub={`${rm.total_rolls} rolls, ${rm.total_weight_kg} kg`}
+          color="bg-blue-500" icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        <KpiCard label="Work-in-Progress" value={fmt(gt.work_in_progress)} sub={`${wip.lots_in_cutting.count} lots + ${wip.batches_in_pipeline.total_batches} batches`}
+          color="bg-amber-500" icon="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        <KpiCard label="Finished Goods" value={fmt(gt.finished_goods)} sub={`${fg.total_skus} SKUs, ${fg.total_pieces} pcs`}
+          color="bg-emerald-500" icon="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+      </div>
+
+      {/* ─── RAW MATERIALS ─────────────────────────────────── */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Raw Materials (Rolls)</h3>
+
+        {/* Status breakdown */}
+        <div className="grid gap-3 sm:grid-cols-4 mb-6">
+          {Object.entries(rm.by_status || {}).map(([status, v]) => (
+            <div key={status} className="rounded-lg bg-gray-50 p-3 border border-gray-100">
+              <p className="typo-data-label">{STATUS_LABELS[status] || status}</p>
+              <p className="typo-kpi-sm mt-1">{v.rolls} rolls</p>
+              <p className="typo-caption">{v.weight} kg &middot; {fmt(v.value)}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Fabric-wise table */}
+        {rm.by_fabric.length > 0 && (
+          <>
+            <h4 className="typo-data-label mb-2 mt-4">By Fabric Type</h4>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">Fabric</th>
+                  <th className="pb-3 font-medium text-right">Rolls</th>
+                  <th className="pb-3 font-medium text-right">Weight (kg)</th>
+                  <th className="pb-3 font-medium text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rm.by_fabric.map((f, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-3 font-semibold">{f.fabric_type}</td>
+                    <td className="py-3 text-right">{f.rolls}</td>
+                    <td className="py-3 text-right">{f.weight}</td>
+                    <td className="py-3 text-right font-medium text-emerald-700">{fmt(f.value)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-gray-300 font-bold">
+                  <td className="py-3">Total</td>
+                  <td className="py-3 text-right">{rm.total_rolls}</td>
+                  <td className="py-3 text-right">{rm.total_weight_kg}</td>
+                  <td className="py-3 text-right text-emerald-700">{fmt(rm.total_value)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      {/* ─── WORK-IN-PROGRESS ──────────────────────────────── */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-1">Work-in-Progress</h3>
+        <p className="typo-caption mb-4">{wip.valuation_note}</p>
+
+        <div className="grid gap-4 sm:grid-cols-2 mb-6">
+          {/* Lots in cutting */}
+          <div className="rounded-lg bg-amber-50 p-4 border border-amber-100">
+            <p className="typo-data-label">Lots in Cutting</p>
+            <p className="typo-kpi-sm text-amber-700 mt-1">{wip.lots_in_cutting.count} lots</p>
+            <p className="typo-caption">Material value: {fmt(wip.lots_in_cutting.material_value)}</p>
+          </div>
+          {/* Batches in pipeline */}
+          <div className="rounded-lg bg-blue-50 p-4 border border-blue-100">
+            <p className="typo-data-label">Batches in Pipeline</p>
+            <p className="typo-kpi-sm text-blue-700 mt-1">{wip.batches_in_pipeline.total_batches} batches &middot; {wip.batches_in_pipeline.total_pieces} pcs</p>
+            <p className="typo-caption">Material value: {fmt(wip.batches_in_pipeline.total_value)}</p>
+          </div>
+        </div>
+
+        {/* By stage */}
+        {Object.keys(wip.batches_in_pipeline.by_stage || {}).length > 0 && (
+          <>
+            <h4 className="typo-data-label mb-2">Batches by Stage</h4>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">Stage</th>
+                  <th className="pb-3 font-medium text-right">Batches</th>
+                  <th className="pb-3 font-medium text-right">Pieces</th>
+                  <th className="pb-3 font-medium text-right">Material Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(wip.batches_in_pipeline.by_stage).map(([stage, v]) => (
+                  <tr key={stage} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-3 font-semibold">{STAGE_LABELS[stage] || stage}</td>
+                    <td className="py-3 text-right">{v.count}</td>
+                    <td className="py-3 text-right">{v.pieces}</td>
+                    <td className="py-3 text-right font-medium text-amber-700">{fmt(v.material_value)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-gray-300 font-bold">
+                  <td className="py-3">Total WIP</td>
+                  <td className="py-3 text-right">{wip.batches_in_pipeline.total_batches}</td>
+                  <td className="py-3 text-right">{wip.batches_in_pipeline.total_pieces}</td>
+                  <td className="py-3 text-right text-amber-700">{fmt(wip.total_value)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      {/* ─── FINISHED GOODS ────────────────────────────────── */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Finished Goods</h3>
+
+        {/* By product type summary */}
+        {fg.by_product_type.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-4 mb-6">
+            {fg.by_product_type.map((pt) => (
+              <div key={pt.product_type} className="rounded-lg bg-emerald-50 p-3 border border-emerald-100">
+                <p className="typo-data-label">{pt.product_type}</p>
+                <p className="typo-kpi-sm text-emerald-700 mt-1">{pt.skus} SKUs</p>
+                <p className="typo-caption">{pt.pieces} pcs &middot; {fmt(pt.value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Unpriced warning */}
+        {fg.unpriced_skus > 0 && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 mb-4 flex items-start gap-3">
+            <svg className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <div>
+              <p className="font-semibold text-amber-800">{fg.unpriced_skus} SKU{fg.unpriced_skus > 1 ? 's' : ''} without cost price</p>
+              <p className="text-amber-700 text-sm mt-0.5">These SKUs show {'\u20B9'}0 value because base price is not set. Go to SKUs page and fill the base price (cost price) to get accurate valuation.</p>
+            </div>
+          </div>
+        )}
+
+        {/* SKU detail table with 5-component cost breakdown */}
+        {fg.items.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">SKU Code</th>
+                  <th className="pb-3 font-medium text-right">Qty</th>
+                  <th className="pb-3 font-medium text-right">Material</th>
+                  <th className="pb-3 font-medium text-right">Roll VA</th>
+                  <th className="pb-3 font-medium text-right">Stitching</th>
+                  <th className="pb-3 font-medium text-right">Batch VA</th>
+                  <th className="pb-3 font-medium text-right">Other</th>
+                  <th className="pb-3 font-medium text-right">Total/pc</th>
+                  <th className="pb-3 font-medium text-right">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fg.items.map((item, i) => {
+                  const cb = item.cost_breakdown || {}
+                  const missing = item.cost_source === 'missing'
+                  const dash = <span className="text-gray-300">—</span>
+                  const costCell = (v) => v > 0 ? fmtDec(v) : <span className="text-gray-300">0</span>
+                  return (
+                    <tr key={i} className={`border-b last:border-0 hover:bg-gray-50 ${missing ? 'bg-amber-50/50' : ''}`}>
+                      <td className="py-2.5">
+                        <span className="font-semibold text-emerald-600">{item.sku_code}</span>
+                        {missing && <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">No cost</span>}
+                      </td>
+                      <td className="py-2.5 text-right">{item.total_qty}</td>
+                      <td className="py-2.5 text-right">{missing ? dash : costCell(cb.material_cost)}</td>
+                      <td className="py-2.5 text-right">{missing ? dash : costCell(cb.roll_va_cost)}</td>
+                      <td className="py-2.5 text-right">{missing ? dash : costCell(cb.stitching_cost)}</td>
+                      <td className="py-2.5 text-right">{missing ? dash : costCell(cb.batch_va_cost)}</td>
+                      <td className="py-2.5 text-right">{missing ? dash : costCell(cb.other_cost)}</td>
+                      <td className="py-2.5 text-right font-medium">{missing ? dash : fmtDec(item.wac_per_unit)}</td>
+                      <td className="py-2.5 text-right font-medium text-emerald-700">{missing ? dash : fmt(item.value)}</td>
+                    </tr>
+                  )
+                })}
+                <tr className="border-t-2 border-gray-300 font-bold">
+                  <td className="py-3">Total</td>
+                  <td className="py-3 text-right">{fg.total_pieces}</td>
+                  <td className="py-3 text-right" colSpan={6}></td>
+                  <td className="py-3 text-right text-emerald-700">{fmt(fg.total_value)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Formula note */}
+        <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+          <p className="text-xs font-semibold text-gray-600 mb-1">Cost Formula (per piece)</p>
+          <p className="text-xs text-gray-500">
+            <strong>Total Cost</strong> = Material (fabric weight &times; rate) + Roll VA (embroidery, dying on fabric) + Stitching (tailor charges) + Batch VA (handstitch, buttons on garment) + Other (thread, lining, packing, misc)
+          </p>
+          <p className="text-xs text-gray-400 mt-1">Valuation method: Weighted Average Cost (AS-2 / Ind AS 2). Material cost derived from lot&rarr;roll chain. VA costs from challan receive records. Stitching &amp; Other from SKU master.</p>
+        </div>
+
+        {fg.items.length === 0 && <p className="typo-empty py-4 text-center">No finished goods in stock.</p>}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
 //  MAIN REPORTS PAGE
 // ═══════════════════════════════════════════════════════
 export default function ReportsPage() {
@@ -1224,6 +1545,7 @@ export default function ReportsPage() {
   const [purchaseData, setPurchaseData] = useState(null)
   const [returnsData, setReturnsData] = useState(null)
   const [tailorData, setTailorData] = useState([])
+  const [closingStockData, setClosingStockData] = useState(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -1254,6 +1576,9 @@ export default function ReportsPage() {
       } else if (activeTab === 'returns') {
         const res = await getReturnsReport(params)
         setReturnsData(res.data.data)
+      } else if (activeTab === 'closing_stock') {
+        const res = await getClosingStockReport()
+        setClosingStockData(res.data.data)
       } else if (activeTab === 'tailor') {
         const res = await getTailorPerf(params)
         setTailorData(res.data.data)
@@ -1336,6 +1661,7 @@ export default function ReportsPage() {
             {activeTab === 'va' && <VATab data={vaData} />}
             {activeTab === 'purchases' && <PurchaseTab data={purchaseData} />}
             {activeTab === 'returns' && <ReturnsTab data={returnsData} />}
+            {activeTab === 'closing_stock' && <ClosingStockTab data={closingStockData} />}
             {activeTab === 'tailor' && <TailorTab data={tailorData} />}
           </>
         )}

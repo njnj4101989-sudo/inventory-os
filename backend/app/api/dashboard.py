@@ -211,6 +211,41 @@ async def purchase_report(
     return {"success": True, "data": result}
 
 
+@router.get("/closing-stock-report", response_model=None)
+async def closing_stock_report(
+    as_of_date: date | None = Query(None, description="Valuation date (default: today)"),
+    fy_id: str | None = Query(None, description="FY ID — if closed FY, returns frozen snapshot"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Closing stock valuation — Raw Materials + WIP + Finished Goods (AS-2 WAC).
+    For closed FYs, returns the frozen snapshot captured at close time."""
+    # Check if requesting a closed FY's snapshot
+    if fy_id:
+        from uuid import UUID as UUIDType
+        from app.models.financial_year import FinancialYear
+        from sqlalchemy import select
+        try:
+            fy = (await db.execute(
+                select(FinancialYear).where(FinancialYear.id == UUIDType(fy_id))
+            )).scalar_one_or_none()
+            if fy and fy.status == "closed" and fy.closing_snapshot and "stock_valuation" in fy.closing_snapshot:
+                return {"success": True, "data": {
+                    "as_of_date": str(fy.end_date),
+                    "valuation_method": "weighted_average_cost",
+                    "source": "fy_closing_snapshot",
+                    "fy_code": fy.code,
+                    **fy.closing_snapshot["stock_valuation"],
+                }}
+        except (ValueError, Exception):
+            pass  # fall through to live computation
+
+    svc = DashboardService(db)
+    result = await svc.get_closing_stock_report(as_of_date)
+    result["source"] = "live"
+    return {"success": True, "data": result}
+
+
 @router.get("/returns-report", response_model=None)
 async def returns_report(
     period: str | None = Query(None),

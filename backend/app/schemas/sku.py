@@ -58,6 +58,8 @@ class SKUUpdate(BaseModel):
     gst_percent: Decimal | None = None
     mrp: Decimal | None = None
     sale_rate: Decimal | None = None
+    stitching_cost: Decimal | None = None
+    other_cost: Decimal | None = None
     unit: str | None = None
     is_active: bool | None = None
 
@@ -79,6 +81,8 @@ class SKUResponse(BaseSchema):
     gst_percent: Decimal | None = None
     mrp: Decimal | None = None
     sale_rate: Decimal | None = None
+    stitching_cost: Decimal | None = None
+    other_cost: Decimal | None = None
     unit: str | None = None
     is_active: bool
     stock: StockBrief | None = None

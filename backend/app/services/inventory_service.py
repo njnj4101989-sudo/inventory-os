@@ -3,7 +3,7 @@
 Core principle: all stock changes flow through inventory events.
 State is always recomputable from the event stream.
 
-Formula: total = STOCK_IN − STOCK_OUT − LOSS + RETURN
+Formula: total = STOCK_IN + OPENING_STOCK + ADJUSTMENT + RETURN − STOCK_OUT − LOSS
          reserved = SUM(active reservations)
          available = total − reserved
 """
@@ -165,7 +165,7 @@ class InventoryService:
             await self.db.flush()
 
         # Update based on event type
-        if event_type in ("stock_in", "return", "ready_stock_in"):
+        if event_type in ("stock_in", "return", "ready_stock_in", "opening_stock", "adjustment"):
             state.total_qty += quantity
         elif event_type in ("stock_out", "loss"):
             state.total_qty = max(0, state.total_qty - quantity)
@@ -177,7 +177,7 @@ class InventoryService:
         return event
 
     async def adjust_inventory(self, req: AdjustRequest, user_id: UUID) -> dict:
-        valid_types = ("stock_in", "stock_out", "loss", "return", "adjustment")
+        valid_types = ("stock_in", "stock_out", "loss", "return", "adjustment", "opening_stock")
         if req.event_type not in valid_types:
             raise ValidationError(f"Invalid event_type '{req.event_type}'. Must be one of: {valid_types}")
 
@@ -202,6 +202,59 @@ class InventoryService:
         return {
             "event": self._event_to_response(event),
             "inventory": inv,
+        }
+
+    async def create_opening_stock(self, items: list, performed_by: UUID) -> dict:
+        """Bulk opening stock entry for Day 1 setup."""
+        created = 0
+        skipped = []
+
+        for item in items:
+            # Check for existing opening_stock event for this SKU (prevent duplicates)
+            existing = (await self.db.execute(
+                select(func.count()).select_from(InventoryEvent).where(
+                    InventoryEvent.sku_id == item.sku_id,
+                    InventoryEvent.event_type == "opening_stock",
+                )
+            )).scalar() or 0
+            if existing > 0:
+                # Get SKU code for message
+                sku = (await self.db.execute(
+                    select(SKU.sku_code).where(SKU.id == item.sku_id)
+                )).scalar()
+                skipped.append(sku or str(item.sku_id))
+                continue
+
+            # Verify SKU exists
+            sku_row = (await self.db.execute(
+                select(SKU).where(SKU.id == item.sku_id)
+            )).scalar_one_or_none()
+            if not sku_row:
+                raise ValidationError(f"SKU {item.sku_id} not found")
+
+            if item.quantity <= 0:
+                raise ValidationError(f"Quantity must be > 0 for SKU {sku_row.sku_code}")
+
+            metadata = {"is_opening_stock": True}
+            if item.unit_cost is not None:
+                metadata["unit_cost"] = item.unit_cost
+
+            await self.create_event(
+                event_type="opening_stock",
+                item_type="finished_goods",
+                reference_type="opening_stock",
+                reference_id=uuid.uuid4(),
+                sku_id=item.sku_id,
+                quantity=item.quantity,
+                performed_by=performed_by,
+                metadata=metadata,
+            )
+            created += 1
+
+        return {
+            "created": created,
+            "skipped": skipped,
+            "message": f"{created} SKU opening stock entries created" + (f", {len(skipped)} skipped (already exist)" if skipped else ""),
         }
 
     async def reconcile(self) -> dict:
@@ -241,6 +294,8 @@ class InventoryService:
                 (totals.get("stock_in", 0) or 0)
                 + (totals.get("return", 0) or 0)
                 + (totals.get("ready_stock_in", 0) or 0)
+                + (totals.get("opening_stock", 0) or 0)
+                + (totals.get("adjustment", 0) or 0)
                 - (totals.get("stock_out", 0) or 0)
                 - (totals.get("loss", 0) or 0)
             )
