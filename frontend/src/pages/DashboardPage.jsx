@@ -42,7 +42,7 @@ function Gauge({ value, max, level, label, detail }) {
             style={{ transition: 'all 0.8s ease-out' }} />
         )}
         {/* Center value */}
-        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-gray-900" style={{ fontSize: '22px', fontWeight: 700 }}>
+        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-gray-900" style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
           {typeof value === 'number' && max === 100 ? `${value}%` : value}
         </text>
       </svg>
@@ -112,7 +112,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
           const isToday = i === data.length - 1
           return (
             <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-              <span className="typo-caption text-[10px]">
+              <span className="typo-kpi-label">
                 {d.amount > 0 ? `\u20B9${(d.amount / 1000).toFixed(d.amount >= 1000 ? 0 : 1)}k` : ''}
               </span>
               <div className="w-full flex justify-center">
@@ -122,7 +122,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
                   title={`${d.day_label}: \u20B9${d.amount.toLocaleString()}`}
                 />
               </div>
-              <span className={`text-[10px] font-medium ${isToday ? 'text-emerald-700' : 'text-gray-400'}`}>{d.day_label}</span>
+              <span className={`typo-kpi-label ${isToday ? 'text-emerald-700' : ''}`}>{d.day_label}</span>
             </div>
           )
         })}
@@ -310,7 +310,7 @@ export default function DashboardPage() {
             <div key={stage.label} className="flex items-center flex-1">
               <div className={`flex-1 rounded-lg p-3 text-center ${stage.bg} ${stage.value > 0 ? 'ring-1 ring-inset ring-black/5' : ''}`}>
                 <p className={`typo-kpi ${stage.accent}`}>{stage.value}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide mt-1 text-gray-500">{stage.label}</p>
+                <p className="typo-kpi-label mt-1">{stage.label}</p>
               </div>
               {i < arr.length - 1 && (
                 <svg className="h-4 w-4 text-gray-300 flex-shrink-0 mx-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
