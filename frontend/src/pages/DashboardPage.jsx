@@ -94,8 +94,8 @@ function AlertBar({ alerts }) {
               <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${s.dot}`} />
             </span>
             <div className="flex-1 min-w-0">
-              <span className={`text-sm font-semibold ${s.title}`}>{a.title}</span>
-              <span className={`ml-2 text-xs ${s.msg}`}>{a.message}</span>
+              <span className={`text-sm font-bold tracking-tight ${s.title}`}>{a.title}</span>
+              <span className={`ml-2 text-xs font-medium ${s.msg}`}>{a.message}</span>
             </div>
             <span className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${s.dot} text-white`}>
               {a.count}
