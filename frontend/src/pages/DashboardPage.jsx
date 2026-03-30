@@ -302,7 +302,7 @@ export default function DashboardPage() {
             <div key={stage.label} className="flex items-center flex-1">
               <div className={`flex-1 rounded-lg p-3 text-center ${stage.bg} ${stage.value > 0 ? 'ring-1 ring-inset ring-black/5' : ''}`}>
                 <p className={`text-2xl font-bold tracking-tight ${stage.accent}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{stage.value}</p>
-                <p className="typo-kpi-label mt-1">{stage.label}</p>
+                <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${stage.accent}`}>{stage.label}</p>
               </div>
               {i < arr.length - 1 && (
                 <svg className="h-4 w-4 text-gray-300 flex-shrink-0 mx-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
