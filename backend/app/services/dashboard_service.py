@@ -1920,3 +1920,195 @@ class DashboardService:
             "by_customer": by_customer,
             "supplier_returns": supplier_returns,
         }
+
+    # ═══════════════════════════════════════════════════════
+    #  ENHANCED DASHBOARD (WOW)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_dashboard_enhanced(self, fy_id=None) -> dict:
+        """Enhanced dashboard — smart alerts, 7-day revenue, production gauges."""
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        seven_days_ago = today - timedelta(days=7)
+        inv_fy = [Invoice.fy_id == fy_id] if fy_id else []
+
+        # ── SMART ALERTS ──────────────────────────────────
+        alerts = []
+
+        # 1. Unclaimed batches (created > 24h, no assignment)
+        unclaimed = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(
+                Batch.status == "created",
+                Batch.created_at < now - timedelta(hours=24),
+            )
+        )).scalar() or 0
+        if unclaimed > 0:
+            alerts.append({"severity": "critical", "title": "Unclaimed Batches", "message": f"{unclaimed} batches waiting 24h+ — no tailor has scanned", "count": unclaimed})
+
+        # 2. Lots piling up (3+ open lots)
+        open_lots = (await self.db.execute(
+            select(func.count()).select_from(Lot).where(Lot.status == "open")
+        )).scalar() or 0
+        if open_lots >= 3:
+            alerts.append({"severity": "warning", "title": "Lots Piling Up", "message": f"{open_lots} lots in open status — cutting may be delayed", "count": open_lots})
+
+        # 3. VA overdue (challans sent > 7 days, not received)
+        overdue_jc = (await self.db.execute(
+            select(func.count()).select_from(JobChallan).where(
+                JobChallan.status == "sent",
+                JobChallan.sent_date < today - timedelta(days=7),
+            )
+        )).scalar() or 0
+        overdue_bc = (await self.db.execute(
+            select(func.count()).select_from(BatchChallan).where(
+                BatchChallan.status == "sent",
+                BatchChallan.sent_date < today - timedelta(days=7),
+            )
+        )).scalar() or 0
+        overdue_va = overdue_jc + overdue_bc
+        if overdue_va > 0:
+            alerts.append({"severity": "critical", "title": "VA Overdue", "message": f"{overdue_va} challans sent 7+ days ago, not received", "count": overdue_va})
+
+        # 4. Overdue invoices
+        overdue_inv = (await self.db.execute(
+            select(
+                func.count().label("cnt"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("amount"),
+            )
+            .where(
+                Invoice.status == "issued",
+                Invoice.due_date != None,
+                Invoice.due_date < today,
+                *inv_fy,
+            )
+        )).one()
+        if overdue_inv.cnt > 0:
+            alerts.append({"severity": "warning", "title": "Overdue Invoices", "message": f"{overdue_inv.cnt} invoices overdue — \u20B9{float(overdue_inv.amount):,.0f}", "count": overdue_inv.cnt})
+
+        # 5. Low stock SKUs
+        low_stock = (await self.db.execute(
+            select(func.count()).select_from(InventoryState).where(
+                InventoryState.available_qty > 0,
+                InventoryState.available_qty <= 10,
+            )
+        )).scalar() or 0
+        if low_stock > 0:
+            alerts.append({"severity": "info", "title": "Low Stock", "message": f"{low_stock} SKUs running low (< 10 available)", "count": low_stock})
+
+        # 6. Submitted but not checked (QC bottleneck)
+        submitted_waiting = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(
+                Batch.status == "submitted",
+                Batch.submitted_at < now - timedelta(hours=48),
+            )
+        )).scalar() or 0
+        if submitted_waiting > 0:
+            alerts.append({"severity": "warning", "title": "QC Bottleneck", "message": f"{submitted_waiting} batches awaiting QC for 48h+", "count": submitted_waiting})
+
+        # ── 7-DAY REVENUE TREND ───────────────────────────
+        rev_stmt = (
+            select(
+                func.date(Invoice.paid_at).label("day"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("amount"),
+                func.count().label("invoices"),
+            )
+            .where(
+                Invoice.status == "paid",
+                func.date(Invoice.paid_at) >= seven_days_ago,
+                func.date(Invoice.paid_at) <= today,
+                *inv_fy,
+            )
+            .group_by(func.date(Invoice.paid_at))
+        )
+        rev_rows = (await self.db.execute(rev_stmt)).all()
+        rev_map = {str(r.day): {"amount": float(r.amount), "invoices": r.invoices} for r in rev_rows}
+
+        revenue_trend = []
+        current = seven_days_ago
+        while current <= today:
+            d = rev_map.get(current.isoformat(), {"amount": 0, "invoices": 0})
+            revenue_trend.append({
+                "date": current.isoformat(),
+                "day_label": current.strftime("%a"),
+                "amount": d["amount"],
+                "invoices": d["invoices"],
+            })
+            current += timedelta(days=1)
+
+        # ── PRODUCTION GAUGES ─────────────────────────────
+
+        # Lot Load gauge: open lots vs threshold (3 = normal, 5 = busy, 7+ = overloaded)
+        lot_load = {
+            "value": open_lots,
+            "max": 10,
+            "level": "overloaded" if open_lots >= 7 else "busy" if open_lots >= 4 else "normal",
+            "label": "Lot Load",
+        }
+
+        # Tailor Utilization: assigned+in_progress batches / total tailors
+        from app.models.role import Role
+        total_tailors = (await self.db.execute(
+            select(func.count()).select_from(User)
+            .join(Role, Role.id == User.role_id)
+            .where(Role.name == "tailor", User.is_active == True)
+        )).scalar() or 1
+        active_batches = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(
+                Batch.status.in_(["assigned", "in_progress"])
+            )
+        )).scalar() or 0
+        utilization_pct = min(round(active_batches / total_tailors * 100), 100) if total_tailors > 0 else 0
+        idle_tailors = max(total_tailors - active_batches, 0)
+
+        tailor_util = {
+            "value": utilization_pct,
+            "max": 100,
+            "level": "overloaded" if utilization_pct >= 90 else "busy" if utilization_pct >= 60 else "low" if utilization_pct < 30 else "normal",
+            "label": "Tailor Load",
+            "detail": f"{active_batches}/{total_tailors} tailors active" + (f", {idle_tailors} idle" if idle_tailors > 0 else ""),
+        }
+
+        # QC Throughput: checked today / submitted (waiting for QC)
+        submitted_count = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(Batch.status == "submitted")
+        )).scalar() or 0
+        checked_today = (await self.db.execute(
+            select(func.count()).select_from(Batch).where(
+                Batch.status.in_(["checked", "packing", "packed"]),
+                func.date(Batch.checked_at) == today,
+            )
+        )).scalar() or 0
+        qc_ratio = round(checked_today / max(submitted_count + checked_today, 1) * 100)
+
+        qc_throughput = {
+            "value": qc_ratio,
+            "max": 100,
+            "level": "overloaded" if submitted_count > 5 and checked_today == 0 else "busy" if qc_ratio < 50 else "normal",
+            "label": "QC Flow",
+            "detail": f"{checked_today} checked today, {submitted_count} in queue",
+        }
+
+        # ── INVOICE SPLIT ─────────────────────────────────
+        inv_split = (await self.db.execute(
+            select(
+                func.coalesce(func.sum(case((Invoice.status == "paid", Invoice.total_amount))), 0).label("paid"),
+                func.coalesce(func.sum(case((Invoice.status == "issued", Invoice.total_amount))), 0).label("pending"),
+            )
+            .where(*inv_fy)
+        )).one()
+        invoice_split = {
+            "paid": float(inv_split.paid),
+            "pending": float(inv_split.pending),
+            "total": float(inv_split.paid) + float(inv_split.pending),
+        }
+
+        return {
+            "alerts": sorted(alerts, key=lambda a: {"critical": 0, "warning": 1, "info": 2}[a["severity"]]),
+            "revenue_trend": revenue_trend,
+            "gauges": {
+                "lot_load": lot_load,
+                "tailor_util": tailor_util,
+                "qc_throughput": qc_throughput,
+            },
+            "invoice_split": invoice_split,
+        }

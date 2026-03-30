@@ -14,6 +14,10 @@ export async function getSummary() {
   return client.get('/dashboard/summary')
 }
 
+export async function getEnhancedDashboard() {
+  return client.get('/dashboard/enhanced')
+}
+
 export async function getTailorPerf(params = {}) {
   if (USE_MOCK) {
     let data = [...tailorPerformance]

@@ -40,6 +40,18 @@ async def get_summary(
     return {"success": True, "data": result}
 
 
+@router.get("/enhanced", response_model=None)
+async def enhanced_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Enhanced dashboard — smart alerts, revenue trend, production gauges."""
+    fy_id = get_fy_id(current_user)
+    svc = DashboardService(db)
+    result = await svc.get_dashboard_enhanced(fy_id)
+    return {"success": True, "data": result}
+
+
 @router.get("/inventory-summary", response_model=None)
 async def inventory_summary(
     db: AsyncSession = Depends(get_db),
