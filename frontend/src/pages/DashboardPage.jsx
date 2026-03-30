@@ -60,9 +60,9 @@ function AlertBar({ alerts }) {
   if (!alerts || alerts.length === 0) return null
 
   const SEVERITY = {
-    critical: { bg: 'bg-red-50 border-red-200', text: 'text-red-800', icon: 'text-red-500', dot: 'bg-red-500' },
-    warning: { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-800', icon: 'text-amber-500', dot: 'bg-amber-500' },
-    info: { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-800', icon: 'text-blue-500', dot: 'bg-blue-500' },
+    critical: { bg: 'bg-red-50 border-red-200', title: 'text-red-800', msg: 'text-red-700', dot: 'bg-red-500' },
+    warning: { bg: 'bg-amber-50 border-amber-200', title: 'text-amber-800', msg: 'text-amber-700', dot: 'bg-amber-500' },
+    info: { bg: 'bg-blue-50 border-blue-200', title: 'text-blue-800', msg: 'text-blue-700', dot: 'bg-blue-500' },
   }
 
   return (
@@ -71,13 +71,13 @@ function AlertBar({ alerts }) {
         const s = SEVERITY[a.severity] || SEVERITY.info
         return (
           <div key={i} className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 ${s.bg}`}>
-            <span className={`relative flex h-2.5 w-2.5 flex-shrink-0`}>
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
               <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${s.dot}`} />
               <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${s.dot}`} />
             </span>
             <div className="flex-1 min-w-0">
-              <span className={`typo-data ${s.text}`}>{a.title}</span>
-              <span className={`ml-2 typo-caption ${s.text} opacity-80`}>{a.message}</span>
+              <span className={`text-sm font-semibold ${s.title}`}>{a.title}</span>
+              <span className={`ml-2 text-xs ${s.msg}`}>{a.message}</span>
             </div>
             <span className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${s.dot} text-white`}>
               {a.count}
@@ -102,7 +102,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
           <p className="typo-caption mt-0.5">7-day trend</p>
         </div>
         <div className="text-right">
-          <p className="typo-kpi text-emerald-600">{'\u20B9'}{monthRevenue.toLocaleString()}</p>
+          <p className="typo-kpi-sm text-emerald-600">{'\u20B9'}{monthRevenue.toLocaleString()}</p>
           <p className="typo-caption">This month</p>
         </div>
       </div>
@@ -122,14 +122,14 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
                   title={`${d.day_label}: \u20B9${d.amount.toLocaleString()}`}
                 />
               </div>
-              <span className={`typo-kpi-label ${isToday ? 'text-emerald-700' : ''}`}>{d.day_label}</span>
+              <span className={isToday ? 'text-[10px] font-semibold uppercase tracking-wider text-emerald-700' : 'typo-kpi-label'}>{d.day_label}</span>
             </div>
           )
         })}
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between">
         <span className="typo-data-label">Today</span>
-        <span className="typo-data text-emerald-600">{'\u20B9'}{todayRevenue.toLocaleString()}</span>
+        <span className="text-sm font-semibold text-emerald-600">{'\u20B9'}{todayRevenue.toLocaleString()}</span>
       </div>
     </div>
   )
@@ -151,12 +151,12 @@ function InvoiceSplit({ data }) {
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-emerald-500" />
           <span className="typo-data-label">Paid</span>
-          <span className="typo-data text-emerald-600">{'\u20B9'}{data.paid.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-emerald-600">{'\u20B9'}{data.paid.toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-amber-400" />
           <span className="typo-data-label">Pending</span>
-          <span className="typo-data text-amber-600">{'\u20B9'}{data.pending.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-amber-600">{'\u20B9'}{data.pending.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -229,7 +229,7 @@ export default function DashboardPage() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
           </span>
-          <span className="typo-caption text-emerald-600">Live</span>
+          <span className="text-xs text-emerald-600 font-medium">Live</span>
         </div>
       </div>
 
@@ -309,7 +309,7 @@ export default function DashboardPage() {
           ].map((stage, i, arr) => (
             <div key={stage.label} className="flex items-center flex-1">
               <div className={`flex-1 rounded-lg p-3 text-center ${stage.bg} ${stage.value > 0 ? 'ring-1 ring-inset ring-black/5' : ''}`}>
-                <p className={`typo-kpi ${stage.accent}`}>{stage.value}</p>
+                <p className={`text-2xl font-bold tracking-tight ${stage.accent}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{stage.value}</p>
                 <p className="typo-kpi-label mt-1">{stage.label}</p>
               </div>
               {i < arr.length - 1 && (
