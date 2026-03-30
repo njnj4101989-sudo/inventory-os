@@ -456,10 +456,6 @@ class BatchService:
                 # Finalize cost with SKU-level stitching + other
                 sku_cost = self._finalize_cost_with_sku({**cost_breakdown}, sku)
 
-                # Set base_price on SKU if not already set
-                if sku.base_price is None and sku_cost["total_cost_per_piece"] > 0:
-                    sku.base_price = sku_cost["total_cost_per_piece"]
-
                 await inv_svc.create_event(
                     event_type="ready_stock_in",
                     item_type="finished_goods",
@@ -489,9 +485,6 @@ class BatchService:
             # Get SKU for cost fields
             sku = (await self.db.execute(select(SKU).where(SKU.id == batch.sku_id))).scalar_one_or_none()
             sku_cost = self._finalize_cost_with_sku({**cost_breakdown}, sku) if sku else cost_breakdown
-
-            if sku and sku.base_price is None and sku_cost.get("total_cost_per_piece", 0) > 0:
-                sku.base_price = sku_cost["total_cost_per_piece"]
 
             await inv_svc.create_event(
                 event_type="ready_stock_in",

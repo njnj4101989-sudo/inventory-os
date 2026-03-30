@@ -91,6 +91,61 @@ class SKUService:
         resp["source_batches"] = [self._batch_brief(b) for b in batches]
         return resp
 
+    async def get_cost_history(self, sku_id: UUID) -> dict:
+        """Per-batch cost breakdown from ready_stock_in event metadata."""
+        sku = await self._get_or_404(sku_id)
+
+        # Get all ready_stock_in + opening_stock + stock_in events for this SKU
+        events = (await self.db.execute(
+            select(InventoryEvent)
+            .where(
+                InventoryEvent.sku_id == sku_id,
+                InventoryEvent.event_type.in_(("ready_stock_in", "opening_stock", "stock_in")),
+            )
+            .order_by(InventoryEvent.performed_at.desc())
+        )).scalars().all()
+
+        batches = []
+        total_pieces = 0
+        total_cost = 0.0
+
+        for evt in events:
+            meta = evt.metadata_ or {}
+            cb = meta.get("cost_breakdown", {})
+            unit_cost = float(meta.get("unit_cost", 0))
+            qty = evt.quantity or 0
+
+            batches.append({
+                "batch_code": meta.get("batch_code", meta.get("reference", "—")),
+                "event_type": evt.event_type,
+                "date": evt.performed_at.strftime("%Y-%m-%d") if evt.performed_at else None,
+                "pieces": qty,
+                "material_cost": round(float(cb.get("material_cost", 0)), 2),
+                "roll_va_cost": round(float(cb.get("roll_va_cost", 0)), 2),
+                "stitching_cost": round(float(cb.get("stitching_cost", 0)), 2),
+                "batch_va_cost": round(float(cb.get("batch_va_cost", 0)), 2),
+                "other_cost": round(float(cb.get("other_cost", 0)), 2),
+                "total_cost_per_piece": round(unit_cost, 2),
+                "line_total": round(unit_cost * qty, 2),
+                "rate_pending": unit_cost == 0 and qty > 0,
+            })
+            total_pieces += qty
+            total_cost += unit_cost * qty
+
+        wac = round(total_cost / total_pieces, 2) if total_pieces > 0 else 0
+
+        return {
+            "sku_id": str(sku_id),
+            "sku_code": sku.sku_code,
+            "current_stitching_cost": float(sku.stitching_cost) if sku.stitching_cost else None,
+            "current_other_cost": float(sku.other_cost) if sku.other_cost else None,
+            "total_batches": len(batches),
+            "total_pieces": total_pieces,
+            "total_cost": round(total_cost, 2),
+            "wac_per_piece": wac,
+            "batches": batches,
+        }
+
     async def create_sku(self, req: SKUCreate) -> dict:
         # Auto-generate sku_code: ProductType-DesignNo-Color-Size
         sku_code = f"{req.product_type}-{req.product_name}-{req.color}-{req.size}"

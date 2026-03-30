@@ -79,6 +79,18 @@ async def get_sku_by_code(
     return {"success": True, "data": result}
 
 
+@router.get("/{sku_id}/cost-history", response_model=None)
+async def get_cost_history(
+    sku_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Per-batch cost breakdown for a SKU — from event metadata."""
+    svc = SKUService(db)
+    result = await svc.get_cost_history(sku_id)
+    return {"success": True, "data": result}
+
+
 @router.get("/{sku_id}", response_model=None)
 async def get_sku(
     sku_id: UUID,

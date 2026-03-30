@@ -103,3 +103,7 @@ export async function getSKUPassport(skuCode) {
 export async function getSKUByCode(skuCode) {
   return client.get(`/skus/by-code/${encodeURIComponent(skuCode)}`)
 }
+
+export async function getSKUCostHistory(skuId) {
+  return client.get(`/skus/${skuId}/cost-history`)
+}

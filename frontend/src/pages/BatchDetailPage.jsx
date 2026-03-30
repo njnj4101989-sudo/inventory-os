@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { QRCodeSVG } from 'qrcode.react'
 import { getBatch, checkBatch, readyForPacking, packBatch, updateBatch } from '../api/batches'
+import { getSKUCostHistory, updateSKU } from '../api/skus'
 import StatusBadge from '../components/common/StatusBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
@@ -54,6 +55,10 @@ export default function BatchDetailPage() {
   const [labelBatches, setLabelBatches] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [packRef, setPackRef] = useState('')
+  const [packCostInfo, setPackCostInfo] = useState(null) // {total_batches, current_stitching_cost, current_other_cost}
+  const [packStitching, setPackStitching] = useState('')
+  const [packOther, setPackOther] = useState('')
+  const [packCostLoading, setPackCostLoading] = useState(false)
   const [showQCForm, setShowQCForm] = useState(false)
   const [qcApproved, setQcApproved] = useState('')
   const [qcRejected, setQcRejected] = useState('')
@@ -90,9 +95,35 @@ export default function BatchDetailPage() {
     } finally { setActionLoading(false) }
   }
 
+  // Load cost info for pack confirmation
+  useEffect(() => {
+    if (batch?.status === 'packing' && batch?.sku_id) {
+      setPackCostLoading(true)
+      getSKUCostHistory(batch.sku_id)
+        .then(res => {
+          const d = res.data.data
+          setPackCostInfo(d)
+          setPackStitching(d.current_stitching_cost != null ? String(d.current_stitching_cost) : '')
+          setPackOther(d.current_other_cost != null ? String(d.current_other_cost) : '')
+        })
+        .catch(() => setPackCostInfo(null))
+        .finally(() => setPackCostLoading(false))
+    }
+  }, [batch?.status, batch?.sku_id])
+
   const handlePackBatch = async () => {
     setActionLoading(true)
     try {
+      // Save updated rates to SKU before packing (if changed)
+      if (batch?.sku_id) {
+        const stitchVal = packStitching !== '' ? parseFloat(packStitching) : null
+        const otherVal = packOther !== '' ? parseFloat(packOther) : null
+        const changed = stitchVal !== (packCostInfo?.current_stitching_cost ?? null)
+          || otherVal !== (packCostInfo?.current_other_cost ?? null)
+        if (changed) {
+          await updateSKU(batch.sku_id, { stitching_cost: stitchVal, other_cost: otherVal })
+        }
+      }
       await packBatch(batch.id, { pack_reference: packRef.trim() || null })
       setPackRef('')
       fetchBatch()
@@ -274,20 +305,56 @@ export default function BatchDetailPage() {
       )}
 
       {(perms.batch_pack || isAdminOrSuper) && batch.status === 'packing' && (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 flex items-center justify-between gap-4">
-          <div>
-            <p className="typo-data text-green-800">Batch is ready — Confirm packing</p>
-            <p className="text-[11px] text-green-600 mt-0.5">{pieces} pieces to pack</p>
+        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="typo-data text-green-800">Batch is ready — Confirm packing</p>
+              <p className="text-[11px] text-green-600 mt-0.5">{pieces} pieces to pack</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
+                placeholder="Pack reference (optional)"
+                className="rounded-lg border border-green-300 px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-green-400" />
+              <button onClick={handlePackBatch} disabled={actionLoading || packCostLoading}
+                className="rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 typo-btn disabled:opacity-50 transition-colors whitespace-nowrap">
+                {actionLoading ? 'Packing...' : 'Confirm & Pack'}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <input type="text" value={packRef} onChange={(e) => setPackRef(e.target.value)}
-              placeholder="Pack reference (optional)"
-              className="rounded-lg border border-green-300 px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-green-400" />
-            <button onClick={handlePackBatch} disabled={actionLoading}
-              className="rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-2 typo-btn disabled:opacity-50 transition-colors whitespace-nowrap">
-              {actionLoading ? 'Packing...' : 'Mark as Packed'}
-            </button>
-          </div>
+
+          {/* Cost rate confirmation */}
+          {!packCostLoading && (
+            <div className="rounded-lg bg-white border border-green-200 px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-700">Cost Rates for this SKU</p>
+                {packCostInfo && packCostInfo.total_batches > 0 && (
+                  <span className="text-xs text-gray-500">{packCostInfo.total_batches} previous batch{packCostInfo.total_batches !== 1 ? 'es' : ''} produced</span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-gray-500">Stitching Cost/pc</label>
+                  <input type="number" min="0" step="0.01" value={packStitching} onChange={(e) => setPackStitching(e.target.value)}
+                    placeholder="₹ rate"
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-500">Other Cost/pc</label>
+                  <input type="number" min="0" step="0.01" value={packOther} onChange={(e) => setPackOther(e.target.value)}
+                    placeholder="₹ rate"
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400" />
+                </div>
+                {packCostInfo && packCostInfo.wac_per_piece > 0 && (
+                  <div className="sm:col-span-2 flex items-end">
+                    <p className="text-xs text-gray-500">Previous WAC: <strong className="text-gray-700">{'\u20B9'}{packCostInfo.wac_per_piece.toFixed(2)}/pc</strong></p>
+                  </div>
+                )}
+              </div>
+              {(!packStitching && !packOther) && (
+                <p className="mt-2 text-[11px] text-amber-600">Stitching &amp; other rates not set — cost breakdown will show these as pending. You can update now or later from SKU detail.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
