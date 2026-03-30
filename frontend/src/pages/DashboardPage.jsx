@@ -4,23 +4,43 @@ import { useNotifications } from '../context/NotificationContext'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
+// ── KPI Card — matches Orders/Invoices/Returns gradient pattern ──
+const KPI_COLORS = {
+  slate: 'from-slate-500 to-slate-600',
+  amber: 'from-amber-500 to-amber-600',
+  blue: 'from-blue-500 to-blue-600',
+  green: 'from-green-500 to-green-600',
+  emerald: 'from-emerald-500 to-emerald-600',
+  purple: 'from-purple-500 to-purple-600',
+  red: 'from-red-500 to-red-600',
+  orange: 'from-orange-500 to-orange-600',
+  cyan: 'from-cyan-500 to-cyan-600',
+}
+
+function KPICard({ label, value, sub, color = 'slate' }) {
+  return (
+    <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
+      <p className="typo-kpi-label text-white/85">{label}</p>
+      <p className="mt-0.5 text-xl font-bold leading-tight">{value}</p>
+      {sub && <p className="typo-caption text-white/75">{sub}</p>}
+    </div>
+  )
+}
+
 // ── Semicircle Gauge ─────────────────────────────────
 function Gauge({ value, max, level, label, detail }) {
   const pct = Math.min(value / max * 100, 100)
   const angle = (pct / 100) * 180
   const COLORS = {
-    normal: { stroke: '#10b981', bg: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700' },
-    busy: { stroke: '#f59e0b', bg: 'text-amber-600', badge: 'bg-amber-50 text-amber-700' },
-    overloaded: { stroke: '#ef4444', bg: 'text-red-600', badge: 'bg-red-50 text-red-700' },
-    low: { stroke: '#6b7280', bg: 'text-gray-500', badge: 'bg-gray-50 text-gray-600' },
+    normal: { stroke: '#10b981', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
+    busy: { stroke: '#f59e0b', badge: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
+    overloaded: { stroke: '#ef4444', badge: 'bg-red-50 text-red-700 ring-red-600/20' },
+    low: { stroke: '#6b7280', badge: 'bg-gray-50 text-gray-600 ring-gray-600/20' },
   }
   const c = COLORS[level] || COLORS.normal
   const LEVEL_LABELS = { normal: 'Normal', busy: 'Busy', overloaded: 'Overloaded', low: 'Low' }
 
-  // SVG arc for semicircle
-  const r = 60
-  const cx = 70
-  const cy = 70
+  const r = 60, cx = 70, cy = 70
   const startAngle = Math.PI
   const endAngle = startAngle + (angle * Math.PI / 180)
   const x1 = cx + r * Math.cos(startAngle)
@@ -32,22 +52,20 @@ function Gauge({ value, max, level, label, detail }) {
   return (
     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 text-center">
       <svg viewBox="0 0 140 85" className="w-full max-w-[180px] mx-auto">
-        {/* Background arc */}
         <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none" stroke="#e5e7eb" strokeWidth="12" strokeLinecap="round" />
-        {/* Value arc */}
         {pct > 0 && (
           <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`}
             fill="none" stroke={c.stroke} strokeWidth="12" strokeLinecap="round"
             style={{ transition: 'all 0.8s ease-out' }} />
         )}
-        {/* Center value */}
-        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-gray-900" style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
+        <text x={cx} y={cy - 8} textAnchor="middle" className="fill-gray-900"
+          style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'Inter, sans-serif' }}>
           {typeof value === 'number' && max === 100 ? `${value}%` : value}
         </text>
       </svg>
       <p className="typo-data mt-1">{label}</p>
-      <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge mt-1 ${c.badge}`}>
+      <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ring-1 ring-inset mt-1 ${c.badge}`}>
         {LEVEL_LABELS[level]}
       </span>
       {detail && <p className="typo-caption mt-1">{detail}</p>}
@@ -122,7 +140,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
                   title={`${d.day_label}: \u20B9${d.amount.toLocaleString()}`}
                 />
               </div>
-              <span className={isToday ? 'text-[10px] font-semibold uppercase tracking-wider text-emerald-700' : 'typo-kpi-label'}>{d.day_label}</span>
+              <span className={isToday ? 'typo-kpi-label !text-emerald-700' : 'typo-kpi-label'}>{d.day_label}</span>
             </div>
           )
         })}
@@ -157,26 +175,6 @@ function InvoiceSplit({ data }) {
           <span className="h-3 w-3 rounded-full bg-amber-400" />
           <span className="typo-data-label">Pending</span>
           <span className="text-sm font-semibold text-amber-600">{'\u20B9'}{data.pending.toLocaleString()}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── KPI Card ─────────────────────────────────────────
-function KpiCard({ label, value, sub, icon, color }) {
-  return (
-    <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="typo-kpi-label">{label}</p>
-          <p className="mt-1 typo-kpi">{value}</p>
-          {sub && <p className="mt-1 typo-caption">{sub}</p>}
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
-          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} />
-          </svg>
         </div>
       </div>
     </div>
@@ -229,7 +227,7 @@ export default function DashboardPage() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
           </span>
-          <span className="text-xs text-emerald-600 font-medium">Live</span>
+          <span className="text-xs font-medium text-emerald-600">Live</span>
         </div>
       </div>
 
@@ -240,29 +238,24 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Top KPIs — 2x2 grid on mobile, 4 cols on desktop */}
-      <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Active Orders" value={s.orders.pending + s.orders.processing}
-          sub={`${s.orders.pending} pending, ${s.orders.shipped_today} shipped today`}
-          icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-          color="bg-blue-500" />
-        <KpiCard label="Rolls" value={s.rolls.total}
-          sub={`${s.rolls.with_remaining} with stock, ${s.rolls_out_house} at VA`}
-          icon="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7l8-4 8 4"
-          color="bg-purple-500" />
-        <KpiCard label="Ready Stock" value={`${s.ready_stock_pieces} pcs`}
-          sub={`${s.batches?.packed || 0} batches packed`}
-          icon="M5 13l4 4L19 7"
-          color="bg-emerald-500" />
-        <KpiCard label="Returns" value={s.returns?.this_month || 0}
-          sub={`${s.returns?.draft || 0} draft, ${s.returns?.active || 0} active`}
-          icon="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-          color="bg-amber-500" />
+      {/* Top KPIs — gradient cards matching Orders/Invoices/Returns */}
+      <div className="mt-6 grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <KPICard label="Active Orders" value={s.orders.pending + s.orders.processing}
+          sub={`${s.orders.pending} pending`} color="blue" />
+        <KPICard label="Rolls" value={s.rolls.total}
+          sub={`${s.rolls.with_remaining} with stock`} color="purple" />
+        <KPICard label="Ready Stock" value={`${s.ready_stock_pieces} pcs`}
+          sub={`${s.batches?.packed || 0} packed`} color="emerald" />
+        <KPICard label="Shipped Today" value={s.orders.shipped_today}
+          sub="Orders dispatched" color="green" />
+        <KPICard label="Out at VA" value={(s.rolls_out_house || 0) + (s.batches_out_house || 0)}
+          sub={`${s.rolls_out_house || 0}R + ${s.batches_out_house || 0}B`} color="orange" />
+        <KPICard label="Returns" value={s.returns?.this_month || 0}
+          sub={`${s.returns?.draft || 0} draft`} color="amber" />
       </div>
 
-      {/* Revenue Trend + Gauges row */}
+      {/* Revenue Trend + Invoice Split */}
       <div className="mt-6 grid gap-6 lg:grid-cols-5">
-        {/* Revenue chart — takes 3 cols */}
         <div className="lg:col-span-3">
           <RevenueTrend
             data={enhanced?.revenue_trend}
@@ -270,13 +263,12 @@ export default function DashboardPage() {
             monthRevenue={s.revenue_month}
           />
         </div>
-        {/* Invoice Split — takes 2 cols */}
         <div className="lg:col-span-2">
           <InvoiceSplit data={enhanced?.invoice_split} />
         </div>
       </div>
 
-      {/* Production Gauges — 3 meters */}
+      {/* Operational Health Gauges */}
       {enhanced?.gauges && (
         <div className="mt-6">
           <h2 className="typo-section-title mb-4">Operational Health</h2>
@@ -288,13 +280,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Batch Pipeline — enhanced with arrows + piece counts */}
+      {/* Batch Pipeline */}
       <div className="mt-6 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between mb-4">
           <h2 className="typo-section-title">Batch Pipeline</h2>
-          <div className="flex gap-3 typo-caption">
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Checked today: {s.batches.checked_today || 0}</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> Packed today: {s.batches.packed_today || 0}</span>
+          <div className="flex gap-3">
+            <span className="flex items-center gap-1 typo-caption"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Checked today: {s.batches.checked_today || 0}</span>
+            <span className="flex items-center gap-1 typo-caption"><span className="h-2 w-2 rounded-full bg-green-500" /> Packed today: {s.batches.packed_today || 0}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -322,24 +314,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Bottom row: Out-House + Lots + Inventory */}
+      {/* Bottom row: Lots + Inventory detail */}
       <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Rolls Out-House" value={s.rolls_out_house || 0}
-          sub="At VA vendor"
-          icon="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-          color="bg-orange-500" />
-        <KpiCard label="Batches Out-House" value={s.batches_out_house || 0}
-          sub="Garments at VA"
-          icon="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-          color="bg-red-500" />
-        <KpiCard label="Active Lots" value={s.lots?.total || 0}
-          sub={`${s.lots?.open || 0} open, ${s.lots?.distributed || 0} distributed`}
-          icon="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 0 3 3 0 004.243 0zm0-5.758a3 3 0 10-4.243 0 3 3 0 004.243 0z"
-          color="bg-cyan-500" />
-        <KpiCard label="Inventory" value={`${s.inventory.total_skus} SKUs`}
-          sub={s.inventory.low_stock_skus > 0 ? `${s.inventory.low_stock_skus} low stock` : 'Stock healthy'}
-          icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-          color={s.inventory.low_stock_skus > 0 ? 'bg-red-500' : 'bg-emerald-500'} />
+        <KPICard label="Active Lots" value={s.lots?.total || 0}
+          sub={`${s.lots?.open || 0} open, ${s.lots?.distributed || 0} dist`} color="cyan" />
+        <KPICard label="Low Stock SKUs" value={s.inventory.low_stock_skus}
+          sub={`of ${s.inventory.total_skus} total`} color={s.inventory.low_stock_skus > 0 ? 'red' : 'emerald'} />
+        <KPICard label="Revenue Today" value={`\u20B9${s.revenue_today.toLocaleString()}`}
+          sub="Invoices paid" color="green" />
+        <KPICard label="Revenue Month" value={`\u20B9${s.revenue_month.toLocaleString()}`}
+          sub="This month total" color="emerald" />
       </div>
     </div>
   )
