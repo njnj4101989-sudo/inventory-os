@@ -111,3 +111,57 @@ async def inventory_movement(
     svc = DashboardService(db)
     result = await svc.get_inventory_movement(sku_id or "", fd, td)
     return {"success": True, "data": result}
+
+
+@router.get("/sales-report", response_model=None)
+async def sales_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Sales & Orders report: KPIs, customer ranking, fulfillment funnel, broker commission."""
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_sales_report(fd, td, fy_id)
+    return {"success": True, "data": result}
+
+
+@router.get("/accounting-report", response_model=None)
+async def accounting_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Accounting report: receivables, payables, GST summary, credit/debit notes."""
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_accounting_report(fd, td, fy_id)
+    return {"success": True, "data": result}
+
+
+@router.get("/raw-material-summary", response_model=None)
+async def raw_material_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Raw material (roll) inventory summary — status/fabric/supplier breakdown."""
+    svc = DashboardService(db)
+    result = await svc.get_raw_material_summary()
+    return {"success": True, "data": result}
+
+
+@router.get("/wip-summary", response_model=None)
+async def wip_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Work-in-progress inventory — batches in pipeline by status/product type/tailor."""
+    svc = DashboardService(db)
+    result = await svc.get_wip_summary()
+    return {"success": True, "data": result}

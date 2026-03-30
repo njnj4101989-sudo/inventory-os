@@ -17,6 +17,7 @@
 | `CLAUDE.md` | Session log, project state, architecture | Every session start |
 | `guardian.md` | Protocols, rules, coding standards | Before any coding |
 | `API_REFERENCE.md` | **THE** source of truth for API shapes | Before any frontend↔backend work |
+| `REPORTS_AND_INVENTORY_PLAN.md` | Reports overhaul + Inventory upgrade (3 phases) | Before any reports/inventory work |
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |

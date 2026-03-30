@@ -58,3 +58,19 @@ export async function getInventorySummary() {
   }
   return client.get('/dashboard/inventory-summary')
 }
+
+export async function getSalesReport(params = {}) {
+  return client.get('/dashboard/sales-report', { params })
+}
+
+export async function getAccountingReport(params = {}) {
+  return client.get('/dashboard/accounting-report', { params })
+}
+
+export async function getRawMaterialSummary() {
+  return client.get('/dashboard/raw-material-summary')
+}
+
+export async function getWIPSummary() {
+  return client.get('/dashboard/wip-summary')
+}

@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getMovement, getProductionReport, getFinancialReport } from '../api/dashboard'
+import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
 // ── Tab config ────────────────────────────────────────
 const TABS = [
   { key: 'production', label: 'Production', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
+  { key: 'sales', label: 'Sales & Orders', icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z' },
   { key: 'inventory', label: 'Inventory', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
   { key: 'financial', label: 'Financial', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { key: 'accounting', label: 'Accounting', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
   { key: 'tailor', label: 'Tailor Performance', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
 
@@ -449,6 +451,333 @@ function TailorTab({ data }) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  SALES & ORDERS TAB
+// ═══════════════════════════════════════════════════════
+function SalesTab({ data }) {
+  if (!data) return null
+  const k = data.kpis
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Orders" value={k.total_orders} sub={`Pending: ${k.orders_by_status?.pending || 0}, Shipped: ${k.orders_by_status?.shipped || 0}`}
+          color="bg-blue-500" icon="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        <KpiCard label="Total Revenue" value={`\u20B9${k.total_revenue.toLocaleString()}`} sub="From invoices (issued + paid)"
+          color="bg-emerald-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Avg Fulfillment" value={`${k.avg_fulfillment_days}d`} sub="Order to shipment"
+          color={k.avg_fulfillment_days <= 3 ? 'bg-emerald-500' : 'bg-amber-500'} icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Return Rate" value={`${k.return_rate_pct}%`} sub={k.return_rate_pct <= 5 ? 'Healthy' : 'Needs attention'}
+          color={k.return_rate_pct <= 5 ? 'bg-emerald-500' : 'bg-red-500'} icon="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+      </div>
+
+      {/* Fulfillment Funnel */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Order Fulfillment Funnel</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4">
+          {[
+            { label: 'Pending', val: data.fulfillment.pending, color: 'bg-gray-100 text-gray-700' },
+            { label: 'Processing', val: data.fulfillment.processing, color: 'bg-blue-100 text-blue-700' },
+            { label: 'Partial Ship', val: data.fulfillment.partially_shipped, color: 'bg-amber-100 text-amber-700' },
+            { label: 'Shipped', val: data.fulfillment.shipped, color: 'bg-emerald-100 text-emerald-700' },
+            { label: 'Delivered', val: data.fulfillment.delivered, color: 'bg-green-100 text-green-700' },
+            { label: 'Cancelled', val: data.fulfillment.cancelled, color: 'bg-red-100 text-red-700' },
+            { label: 'Fulfillment', val: `${data.fulfillment.fulfillment_rate_pct}%`, color: 'bg-emerald-600 text-white' },
+          ].map((s) => (
+            <div key={s.label} className={`rounded-lg p-3 text-center ${s.color}`}>
+              <p className="typo-kpi-label">{s.label}</p>
+              <p className="typo-kpi-sm mt-1">{s.val}</p>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+          <div><p className="typo-data-label">Items Ordered</p><p className="typo-data">{data.fulfillment.items_ordered}</p></div>
+          <div><p className="typo-data-label">Items Fulfilled</p><p className="typo-data text-emerald-600">{data.fulfillment.items_fulfilled}</p></div>
+          <div><p className="typo-data-label">Items Returned</p><p className="typo-data text-red-600">{data.fulfillment.items_returned}</p></div>
+        </div>
+      </div>
+
+      {/* Customer Ranking */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Customer Ranking (by Net Revenue)</h3>
+        {data.customer_ranking.length === 0
+          ? <p className="typo-empty py-4 text-center">No customer orders in this period.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">#</th>
+                    <th className="pb-3 font-medium">Customer</th>
+                    <th className="pb-3 font-medium">Orders</th>
+                    <th className="pb-3 font-medium">Revenue</th>
+                    <th className="pb-3 font-medium">Returns</th>
+                    <th className="pb-3 font-medium">Net Revenue</th>
+                    <th className="pb-3 font-medium">Avg Order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.customer_ranking.map((c, i) => (
+                    <tr key={c.customer_id} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 text-gray-400">{i + 1}</td>
+                      <td className="py-3 font-semibold">{c.customer_name}</td>
+                      <td className="py-3">{c.order_count}</td>
+                      <td className="py-3 text-emerald-600 font-medium">{'\u20B9'}{c.total_revenue.toLocaleString()}</td>
+                      <td className="py-3 text-red-600">{c.total_returns > 0 ? `\u20B9${c.total_returns.toLocaleString()}` : '—'}</td>
+                      <td className="py-3 font-bold">{'\u20B9'}{c.net_revenue.toLocaleString()}</td>
+                      <td className="py-3 text-gray-500">{'\u20B9'}{c.avg_order_value.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {/* Broker Commission */}
+      {data.broker_commission.length > 0 && (
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Broker Commission</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">Broker</th>
+                  <th className="pb-3 font-medium">Orders</th>
+                  <th className="pb-3 font-medium">Order Value</th>
+                  <th className="pb-3 font-medium">Rate</th>
+                  <th className="pb-3 font-medium">Commission Earned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.broker_commission.map((b) => (
+                  <tr key={b.broker_id} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-3 font-semibold">{b.broker_name}</td>
+                    <td className="py-3">{b.order_count}</td>
+                    <td className="py-3">{'\u20B9'}{b.total_order_value.toLocaleString()}</td>
+                    <td className="py-3">{b.commission_rate}%</td>
+                    <td className="py-3 font-bold text-emerald-600">{'\u20B9'}{b.commission_earned.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACCOUNTING TAB
+// ═══════════════════════════════════════════════════════
+function AccountingTab({ data }) {
+  if (!data) return null
+
+  const recv = data.receivables
+  const pay = data.payables
+  const gst = data.gst_summary
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Receivable" value={`\u20B9${recv.total_receivable.toLocaleString()}`} sub={`${recv.by_customer.length} customers`}
+          color="bg-blue-500" icon="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+        <KpiCard label="Total Payable" value={`\u20B9${(pay.total_payable_suppliers + pay.total_payable_va).toLocaleString()}`}
+          sub={`Suppliers: \u20B9${pay.total_payable_suppliers.toLocaleString()}, VA: \u20B9${pay.total_payable_va.toLocaleString()}`}
+          color="bg-red-500" icon="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        <KpiCard label="Net GST Payable" value={`\u20B9${gst.net_payable.toLocaleString()}`}
+          sub={`Output: \u20B9${gst.output_tax.toLocaleString()} | Input: \u20B9${gst.input_tax.toLocaleString()}`}
+          color={gst.net_payable > 0 ? 'bg-amber-500' : 'bg-emerald-500'} icon="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+        <KpiCard label="Overdue Amount" value={`\u20B9${recv.overdue_amount.toLocaleString()}`}
+          sub={recv.overdue_amount > 0 ? 'Action needed' : 'All clear'}
+          color={recv.overdue_amount > 0 ? 'bg-red-500' : 'bg-emerald-500'} icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </div>
+
+      {/* Receivables Aging */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Outstanding Receivables (Aging)</h3>
+        {/* Aging bucket bars */}
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          {Object.entries(recv.aging_buckets).map(([bucket, amt]) => (
+            <div key={bucket} className={`rounded-lg p-3 text-center ${
+              bucket === '90+' ? 'bg-red-50 text-red-700' :
+              bucket === '61-90' ? 'bg-orange-50 text-orange-700' :
+              bucket === '31-60' ? 'bg-amber-50 text-amber-700' :
+              'bg-emerald-50 text-emerald-700'
+            }`}>
+              <p className="typo-kpi-label">{bucket} days</p>
+              <p className="typo-kpi-sm mt-1">{'\u20B9'}{amt.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+        {recv.by_customer.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">Customer</th>
+                  <th className="pb-3 font-medium">Invoices</th>
+                  <th className="pb-3 font-medium">Amount</th>
+                  <th className="pb-3 font-medium">Overdue</th>
+                  <th className="pb-3 font-medium">Oldest Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recv.by_customer.map((c, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-3 font-semibold">{c.customer_name}</td>
+                    <td className="py-3">{c.invoice_count}</td>
+                    <td className="py-3 font-medium">{'\u20B9'}{c.total_amount.toLocaleString()}</td>
+                    <td className="py-3">
+                      {c.overdue_amount > 0
+                        ? <span className="text-red-600 font-medium">{'\u20B9'}{c.overdue_amount.toLocaleString()}</span>
+                        : <span className="text-emerald-600">—</span>}
+                    </td>
+                    <td className="py-3 text-gray-500 text-xs">{c.oldest_due_date ? new Date(c.oldest_due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Payables + GST side-by-side */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Payables */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Outstanding Payables</h3>
+          {pay.by_party.length === 0
+            ? <p className="typo-empty py-4 text-center">No outstanding payables.</p>
+            : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-500">
+                      <th className="pb-3 font-medium">Party</th>
+                      <th className="pb-3 font-medium">Type</th>
+                      <th className="pb-3 font-medium">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pay.by_party.map((p, i) => (
+                      <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-3 font-semibold">{p.party_name}</td>
+                        <td className="py-3">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${
+                            p.party_type === 'supplier' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                          }`}>{p.party_type === 'supplier' ? 'Supplier' : 'VA Party'}</span>
+                        </td>
+                        <td className="py-3 font-medium">
+                          <span className={p.balance_type === 'cr' ? 'text-red-600' : 'text-emerald-600'}>
+                            {'\u20B9'}{p.balance.toLocaleString()} {p.balance_type.toUpperCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
+
+        {/* GST Summary */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">GST Summary</h3>
+          <div className="space-y-3 mb-4">
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="typo-data-label">Output Tax (Sales)</span>
+              <span className="typo-data text-red-600">{'\u20B9'}{gst.output_tax.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="typo-data-label">Input Tax (Purchases)</span>
+              <span className="typo-data text-emerald-600">{'\u20B9'}{gst.input_tax.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="typo-data font-bold">Net Payable</span>
+              <span className={`typo-kpi-sm ${gst.net_payable > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {'\u20B9'}{gst.net_payable.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          {gst.by_rate.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">Type</th>
+                    <th className="pb-3 font-medium">Rate</th>
+                    <th className="pb-3 font-medium">Taxable</th>
+                    <th className="pb-3 font-medium">CGST</th>
+                    <th className="pb-3 font-medium">SGST</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gst.by_rate.map((r, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${
+                          r.type === 'output' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>{r.type === 'output' ? 'Output' : 'Input'}</span>
+                      </td>
+                      <td className="py-3">{r.gst_percent}%</td>
+                      <td className="py-3">{'\u20B9'}{r.taxable_value.toLocaleString()}</td>
+                      <td className="py-3">{'\u20B9'}{r.cgst.toLocaleString()}</td>
+                      <td className="py-3">{'\u20B9'}{r.sgst.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Credit / Debit Notes */}
+      {data.credit_debit_notes.length > 0 && (
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Credit / Debit Notes</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-gray-500">
+                  <th className="pb-3 font-medium">Note No</th>
+                  <th className="pb-3 font-medium">Type</th>
+                  <th className="pb-3 font-medium">Date</th>
+                  <th className="pb-3 font-medium">Party</th>
+                  <th className="pb-3 font-medium">Linked Return</th>
+                  <th className="pb-3 font-medium">Amount</th>
+                  <th className="pb-3 font-medium">GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.credit_debit_notes.map((n, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-3 font-semibold text-emerald-600">{n.note_no}</td>
+                    <td className="py-3">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${
+                        n.type === 'CN' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                      }`}>{n.type === 'CN' ? 'Credit Note' : 'Debit Note'}</span>
+                    </td>
+                    <td className="py-3 text-gray-500 text-xs">{n.date ? new Date(n.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}</td>
+                    <td className="py-3">{n.party_name}</td>
+                    <td className="py-3 text-gray-500">{n.linked_return}</td>
+                    <td className="py-3 font-medium">{'\u20B9'}{n.amount.toLocaleString()}</td>
+                    <td className="py-3 text-gray-500">{'\u20B9'}{n.gst.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
 //  MAIN REPORTS PAGE
 // ═══════════════════════════════════════════════════════
 export default function ReportsPage() {
@@ -459,8 +788,10 @@ export default function ReportsPage() {
 
   // Data per tab
   const [productionData, setProductionData] = useState(null)
+  const [salesData, setSalesData] = useState(null)
   const [movementData, setMovementData] = useState([])
   const [financialData, setFinancialData] = useState(null)
+  const [accountingData, setAccountingData] = useState(null)
   const [tailorData, setTailorData] = useState([])
 
   const fetchData = useCallback(async () => {
@@ -471,12 +802,18 @@ export default function ReportsPage() {
       if (activeTab === 'production') {
         const res = await getProductionReport(params)
         setProductionData(res.data.data)
+      } else if (activeTab === 'sales') {
+        const res = await getSalesReport(params)
+        setSalesData(res.data.data)
       } else if (activeTab === 'inventory') {
         const res = await getMovement(params)
         setMovementData(res.data.data)
       } else if (activeTab === 'financial') {
         const res = await getFinancialReport(params)
         setFinancialData(res.data.data)
+      } else if (activeTab === 'accounting') {
+        const res = await getAccountingReport(params)
+        setAccountingData(res.data.data)
       } else if (activeTab === 'tailor') {
         const res = await getTailorPerf(params)
         setTailorData(res.data.data)
@@ -496,7 +833,7 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Reports</h1>
-          <p className="mt-1 typo-caption">Production metrics, inventory analysis, financial summaries, and tailor performance</p>
+          <p className="mt-1 typo-caption">Production, sales, inventory, financial, accounting, and tailor performance reports</p>
         </div>
       </div>
 
@@ -552,8 +889,10 @@ export default function ReportsPage() {
         ) : (
           <>
             {activeTab === 'production' && <ProductionTab data={productionData} />}
+            {activeTab === 'sales' && <SalesTab data={salesData} />}
             {activeTab === 'inventory' && <InventoryTab data={movementData} />}
             {activeTab === 'financial' && <FinancialTab data={financialData} />}
+            {activeTab === 'accounting' && <AccountingTab data={accountingData} />}
             {activeTab === 'tailor' && <TailorTab data={tailorData} />}
           </>
         )}

@@ -19,6 +19,16 @@ from app.models.order_item import OrderItem
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.models.return_note import ReturnNote
+from app.models.sales_return import SalesReturn, SalesReturnItem
+from app.models.shipment import Shipment
+from app.models.customer import Customer
+from app.models.broker import Broker
+from app.models.supplier import Supplier
+from app.models.supplier_invoice import SupplierInvoice
+from app.models.ledger_entry import LedgerEntry
+from app.models.va_party import VAParty
+from app.models.job_challan import JobChallan
+from app.models.batch_challan import BatchChallan
 
 
 class DashboardService:
@@ -636,4 +646,662 @@ class DashboardService:
             "revenue_by_sku": revenue_by_sku,
             "cost_breakdown": cost_breakdown,
             "revenue_by_period": revenue_by_period,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  SALES & ORDERS REPORT (P1.1)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_sales_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """Sales & Orders report — KPIs, customer ranking, fulfillment funnel, broker commission."""
+        ord_fy = [Order.fy_id == fy_id] if fy_id else []
+        inv_fy = [Invoice.fy_id == fy_id] if fy_id else []
+
+        # --- KPIs: order counts by status ---
+        status_rows = (await self.db.execute(
+            select(Order.status, func.count().label("cnt"))
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+            .group_by(Order.status)
+        )).all()
+        orders_by_status = {r.status: r.cnt for r in status_rows}
+        total_orders = sum(orders_by_status.values())
+
+        # Revenue from invoices (issued+paid) in range
+        total_revenue = float((await self.db.execute(
+            select(func.coalesce(func.sum(Invoice.total_amount), 0))
+            .where(
+                Invoice.status.in_(["issued", "paid"]),
+                func.date(Invoice.created_at) >= from_date,
+                func.date(Invoice.created_at) <= to_date,
+                *inv_fy,
+            )
+        )).scalar() or 0)
+
+        # Avg fulfillment days (orders that have shipments)
+        ship_agg = (await self.db.execute(
+            select(
+                func.avg(
+                    func.extract("epoch", Shipment.shipped_at - Order.created_at) / 86400
+                ).label("avg_days"),
+            )
+            .join(Order, Order.id == Shipment.order_id)
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+        )).one()
+        avg_fulfillment_days = round(float(ship_agg.avg_days or 0), 1)
+
+        # Return rate
+        sr_count = (await self.db.execute(
+            select(func.count()).select_from(SalesReturn)
+            .where(
+                SalesReturn.status != "cancelled",
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+        )).scalar() or 0
+        return_rate = round(sr_count / total_orders * 100, 1) if total_orders > 0 else 0.0
+
+        # --- Customer Ranking ---
+        cust_stmt = (
+            select(
+                Customer.id,
+                Customer.name,
+                func.count(func.distinct(Order.id)).label("order_count"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("total_revenue"),
+            )
+            .join(Order, Order.customer_id == Customer.id)
+            .outerjoin(Invoice, and_(
+                Invoice.order_id == Order.id,
+                Invoice.status.in_(["issued", "paid"]),
+            ))
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+            .group_by(Customer.id, Customer.name)
+            .order_by(func.coalesce(func.sum(Invoice.total_amount), 0).desc())
+            .limit(50)
+        )
+        cust_rows = (await self.db.execute(cust_stmt)).all()
+
+        # Get return totals per customer in range
+        cust_return_stmt = (
+            select(
+                SalesReturn.customer_id,
+                func.coalesce(func.sum(SalesReturn.total_amount), 0).label("return_total"),
+            )
+            .where(
+                SalesReturn.status == "closed",
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+            .group_by(SalesReturn.customer_id)
+        )
+        cust_return_rows = (await self.db.execute(cust_return_stmt)).all()
+        return_map = {r.customer_id: float(r.return_total) for r in cust_return_rows}
+
+        customer_ranking = []
+        for r in cust_rows:
+            rev = float(r.total_revenue)
+            ret = return_map.get(r.id, 0.0)
+            net = rev - ret
+            customer_ranking.append({
+                "customer_id": str(r.id),
+                "customer_name": r.name,
+                "order_count": r.order_count,
+                "total_revenue": rev,
+                "total_returns": ret,
+                "net_revenue": round(net, 2),
+                "avg_order_value": round(rev / r.order_count, 2) if r.order_count > 0 else 0,
+            })
+
+        # --- Order Fulfillment Funnel ---
+        item_agg = (await self.db.execute(
+            select(
+                func.coalesce(func.sum(OrderItem.quantity), 0).label("ordered"),
+                func.coalesce(func.sum(OrderItem.fulfilled_qty), 0).label("fulfilled"),
+                func.coalesce(func.sum(OrderItem.returned_qty), 0).label("returned"),
+            )
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+        )).one()
+        items_ordered = int(item_agg.ordered)
+        items_fulfilled = int(item_agg.fulfilled)
+        items_returned = int(item_agg.returned)
+        fulfillment_rate = round(items_fulfilled / items_ordered * 100, 1) if items_ordered > 0 else 0.0
+
+        # Partial ship %
+        partial_count = orders_by_status.get("partially_shipped", 0)
+        shipped_total = partial_count + orders_by_status.get("shipped", 0) + orders_by_status.get("delivered", 0)
+        partial_ship_pct = round(partial_count / shipped_total * 100, 1) if shipped_total > 0 else 0.0
+
+        fulfillment = {
+            "total_orders": total_orders,
+            "pending": orders_by_status.get("pending", 0),
+            "processing": orders_by_status.get("processing", 0),
+            "partially_shipped": partial_count,
+            "shipped": orders_by_status.get("shipped", 0),
+            "delivered": orders_by_status.get("delivered", 0),
+            "cancelled": orders_by_status.get("cancelled", 0),
+            "avg_days_to_ship": avg_fulfillment_days,
+            "partial_ship_pct": partial_ship_pct,
+            "items_ordered": items_ordered,
+            "items_fulfilled": items_fulfilled,
+            "items_returned": items_returned,
+            "fulfillment_rate_pct": fulfillment_rate,
+        }
+
+        # --- Broker Commission ---
+        broker_stmt = (
+            select(
+                Broker.id,
+                Broker.name,
+                Broker.commission_rate,
+                func.count(func.distinct(Order.id)).label("order_count"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("total_order_value"),
+            )
+            .join(Order, Order.broker_id == Broker.id)
+            .where(
+                func.date(Order.created_at) >= from_date,
+                func.date(Order.created_at) <= to_date,
+                *ord_fy,
+            )
+            .group_by(Broker.id, Broker.name, Broker.commission_rate)
+            .order_by(func.coalesce(func.sum(Order.total_amount), 0).desc())
+        )
+        broker_rows = (await self.db.execute(broker_stmt)).all()
+
+        # Get actual commission from ledger
+        commission_stmt = (
+            select(
+                LedgerEntry.party_id,
+                func.coalesce(func.sum(LedgerEntry.debit), 0).label("total_commission"),
+            )
+            .where(
+                LedgerEntry.party_type == "broker",
+                LedgerEntry.entry_type == "commission",
+                LedgerEntry.entry_date >= from_date,
+                LedgerEntry.entry_date <= to_date,
+            )
+            .group_by(LedgerEntry.party_id)
+        )
+        comm_rows = (await self.db.execute(commission_stmt)).all()
+        comm_map = {r.party_id: float(r.total_commission) for r in comm_rows}
+
+        broker_commission = []
+        for r in broker_rows:
+            commission = comm_map.get(r.id, 0.0)
+            broker_commission.append({
+                "broker_id": str(r.id),
+                "broker_name": r.name,
+                "order_count": r.order_count,
+                "total_order_value": float(r.total_order_value),
+                "commission_rate": float(r.commission_rate or 0),
+                "commission_earned": commission,
+            })
+
+        return {
+            "kpis": {
+                "total_orders": total_orders,
+                "total_revenue": total_revenue,
+                "avg_fulfillment_days": avg_fulfillment_days,
+                "return_rate_pct": return_rate,
+                "orders_by_status": orders_by_status,
+            },
+            "customer_ranking": customer_ranking,
+            "fulfillment": fulfillment,
+            "broker_commission": broker_commission,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  ACCOUNTING REPORT (P1.2)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_accounting_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """Accounting report — receivables, payables, GST, credit/debit notes."""
+        today = date.today()
+        inv_fy = [Invoice.fy_id == fy_id] if fy_id else []
+
+        # --- Receivables (unpaid invoices) ---
+        recv_stmt = (
+            select(
+                Customer.id.label("cid"),
+                Customer.name.label("cname"),
+                func.count(Invoice.id).label("inv_count"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("total"),
+                func.min(Invoice.due_date).label("oldest_due"),
+                # Aging buckets
+                func.coalesce(func.sum(case((
+                    func.date(Invoice.due_date) >= today - 30, Invoice.total_amount
+                ))), 0).label("b_0_30"),
+                func.coalesce(func.sum(case((
+                    and_(func.date(Invoice.due_date) < today - 30, func.date(Invoice.due_date) >= today - 60),
+                    Invoice.total_amount
+                ))), 0).label("b_31_60"),
+                func.coalesce(func.sum(case((
+                    and_(func.date(Invoice.due_date) < today - 60, func.date(Invoice.due_date) >= today - 90),
+                    Invoice.total_amount
+                ))), 0).label("b_61_90"),
+                func.coalesce(func.sum(case((
+                    func.date(Invoice.due_date) < today - 90, Invoice.total_amount
+                ))), 0).label("b_90_plus"),
+                # Overdue = due_date < today
+                func.coalesce(func.sum(case((
+                    and_(Invoice.due_date != None, func.date(Invoice.due_date) < today),
+                    Invoice.total_amount
+                ))), 0).label("overdue"),
+            )
+            .outerjoin(Customer, Customer.id == Invoice.customer_id)
+            .where(
+                Invoice.status == "issued",
+                *inv_fy,
+            )
+            .group_by(Customer.id, Customer.name)
+            .order_by(func.coalesce(func.sum(Invoice.total_amount), 0).desc())
+        )
+        recv_rows = (await self.db.execute(recv_stmt)).all()
+
+        total_receivable = 0.0
+        total_overdue = 0.0
+        aging_buckets = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "90+": 0.0}
+        by_customer = []
+        for r in recv_rows:
+            amt = float(r.total)
+            over = float(r.overdue)
+            total_receivable += amt
+            total_overdue += over
+            aging_buckets["0-30"] += float(r.b_0_30)
+            aging_buckets["31-60"] += float(r.b_31_60)
+            aging_buckets["61-90"] += float(r.b_61_90)
+            aging_buckets["90+"] += float(r.b_90_plus)
+            by_customer.append({
+                "customer_name": r.cname or "Direct Sale",
+                "invoice_count": r.inv_count,
+                "total_amount": amt,
+                "overdue_amount": over,
+                "oldest_due_date": r.oldest_due.isoformat() if r.oldest_due else None,
+            })
+
+        receivables = {
+            "total_receivable": round(total_receivable, 2),
+            "overdue_amount": round(total_overdue, 2),
+            "aging_buckets": {k: round(v, 2) for k, v in aging_buckets.items()},
+            "by_customer": by_customer,
+        }
+
+        # --- Payables (party balances from ledger) ---
+        payable_stmt = (
+            select(
+                LedgerEntry.party_type,
+                LedgerEntry.party_id,
+                func.sum(LedgerEntry.debit).label("total_debit"),
+                func.sum(LedgerEntry.credit).label("total_credit"),
+            )
+            .where(LedgerEntry.party_type.in_(["supplier", "va_party"]))
+            .group_by(LedgerEntry.party_type, LedgerEntry.party_id)
+        )
+        pay_rows = (await self.db.execute(payable_stmt)).all()
+
+        # Get party names
+        supplier_ids = [r.party_id for r in pay_rows if r.party_type == "supplier"]
+        va_ids = [r.party_id for r in pay_rows if r.party_type == "va_party"]
+        name_map = {}
+        if supplier_ids:
+            s_rows = (await self.db.execute(
+                select(Supplier.id, Supplier.name).where(Supplier.id.in_(supplier_ids))
+            )).all()
+            name_map.update({r.id: r.name for r in s_rows})
+        if va_ids:
+            v_rows = (await self.db.execute(
+                select(VAParty.id, VAParty.name).where(VAParty.id.in_(va_ids))
+            )).all()
+            name_map.update({r.id: r.name for r in v_rows})
+
+        total_payable_suppliers = 0.0
+        total_payable_va = 0.0
+        by_party = []
+        for r in pay_rows:
+            dr = float(r.total_debit or 0)
+            cr = float(r.total_credit or 0)
+            balance = cr - dr  # positive = we owe them
+            if abs(balance) < 0.01:
+                continue
+            balance_type = "cr" if balance > 0 else "dr"
+            if r.party_type == "supplier":
+                total_payable_suppliers += max(balance, 0)
+            else:
+                total_payable_va += max(balance, 0)
+            by_party.append({
+                "party_type": r.party_type,
+                "party_name": name_map.get(r.party_id, "Unknown"),
+                "balance": round(abs(balance), 2),
+                "balance_type": balance_type,
+            })
+        by_party.sort(key=lambda x: x["balance"], reverse=True)
+
+        payables = {
+            "total_payable_suppliers": round(total_payable_suppliers, 2),
+            "total_payable_va": round(total_payable_va, 2),
+            "by_party": by_party,
+        }
+
+        # --- GST Summary ---
+        # Output tax (from sales invoices)
+        output_stmt = (
+            select(
+                Invoice.gst_percent,
+                func.coalesce(func.sum(Invoice.subtotal), 0).label("taxable"),
+                func.coalesce(func.sum(Invoice.tax_amount), 0).label("tax"),
+            )
+            .where(
+                Invoice.status.in_(["issued", "paid"]),
+                func.date(Invoice.created_at) >= from_date,
+                func.date(Invoice.created_at) <= to_date,
+                *inv_fy,
+            )
+            .group_by(Invoice.gst_percent)
+        )
+        output_rows = (await self.db.execute(output_stmt)).all()
+
+        total_output_tax = 0.0
+        by_rate = []
+        for r in output_rows:
+            tax = float(r.tax)
+            total_output_tax += tax
+            rate = float(r.gst_percent or 0)
+            by_rate.append({
+                "gst_percent": rate,
+                "taxable_value": float(r.taxable),
+                "cgst": round(tax / 2, 2),
+                "sgst": round(tax / 2, 2),
+                "total_tax": round(tax, 2),
+                "type": "output",
+            })
+
+        # Input tax (from supplier invoices — rolls)
+        input_stmt = (
+            select(
+                SupplierInvoice.gst_percent,
+                func.coalesce(func.sum(Roll.total_weight * Roll.cost_per_unit), 0).label("taxable"),
+            )
+            .join(Roll, Roll.supplier_invoice_id == SupplierInvoice.id)
+            .where(
+                func.date(SupplierInvoice.received_at) >= from_date,
+                func.date(SupplierInvoice.received_at) <= to_date,
+            )
+            .group_by(SupplierInvoice.gst_percent)
+        )
+        input_rows = (await self.db.execute(input_stmt)).all()
+
+        total_input_tax = 0.0
+        for r in input_rows:
+            rate = float(r.gst_percent or 0)
+            taxable = float(r.taxable)
+            tax = round(taxable * rate / 100, 2)
+            total_input_tax += tax
+            by_rate.append({
+                "gst_percent": rate,
+                "taxable_value": taxable,
+                "cgst": round(tax / 2, 2),
+                "sgst": round(tax / 2, 2),
+                "total_tax": tax,
+                "type": "input",
+            })
+
+        gst_summary = {
+            "output_tax": round(total_output_tax, 2),
+            "input_tax": round(total_input_tax, 2),
+            "net_payable": round(total_output_tax - total_input_tax, 2),
+            "by_rate": by_rate,
+        }
+
+        # --- Credit / Debit Notes ---
+        cn_rows = (await self.db.execute(
+            select(
+                SalesReturn.credit_note_no,
+                SalesReturn.return_date,
+                Customer.name.label("party_name"),
+                SalesReturn.srn_no,
+                SalesReturn.total_amount,
+                SalesReturn.tax_amount,
+            )
+            .outerjoin(Customer, Customer.id == SalesReturn.customer_id)
+            .where(
+                SalesReturn.credit_note_no != None,
+                func.date(SalesReturn.created_at) >= from_date,
+                func.date(SalesReturn.created_at) <= to_date,
+            )
+            .order_by(SalesReturn.created_at.desc())
+        )).all()
+
+        dn_rows = (await self.db.execute(
+            select(
+                ReturnNote.debit_note_no,
+                ReturnNote.return_date,
+                Supplier.name.label("party_name"),
+                ReturnNote.return_note_no,
+                ReturnNote.total_amount,
+                ReturnNote.tax_amount,
+            )
+            .outerjoin(Supplier, Supplier.id == ReturnNote.supplier_id)
+            .where(
+                ReturnNote.debit_note_no != None,
+                func.date(ReturnNote.created_at) >= from_date,
+                func.date(ReturnNote.created_at) <= to_date,
+            )
+            .order_by(ReturnNote.created_at.desc())
+        )).all()
+
+        credit_debit_notes = []
+        for r in cn_rows:
+            credit_debit_notes.append({
+                "note_no": r.credit_note_no,
+                "type": "CN",
+                "date": r.return_date.isoformat() if r.return_date else None,
+                "party_name": r.party_name or "—",
+                "linked_return": r.srn_no,
+                "amount": float(r.total_amount or 0),
+                "gst": float(r.tax_amount or 0),
+            })
+        for r in dn_rows:
+            credit_debit_notes.append({
+                "note_no": r.debit_note_no,
+                "type": "DN",
+                "date": r.return_date.isoformat() if r.return_date else None,
+                "party_name": r.party_name or "—",
+                "linked_return": r.return_note_no,
+                "amount": float(r.total_amount or 0),
+                "gst": float(r.tax_amount or 0),
+            })
+
+        return {
+            "receivables": receivables,
+            "payables": payables,
+            "gst_summary": gst_summary,
+            "credit_debit_notes": credit_debit_notes,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  RAW MATERIAL SUMMARY (P1.3)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_raw_material_summary(self) -> dict:
+        """Roll inventory — status-wise, fabric-wise, supplier-wise."""
+        # Status-wise aggregation
+        status_agg = (await self.db.execute(
+            select(
+                Roll.status,
+                func.count().label("cnt"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+            )
+            .group_by(Roll.status)
+        )).all()
+        status_map = {r.status: {"count": r.cnt, "weight": float(r.weight), "value": float(r.value)} for r in status_agg}
+
+        total_rolls = sum(v["count"] for v in status_map.values())
+        total_weight = sum(v["weight"] for v in status_map.values())
+        total_value = sum(v["value"] for v in status_map.values())
+
+        # Fabric-wise
+        fabric_rows = (await self.db.execute(
+            select(
+                Roll.fabric_type,
+                func.count().label("cnt"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+                func.count(case((Roll.status == "in_stock", 1))).label("in_stock"),
+                func.count(case((Roll.status == "sent_for_processing", 1))).label("at_va"),
+            )
+            .group_by(Roll.fabric_type)
+            .order_by(func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).desc())
+        )).all()
+
+        by_fabric = [{
+            "fabric_type": r.fabric_type,
+            "roll_count": r.cnt,
+            "total_weight": float(r.weight),
+            "value": round(float(r.value), 2),
+            "in_stock": r.in_stock,
+            "at_va": r.at_va,
+        } for r in fabric_rows]
+
+        # Supplier-wise
+        supplier_rows = (await self.db.execute(
+            select(
+                Supplier.name,
+                func.count(Roll.id).label("cnt"),
+                func.coalesce(func.sum(Roll.remaining_weight), 0).label("weight"),
+                func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).label("value"),
+            )
+            .outerjoin(Supplier, Supplier.id == Roll.supplier_id)
+            .group_by(Supplier.name)
+            .order_by(func.coalesce(func.sum(Roll.remaining_weight * Roll.cost_per_unit), 0).desc())
+        )).all()
+
+        by_supplier = [{
+            "supplier_name": r.name or "Unknown",
+            "roll_count": r.cnt,
+            "total_weight": float(r.weight),
+            "value": round(float(r.value), 2),
+        } for r in supplier_rows]
+
+        is_map = status_map.get("in_stock", {"count": 0, "weight": 0})
+        va_map = status_map.get("sent_for_processing", {"count": 0, "weight": 0})
+
+        return {
+            "total_rolls": total_rolls,
+            "total_weight_kg": round(total_weight, 2),
+            "total_value": round(total_value, 2),
+            "rolls_in_stock": is_map["count"],
+            "rolls_at_va": va_map["count"],
+            "rolls_in_cutting": status_map.get("in_cutting", {"count": 0})["count"],
+            "remnant_rolls": status_map.get("remnant", {"count": 0})["count"],
+            "weight_in_stock": round(is_map["weight"], 2),
+            "weight_at_va": round(va_map["weight"], 2),
+            "by_fabric": by_fabric,
+            "by_supplier": by_supplier,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  WIP SUMMARY (P1.4)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_wip_summary(self) -> dict:
+        """Work-in-progress inventory — batches not yet packed."""
+        now = datetime.now(timezone.utc)
+
+        # Status pipeline (exclude packed — that's finished goods)
+        status_rows = (await self.db.execute(
+            select(Batch.status, func.count().label("cnt"), func.coalesce(func.sum(Batch.piece_count), 0).label("pieces"))
+            .where(Batch.status != "packed")
+            .group_by(Batch.status)
+        )).all()
+        by_status = {r.status: {"count": r.cnt, "pieces": int(r.pieces)} for r in status_rows}
+        total_batches = sum(v["count"] for v in by_status.values())
+        total_pieces = sum(v["pieces"] for v in by_status.values())
+
+        # Batches at VA
+        va_agg = (await self.db.execute(
+            select(
+                func.count(func.distinct(BatchProcessing.batch_id)).label("batches"),
+                func.coalesce(func.sum(BatchProcessing.pieces_sent), 0).label("pieces"),
+            )
+            .where(BatchProcessing.status == "sent")
+        )).one()
+        batches_at_va = va_agg.batches or 0
+        pieces_at_va = int(va_agg.pieces or 0)
+
+        # Avg days in pipeline (created_at to now, for non-packed batches)
+        avg_days_result = (await self.db.execute(
+            select(
+                func.avg(func.extract("epoch", now - Batch.created_at) / 86400).label("avg_days"),
+            )
+            .where(Batch.status != "packed")
+        )).scalar()
+        avg_days = round(float(avg_days_result or 0), 1)
+
+        # By product type (through lots)
+        pt_rows = (await self.db.execute(
+            select(
+                Lot.product_type,
+                func.count(Batch.id).label("cnt"),
+                func.coalesce(func.sum(Batch.piece_count), 0).label("pieces"),
+            )
+            .join(Lot, Lot.id == Batch.lot_id)
+            .where(Batch.status != "packed")
+            .group_by(Lot.product_type)
+            .order_by(func.coalesce(func.sum(Batch.piece_count), 0).desc())
+        )).all()
+        by_product_type = [{
+            "product_type": r.product_type,
+            "batch_count": r.cnt,
+            "piece_count": int(r.pieces),
+        } for r in pt_rows]
+
+        # By tailor (through assignments)
+        tailor_rows = (await self.db.execute(
+            select(
+                User.full_name,
+                func.count(Batch.id).label("cnt"),
+                func.coalesce(func.sum(Batch.piece_count), 0).label("pieces"),
+                func.count(case((Batch.status == "in_progress", 1))).label("in_progress"),
+                func.count(case((Batch.status == "submitted", 1))).label("submitted"),
+            )
+            .join(BatchAssignment, BatchAssignment.batch_id == Batch.id)
+            .join(User, User.id == BatchAssignment.tailor_id)
+            .where(Batch.status != "packed")
+            .group_by(User.full_name)
+            .order_by(func.coalesce(func.sum(Batch.piece_count), 0).desc())
+        )).all()
+        by_tailor = [{
+            "tailor_name": r.full_name,
+            "batch_count": r.cnt,
+            "piece_count": int(r.pieces),
+            "in_progress": r.in_progress,
+            "submitted": r.submitted,
+        } for r in tailor_rows]
+
+        return {
+            "total_batches": total_batches,
+            "total_pieces": total_pieces,
+            "by_status": {s: by_status.get(s, {"count": 0, "pieces": 0}) for s in
+                          ["created", "assigned", "in_progress", "submitted", "checked", "packing"]},
+            "pieces_at_va": pieces_at_va,
+            "batches_at_va": batches_at_va,
+            "avg_days_in_pipeline": avg_days,
+            "by_product_type": by_product_type,
+            "by_tailor": by_tailor,
         }

@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
-> **Generated from:** `frontend/src/api/mock.js` + all 19 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-28 (Session 89 — Broker+Transport masters, Order/Invoice broker_id+transport_id+LR fields, ShipOrderRequest, broker commission ledger)
+> **Generated from:** `frontend/src/api/mock.js` + all 25 API modules
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-30 (Session 95 — Shipments, Supplier Returns, Sales Returns, Credit/Debit Notes, VA damage tracking, partial ship, GST on returns)
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -35,8 +35,9 @@ All transactional endpoints are scoped to the current financial year from the JW
 **List endpoints:** Filter by current FY by default. Items from previous FYs that are still "active" (e.g., rolls `in_stock`, orders `pending`) are included via cross-FY visibility rules.
 
 **Counter reset per FY:** The following auto-increment codes reset to 001/0001 at the start of each FY:
-- `LOT-XXXX`, `BATCH-XXXX`, `ORD-XXXX`, `INV-XXXX` — reset to 0001
+- `LOT-XXXX`, `BATCH-XXXX`, `ORD-XXXX`, `INV-XXXX`, `SHP-XXXX`, `RN-XXXX`, `SRN-XXXX` — reset to 0001
 - `JC-XXX`, `BC-XXX` — reset to 001
+- `CN-XXXX`, `DN-XXXX` — reset to 0001 (credit/debit notes)
 - Roll codes are **NOT** FY-scoped (prefix-based, unchanged)
 
 **Response:** All create responses include `fy_id` on the created record.
@@ -1026,6 +1027,8 @@ When `sku` is present:
   "transport_detail": { "id": "uuid", "name": "Shree Maruti", "phone": "9876543211", "city": "Surat", "gst_no": "24AABCS1234F1Z5" },
   "lr_number": "LR-12345 | null",
   "lr_date": "2026-03-28 | null",
+  "eway_bill_no": "EWB123456 | null",
+  "eway_bill_date": "2026-03-28 | null",
   "gst_percent": 12,
   "status": "pending",
   "notes": "Urgent delivery needed",
@@ -1042,7 +1045,9 @@ When `sku` is present:
       "quantity": 5,
       "unit_price": 450.0,
       "total_price": 2250.0,
-      "fulfilled_qty": 0
+      "fulfilled_qty": 0,
+      "short_qty": 0,
+      "returned_qty": 0
     }
   ],
   "has_shortage": false,
@@ -1051,10 +1056,25 @@ When `sku` is present:
   "invoices": [
     { "id": "uuid", "invoice_number": "INV-0001", "total_amount": 2520.0, "status": "issued" }
   ],
+  "shipments": [
+    {
+      "id": "uuid",
+      "shipment_no": "SHP-0001",
+      "shipped_at": "2026-03-29T10:00:00Z",
+      "transport": { "id": "uuid", "name": "Shree Maruti" },
+      "lr_number": "LR-12345",
+      "eway_bill_no": "EWB123456",
+      "invoice": { "id": "uuid", "invoice_number": "INV-0001" },
+      "items": [
+        { "id": "uuid", "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "..." }, "order_item_id": "uuid", "quantity": 3 }
+      ]
+    }
+  ],
   "created_at": "2026-02-08T08:00:00Z"
 }
 ```
-**IMPORTANT:** `items[].sku` is a nested object with `color`, `size`, `base_price` (S48 extension). Each item has `fulfilled_qty`.
+**S91 additions:** `items[].fulfilled_qty` (partial ship progress), `items[].short_qty` (over-order), `items[].returned_qty` (returns), `shipments[]` (per-shipment records with items, transport, invoice link), `eway_bill_no`/`eway_bill_date` on order.
+**Order statuses:** `pending`, `processing`, `partially_shipped`, `shipped`, `partially_returned`, `returned`, `delivered`, `cancelled`.
 
 ### GET `/orders/{id}`
 **Response:** Single order object (same shape as list items). Uses `selectinload` for items + sku.
@@ -1084,16 +1104,57 @@ When `sku` is present:
 **Response:** Created order object
 **Over-order (S86):** Allows ordering when stock is insufficient — reserves available portion, tracks `short_qty` on items.
 
-### POST `/orders/{id}/ship`
-**Request (S89 — optional body):**
+### POST `/orders/{id}/ship` (S91 — Partial Ship via Shipments)
+**Request (S91 — all fields optional):**
 ```json
 {
+  "items": [
+    { "order_item_id": "uuid", "quantity": 3 },
+    { "order_item_id": "uuid", "quantity": 5 }
+  ],
   "transport_id": "uuid | null",
-  "lr_number": "LR-12345 (required)",
-  "lr_date": "2026-03-28 | null"
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-28 | null",
+  "eway_bill_no": "EWB123456 | null",
+  "eway_bill_date": "2026-03-28 | null",
+  "notes": "Optional"
 }
 ```
-**Response:** Updated order (status → `shipped`) + auto-creates invoice. LR fields set on both Order and Invoice. If broker has `commission_rate > 0`, auto-creates broker commission ledger entry.
+- `items` = `null` or omitted → ships ALL remaining unfulfilled items (backward compatible)
+- `items[]` = partial ship — only ships specified items/quantities
+- Creates a `Shipment` + `ShipmentItem` records (see §23)
+- Each shipment auto-creates its own invoice (proportional discount)
+- `fulfilled_qty` incremented per item; status → `partially_shipped` or `shipped`
+- Stock validation: `available_qty >= ship_qty` with FOR UPDATE lock
+- If broker has `commission_rate > 0`, auto-creates broker commission ledger entry
+
+**Response:** Updated order with `shipments[]` populated. Order `items[].fulfilled_qty` updated.
+
+### PATCH `/orders/{id}/shipping` (S90 — Legacy, updates order-level fields)
+**Request:** `{ transport_id?, lr_number?, lr_date?, eway_bill_no?, eway_bill_date? }`
+**Response:** Updated order. **Note:** Prefer updating via `PATCH /shipments/{id}` (per-shipment) instead.
+
+### POST `/orders/{id}/return` (S92 — Quick Return)
+**Request:**
+```json
+{
+  "items": [
+    { "sku_id": "uuid", "quantity": 5, "reason": "defective" }
+  ],
+  "return_date": "2026-03-29",
+  "return_notes": "Customer reported defects"
+}
+```
+- Validates returnable qty: `fulfilled_qty - returned_qty >= quantity`
+- Creates RETURN inventory event per item
+- Increments `returned_qty` on OrderItem
+- Status → `partially_returned` or `returned`
+- Creates `credit_note` ledger entry for customer
+- Reason options: `defective`, `wrong_item`, `size_mismatch`, `color_mismatch`, `damaged_in_transit`, `customer_changed_mind`, `other`
+
+**Response:** Updated order with `items[].returned_qty` populated.
+
+**Note:** This is a quick-action flow. For full document-based returns with QC inspection, use Sales Returns (§25).
 
 ### POST `/orders/{id}/cancel`
 **Response:** Updated order (status → `cancelled`)
@@ -1153,6 +1214,8 @@ When `sku` is present:
 }
 ```
 **S87:** `order` is nullable (standalone invoices have `order: null`). Top-level `customer_name/phone/address` are always populated — prefer invoice-level, fall back to order-level. `gst_percent` drives CGST/SGST split.
+**S91:** Invoice may have `shipment_id` — auto-created per shipment. Shows `· SHP-xxxx` in detail/print.
+**S94:** Credit notes (CN-XXXX) auto-created on sales return close. Debit notes (DN-XXXX) on supplier return close. Frontend shows 3-way tabs: Invoices / Credit Notes / Debit Notes.
 
 ### GET `/invoices/{id}`
 **Response:** Single invoice object (same shape as list items). Uses `selectinload` for order + customer + items + sku.
@@ -1630,6 +1693,20 @@ Every processing log has a required `value_addition_id` (no more `process_type`)
 **Request:** `{ name (required), contact_person?, phone?, phone_alt?, email?, address?, city?, state?, pin_code?, gst_no?, gst_type?, state_code?, pan_no?, aadhar_no?, hsn_code?, due_days?, credit_limit?, opening_balance?, balance_type?, tds_applicable?, tds_rate?, tds_section?, msme_type?, msme_reg_no?, notes? }`
 **Response:** Created VA Party
 
+### GET `/masters/va-parties/{id}/summary` (S92)
+**Auth:** `supplier_manage` permission
+**Response:**
+```json
+{
+  "job_challans": { "count": 12, "total_cost": 45000.00 },
+  "batch_challans": { "count": 8, "total_cost": 32000.00 },
+  "total_processed_cost": 77000.00,
+  "balance": { "total_debit": 80000.00, "total_credit": 50000.00, "balance": 30000.00, "balance_type": "dr" },
+  "damage_claims": { "count": 3, "total_amount": 2500.00 }
+}
+```
+**Purpose:** KPI summary for VA party detail overlay — shows challan counts, costs, balance, and damage claims.
+
 ### PATCH `/masters/va-parties/{id}`
 **Request:** All fields optional + `is_active?`
 **Response:** Updated VA Party
@@ -1725,14 +1802,16 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 {
   "received_date": "2026-03-15",
   "rolls": [
-    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 19.500, "processing_cost": 500.00 },
-    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 27.200, "processing_cost": null }
+    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 19.500, "processing_cost": 500.00, "weight_damaged": 0.5, "damage_reason": "shrinkage" },
+    { "roll_id": "uuid", "processing_id": "uuid", "weight_after": 27.200, "processing_cost": null, "weight_damaged": null, "damage_reason": null }
   ],
   "notes": "All rolls returned in good condition"
 }
 ```
 - `rolls[]`: only include checked/selected rolls — unchecked rolls stay `sent`
 - `processing_cost`: optional per roll
+- `weight_damaged`: optional (S92) — damaged weight in kg, triggers ledger debit against VA party
+- `damage_reason`: optional — `shrinkage`, `color_bleeding`, `stain`, `tear`, `wrong_process`, `lost`, `other`
 - `notes`: optional, appended to challan notes
 
 **Effect per roll:**
@@ -1840,12 +1919,15 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 ```json
 {
   "batches": [
-    { "batch_id": "uuid", "pieces_received": 15, "cost": 2500.00 },
-    { "batch_id": "uuid", "pieces_received": 20, "cost": 3200.00 }
+    { "batch_id": "uuid", "pieces_received": 15, "cost": 2500.00, "pieces_damaged": 1, "damage_reason": "stain" },
+    { "batch_id": "uuid", "pieces_received": 20, "cost": 3200.00, "pieces_damaged": null, "damage_reason": null }
   ],
   "notes": "All pieces returned in good condition"
 }
 ```
+- `pieces_damaged`: optional (S92) — damaged piece count, triggers ledger debit against VA party
+- `damage_reason`: optional — `shrinkage`, `color_bleeding`, `stain`, `tear`, `wrong_process`, `lost`, `other`
+
 **Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). Challan status: all received → `'received'`, some received → `'partially_received'`. `total_cost` = sum of costs.
 **Response:** Updated challan object
 
@@ -2094,6 +2176,309 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 
 ---
 
+## 23. Shipments (`/api/v1/shipments`) — NEW S91
+
+> Auto-created when `/orders/{id}/ship` is called. Separate endpoints to query and update shipping details 1-3 days later. Each shipment gets its own invoice.
+
+### GET `/orders/{order_id}/shipments`
+**Auth:** `order_manage` permission
+**Response:** Array of:
+```json
+{
+  "id": "uuid",
+  "shipment_no": "SHP-0001",
+  "order_id": "uuid",
+  "transport_id": "uuid | null",
+  "transport": { "id": "uuid", "name": "Shree Maruti", "phone": "...", "city": "..." },
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-29 | null",
+  "eway_bill_no": "EWB123456 | null",
+  "eway_bill_date": "2026-03-29 | null",
+  "shipped_by": "uuid | null",
+  "shipped_at": "2026-03-29T10:00:00Z",
+  "notes": null,
+  "invoice": { "id": "uuid", "invoice_number": "INV-0001" },
+  "items": [
+    {
+      "id": "uuid",
+      "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
+      "order_item_id": "uuid",
+      "quantity": 3
+    }
+  ],
+  "created_at": "2026-03-29T10:00:00Z"
+}
+```
+
+### GET `/shipments/{shipment_id}`
+**Auth:** `order_manage` permission
+**Response:** Single shipment object (same shape as above)
+
+### PATCH `/shipments/{shipment_id}`
+**Auth:** `order_manage` permission
+**Request:** All fields optional:
+```json
+{
+  "transport_id": "uuid | null",
+  "lr_number": "LR-12345",
+  "lr_date": "2026-03-29",
+  "eway_bill_no": "EWB123456",
+  "eway_bill_date": "2026-03-29",
+  "notes": "Updated"
+}
+```
+**Response:** Updated shipment object
+**Use case:** Add transport/LR/eway details 1-3 days after shipping.
+
+---
+
+## 24. Return Notes — Supplier Returns (`/api/v1/return-notes`) — NEW S92
+
+> Return defective/excess rolls or SKUs to suppliers. 6-status workflow with stock reversal and supplier ledger debit on close. GST fields added S94.
+
+### Statuses
+```
+draft → approved → dispatched → acknowledged → closed
+                                                ↳ cancelled (from any status except closed)
+```
+
+### GET `/return-notes`
+**Auth:** `order_manage` permission
+**Query:** `ReturnNoteFilterParams` — `status`, `return_type` (`roll_return`|`sku_return`), `supplier_id`, `search`, `page`, `page_size`
+**Response:** Paginated array of ReturnNoteResponse (see below)
+
+### GET `/return-notes/next-number`
+**Auth:** `order_manage` permission
+**Response:** `{ "next_number": "RN-0001" }`
+
+### GET `/return-notes/{id}`
+**Auth:** `order_manage` permission
+**Response:**
+```json
+{
+  "id": "uuid",
+  "return_note_no": "RN-0001",
+  "return_type": "roll_return",
+  "supplier": { "id": "uuid", "name": "Krishna Textiles" },
+  "status": "draft",
+  "return_date": "2026-03-29",
+  "approved_by_user": null,
+  "approved_at": null,
+  "dispatch_date": null,
+  "transport": { "id": "uuid", "name": "Shree Maruti" },
+  "lr_number": "LR-12345 | null",
+  "total_amount": 5000.00,
+  "gst_percent": 12.0,
+  "subtotal": 4464.29,
+  "tax_amount": 535.71,
+  "debit_note_no": "DN-0001 | null",
+  "notes": null,
+  "created_by_user": { "id": "uuid", "full_name": "Admin" },
+  "created_at": "2026-03-29T10:00:00Z",
+  "items": [
+    {
+      "id": "uuid",
+      "roll": { "id": "uuid", "roll_code": "1-COT-GREEN/01-01" },
+      "sku": null,
+      "quantity": 1,
+      "weight": 18.5,
+      "unit_price": 120.0,
+      "amount": 2220.0,
+      "reason": "Defective weave",
+      "condition": "damaged",
+      "notes": null
+    }
+  ]
+}
+```
+
+### POST `/return-notes`
+**Auth:** `order_manage` permission
+**Request:**
+```json
+{
+  "return_type": "roll_return",
+  "supplier_id": "uuid",
+  "return_date": "2026-03-29",
+  "transport_id": "uuid | null",
+  "lr_number": "LR-12345 | null",
+  "gst_percent": 12,
+  "items": [
+    {
+      "roll_id": "uuid (for roll_return)",
+      "sku_id": null,
+      "quantity": 1,
+      "weight": 18.5,
+      "unit_price": 120.0,
+      "reason": "Defective weave",
+      "condition": "damaged",
+      "notes": null
+    }
+  ],
+  "notes": null
+}
+```
+- `return_type`: `roll_return` (requires `roll_id`) or `sku_return` (requires `sku_id`)
+- `gst_percent`: auto-calculated from supplier's last invoice if not provided
+
+**Response:** Created return note
+
+### PATCH `/return-notes/{id}`
+**Auth:** `order_manage` permission
+**Request:** `{ return_date?, transport_id?, lr_number?, notes? }`
+**Response:** Updated return note
+
+### POST `/return-notes/{id}/approve`
+**Effect:** `status → approved`, sets `approved_by`, `approved_at`
+
+### POST `/return-notes/{id}/dispatch`
+**Effect:** `status → dispatched`, sets `dispatch_date`. **Stock reversal:** roll status → `returned`, SKU stock_out event.
+
+### POST `/return-notes/{id}/acknowledge`
+**Effect:** `status → acknowledged`
+
+### POST `/return-notes/{id}/close`
+**Effect:** `status → closed`. Creates debit note (DN-XXXX) — debits supplier ledger for return amount.
+
+### POST `/return-notes/{id}/cancel`
+**Effect:** `status → cancelled`. Only from `draft`, `approved`, or `dispatched`.
+
+---
+
+## 25. Sales Returns — Customer Returns (`/api/v1/sales-returns`) — NEW S93-S94
+
+> Full document-based customer return flow with QC inspection, restock/damage tracking, and automatic credit note generation. GST fields added S94.
+
+### Statuses
+```
+draft → received → inspected → restocked → closed
+                                             ↳ cancelled (from any status except closed)
+```
+
+### GET `/sales-returns`
+**Auth:** `order_manage` permission
+**Query:** `SalesReturnFilterParams` — `status`, `customer_id`, `order_id`, `search`, `page`, `page_size`
+**Response:** Paginated array of SalesReturnResponse (see below)
+
+### GET `/sales-returns/next-number`
+**Auth:** `order_manage` permission
+**Response:** `{ "next_number": "SRN-0001" }`
+
+### GET `/sales-returns/{id}`
+**Auth:** `order_manage` permission
+**Response:**
+```json
+{
+  "id": "uuid",
+  "srn_no": "SRN-0001",
+  "order": { "id": "uuid", "order_number": "ORD-0001", "customer_name": "Fashion Hub" },
+  "customer": { "id": "uuid", "name": "Fashion Hub", "phone": "9876543210", "gst_no": "..." },
+  "status": "draft",
+  "return_date": "2026-03-29",
+  "received_date": null,
+  "inspected_date": null,
+  "restocked_date": null,
+  "transport": { "id": "uuid", "name": "Shree Maruti" },
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-29 | null",
+  "reason_summary": "Customer reported defects in batch",
+  "qc_notes": null,
+  "gst_percent": 12.0,
+  "subtotal": 4464.29,
+  "tax_amount": 535.71,
+  "total_amount": 5000.00,
+  "credit_note_no": "CN-0001 | null",
+  "created_by_user": { "id": "uuid", "full_name": "Admin" },
+  "received_by_user": null,
+  "inspected_by_user": null,
+  "created_at": "2026-03-29T10:00:00Z",
+  "items": [
+    {
+      "id": "uuid",
+      "order_item": { "id": "uuid", "sku_code": "BLS-101-Red-M", "quantity": 10 },
+      "sku": { "id": "uuid", "sku_code": "BLS-101-Red-M", "product_name": "Design 101 Red Medium" },
+      "unit_price": 450.0,
+      "quantity_returned": 5,
+      "quantity_restocked": 0,
+      "quantity_damaged": 0,
+      "reason": "defective",
+      "condition": "pending",
+      "notes": null
+    }
+  ]
+}
+```
+
+### POST `/sales-returns`
+**Auth:** `order_manage` permission
+**Request:**
+```json
+{
+  "customer_id": "uuid",
+  "order_id": "uuid | null",
+  "return_date": "2026-03-29",
+  "transport_id": "uuid | null",
+  "lr_number": "LR-12345 | null",
+  "lr_date": "2026-03-29 | null",
+  "reason_summary": "Customer reported defects",
+  "gst_percent": 12,
+  "items": [
+    {
+      "sku_id": "uuid",
+      "quantity_returned": 5,
+      "order_item_id": "uuid | null",
+      "unit_price": 450.0,
+      "reason": "defective",
+      "notes": null
+    }
+  ]
+}
+```
+- `gst_percent`: auto-fetched from linked order if not provided
+- `order_item_id`: links to specific order line item (for traceability)
+
+**Response:** Created sales return
+
+### PATCH `/sales-returns/{id}`
+**Auth:** `order_manage` permission
+**Request:** `{ transport_id?, lr_number?, lr_date?, reason_summary? }`
+**Response:** Updated sales return
+
+### POST `/sales-returns/{id}/receive`
+**Effect:** `status → received`, sets `received_date`, `received_by_user`
+
+### POST `/sales-returns/{id}/inspect`
+**Request:**
+```json
+{
+  "items": [
+    {
+      "item_id": "uuid",
+      "condition": "good",
+      "quantity_restocked": 4,
+      "quantity_damaged": 1,
+      "notes": "1 piece has torn stitching"
+    }
+  ],
+  "qc_notes": "Inspected all 5 pieces, 1 damaged beyond repair"
+}
+```
+- `condition`: `good` (restockable), `damaged` (write-off), `rejected`
+- `quantity_restocked + quantity_damaged` must equal `quantity_returned` per item
+
+**Effect:** `status → inspected`, sets `inspected_date`, `inspected_by_user`, updates item conditions.
+
+### POST `/sales-returns/{id}/restock`
+**Effect:** `status → restocked`, sets `restocked_date`. Creates RETURN inventory events for good items (quantity_restocked), LOSS events for damaged items (quantity_damaged).
+
+### POST `/sales-returns/{id}/close`
+**Effect:** `status → closed`. Creates credit note (CN-XXXX) — credits customer ledger for return amount (based on restocked + damaged at unit_price, with GST).
+
+### POST `/sales-returns/{id}/cancel`
+**Effect:** `status → cancelled`. Only from `draft` or `received`.
+
+---
+
 ## Appendix A: All Permission Keys
 
 ```
@@ -2107,17 +2492,20 @@ invoice_manage, report_view
 
 | Entity  | Valid Statuses |
 |---------|---------------|
-| Roll    | `in_stock`, `sent_for_processing`, `in_cutting`, `remnant` |
+| Roll    | `in_stock`, `sent_for_processing`, `in_cutting`, `remnant`, `returned` |
 | Roll Processing | `sent`, `received` |
 | Lot     | `open`, `cutting`, `distributed` |
 | Batch   | `created`, `assigned`, `in_progress`, `submitted`, `checked`, `packing`, `packed` |
 | Batch Processing | `sent`, `received` |
 | Job Challan | `sent`, `partially_received`, `received` |
 | Batch Challan | `sent`, `partially_received`, `received` |
-| Order   | `pending`, `processing`, `shipped`, `returned`, `cancelled` |
-| Invoice | `issued`, `paid` |
+| Order   | `pending`, `processing`, `partially_shipped`, `shipped`, `partially_returned`, `returned`, `delivered`, `cancelled` |
+| Invoice | `draft`, `issued`, `paid`, `cancelled` |
+| Return Note (Supplier) | `draft`, `approved`, `dispatched`, `acknowledged`, `closed`, `cancelled` |
+| Sales Return (Customer) | `draft`, `received`, `inspected`, `restocked`, `closed`, `cancelled` |
 | Financial Year | `open`, `closed` |
-| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `commission`, `va_receive`, `tds`, `tcs`, `adjustment`, `opening`, `credit_note` |
+| Ledger Entry Type | `stock_in`, `payment`, `invoice`, `commission`, `va_receive`, `tds`, `tcs`, `adjustment`, `opening`, `credit_note`, `debit_note` |
+| Ledger Reference Type | `supplier_invoice`, `order`, `invoice`, `job_challan`, `batch_challan`, `payment`, `damage_claim`, `supplier_return`, `sales_return`, `shipment` |
 | Ledger Party Type | `supplier`, `customer`, `va_party`, `broker`, `transport` |
 
 ## 21. Brokers (`/api/v1/brokers`) — NEW S89
@@ -2199,6 +2587,16 @@ Backend MUST return these as nested objects, NOT flat IDs:
 | `color_obj` | Rolls, SKUs | `{ id, name, code, color_no }` |
 | `company` | Auth login/me/select-company | `{ id, name, slug, schema_name }` |
 | `fy` | Auth login/me/select-company | `{ id, code, start_date, end_date }` |
+| `shipments` | Orders | `[{ id, shipment_no, shipped_at, transport, lr_number, eway_bill_no, invoice, items }]` |
+| `items` (shipment) | Shipments | `[{ id, sku, order_item_id, quantity }]` |
+| `supplier` | Return Notes | `{ id, name }` |
+| `roll` | Return Note Items | `{ id, roll_code }` |
+| `order` | Sales Returns | `{ id, order_number, customer_name }` |
+| `customer` | Sales Returns | `{ id, name, phone, gst_no }` |
+| `approved_by_user` | Return Notes | `{ id, full_name }` |
+| `created_by_user` | Return Notes, Sales Returns | `{ id, full_name }` |
+| `received_by_user` | Sales Returns | `{ id, full_name }` |
+| `inspected_by_user` | Sales Returns | `{ id, full_name }` |
 
 ## Appendix D: Auth & FY Error Responses (S77)
 
