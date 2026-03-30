@@ -1463,7 +1463,7 @@ class DashboardService:
             select(
                 VAParty.name.label("vp_name"),
                 ValueAddition.short_code.label("va_code"),
-                func.avg(func.extract("epoch", JobChallan.received_date - JobChallan.sent_date) / 86400).label("avg_days"),
+                func.avg(JobChallan.received_date - JobChallan.sent_date).label("avg_days"),
                 func.count().label("total"),
             )
             .join(VAParty, VAParty.id == JobChallan.va_party_id)
@@ -1481,7 +1481,7 @@ class DashboardService:
             select(
                 VAParty.name.label("vp_name"),
                 ValueAddition.short_code.label("va_code"),
-                func.avg(func.extract("epoch", BatchChallan.received_date - BatchChallan.sent_date) / 86400).label("avg_days"),
+                func.avg(BatchChallan.received_date - BatchChallan.sent_date).label("avg_days"),
                 func.count().label("total"),
             )
             .join(VAParty, VAParty.id == BatchChallan.va_party_id)
