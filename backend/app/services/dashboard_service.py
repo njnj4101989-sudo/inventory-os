@@ -884,18 +884,18 @@ class DashboardService:
                 func.min(Invoice.due_date).label("oldest_due"),
                 # Aging buckets
                 func.coalesce(func.sum(case((
-                    func.date(Invoice.due_date) >= today - 30, Invoice.total_amount
+                    func.date(Invoice.due_date) >= today - timedelta(days=30), Invoice.total_amount
                 ))), 0).label("b_0_30"),
                 func.coalesce(func.sum(case((
-                    and_(func.date(Invoice.due_date) < today - 30, func.date(Invoice.due_date) >= today - 60),
+                    and_(func.date(Invoice.due_date) < today - timedelta(days=30), func.date(Invoice.due_date) >= today - timedelta(days=60)),
                     Invoice.total_amount
                 ))), 0).label("b_31_60"),
                 func.coalesce(func.sum(case((
-                    and_(func.date(Invoice.due_date) < today - 60, func.date(Invoice.due_date) >= today - 90),
+                    and_(func.date(Invoice.due_date) < today - timedelta(days=60), func.date(Invoice.due_date) >= today - timedelta(days=90)),
                     Invoice.total_amount
                 ))), 0).label("b_61_90"),
                 func.coalesce(func.sum(case((
-                    func.date(Invoice.due_date) < today - 90, Invoice.total_amount
+                    func.date(Invoice.due_date) < today - timedelta(days=90), Invoice.total_amount
                 ))), 0).label("b_90_plus"),
                 # Overdue = due_date < today
                 func.coalesce(func.sum(case((
