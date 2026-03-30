@@ -33,11 +33,56 @@
 
 ---
 
-## Current State (Session 96 — 2026-03-30)
+## Current State (Session 97 — 2026-03-30)
+
+### S97: FY Transition P4-P6 + 5-Component Cost System + Tailor Costing
+
+**1 commit pushed. 2 migrations pending on dev+prod. 44 models (2 new).**
+
+**Phase 4 — Closing Stock Valuation Report:**
+- `GET /dashboard/closing-stock-report` — 3 categories: Raw Materials (roll weight × cost), WIP (material cost, AS-2 simplified), Finished Goods (WAC from events)
+- 5-column cost breakdown: Material / Roll VA / Stitching / Batch VA / Other
+- Unpriced SKUs flagged with "No cost" badge instead of arbitrary estimates
+- FY close snapshot: stock computed as-of `fy.end_date` using event replay (handles late close)
+- For closed FYs, report reads frozen snapshot; for current FY, shows live data with source indicator
+
+**Phase 5 — Physical Verification Workflow:**
+- 2 new models: `StockVerification` (43rd), `StockVerificationItem` (44th)
+- 6 API endpoints: list, create, get, update_counts, complete, approve
+- Auto-populates items from current stock (finished goods: SKUs, raw material: rolls)
+- Approve creates loss/adjustment events for mismatches, updates InventoryState/Roll weights
+- Frontend: "Physical Verification" button on InventoryPage, modal with create/count/approve flow, history list
+
+**Phase 6 — Party Reconciliation Report:**
+- `GET /ledger/party-confirmation/{party_type}/{party_id}` — opening balance, transactions, closing balance, unpaid invoices
+- "Balance Confirmation" print button on Party Detail overlay — formal A4 letter with company header, transaction table, signature line
+- Works for all 4 party types (supplier, customer, va_party, broker)
+
+**5-Component Cost System (beyond original plan):**
+- `stitching_cost` + `other_cost` fields on SKU model (migration `z0a1b2c3d4e5`)
+- Auto-compute at pack time in `batch_service.pack_batch()`: material + roll_va + stitching + batch_va + other → stored in `ready_stock_in` event metadata + sets `sku.base_price`
+- SKUs page: new "Cost Breakdown" tab with per-SKU cost table + margin calculation + formula note
+- Closing Stock Report: 5-column breakdown table + formula note at bottom
+
+**Tailor Costing Report:**
+- Tailor Performance enriched: total_stitching_cost, avg_rate, per-batch detail table
+- Expandable rows: Batch / SKU / Pieces / Rejected / Rate / Cost / Date per tailor
+- "Rate pending" badge when SKU.stitching_cost not set — full transparency, no fake ₹0
+
+**Backend files modified (17):** batch_service, dashboard_service, fy_closing_service, inventory_service, ledger_service, roll_service, sku_service, dashboard.py (API), inventory.py (API), ledger.py (API), rolls.py (API), code_generator, models/__init__, sku model, sku schema, inventory schema, ledger schema, roll schema
+**Backend files new (5):** stock_verification model, stock_verification schema, stock_verification_service, 2 migrations
+**Frontend files modified (9):** ReportsPage, InventoryPage, SKUsPage, PartyMastersPage, RollsPage, SettingsPage, dashboard.js, inventory.js, ledger.js
+**Migrations pending:** `y9z0a1b2c3d4` (stock_verifications tables), `z0a1b2c3d4e5` (stitching_cost + other_cost on SKUs)
+
+**NEXT:** Run 2 migrations on dev+prod. Test full pack→cost flow. Test physical verification flow. Test closing stock report with real data. Update API_REFERENCE.md with all new endpoints.
+
+---
+
+## Previous State (Session 96 — 2026-03-30)
 
 ### S96: FY Transition P1-P3 (Opening Stock + Opening Balances + Broker Fix) + API_REFERENCE Update
 
-**0 commits pushed yet. 0 migrations. 42 models (no new models).**
+**1 commit pushed (S97). 0 migrations for P1-P3. 42 models (no new models from P1-P3).**
 
 **FY_TRANSITION_PLAN.md Created:**
 - 6-phase production-grade plan: Opening Stock, Opening Balances, Broker Fix, Closing Valuation, Physical Verification, Reconciliation
