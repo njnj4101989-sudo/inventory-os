@@ -32,7 +32,58 @@
 
 ---
 
-## Current State (Session 92 — 2026-03-29)
+## Current State (Session 95 — 2026-03-30)
+
+### S95: Reports & Inventory Overhaul (P1-P3) + WOW Dashboard + API_REFERENCE Update
+
+**14 commits pushed. 0 migrations. 42 models (no new models).**
+
+**API_REFERENCE.md Updated (S90-S94):**
+- +398 lines: Shipments (§23), Return Notes (§24), Sales Returns (§25), updated statuses, nested objects, FY counters
+- All S90-S94 changes documented
+
+**Reports Page — 5 new tabs (4+5 existing = 9 total):**
+- **Sales & Orders** — order KPIs, customer ranking (revenue-returns=net), fulfillment funnel, broker commission
+- **Accounting** — receivables aging (0-30/31-60/61-90/90+ buckets), payables by party, GST summary, CN/DN register
+- **VA Processing** — cost by vendor/VA type, turnaround time per vendor, damage tracking
+- **Purchases & Suppliers** — purchase register, supplier quality scorecard (defect%), fabric utilization (waste%)
+- **Returns Analysis** — customer return rate by SKU/customer, supplier returns, restock vs damage recovery rate
+
+**Inventory Page — 2 new tabs (1 existing + 2 = 3 total):**
+- **Raw Material** — roll inventory by status/fabric/supplier with weight+value KPIs
+- **Work in Progress** — batch pipeline by stage/product type/tailor with avg days metric
+
+**WOW Dashboard Redesign:**
+- Smart Alerts Bar (6 alerts): unclaimed batches >24h, lots piling up, VA overdue >7d, overdue invoices, QC bottleneck >48h, low stock
+- 7-day revenue bar chart with today highlight
+- Invoice collection split bar (paid vs pending)
+- 3 semicircle gauges: Lot Load, Tailor Utilization, QC Flow (normal/busy/overloaded)
+- Batch pipeline with connecting arrows and accent-colored stage labels
+- Gradient KPI cards matching Orders/Invoices/Returns pattern
+- All text dark/bold/readable — no gray-400 on dashboard
+
+**Typography Fix (global):**
+- `typo-kpi-label`: `font-semibold text-gray-400` → `font-bold text-gray-500` — affects 14+ pages
+
+**Backend: 8 new methods + 8 new endpoints on /dashboard/:**
+- `GET /dashboard/sales-report` — sales KPIs, customer ranking, fulfillment, broker commission
+- `GET /dashboard/accounting-report` — receivables, payables, GST, CN/DN
+- `GET /dashboard/raw-material-summary` — roll inventory aggregation
+- `GET /dashboard/wip-summary` — batch pipeline aggregation
+- `GET /dashboard/va-report` — VA cost, turnaround, damage
+- `GET /dashboard/purchase-report` — purchases, supplier quality, fabric utilization
+- `GET /dashboard/returns-report` — return analysis across customer+supplier
+- `GET /dashboard/enhanced` — smart alerts, 7-day revenue, gauges, invoice split
+
+**Plan doc:** `Guardian/REPORTS_AND_INVENTORY_PLAN.md` — all 3 phases complete
+
+**Tables covered in reports:** 8 → 34 of 42
+
+**NEXT:** Update API_REFERENCE.md with 8 new dashboard endpoints, BatchesPage print SKU labels after pack, test full flow on prod
+
+---
+
+## Previous State (Session 92 — 2026-03-29)
 
 ### S92: Return Management System (P1-P5) + Invoice/Order Deep-Links + Constraint Fix
 
