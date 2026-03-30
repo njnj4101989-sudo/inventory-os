@@ -78,9 +78,9 @@ function AlertBar({ alerts }) {
   if (!alerts || alerts.length === 0) return null
 
   const SEVERITY = {
-    critical: { bg: 'bg-red-50 border-red-200', title: 'text-red-800', msg: 'text-red-700', dot: 'bg-red-500' },
-    warning: { bg: 'bg-amber-50 border-amber-200', title: 'text-amber-800', msg: 'text-amber-700', dot: 'bg-amber-500' },
-    info: { bg: 'bg-blue-50 border-blue-200', title: 'text-blue-800', msg: 'text-blue-700', dot: 'bg-blue-500' },
+    critical: { bg: 'bg-red-50 border-red-300', title: 'text-red-900', msg: 'text-red-800', dot: 'bg-red-500' },
+    warning: { bg: 'bg-amber-50 border-amber-300', title: 'text-amber-900', msg: 'text-amber-800', dot: 'bg-amber-500' },
+    info: { bg: 'bg-blue-50 border-blue-300', title: 'text-blue-900', msg: 'text-blue-800', dot: 'bg-blue-500' },
   }
 
   return (
@@ -88,16 +88,16 @@ function AlertBar({ alerts }) {
       {alerts.map((a, i) => {
         const s = SEVERITY[a.severity] || SEVERITY.info
         return (
-          <div key={i} className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 ${s.bg}`}>
+          <div key={i} className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${s.bg}`}>
             <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
               <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${s.dot}`} />
               <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${s.dot}`} />
             </span>
             <div className="flex-1 min-w-0">
-              <span className={`text-sm font-bold tracking-tight ${s.title}`}>{a.title}</span>
-              <span className={`ml-2 text-xs font-medium ${s.msg}`}>{a.message}</span>
+              <span className={`text-sm font-bold ${s.title}`}>{a.title}</span>
+              <span className={`ml-2 text-sm font-semibold ${s.msg}`}>{a.message}</span>
             </div>
-            <span className={`flex-shrink-0 inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${s.dot} text-white`}>
+            <span className={`flex-shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${s.dot} text-white`}>
               {a.count}
             </span>
           </div>
@@ -117,11 +117,11 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="typo-section-title">Revenue</h2>
-          <p className="typo-caption mt-0.5">7-day trend</p>
+          <p className="text-xs font-medium text-gray-600 mt-0.5">7-day trend</p>
         </div>
         <div className="text-right">
           <p className="typo-kpi-sm text-emerald-600">{'\u20B9'}{monthRevenue.toLocaleString()}</p>
-          <p className="typo-caption">This month</p>
+          <p className="text-xs font-medium text-gray-600">This month</p>
         </div>
       </div>
       <div className="flex items-end gap-2 h-32">
@@ -130,24 +130,24 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
           const isToday = i === data.length - 1
           return (
             <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-              <span className="typo-kpi-label">
+              <span className="text-[10px] font-bold text-gray-600">
                 {d.amount > 0 ? `\u20B9${(d.amount / 1000).toFixed(d.amount >= 1000 ? 0 : 1)}k` : ''}
               </span>
               <div className="w-full flex justify-center">
                 <div
-                  className={`w-full max-w-[32px] rounded-t-md transition-all duration-500 ${isToday ? 'bg-emerald-500' : 'bg-emerald-200 hover:bg-emerald-300'}`}
+                  className={`w-full max-w-[32px] rounded-t-md transition-all duration-500 ${isToday ? 'bg-emerald-500' : 'bg-emerald-300 hover:bg-emerald-400'}`}
                   style={{ height: `${h}%`, minHeight: '4px' }}
                   title={`${d.day_label}: \u20B9${d.amount.toLocaleString()}`}
                 />
               </div>
-              <span className={isToday ? 'typo-kpi-label !text-emerald-700' : 'typo-kpi-label'}>{d.day_label}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-emerald-700' : 'text-gray-700'}`}>{d.day_label}</span>
             </div>
           )
         })}
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between">
-        <span className="typo-data-label">Today</span>
-        <span className="text-sm font-semibold text-emerald-600">{'\u20B9'}{todayRevenue.toLocaleString()}</span>
+        <span className="text-sm font-bold text-gray-800">Today</span>
+        <span className="text-sm font-bold text-emerald-600">{'\u20B9'}{todayRevenue.toLocaleString()}</span>
       </div>
     </div>
   )
@@ -168,13 +168,13 @@ function InvoiceSplit({ data }) {
       <div className="mt-3 flex justify-between">
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-emerald-500" />
-          <span className="typo-data-label">Paid</span>
-          <span className="text-sm font-semibold text-emerald-600">{'\u20B9'}{data.paid.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-gray-700">Paid</span>
+          <span className="text-sm font-bold text-emerald-600">{'\u20B9'}{data.paid.toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-amber-400" />
-          <span className="typo-data-label">Pending</span>
-          <span className="text-sm font-semibold text-amber-600">{'\u20B9'}{data.pending.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-gray-700">Pending</span>
+          <span className="text-sm font-bold text-amber-600">{'\u20B9'}{data.pending.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -220,7 +220,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Dashboard</h1>
-          <p className="mt-1 typo-caption">Real-time overview of your textile operations</p>
+          <p className="mt-1 text-sm font-medium text-gray-600">Real-time overview of your textile operations</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="relative flex h-3 w-3">
@@ -285,8 +285,8 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="typo-section-title">Batch Pipeline</h2>
           <div className="flex gap-3">
-            <span className="flex items-center gap-1 typo-caption"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Checked today: {s.batches.checked_today || 0}</span>
-            <span className="flex items-center gap-1 typo-caption"><span className="h-2 w-2 rounded-full bg-green-500" /> Packed today: {s.batches.packed_today || 0}</span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-gray-600"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Checked today: {s.batches.checked_today || 0}</span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-gray-600"><span className="h-2 w-2 rounded-full bg-green-500" /> Packed today: {s.batches.packed_today || 0}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
