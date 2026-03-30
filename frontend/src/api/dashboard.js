@@ -74,3 +74,11 @@ export async function getRawMaterialSummary() {
 export async function getWIPSummary() {
   return client.get('/dashboard/wip-summary')
 }
+
+export async function getVAReport(params = {}) {
+  return client.get('/dashboard/va-report', { params })
+}
+
+export async function getPurchaseReport(params = {}) {
+  return client.get('/dashboard/purchase-report', { params })
+}

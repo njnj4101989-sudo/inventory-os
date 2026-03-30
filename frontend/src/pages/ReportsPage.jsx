@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport } from '../api/dashboard'
+import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
@@ -10,6 +10,8 @@ const TABS = [
   { key: 'inventory', label: 'Inventory', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
   { key: 'financial', label: 'Financial', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { key: 'accounting', label: 'Accounting', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
+  { key: 'va', label: 'VA Processing', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+  { key: 'purchases', label: 'Purchases', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z' },
   { key: 'tailor', label: 'Tailor Performance', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
 
@@ -778,6 +780,278 @@ function AccountingTab({ data }) {
 }
 
 // ═══════════════════════════════════════════════════════
+//  VA PROCESSING TAB
+// ═══════════════════════════════════════════════════════
+function VATab({ data }) {
+  if (!data) return null
+  const k = data.kpis
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total VA Spend" value={`\u20B9${k.total_va_spend.toLocaleString()}`} sub="Roll + Batch processing"
+          color="bg-purple-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Avg Turnaround" value={`${k.avg_turnaround_days}d`} sub="Sent to received"
+          color={k.avg_turnaround_days <= 7 ? 'bg-emerald-500' : 'bg-amber-500'} icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Damage Rate" value={`${k.damage_rate_pct}%`} sub={k.damage_rate_pct <= 2 ? 'Acceptable' : 'Needs review'}
+          color={k.damage_rate_pct <= 2 ? 'bg-emerald-500' : 'bg-red-500'} icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <KpiCard label="Active Challans" value={k.active_challans} sub="Sent / partially received"
+          color="bg-blue-500" icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </div>
+
+      {/* Cost by Vendor */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Cost by VA Vendor</h3>
+        {data.by_vendor.length === 0
+          ? <p className="typo-empty py-4 text-center">No VA data in this period.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">VA Party</th>
+                    <th className="pb-3 font-medium">Roll JC</th>
+                    <th className="pb-3 font-medium">Batch BC</th>
+                    <th className="pb-3 font-medium">Roll Cost</th>
+                    <th className="pb-3 font-medium">Batch Cost</th>
+                    <th className="pb-3 font-medium">Avg/kg</th>
+                    <th className="pb-3 font-medium">Avg/pc</th>
+                    <th className="pb-3 font-medium">Damage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_vendor.map((v, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 font-semibold">{v.va_party_name}</td>
+                      <td className="py-3">{v.roll_challans}</td>
+                      <td className="py-3">{v.batch_challans}</td>
+                      <td className="py-3 text-purple-600 font-medium">{v.roll_cost > 0 ? `\u20B9${v.roll_cost.toLocaleString()}` : '—'}</td>
+                      <td className="py-3 text-indigo-600 font-medium">{v.batch_cost > 0 ? `\u20B9${v.batch_cost.toLocaleString()}` : '—'}</td>
+                      <td className="py-3 text-gray-500">{v.avg_cost_per_kg > 0 ? `\u20B9${v.avg_cost_per_kg}` : '—'}</td>
+                      <td className="py-3 text-gray-500">{v.avg_cost_per_piece > 0 ? `\u20B9${v.avg_cost_per_piece}` : '—'}</td>
+                      <td className="py-3">
+                        {v.damage_count > 0
+                          ? <span className="text-red-600 font-medium">{v.damage_count} ({v.damage_weight > 0 ? `${v.damage_weight}kg` : `${v.damage_pieces}pcs`})</span>
+                          : <span className="text-emerald-600">None</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {/* VA Type + Turnaround side-by-side */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* By VA Type */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Cost by VA Type</h3>
+          {data.by_va_type.length === 0
+            ? <p className="typo-empty py-4 text-center">No VA type data.</p>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">VA Type</th>
+                    <th className="pb-3 font-medium">Code</th>
+                    <th className="pb-3 font-medium">Roll JC</th>
+                    <th className="pb-3 font-medium">Batch BC</th>
+                    <th className="pb-3 font-medium">Total Spend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_va_type.map((v, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 font-semibold">{v.name}</td>
+                      <td className="py-3"><span className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 typo-badge text-purple-700 ring-1 ring-inset ring-purple-700/10">{v.short_code}</span></td>
+                      <td className="py-3">{v.roll_challans}</td>
+                      <td className="py-3">{v.batch_challans}</td>
+                      <td className="py-3 font-medium text-purple-600">{'\u20B9'}{v.total_spend.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+        </div>
+
+        {/* Turnaround */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Turnaround Time</h3>
+          {data.turnaround.length === 0
+            ? <p className="typo-empty py-4 text-center">No turnaround data.</p>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">VA Party</th>
+                    <th className="pb-3 font-medium">Type</th>
+                    <th className="pb-3 font-medium">Challan</th>
+                    <th className="pb-3 font-medium">Avg Days</th>
+                    <th className="pb-3 font-medium">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.turnaround.map((t, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 font-semibold">{t.va_party_name}</td>
+                      <td className="py-3"><span className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 typo-badge text-purple-700 ring-1 ring-inset ring-purple-700/10">{t.va_type}</span></td>
+                      <td className="py-3 text-gray-500 text-xs">{t.challan_type}</td>
+                      <td className="py-3">
+                        <span className={`font-medium ${t.avg_days > 7 ? 'text-red-600' : t.avg_days > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {t.avg_days}d
+                        </span>
+                      </td>
+                      <td className="py-3">{t.total_challans}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
+//  PURCHASES & SUPPLIERS TAB
+// ═══════════════════════════════════════════════════════
+function PurchaseTab({ data }) {
+  if (!data) return null
+  const k = data.kpis
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Purchased" value={`\u20B9${k.total_purchased.toLocaleString()}`} sub="Fabric cost"
+          color="bg-blue-500" icon="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+        <KpiCard label="Rolls Received" value={k.rolls_received} sub={`${k.suppliers_active} suppliers`}
+          color="bg-emerald-500" icon="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7" />
+        <KpiCard label="Active Suppliers" value={k.suppliers_active} sub="With purchases in period"
+          color="bg-purple-500" icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        <KpiCard label="Avg Waste" value={`${k.avg_waste_pct}%`} sub={k.avg_waste_pct <= 5 ? 'Within target' : 'Above target'}
+          color={k.avg_waste_pct <= 5 ? 'bg-emerald-500' : 'bg-red-500'} icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </div>
+
+      {/* Purchase by Supplier */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <h3 className="typo-section-title mb-4">Purchases by Supplier</h3>
+        {data.by_supplier.length === 0
+          ? <p className="typo-empty py-4 text-center">No purchases in this period.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">Supplier</th>
+                    <th className="pb-3 font-medium">Rolls</th>
+                    <th className="pb-3 font-medium">Weight (kg)</th>
+                    <th className="pb-3 font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_supplier.map((s, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 font-semibold">{s.supplier_name}</td>
+                      <td className="py-3">{s.roll_count}</td>
+                      <td className="py-3 font-medium">{s.total_weight.toFixed(1)}</td>
+                      <td className="py-3 text-emerald-600 font-medium">{'\u20B9'}{s.total_value.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </div>
+
+      {/* Supplier Quality + Fabric Utilization side-by-side */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Supplier Quality */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Supplier Quality Scorecard</h3>
+          {data.supplier_quality.length === 0
+            ? <p className="typo-empty py-4 text-center">No quality data.</p>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">Supplier</th>
+                    <th className="pb-3 font-medium">Received</th>
+                    <th className="pb-3 font-medium">Returned</th>
+                    <th className="pb-3 font-medium">Damage</th>
+                    <th className="pb-3 font-medium">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.supplier_quality.map((s, i) => {
+                    const scoreColor = s.quality_score >= 95 ? 'bg-emerald-500' : s.quality_score >= 80 ? 'bg-amber-500' : 'bg-red-500'
+                    return (
+                      <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-3 font-semibold">{s.supplier_name}</td>
+                        <td className="py-3">{s.rolls_received}</td>
+                        <td className="py-3">{s.rolls_returned > 0 ? <span className="text-red-600">{s.rolls_returned}</span> : '0'}</td>
+                        <td className="py-3">{s.damage_claims > 0 ? <span className="text-amber-600">{s.damage_claims}</span> : '0'}</td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${s.quality_score}%` }} />
+                            </div>
+                            <span className="typo-badge text-gray-700 w-10">{s.quality_score}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+        </div>
+
+        {/* Fabric Utilization */}
+        <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+          <h3 className="typo-section-title mb-4">Fabric Utilization</h3>
+          {data.fabric_utilization.length === 0
+            ? <p className="typo-empty py-4 text-center">No fabric data.</p>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-gray-500">
+                    <th className="pb-3 font-medium">Fabric</th>
+                    <th className="pb-3 font-medium">Purchased</th>
+                    <th className="pb-3 font-medium">Used</th>
+                    <th className="pb-3 font-medium">Waste</th>
+                    <th className="pb-3 font-medium">Waste %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.fabric_utilization.map((f, i) => (
+                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 font-semibold">{f.fabric_type}</td>
+                      <td className="py-3">{f.purchased_kg} kg</td>
+                      <td className="py-3 text-emerald-600 font-medium">{f.used_kg} kg</td>
+                      <td className="py-3">{f.waste_kg} kg</td>
+                      <td className="py-3">
+                        <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${
+                          f.waste_pct > 5
+                            ? 'bg-red-50 text-red-700 ring-red-600/20'
+                            : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+                        }`}>{f.waste_pct}%</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
 //  MAIN REPORTS PAGE
 // ═══════════════════════════════════════════════════════
 export default function ReportsPage() {
@@ -792,6 +1066,8 @@ export default function ReportsPage() {
   const [movementData, setMovementData] = useState([])
   const [financialData, setFinancialData] = useState(null)
   const [accountingData, setAccountingData] = useState(null)
+  const [vaData, setVaData] = useState(null)
+  const [purchaseData, setPurchaseData] = useState(null)
   const [tailorData, setTailorData] = useState([])
 
   const fetchData = useCallback(async () => {
@@ -814,6 +1090,12 @@ export default function ReportsPage() {
       } else if (activeTab === 'accounting') {
         const res = await getAccountingReport(params)
         setAccountingData(res.data.data)
+      } else if (activeTab === 'va') {
+        const res = await getVAReport(params)
+        setVaData(res.data.data)
+      } else if (activeTab === 'purchases') {
+        const res = await getPurchaseReport(params)
+        setPurchaseData(res.data.data)
       } else if (activeTab === 'tailor') {
         const res = await getTailorPerf(params)
         setTailorData(res.data.data)
@@ -893,6 +1175,8 @@ export default function ReportsPage() {
             {activeTab === 'inventory' && <InventoryTab data={movementData} />}
             {activeTab === 'financial' && <FinancialTab data={financialData} />}
             {activeTab === 'accounting' && <AccountingTab data={accountingData} />}
+            {activeTab === 'va' && <VATab data={vaData} />}
+            {activeTab === 'purchases' && <PurchaseTab data={purchaseData} />}
             {activeTab === 'tailor' && <TailorTab data={tailorData} />}
           </>
         )}

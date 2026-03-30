@@ -165,3 +165,35 @@ async def wip_summary(
     svc = DashboardService(db)
     result = await svc.get_wip_summary()
     return {"success": True, "data": result}
+
+
+@router.get("/va-report", response_model=None)
+async def va_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """VA Processing report: cost analysis, turnaround, damage tracking."""
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_va_report(fd, td, fy_id)
+    return {"success": True, "data": result}
+
+
+@router.get("/purchase-report", response_model=None)
+async def purchase_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """Purchases & Suppliers report: purchase register, supplier quality, fabric utilization."""
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_purchase_report(fd, td, fy_id)
+    return {"success": True, "data": result}

@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import func, select, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.roll import Roll
+from app.models.roll import Roll, RollProcessing
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
@@ -1304,4 +1304,379 @@ class DashboardService:
             "avg_days_in_pipeline": avg_days,
             "by_product_type": by_product_type,
             "by_tailor": by_tailor,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  VA PROCESSING REPORT (P2.1)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_va_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """VA Processing report — cost analysis, turnaround, damage."""
+        from app.models.value_addition import ValueAddition
+
+        jc_fy = [JobChallan.fy_id == fy_id] if fy_id else []
+        bc_fy = [BatchChallan.fy_id == fy_id] if fy_id else []
+
+        # --- Roll VA cost by vendor ---
+        roll_va_stmt = (
+            select(
+                VAParty.id.label("vp_id"),
+                VAParty.name.label("vp_name"),
+                func.count(func.distinct(JobChallan.id)).label("challan_count"),
+                func.coalesce(func.sum(RollProcessing.processing_cost), 0).label("total_cost"),
+                func.coalesce(func.sum(RollProcessing.weight_before), 0).label("total_weight"),
+                func.count(case((RollProcessing.weight_damaged > 0, 1))).label("damage_count"),
+                func.coalesce(func.sum(RollProcessing.weight_damaged), 0).label("damage_weight"),
+            )
+            .join(JobChallan, JobChallan.id == RollProcessing.job_challan_id)
+            .join(VAParty, VAParty.id == RollProcessing.va_party_id)
+            .where(
+                RollProcessing.status == "received",
+                func.date(RollProcessing.received_date) >= from_date,
+                func.date(RollProcessing.received_date) <= to_date,
+                *jc_fy,
+            )
+            .group_by(VAParty.id, VAParty.name)
+        )
+        roll_va_rows = (await self.db.execute(roll_va_stmt)).all()
+
+        # --- Batch VA cost by vendor ---
+        batch_va_stmt = (
+            select(
+                VAParty.id.label("vp_id"),
+                VAParty.name.label("vp_name"),
+                func.count(func.distinct(BatchChallan.id)).label("challan_count"),
+                func.coalesce(func.sum(BatchProcessing.cost), 0).label("total_cost"),
+                func.coalesce(func.sum(BatchProcessing.pieces_received), 0).label("total_pieces"),
+                func.count(case((BatchProcessing.pieces_damaged > 0, 1))).label("damage_count"),
+                func.coalesce(func.sum(BatchProcessing.pieces_damaged), 0).label("damage_pieces"),
+            )
+            .join(BatchChallan, BatchChallan.id == BatchProcessing.batch_challan_id)
+            .join(VAParty, VAParty.id == BatchChallan.va_party_id)
+            .where(
+                BatchProcessing.status == "received",
+                func.date(BatchChallan.received_date) >= from_date,
+                func.date(BatchChallan.received_date) <= to_date,
+                *bc_fy,
+            )
+            .group_by(VAParty.id, VAParty.name)
+        )
+        batch_va_rows = (await self.db.execute(batch_va_stmt)).all()
+
+        # Merge into by_vendor
+        vendor_map = {}
+        for r in roll_va_rows:
+            vendor_map[r.vp_id] = {
+                "va_party_name": r.vp_name,
+                "roll_challans": r.challan_count,
+                "batch_challans": 0,
+                "roll_cost": float(r.total_cost),
+                "batch_cost": 0.0,
+                "total_weight": float(r.total_weight),
+                "total_pieces": 0,
+                "avg_cost_per_kg": round(float(r.total_cost) / float(r.total_weight), 2) if float(r.total_weight) > 0 else 0,
+                "avg_cost_per_piece": 0,
+                "damage_count": r.damage_count,
+                "damage_weight": float(r.damage_weight),
+                "damage_pieces": 0,
+            }
+        for r in batch_va_rows:
+            if r.vp_id in vendor_map:
+                v = vendor_map[r.vp_id]
+                v["batch_challans"] = r.challan_count
+                v["batch_cost"] = float(r.total_cost)
+                v["total_pieces"] = int(r.total_pieces)
+                v["avg_cost_per_piece"] = round(float(r.total_cost) / int(r.total_pieces), 2) if int(r.total_pieces) > 0 else 0
+                v["damage_count"] += r.damage_count
+                v["damage_pieces"] = int(r.damage_pieces)
+            else:
+                vendor_map[r.vp_id] = {
+                    "va_party_name": r.vp_name,
+                    "roll_challans": 0,
+                    "batch_challans": r.challan_count,
+                    "roll_cost": 0.0,
+                    "batch_cost": float(r.total_cost),
+                    "total_weight": 0,
+                    "total_pieces": int(r.total_pieces),
+                    "avg_cost_per_kg": 0,
+                    "avg_cost_per_piece": round(float(r.total_cost) / int(r.total_pieces), 2) if int(r.total_pieces) > 0 else 0,
+                    "damage_count": r.damage_count,
+                    "damage_weight": 0,
+                    "damage_pieces": int(r.damage_pieces),
+                }
+
+        by_vendor = sorted(vendor_map.values(), key=lambda v: v["roll_cost"] + v["batch_cost"], reverse=True)
+        total_va_spend = sum(v["roll_cost"] + v["batch_cost"] for v in by_vendor)
+        total_damage_count = sum(v["damage_count"] for v in by_vendor)
+        total_processed = sum(v["total_weight"] for v in by_vendor) + sum(v["total_pieces"] for v in by_vendor)
+        damage_rate = round(total_damage_count / len(by_vendor) * 100 / max(len(by_vendor), 1), 1) if by_vendor else 0.0
+
+        # --- By VA Type ---
+        va_type_stmt = (
+            select(
+                ValueAddition.name,
+                ValueAddition.short_code,
+                func.count(func.distinct(RollProcessing.job_challan_id)).label("roll_challans"),
+                func.coalesce(func.sum(RollProcessing.processing_cost), 0).label("roll_cost"),
+            )
+            .join(ValueAddition, ValueAddition.id == RollProcessing.value_addition_id)
+            .where(
+                RollProcessing.status == "received",
+                func.date(RollProcessing.received_date) >= from_date,
+                func.date(RollProcessing.received_date) <= to_date,
+            )
+            .group_by(ValueAddition.name, ValueAddition.short_code)
+        )
+        va_type_roll = (await self.db.execute(va_type_stmt)).all()
+
+        va_type_batch_stmt = (
+            select(
+                ValueAddition.name,
+                ValueAddition.short_code,
+                func.count(func.distinct(BatchProcessing.batch_challan_id)).label("batch_challans"),
+                func.coalesce(func.sum(BatchProcessing.cost), 0).label("batch_cost"),
+            )
+            .join(ValueAddition, ValueAddition.id == BatchProcessing.value_addition_id)
+            .where(
+                BatchProcessing.status == "received",
+                func.date(BatchChallan.received_date) >= from_date,
+                func.date(BatchChallan.received_date) <= to_date,
+            )
+            .join(BatchChallan, BatchChallan.id == BatchProcessing.batch_challan_id)
+            .group_by(ValueAddition.name, ValueAddition.short_code)
+        )
+        va_type_batch = (await self.db.execute(va_type_batch_stmt)).all()
+
+        type_map = {}
+        for r in va_type_roll:
+            type_map[r.short_code] = {"name": r.name, "short_code": r.short_code, "roll_challans": r.roll_challans, "batch_challans": 0, "total_spend": float(r.roll_cost)}
+        for r in va_type_batch:
+            if r.short_code in type_map:
+                type_map[r.short_code]["batch_challans"] = r.batch_challans
+                type_map[r.short_code]["total_spend"] += float(r.batch_cost)
+            else:
+                type_map[r.short_code] = {"name": r.name, "short_code": r.short_code, "roll_challans": 0, "batch_challans": r.batch_challans, "total_spend": float(r.batch_cost)}
+        by_va_type = sorted(type_map.values(), key=lambda v: v["total_spend"], reverse=True)
+
+        # --- Turnaround ---
+        jc_turn = (await self.db.execute(
+            select(
+                VAParty.name.label("vp_name"),
+                ValueAddition.short_code.label("va_code"),
+                func.avg(func.extract("epoch", JobChallan.received_date - JobChallan.sent_date) / 86400).label("avg_days"),
+                func.count().label("total"),
+            )
+            .join(VAParty, VAParty.id == JobChallan.va_party_id)
+            .join(ValueAddition, ValueAddition.id == JobChallan.value_addition_id)
+            .where(
+                JobChallan.status == "received",
+                func.date(JobChallan.received_date) >= from_date,
+                func.date(JobChallan.received_date) <= to_date,
+                *jc_fy,
+            )
+            .group_by(VAParty.name, ValueAddition.short_code)
+        )).all()
+
+        bc_turn = (await self.db.execute(
+            select(
+                VAParty.name.label("vp_name"),
+                ValueAddition.short_code.label("va_code"),
+                func.avg(func.extract("epoch", BatchChallan.received_date - BatchChallan.sent_date) / 86400).label("avg_days"),
+                func.count().label("total"),
+            )
+            .join(VAParty, VAParty.id == BatchChallan.va_party_id)
+            .join(ValueAddition, ValueAddition.id == BatchChallan.value_addition_id)
+            .where(
+                BatchChallan.status == "received",
+                func.date(BatchChallan.received_date) >= from_date,
+                func.date(BatchChallan.received_date) <= to_date,
+                *bc_fy,
+            )
+            .group_by(VAParty.name, ValueAddition.short_code)
+        )).all()
+
+        turnaround = []
+        for r in jc_turn:
+            turnaround.append({"va_party_name": r.vp_name, "va_type": r.va_code, "challan_type": "Roll (JC)", "avg_days": round(float(r.avg_days or 0), 1), "total_challans": r.total})
+        for r in bc_turn:
+            turnaround.append({"va_party_name": r.vp_name, "va_type": r.va_code, "challan_type": "Batch (BC)", "avg_days": round(float(r.avg_days or 0), 1), "total_challans": r.total})
+        turnaround.sort(key=lambda x: x["avg_days"], reverse=True)
+
+        # --- Active challans ---
+        active_jc = (await self.db.execute(
+            select(func.count()).select_from(JobChallan).where(JobChallan.status.in_(["sent", "partially_received"]))
+        )).scalar() or 0
+        active_bc = (await self.db.execute(
+            select(func.count()).select_from(BatchChallan).where(BatchChallan.status.in_(["sent", "partially_received"]))
+        )).scalar() or 0
+
+        avg_turn = round(sum(t["avg_days"] for t in turnaround) / len(turnaround), 1) if turnaround else 0.0
+
+        return {
+            "kpis": {
+                "total_va_spend": round(total_va_spend, 2),
+                "avg_turnaround_days": avg_turn,
+                "damage_rate_pct": damage_rate,
+                "active_challans": active_jc + active_bc,
+            },
+            "by_vendor": by_vendor,
+            "by_va_type": by_va_type,
+            "turnaround": turnaround,
+        }
+
+    # ═══════════════════════════════════════════════════════
+    #  PURCHASES & SUPPLIERS REPORT (P2.2)
+    # ═══════════════════════════════════════════════════════
+
+    async def get_purchase_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
+        """Purchase report — by supplier, supplier quality, fabric utilization."""
+        roll_fy = [Roll.fy_id == fy_id] if fy_id else []
+
+        # --- By Supplier ---
+        sup_stmt = (
+            select(
+                Supplier.name,
+                func.count(Roll.id).label("roll_count"),
+                func.coalesce(func.sum(Roll.total_weight), 0).label("total_weight"),
+                func.coalesce(func.sum(Roll.total_weight * Roll.cost_per_unit), 0).label("total_value"),
+            )
+            .outerjoin(Supplier, Supplier.id == Roll.supplier_id)
+            .where(
+                func.date(Roll.received_at) >= from_date,
+                func.date(Roll.received_at) <= to_date,
+                *roll_fy,
+            )
+            .group_by(Supplier.name)
+            .order_by(func.coalesce(func.sum(Roll.total_weight * Roll.cost_per_unit), 0).desc())
+        )
+        sup_rows = (await self.db.execute(sup_stmt)).all()
+
+        total_purchased = sum(float(r.total_value) for r in sup_rows)
+        total_rolls_received = sum(r.roll_count for r in sup_rows)
+
+        by_supplier = [{
+            "supplier_name": r.name or "Unknown",
+            "roll_count": r.roll_count,
+            "total_weight": float(r.total_weight),
+            "total_value": round(float(r.total_value), 2),
+        } for r in sup_rows]
+
+        # --- Supplier Quality ---
+        # Rolls returned per supplier
+        from app.models.return_note import ReturnNoteItem
+        quality_stmt = (
+            select(
+                Supplier.id.label("sid"),
+                Supplier.name,
+                func.count(func.distinct(Roll.id)).label("rolls_received"),
+            )
+            .join(Roll, Roll.supplier_id == Supplier.id)
+            .where(
+                func.date(Roll.received_at) >= from_date,
+                func.date(Roll.received_at) <= to_date,
+                *roll_fy,
+            )
+            .group_by(Supplier.id, Supplier.name)
+        )
+        q_rows = (await self.db.execute(quality_stmt)).all()
+
+        # Returns per supplier
+        ret_stmt = (
+            select(
+                ReturnNote.supplier_id,
+                func.count(func.distinct(ReturnNote.id)).label("return_count"),
+                func.coalesce(func.sum(ReturnNote.total_amount), 0).label("return_value"),
+            )
+            .where(
+                ReturnNote.status.in_(["dispatched", "acknowledged", "closed"]),
+                func.date(ReturnNote.created_at) >= from_date,
+                func.date(ReturnNote.created_at) <= to_date,
+            )
+            .group_by(ReturnNote.supplier_id)
+        )
+        ret_rows = (await self.db.execute(ret_stmt)).all()
+        ret_map = {r.supplier_id: {"count": r.return_count, "value": float(r.return_value)} for r in ret_rows}
+
+        # Damage per supplier (from roll processing)
+        dmg_stmt = (
+            select(
+                Roll.supplier_id,
+                func.count(case((RollProcessing.weight_damaged > 0, 1))).label("dmg_count"),
+            )
+            .join(Roll, Roll.id == RollProcessing.roll_id)
+            .where(
+                RollProcessing.status == "received",
+                func.date(RollProcessing.received_date) >= from_date,
+                func.date(RollProcessing.received_date) <= to_date,
+            )
+            .group_by(Roll.supplier_id)
+        )
+        dmg_rows = (await self.db.execute(dmg_stmt)).all()
+        dmg_map = {r.supplier_id: r.dmg_count for r in dmg_rows}
+
+        supplier_quality = []
+        for r in q_rows:
+            ret = ret_map.get(r.sid, {"count": 0, "value": 0})
+            dmg = dmg_map.get(r.sid, 0)
+            defects = ret["count"] + dmg
+            score = round(max(0, 100 - (defects / r.rolls_received * 100)), 1) if r.rolls_received > 0 else 100.0
+            supplier_quality.append({
+                "supplier_name": r.name,
+                "rolls_received": r.rolls_received,
+                "rolls_returned": ret["count"],
+                "damage_claims": dmg,
+                "return_value": ret["value"],
+                "quality_score": score,
+            })
+        supplier_quality.sort(key=lambda x: x["quality_score"])
+
+        # --- Fabric Utilization ---
+        fabric_stmt = (
+            select(
+                Roll.fabric_type,
+                func.coalesce(func.sum(Roll.total_weight), 0).label("purchased"),
+                func.coalesce(func.sum(LotRoll.weight_used), 0).label("used"),
+                func.coalesce(func.sum(LotRoll.waste_weight), 0).label("waste"),
+            )
+            .outerjoin(LotRoll, LotRoll.roll_id == Roll.id)
+            .where(
+                func.date(Roll.received_at) >= from_date,
+                func.date(Roll.received_at) <= to_date,
+                *roll_fy,
+            )
+            .group_by(Roll.fabric_type)
+            .order_by(func.coalesce(func.sum(Roll.total_weight), 0).desc())
+        )
+        fab_rows = (await self.db.execute(fabric_stmt)).all()
+
+        avg_waste = 0.0
+        total_waste_sum = 0.0
+        total_used_sum = 0.0
+        fabric_utilization = []
+        for r in fab_rows:
+            purchased = float(r.purchased)
+            used = float(r.used)
+            waste = float(r.waste)
+            waste_pct = round(waste / used * 100, 1) if used > 0 else 0.0
+            total_waste_sum += waste
+            total_used_sum += used
+            fabric_utilization.append({
+                "fabric_type": r.fabric_type,
+                "purchased_kg": round(purchased, 2),
+                "used_kg": round(used, 2),
+                "waste_kg": round(waste, 2),
+                "waste_pct": waste_pct,
+            })
+        avg_waste = round(total_waste_sum / total_used_sum * 100, 1) if total_used_sum > 0 else 0.0
+
+        return {
+            "kpis": {
+                "total_purchased": round(total_purchased, 2),
+                "rolls_received": total_rolls_received,
+                "suppliers_active": len(by_supplier),
+                "avg_waste_pct": avg_waste,
+            },
+            "by_supplier": by_supplier,
+            "supplier_quality": supplier_quality,
+            "fabric_utilization": fabric_utilization,
         }
