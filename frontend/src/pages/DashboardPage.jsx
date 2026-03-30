@@ -130,7 +130,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
           const isToday = i === data.length - 1
           return (
             <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-[10px] font-bold text-gray-600">
+              <span className="typo-kpi-label">
                 {d.amount > 0 ? `\u20B9${(d.amount / 1000).toFixed(d.amount >= 1000 ? 0 : 1)}k` : ''}
               </span>
               <div className="w-full flex justify-center">
@@ -140,7 +140,7 @@ function RevenueTrend({ data, todayRevenue, monthRevenue }) {
                   title={`${d.day_label}: \u20B9${d.amount.toLocaleString()}`}
                 />
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-emerald-700' : 'text-gray-700'}`}>{d.day_label}</span>
+              <span className={isToday ? 'typo-kpi-label text-emerald-700' : 'typo-kpi-label'}>{d.day_label}</span>
             </div>
           )
         })}
@@ -302,7 +302,7 @@ export default function DashboardPage() {
             <div key={stage.label} className="flex items-center flex-1">
               <div className={`flex-1 rounded-lg p-3 text-center ${stage.bg} ${stage.value > 0 ? 'ring-1 ring-inset ring-black/5' : ''}`}>
                 <p className={`text-2xl font-bold tracking-tight ${stage.accent}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{stage.value}</p>
-                <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${stage.accent}`}>{stage.label}</p>
+                <p className={`typo-kpi-label mt-1 ${stage.accent}`}>{stage.label}</p>
               </div>
               {i < arr.length - 1 && (
                 <svg className="h-4 w-4 text-gray-300 flex-shrink-0 mx-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
