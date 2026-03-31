@@ -29,6 +29,7 @@ class LotFilterParams(PaginatedParams):
 class DesignEntry(BaseModel):
     """Single design within a lot — design_no + size breakdown."""
     design_no: str
+    design_id: UUID | None = None
     size_pattern: dict  # e.g. {"L": 4, "XL": 4}
 
 

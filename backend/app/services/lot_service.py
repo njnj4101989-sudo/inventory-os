@@ -100,8 +100,15 @@ class LotService:
         if req.standard_palla_weight is None and req.standard_palla_meter is None:
             raise InvalidStateTransitionError("Either palla weight or palla meter is required")
 
-        # Serialize designs to dicts
-        designs_data = [{"design_no": d.design_no, "size_pattern": d.size_pattern} for d in req.designs]
+        # Serialize designs to dicts (include design_id if provided)
+        designs_data = [
+            {
+                "design_no": d.design_no,
+                "size_pattern": d.size_pattern,
+                **({"design_id": str(d.design_id)} if d.design_id else {}),
+            }
+            for d in req.designs
+        ]
         pieces_per_palla = _compute_pieces_per_palla(designs_data)
         if pieces_per_palla <= 0:
             raise InvalidStateTransitionError("At least one design must have non-zero size quantities")
@@ -225,7 +232,14 @@ class LotService:
         # Handle designs update — recalculate pieces_per_palla
         if "designs" in update_data and update_data["designs"] is not None:
             designs_raw = update_data.pop("designs")
-            designs_data = [{"design_no": d.design_no, "size_pattern": d.size_pattern} for d in designs_raw]
+            designs_data = [
+                {
+                    "design_no": d.design_no,
+                    "size_pattern": d.size_pattern,
+                    **({"design_id": str(d.design_id)} if d.design_id else {}),
+                }
+                for d in designs_raw
+            ]
             lot.designs = designs_data
             lot.pieces_per_palla = _compute_pieces_per_palla(designs_data)
 
@@ -350,6 +364,8 @@ class LotService:
 
         for design in designs:
             design_no = design.get("design_no", "")
+            design_id_str = design.get("design_id")
+            design_id_val = design_id_str if design_id_str else None
             size_pattern = design.get("size_pattern", {})
 
             for size_name, count in size_pattern.items():
@@ -363,6 +379,7 @@ class LotService:
                         lot_id=lot.id,
                         sku_id=None,
                         design_no=design_no,
+                        design_id=design_id_val,
                         size=size_name,
                         quantity=lot.total_pallas or 0,
                         piece_count=lot.total_pallas or 0,

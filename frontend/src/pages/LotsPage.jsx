@@ -3,12 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getLots, getLot, createLot, updateLot } from '../api/lots'
 import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
-import { getAllProductTypes } from '../api/masters'
+import { getAllProductTypes, getAllDesigns } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
+import FilterSelect from '../components/common/FilterSelect'
 import ErrorAlert from '../components/common/ErrorAlert'
 import CuttingSheet from '../components/common/CuttingSheet'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
@@ -126,7 +127,7 @@ export default function LotsPage() {
     lot_date: new Date().toISOString().split('T')[0],
     product_type: 'FBL',
     standard_palla_weight: '', standard_palla_meter: '',
-    designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }],
+    designs: [{ design_no: '', design_id: null, size_pattern: { ...DEFAULT_SIZE_PATTERN } }],
     rolls: [], notes: '',
   })
   const [saving, setSaving] = useState(false)
@@ -136,6 +137,7 @@ export default function LotsPage() {
   const saveRef = useRef(null)
   const pallaDebounce = useRef(null)
   const [masterProductTypes, setMasterProductTypes] = useState([])
+  const [masterDesigns, setMasterDesigns] = useState([])
   // Derive palla mode from selected product type
   const pallaMode = useMemo(() => {
     const pt = masterProductTypes.find(p => p.code === form.product_type)
@@ -151,12 +153,19 @@ export default function LotsPage() {
     }).catch(() => {})
   }, [])
 
+  const refreshDesigns = useCallback(() => {
+    getAllDesigns().then(res => setMasterDesigns(res.data.data || [])).catch(() => {})
+  }, [])
+
   const handleQuickMasterCreated = useCallback((masterType, newItem) => {
     if (masterType === 'product_type' && newItem?.code) {
       refreshProductTypes()
       setTimeout(() => setField('product_type', newItem.code), 200)
     }
-  }, [refreshProductTypes])
+    if (masterType === 'design' && newItem?.id) {
+      refreshDesigns()
+    }
+  }, [refreshProductTypes, refreshDesigns])
 
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
 
@@ -176,7 +185,7 @@ export default function LotsPage() {
     } finally { setLoading(false) }
   }, [page, statusFilter])
 
-  useEffect(() => { loadColorMap(); refreshProductTypes() }, [refreshProductTypes])
+  useEffect(() => { loadColorMap(); refreshProductTypes(); refreshDesigns() }, [refreshProductTypes, refreshDesigns])
   useEffect(() => { fetchData() }, [fetchData])
 
   const fetchRolls = useCallback(async () => {
@@ -207,7 +216,7 @@ export default function LotsPage() {
       navigate('/lots', { replace: true, state: {} })
       setFormError(null); setRollSearch('')
       setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
+      setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', design_id: null, size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
       setShowCreate(true)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -340,7 +349,7 @@ export default function LotsPage() {
   const setDesignSizeKey = (dIdx, size, v) => setForm(f => ({
     ...f, designs: f.designs.map((d, i) => i === dIdx ? { ...d, size_pattern: { ...d.size_pattern, [size]: parseInt(v) || 0 } } : d)
   }))
-  const addDesign = () => setForm(f => ({ ...f, designs: [...f.designs, { design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }] }))
+  const addDesign = () => setForm(f => ({ ...f, designs: [...f.designs, { design_no: '', design_id: null, size_pattern: { ...DEFAULT_SIZE_PATTERN } }] }))
   const removeDesign = (dIdx) => setForm(f => ({ ...f, designs: f.designs.filter((_, i) => i !== dIdx) }))
 
   // Get correct palla value for a roll based on its unit
@@ -372,13 +381,13 @@ export default function LotsPage() {
   const openCreate = () => {
     setFormError(null); setRollSearch(''); setRollsExpanded(false)
     setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
-    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
+    setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', design_id: null, size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
     setShowCreate(true)
   }
 
   const handleCreate = async () => {
     // Validate at least one design with design_no
-    const validDesigns = (form.designs || []).filter(d => d.design_no.trim())
+    const validDesigns = (form.designs || []).filter(d => d.design_id || d.design_no.trim())
     if (validDesigns.length === 0) return setFormError('At least one Design No. is required')
     // At least one palla field
     const hasWeight = form.standard_palla_weight && parseFloat(form.standard_palla_weight) > 0
@@ -391,7 +400,7 @@ export default function LotsPage() {
         lot_date: form.lot_date, product_type: form.product_type || 'FBL',
         standard_palla_weight: hasWeight ? parseFloat(form.standard_palla_weight) : null,
         standard_palla_meter: hasMeter ? parseFloat(form.standard_palla_meter) : null,
-        designs: validDesigns.map(d => ({ design_no: d.design_no.trim(), size_pattern: d.size_pattern })),
+        designs: validDesigns.map(d => ({ design_no: d.design_no.trim(), design_id: d.design_id || null, size_pattern: d.size_pattern })),
         rolls: form.rolls.map(r => ({ roll_id: r.roll_id, palla_weight: parseFloat(r.palla_weight) })),
         notes: form.notes || null,
       })
@@ -605,29 +614,23 @@ export default function LotsPage() {
                   const sizeKeys = Object.keys(d.size_pattern || {})
                   return (
                   <div key={dIdx} className="flex items-end gap-2 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-1.5" data-design-row={dIdx}>
-                    <div className="w-28">
+                    <div className="w-32">
                       <label className="typo-badge text-indigo-600">Design {dIdx + 1}</label>
-                    <input ref={dIdx === 0 ? designRef : undefined} type="text" value={d.design_no} onChange={e => setDesignField(dIdx, 'design_no', e.target.value)}
-                      placeholder="e.g. 702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      data-design-no="true" data-master="design"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
-                          e.preventDefault()
-                          // Empty design_no on non-first row → remove it, jump to rolls
-                          if (!d.design_no.trim() && dIdx > 0) {
-                            removeDesign(dIdx)
-                            setRollsExpanded(true)
-                            setTimeout(() => document.querySelector('[data-roll-search]')?.focus(), 100)
-                            return
+                      <FilterSelect full searchable autoFocus={dIdx === 0}
+                        value={d.design_id || ''}
+                        onChange={v => {
+                          const sel = masterDesigns.find(md => md.id === v)
+                          setForm(f => ({ ...f, designs: f.designs.map((dd, i) => i === dIdx ? { ...dd, design_id: v || null, design_no: sel?.design_no || '' } : dd) }))
+                          if (v) {
+                            setTimeout(() => {
+                              const row = document.querySelector(`[data-design-row="${dIdx}"]`)
+                              row?.querySelector('[data-size-input]')?.focus()
+                            }, 60)
                           }
-                          // Focus first size input in this row
-                          if (d.design_no.trim()) {
-                            const row = e.target.closest('[data-design-row]')
-                            row?.querySelector('[data-size-input]')?.focus()
-                          }
-                        }
-                      }}
-                    />
+                        }}
+                        options={masterDesigns.map(md => ({ value: md.id, label: md.design_no }))}
+                        data-master="design"
+                      />
                   </div>
                   <div className="h-px w-px border-l border-gray-200 self-stretch my-1" />
                   {sizeKeys.map((size, sIdx) => (

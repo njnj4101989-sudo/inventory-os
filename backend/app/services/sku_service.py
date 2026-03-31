@@ -197,13 +197,16 @@ class SKUService:
 
     async def find_or_create(
         self, sku_code: str, product_type: str, product_name: str, color: str, size: str,
-        color_id: UUID | None = None,
+        color_id: UUID | None = None, design_id: UUID | None = None,
     ) -> SKU:
         """Find existing SKU by code, or create new one with InventoryState."""
         stmt = select(SKU).where(SKU.sku_code == sku_code)
         result = await self.db.execute(stmt)
         sku = result.scalar_one_or_none()
         if sku:
+            # Backfill design_id if not set yet
+            if design_id and not sku.design_id:
+                sku.design_id = design_id
             return sku
 
         sku = SKU(
@@ -212,6 +215,7 @@ class SKUService:
             product_name=product_name,
             color=color,
             color_id=color_id,
+            design_id=design_id,
             size=size,
             is_active=True,
         )
@@ -281,6 +285,7 @@ class SKUService:
                 color=item.color,
                 size=item.size,
                 color_id=item.color_id,
+                design_id=item.design_id,
             )
 
             # Set pricing/tax if not already set
@@ -384,6 +389,7 @@ class SKUService:
                 product_name=item.design_no,
                 color=item.color,
                 size=item.size,
+                design_id=item.design_id,
             )
 
             # Check for existing opening_stock event
@@ -727,6 +733,7 @@ class SKUService:
             "product_name": s.product_name,
             "color": s.color,
             "color_id": str(s.color_id) if s.color_id else None,
+            "design_id": str(s.design_id) if s.design_id else None,
             "size": s.size,
             "description": s.description,
             "base_price": float(s.base_price) if s.base_price else 0,

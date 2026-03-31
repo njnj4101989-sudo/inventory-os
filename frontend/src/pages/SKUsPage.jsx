@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, createSKUOpeningStock } from '../api/skus'
 import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
-import { getAllProductTypes, getAllColors } from '../api/masters'
+import { getAllProductTypes, getAllColors, getAllDesigns } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Modal from '../components/common/Modal'
@@ -12,6 +12,8 @@ import ErrorAlert from '../components/common/ErrorAlert'
 import StatusBadge from '../components/common/StatusBadge'
 import FilterSelect from '../components/common/FilterSelect'
 import SKULabelSheet from '../components/common/SKULabelSheet'
+import useQuickMaster from '../hooks/useQuickMaster'
+import QuickMasterModal from '../components/common/QuickMasterModal'
 
 const VA_COLORS = {
   EMB: { bg: 'bg-purple-100', text: 'text-purple-700' },
@@ -128,8 +130,8 @@ function SkippedRow({ skipped, onAdjust }) {
 }
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Free']
-const EMPTY_LINE = { product_type: 'FBL', design_no: '', color: '', size: 'S', qty: '', unit_price: '' }
-const EMPTY_OPENING = { product_type: 'FBL', design_no: '', color: '', size: 'S', qty: '', unit_cost: '' }
+const EMPTY_LINE = { product_type: 'FBL', design_no: '', design_id: null, color: '', size: 'S', qty: '', unit_price: '' }
+const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, color: '', size: 'S', qty: '', unit_cost: '' }
 
 export default function SKUsPage() {
   const [activeTab, setActiveTab] = useState('skus')
@@ -156,6 +158,20 @@ export default function SKUsPage() {
   const [suppliers, setSuppliers] = useState([])
   const [productTypes, setProductTypes] = useState([])
   const [colors, setColors] = useState([])
+  const [designs, setDesigns] = useState([])
+
+  // Shift+M Quick Master
+  const refreshDesigns = useCallback(() => {
+    getAllDesigns().then(res => setDesigns(res.data.data || res.data || [])).catch(() => {})
+  }, [])
+
+  const handleQuickMasterCreated = useCallback((masterType, newItem) => {
+    if (masterType === 'design' && newItem?.id) {
+      refreshDesigns()
+    }
+  }, [refreshDesigns])
+
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
 
   // Purchase overlay
   const [purchaseOpen, setPurchaseOpen] = useState(false)
@@ -211,14 +227,16 @@ export default function SKUsPage() {
   useEffect(() => {
     async function loadMasters() {
       try {
-        const [supRes, ptRes, colRes] = await Promise.all([
+        const [supRes, ptRes, colRes, desRes] = await Promise.all([
           getSuppliers({ is_active: true }),
           getAllProductTypes(),
           getAllColors(),
+          getAllDesigns(),
         ])
         setSuppliers((supRes.data.data || supRes.data || []).filter(s => s.is_active !== false))
         setProductTypes(ptRes.data.data || ptRes.data || [])
         setColors(colRes.data.data || colRes.data || [])
+        setDesigns(desRes.data.data || desRes.data || [])
       } catch (err) { console.error('Failed to load masters', err) }
     }
     loadMasters()
@@ -301,13 +319,13 @@ export default function SKUsPage() {
   }
   const addLine = () => {
     setPurchaseLines(prev => [...prev, { ...EMPTY_LINE }])
-    // Focus design_no input of new row after render
+    // Focus color input of new row after render (design is now FilterSelect)
     setTimeout(() => {
       const rows = document.querySelectorAll('[data-purchase-row]')
       const lastRow = rows[rows.length - 1]
       if (lastRow) {
-        const designInput = lastRow.querySelector('input[data-field="design_no"]')
-        if (designInput) designInput.focus()
+        const colorInput = lastRow.querySelector('input[data-field="color"]')
+        if (colorInput) colorInput.focus()
       }
     }, 50)
   }
@@ -327,7 +345,7 @@ export default function SKUsPage() {
   }, [purchaseSubtotal, purchaseHeader.gst_percent])
 
   const handlePurchaseSubmit = async () => {
-    const validLines = purchaseLines.filter(l => l.design_no && l.color && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
+    const validLines = purchaseLines.filter(l => (l.design_no || l.design_id) && l.color && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
     if (!purchaseHeader.supplier_id) { setPurchaseError('Select a supplier'); return }
     if (validLines.length === 0) { setPurchaseError('Add at least one valid line item'); return }
 
@@ -344,6 +362,7 @@ export default function SKUsPage() {
         line_items: validLines.map(l => ({
           product_type: l.product_type,
           design_no: l.design_no,
+          design_id: l.design_id || null,
           color: l.color,
           size: l.size,
           qty: parseInt(l.qty),
@@ -407,7 +426,7 @@ export default function SKUsPage() {
   }, [allSkuCodes])
 
   const handleOpeningSubmit = async () => {
-    const validLines = openingLines.filter(l => l.design_no && l.color && parseInt(l.qty) > 0)
+    const validLines = openingLines.filter(l => (l.design_no || l.design_id) && l.color && parseInt(l.qty) > 0)
     if (validLines.length === 0) { setOpeningError('Add at least one valid row (design, color, qty)'); return }
     setOpeningSaving(true); setOpeningError(null)
     try {
@@ -415,6 +434,7 @@ export default function SKUsPage() {
         line_items: validLines.map(l => ({
           product_type: l.product_type,
           design_no: l.design_no,
+          design_id: l.design_id || null,
           color: l.color,
           size: l.size,
           qty: parseInt(l.qty),
@@ -552,8 +572,15 @@ export default function SKUsPage() {
                               options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
                           </td>
                           <td className="px-2 py-1.5">
-                            <input data-field="design_no" data-master="design" className="typo-input-sm" value={line.design_no} onChange={e => updateOpeningLine(idx, 'design_no', e.target.value)}
-                              placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
+                            <FilterSelect full searchable value={line.design_id || ''}
+                              onChange={v => {
+                                const sel = designs.find(d => d.id === v)
+                                updateOpeningLine(idx, 'design_id', v || null)
+                                updateOpeningLine(idx, 'design_no', sel?.design_no || '')
+                              }}
+                              options={designs.map(d => ({ value: d.id, label: d.design_no }))}
+                              data-master="design"
+                            />
                           </td>
                           <td className="px-2 py-1.5">
                             <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateOpeningLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
@@ -599,6 +626,7 @@ export default function SKUsPage() {
             </div>
           )}
         </div>
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
@@ -699,8 +727,15 @@ export default function SKUsPage() {
                             options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input data-field="design_no" data-master="design" className="typo-input-sm" value={line.design_no} onChange={e => updateLine(idx, 'design_no', e.target.value)}
-                            placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
+                          <FilterSelect full searchable value={line.design_id || ''}
+                            onChange={v => {
+                              const sel = designs.find(d => d.id === v)
+                              updateLine(idx, 'design_id', v || null)
+                              updateLine(idx, 'design_no', sel?.design_no || '')
+                            }}
+                            options={designs.map(d => ({ value: d.id, label: d.design_no }))}
+                            data-master="design"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
                           <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
@@ -745,6 +780,7 @@ export default function SKUsPage() {
             </div>
           </div>
         </div>
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
@@ -1235,6 +1271,8 @@ export default function SKUsPage() {
       {printSkus && (
         <SKULabelSheet skus={printSkus} onClose={() => setPrintSkus(null)} />
       )}
+
+      <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
     </div>
   )
 }

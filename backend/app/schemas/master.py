@@ -106,6 +106,11 @@ class FabricResponse(BaseSchema):
 # ── Design ─────────────────────────────────────────────
 
 
+class DesignBrief(BaseSchema):
+    id: UUID
+    design_no: str
+
+
 class DesignCreate(BaseModel):
     design_no: str
     description: str | None = None

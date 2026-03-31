@@ -25,6 +25,9 @@ class Batch(Base):
     )
     sku_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("skus.id", ondelete="RESTRICT"), nullable=True, index=True)
     design_no: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    design_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("designs.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     size: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer)
     piece_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -55,6 +58,7 @@ class Batch(Base):
     # Relationships
     lot: Mapped[Lot | None] = relationship(back_populates="batches")
     sku: Mapped[SKU | None] = relationship(back_populates="batches")
+    design: Mapped[Design | None] = relationship(foreign_keys=[design_id])
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     checked_by_user: Mapped[User | None] = relationship(foreign_keys=[checked_by])
     packed_by_user: Mapped[User | None] = relationship(foreign_keys=[packed_by])

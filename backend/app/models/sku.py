@@ -19,6 +19,9 @@ class SKU(Base):
     color_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("colors.id", ondelete="RESTRICT"), index=True
     )
+    design_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("designs.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     size: Mapped[str] = mapped_column(String(20))
     description: Mapped[str | None] = mapped_column(Text)
     base_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
@@ -33,6 +36,7 @@ class SKU(Base):
 
     # Relationships
     color_obj: Mapped[Color | None] = relationship(foreign_keys=[color_id])
+    design_obj: Mapped[Design | None] = relationship(foreign_keys=[design_id])
     lots: Mapped[list[Lot]] = relationship(back_populates="sku")
     batches: Mapped[list[Batch]] = relationship(back_populates="sku")
     inventory_state: Mapped[InventoryState | None] = relationship(

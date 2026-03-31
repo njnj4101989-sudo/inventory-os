@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.lot import LotBrief
+from app.schemas.master import DesignBrief
 from app.schemas.sku import SKUBrief
 from app.schemas.user import UserBrief
 
@@ -102,6 +103,8 @@ class BatchPack(BaseModel):
 class BatchResponse(BaseSchema):
     id: UUID
     batch_code: str
+    design_no: str | None = None
+    design: DesignBrief | None = None
     lot: LotBrief | None = None
     sku: SKUBrief | None = None
     size: str | None = None

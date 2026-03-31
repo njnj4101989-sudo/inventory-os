@@ -74,6 +74,7 @@ class SKUResponse(BaseSchema):
     product_name: str
     color: str
     color_id: UUID | None = None
+    design_id: UUID | None = None
     size: str
     description: str | None = None
     base_price: Decimal | None = None
@@ -94,6 +95,7 @@ class SKUResponse(BaseSchema):
 class PurchaseLineItem(BaseModel):
     product_type: str
     design_no: str
+    design_id: UUID | None = None
     color: str
     color_id: UUID | None = None
     size: str
@@ -173,6 +175,7 @@ class OpeningStockLineItem(BaseModel):
 
     product_type: str
     design_no: str
+    design_id: UUID | None = None
     color: str
     size: str
     qty: int

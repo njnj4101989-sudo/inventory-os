@@ -177,6 +177,7 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
+                selectinload(Batch.design),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
                 selectinload(Batch.checked_by_user),
@@ -431,6 +432,7 @@ class BatchService:
             inv_svc = InventoryService(self.db)
             product_type = lot.product_type or "FBL"
             design_no = batch.design_no or (lot.designs[0]["design_no"] if lot.designs else "")
+            design_id = batch.design_id
 
             # VA names for product_name
             va_names = sorted([
@@ -450,7 +452,8 @@ class BatchService:
                     product_name += " + " + " + ".join(va_names)
 
                 sku = await sku_svc.find_or_create(
-                    sku_code, product_type, product_name, color, batch.size or "Free"
+                    sku_code, product_type, product_name, color, batch.size or "Free",
+                    design_id=design_id,
                 )
 
                 # Finalize cost with SKU-level stitching + other
@@ -716,6 +719,7 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
+                selectinload(Batch.design),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
                 selectinload(Batch.checked_by_user),
@@ -751,6 +755,7 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
+                selectinload(Batch.design),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
             )
@@ -793,6 +798,7 @@ class BatchService:
             .options(
                 selectinload(Batch.lot),
                 selectinload(Batch.sku),
+                selectinload(Batch.design),
                 selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
                 selectinload(Batch.created_by_user),
                 selectinload(Batch.checked_by_user),
@@ -851,6 +857,10 @@ class BatchService:
             "id": str(b.id),
             "batch_code": b.batch_code,
             "design_no": b.design_no,
+            "design": {
+                "id": str(b.design.id),
+                "design_no": b.design.design_no,
+            } if b.design else None,
             "size": b.size,
             "lot": {
                 "id": str(b.lot.id),
