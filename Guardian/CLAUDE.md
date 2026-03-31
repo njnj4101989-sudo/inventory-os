@@ -33,7 +33,27 @@
 
 ---
 
-## Current State (Session 98 — 2026-03-31)
+## Current State (Session 99 — 2026-03-31)
+
+### S99: design_id FK Wiring + Color/Design Dropdowns on SKU Forms
+
+**5 commits pushed. 1 migration on dev+prod. 45 models (0 new).**
+
+- `design_id` UUID FK (nullable, RESTRICT) on Batch + SKU models, with relationship + selectinload
+- `DesignBrief` schema, `design_id` on DesignEntry (lot), PurchaseLineItem, OpeningStockLineItem, BatchResponse, SKUResponse
+- Lot service stores `design_id` in designs JSON, passes to Batch on distribute
+- Batch service passes `design_id` to `find_or_create` at pack, returns `design` nested object
+- SKU `find_or_create` backfills `color_id` + `design_id` on existing SKUs
+- Migration `b2c3d4e5f6g7`: ALTER batches+skus ADD design_id + FK + INDEX, backfill from design_no
+- **LotsPage:** design_no text input → searchable FilterSelect linked to Design master. Removed autoFocus. Fixed overflow-hidden clipping dropdown (Protocol 6).
+- **SKUsPage (purchase + opening stock):** design_no → FilterSelect (Design master), color → FilterSelect (Color master), `color_id` wired through opening stock path, `useQuickMaster` + `QuickMasterModal` added (3 render paths)
+- **No cascading breaks:** size was already a FilterSelect, batch _to_response already returned design_no
+
+**NEXT (S100):** Update CLAUDE.md session history. Sales Return system (S93 plan). API_REFERENCE.md update.
+
+---
+
+## Previous State (Session 98 — 2026-03-31)
 
 ### S98: SKU Opening Stock Overhaul + Design Master + Party Unique Constraints + Inventory History
 
