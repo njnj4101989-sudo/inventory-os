@@ -89,6 +89,13 @@ export async function purchaseStock(data) {
   return client.post('/skus/purchase-stock', data)
 }
 
+export async function createSKUOpeningStock(data) {
+  if (USE_MOCK) {
+    return mockResponse({ created: data.line_items?.length || 0, skipped: [], results: [], message: 'Mock opening stock' })
+  }
+  return client.post('/skus/opening-stock', data)
+}
+
 export async function getPurchaseInvoices(params = {}) {
   if (USE_MOCK) {
     return mockPaginated([], params.page, params.page_size)

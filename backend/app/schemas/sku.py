@@ -163,3 +163,37 @@ class PurchaseInvoiceResponse(BaseSchema):
     items: list[PurchaseItemBrief] = []
     item_count: int = 0
     total_amount: Decimal = Decimal("0")
+
+
+# --- Opening Stock ---
+
+
+class OpeningStockLineItem(BaseModel):
+    """Single line for bulk SKU opening stock entry."""
+
+    product_type: str
+    design_no: str
+    color: str
+    size: str
+    qty: int
+    unit_cost: Decimal | None = None
+
+    @field_validator("qty")
+    @classmethod
+    def qty_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Quantity must be positive")
+        return v
+
+
+class SKUOpeningStockRequest(BaseModel):
+    """POST /skus/opening-stock — bulk create SKUs + opening stock events."""
+
+    line_items: list[OpeningStockLineItem]
+
+    @field_validator("line_items")
+    @classmethod
+    def at_least_one(cls, v):
+        if not v:
+            raise ValueError("At least one line item is required")
+        return v

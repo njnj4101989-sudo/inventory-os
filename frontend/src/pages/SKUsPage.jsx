@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory } from '../api/skus'
+import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, createSKUOpeningStock } from '../api/skus'
+import { adjust } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
 import { getAllProductTypes, getAllColors } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
@@ -94,8 +95,41 @@ const PURCHASE_COLUMNS = [
   { key: 'sr_no', label: 'Sr. No.', render: (val) => <span className="typo-td-secondary">{val || '—'}</span> },
 ]
 
+function SkippedRow({ skipped, onAdjust }) {
+  const [qty, setQty] = useState('')
+  const [saving, setSaving] = useState(false)
+  if (skipped.adjusted) {
+    return (
+      <tr className="border-b border-gray-100 bg-green-50">
+        <td className="px-3 py-2 typo-data">{skipped.sku_code}</td>
+        <td className="px-3 py-2 text-right typo-td">{skipped.existing_qty}</td>
+        <td className="px-3 py-2 text-right typo-data text-green-700">+{skipped.adjusted_qty}</td>
+        <td className="px-3 py-2 text-center"><span className="text-green-600 text-xs font-semibold">Adjusted</span></td>
+      </tr>
+    )
+  }
+  return (
+    <tr className="border-b border-gray-100">
+      <td className="px-3 py-2 typo-data">{skipped.sku_code}</td>
+      <td className="px-3 py-2 text-right typo-td">{skipped.existing_qty}</td>
+      <td className="px-3 py-2 text-right">
+        <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
+          className="typo-input-sm text-right w-20" placeholder="0" />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <button onClick={async () => { setSaving(true); await onAdjust(skipped, qty); setSaving(false) }}
+          disabled={saving || !qty || parseInt(qty) <= 0}
+          className="rounded bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition-colors">
+          {saving ? '...' : 'Adjust'}
+        </button>
+      </td>
+    </tr>
+  )
+}
+
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Free']
 const EMPTY_LINE = { product_type: 'FBL', design_no: '', color: '', size: 'S', qty: '', unit_price: '' }
+const EMPTY_OPENING = { product_type: 'FBL', design_no: '', color: '', size: 'S', qty: '', unit_cost: '' }
 
 export default function SKUsPage() {
   const [activeTab, setActiveTab] = useState('skus')
@@ -142,6 +176,14 @@ export default function SKUsPage() {
 
   // Purchase invoice detail
   const [piDetail, setPiDetail] = useState(null)
+
+  // Opening stock overlay
+  const [openingOpen, setOpeningOpen] = useState(false)
+  const [openingLines, setOpeningLines] = useState([{ ...EMPTY_OPENING }])
+  const [openingSaving, setOpeningSaving] = useState(false)
+  const [openingError, setOpeningError] = useState(null)
+  const [openingResult, setOpeningResult] = useState(null)
+  const [allSkuCodes, setAllSkuCodes] = useState(new Map())
 
   const fetchSKUs = useCallback(async () => {
     setLoading(true); setError(null)
@@ -321,7 +363,242 @@ export default function SKUsPage() {
     finally { setPurchaseSaving(false) }
   }
 
+  // ── Opening Stock Overlay ──
+  const openOpening = async () => {
+    setOpeningLines([{ ...EMPTY_OPENING }])
+    setOpeningError(null)
+    setOpeningResult(null)
+    setOpeningOpen(true)
+    // Fetch all SKUs for live badge matching
+    try {
+      const res = await getSKUs({ page_size: 9999 })
+      const list = res.data.data || []
+      const map = new Map()
+      list.forEach(s => map.set(s.sku_code, { id: s.id, total_qty: s.stock?.total_qty || 0 }))
+      setAllSkuCodes(map)
+    } catch { /* ignore */ }
+  }
+
+  const updateOpeningLine = (idx, field, value) => {
+    setOpeningLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l))
+  }
+
+  const addOpeningLine = () => {
+    setOpeningLines(prev => [...prev, { ...EMPTY_OPENING }])
+    setTimeout(() => {
+      const rows = document.querySelectorAll('[data-opening-row]')
+      const last = rows[rows.length - 1]
+      if (last) { const f = last.querySelector('[data-field="design_no"]'); if (f) f.focus() }
+    }, 50)
+  }
+
+  const removeOpeningLine = (idx) => setOpeningLines(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+
+  const getSkuStatus = useCallback((line) => {
+    if (!line.design_no || !line.color) return null
+    const code = `${line.product_type}-${line.design_no}-${line.color}-${line.size}`
+    const existing = allSkuCodes.get(code)
+    if (!existing) return { type: 'new', label: 'New', cls: 'bg-green-100 text-green-700' }
+    if (existing.total_qty > 0) return { type: 'has_stock', label: `Has ${existing.total_qty} pcs`, cls: 'bg-amber-100 text-amber-700' }
+    return { type: 'exists', label: 'Exists', cls: 'bg-blue-100 text-blue-700' }
+  }, [allSkuCodes])
+
+  const handleOpeningSubmit = async () => {
+    const validLines = openingLines.filter(l => l.design_no && l.color && parseInt(l.qty) > 0)
+    if (validLines.length === 0) { setOpeningError('Add at least one valid row (design, color, qty)'); return }
+    setOpeningSaving(true); setOpeningError(null)
+    try {
+      const res = await createSKUOpeningStock({
+        line_items: validLines.map(l => ({
+          product_type: l.product_type,
+          design_no: l.design_no,
+          color: l.color,
+          size: l.size,
+          qty: parseInt(l.qty),
+          unit_cost: l.unit_cost ? parseFloat(l.unit_cost) : null,
+        })),
+      })
+      const data = res.data.data || res.data
+      if (data.skipped && data.skipped.length > 0) {
+        setOpeningResult(data)
+      } else {
+        setOpeningOpen(false)
+        fetchSKUs()
+      }
+      if (data.created > 0) fetchSKUs()
+    } catch (err) { setOpeningError(err.response?.data?.detail || 'Opening stock entry failed') }
+    finally { setOpeningSaving(false) }
+  }
+
+  const handleAdjustSkipped = async (skipped, adjustQty) => {
+    if (!adjustQty || parseInt(adjustQty) <= 0) return
+    try {
+      await adjust({
+        sku_id: skipped.sku_id,
+        event_type: 'adjustment',
+        quantity: parseInt(adjustQty),
+        reason: 'Opening stock adjustment',
+      })
+      setOpeningResult(prev => ({
+        ...prev,
+        skipped: prev.skipped.map(s => s.sku_id === skipped.sku_id ? { ...s, adjusted: true, adjusted_qty: parseInt(adjustQty) } : s),
+      }))
+      fetchSKUs()
+    } catch (err) { setOpeningError(err.response?.data?.detail || 'Adjust failed') }
+  }
+
   const ptOptions = productTypes.map(pt => ({ value: pt.code, label: `${pt.code} — ${pt.name}` }))
+
+  // ── Opening Stock Overlay ──
+  if (openingOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-3">
+            <button onClick={() => { setOpeningOpen(false); setOpeningError(null); setOpeningResult(null) }} className="rounded-lg p-1.5 hover:bg-white/10 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold">Opening Stock Entry</h2>
+              <p className="text-amber-100 text-xs">Create SKUs + enter existing inventory for Day 1 setup</p>
+            </div>
+          </div>
+          {!openingResult && (
+            <button onClick={handleOpeningSubmit} disabled={openingSaving}
+              className="rounded-lg bg-white/20 hover:bg-white/30 px-5 py-2 typo-btn-sm text-white transition-colors disabled:opacity-50">
+              {openingSaving ? 'Saving...' : 'Save Opening Stock'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {openingError && <ErrorAlert message={openingError} onDismiss={() => setOpeningError(null)} />}
+
+          {/* Post-submit results */}
+          {openingResult && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3">
+                <p className="typo-data text-green-700">{openingResult.message}</p>
+              </div>
+
+              {openingResult.skipped.length > 0 && (
+                <div className="bg-white rounded-lg border border-amber-200 px-4 py-3">
+                  <h3 className="typo-card-title text-amber-700 mb-3">Skipped — Already Have Opening Stock</h3>
+                  <p className="typo-caption mb-3">These SKUs already had opening stock. You can adjust their quantity below.</p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-amber-50">
+                        <th className="px-3 py-2 text-left typo-th">SKU Code</th>
+                        <th className="px-3 py-2 text-right typo-th">Current Qty</th>
+                        <th className="px-3 py-2 text-right typo-th">Add Qty</th>
+                        <th className="px-3 py-2 text-center typo-th">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openingResult.skipped.map((s) => (
+                        <SkippedRow key={s.sku_id} skipped={s} onAdjust={handleAdjustSkipped} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button onClick={() => { setOpeningOpen(false); setOpeningResult(null); fetchSKUs() }}
+                  className="rounded-lg bg-emerald-600 px-5 py-2 typo-btn-sm text-white hover:bg-emerald-700 transition-colors">
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Entry form — hidden after submit */}
+          {!openingResult && (
+            <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="typo-card-title">SKU Line Items</h3>
+                <button onClick={addOpeningLine} className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-amber-700 shadow-sm transition-colors">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add Row
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-amber-600">
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-8 border-r border-amber-500">#</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Type</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Design No.</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Color</th>
+                      <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Size</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Qty</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Unit Cost</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Status</th>
+                      <th className="px-1 py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openingLines.map((line, idx) => {
+                      const status = getSkuStatus(line)
+                      return (
+                        <tr key={idx} data-opening-row className="border-b border-gray-100 hover:bg-gray-50/50">
+                          <td className="px-2 py-1.5 typo-td-secondary">{idx + 1}</td>
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full value={line.product_type} onChange={v => updateOpeningLine(idx, 'product_type', v)}
+                              options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="design_no" className="typo-input-sm" value={line.design_no} onChange={e => updateOpeningLine(idx, 'design_no', e.target.value)}
+                              placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateOpeningLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="qty"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <FilterSelect full className="min-w-[70px]" value={line.size} onChange={v => updateOpeningLine(idx, 'size', v)}
+                              options={SIZES.map(s => ({ value: s, label: s }))} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="qty" type="number" className="typo-input-sm text-right" value={line.qty} onChange={e => updateOpeningLine(idx, 'qty', e.target.value)} placeholder="0" min="1"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="unit_cost"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="unit_cost" type="number" className="typo-input-sm text-right" value={line.unit_cost} onChange={e => updateOpeningLine(idx, 'unit_cost', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (idx === openingLines.length - 1) addOpeningLine(); else { const nextRow = e.target.closest('tr').nextElementSibling; if (nextRow) { const next = nextRow.querySelector('[data-field="design_no"]'); if (next) next.focus() } } } }} />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            {status && (
+                              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>{status.label}</span>
+                            )}
+                          </td>
+                          <td className="px-1 py-1.5">
+                            {openingLines.length > 1 && (
+                              <button onClick={() => removeOpeningLine(idx)} className="text-gray-400 hover:text-red-500 transition-colors p-0.5">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <p className="text-sm text-amber-700">
+                  <strong>Opening Stock</strong> is for Day 1 setup — enter existing finished goods. SKUs are auto-created if they don't exist.
+                  Unit cost is optional but recommended for accurate closing stock valuation. SKUs that already have opening stock will be skipped with an option to adjust.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   // ── Purchase Overlay ──
   if (purchaseOpen) {
@@ -738,10 +1015,16 @@ export default function SKUsPage() {
           <h1 className="typo-page-title">Finished Goods</h1>
           <p className="mt-0.5 typo-caption">SKUs are auto-generated when batches are packed</p>
         </div>
-        <button onClick={openPurchase} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Purchase Ready Stock
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={openOpening} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+            Opening Stock
+          </button>
+          <button onClick={openPurchase} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Purchase Ready Stock
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -820,7 +1103,7 @@ export default function SKUsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((row) => {
+                  {filteredSKUs.map((row) => {
                     const s = row
                     const bp = s.base_price || 0
                     const stitch = s.stitching_cost || 0
@@ -854,7 +1137,7 @@ export default function SKUsPage() {
                 </tbody>
               </table>
             </div>
-            {items.length === 0 && <p className="typo-empty py-8 text-center">No SKUs found.</p>}
+            {filteredSKUs.length === 0 && <p className="typo-empty py-8 text-center">No SKUs found.</p>}
           </div>
           <Pagination page={page} pages={pages} total={total} onChange={setPage} />
 

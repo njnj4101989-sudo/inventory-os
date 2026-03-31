@@ -3725,7 +3725,7 @@ export default function RollsPage() {
 
         {openingRollError && <div className="mb-4"><ErrorAlert message={openingRollError} onDismiss={() => setOpeningRollError(null)} /></div>}
 
-        <div className="space-y-3 max-h-[500px] overflow-y-auto">
+        <div className="space-y-3">
           {openingRollRows.map((row, idx) => (
             <div key={idx} className="rounded-lg border border-gray-200 p-3 bg-white">
               {/* Main row: Fabric, Color, Weight, Rate, Remove */}

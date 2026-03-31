@@ -32,14 +32,21 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
       : []
     : options
 
-  // Click outside → close
+  // Click outside → close (auto-select single match for searchable)
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch('') }
+      if (ref.current && !ref.current.contains(e.target)) {
+        if (searchable && search) {
+          const matches = options.filter(o => o.value && o.label.toLowerCase().includes(search.toLowerCase()))
+          if (matches.length === 1) onChange(matches[0].value)
+        }
+        setOpen(false)
+        setSearch('')
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [searchable, search, options, onChange])
 
   // autoFocus
   useEffect(() => {

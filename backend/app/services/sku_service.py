@@ -18,7 +18,7 @@ from app.models.inventory_state import InventoryState
 from app.models.inventory_event import InventoryEvent
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
-from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest
+from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest, SKUOpeningStockRequest
 from app.schemas import PaginatedParams
 from app.core.exceptions import DuplicateError, NotFoundError
 
@@ -355,6 +355,90 @@ class SKUService:
                 {**it, "total_price": float(it["total_price"])} for it in created_items
             ],
             "subtotal": float(subtotal),
+        }
+
+    async def create_opening_stock(
+        self, req: SKUOpeningStockRequest, performed_by: UUID
+    ) -> dict:
+        """Bulk opening stock: find/create SKUs + create opening_stock events."""
+        import uuid as _uuid
+        from app.services.inventory_service import InventoryService
+
+        inv_svc = InventoryService(self.db)
+        created = 0
+        skipped = []
+        results = []
+
+        for item in req.line_items:
+            sku_code = f"{item.product_type}-{item.design_no}-{item.color}-{item.size}"
+
+            # Check if SKU exists before find_or_create (to track created_new_sku)
+            existing_sku = (await self.db.execute(
+                select(SKU).where(SKU.sku_code == sku_code)
+            )).scalar_one_or_none()
+            created_new_sku = existing_sku is None
+
+            sku = await self.find_or_create(
+                sku_code=sku_code,
+                product_type=item.product_type,
+                product_name=item.design_no,
+                color=item.color,
+                size=item.size,
+            )
+
+            # Check for existing opening_stock event
+            has_opening = (await self.db.execute(
+                select(func.count()).select_from(InventoryEvent).where(
+                    InventoryEvent.sku_id == sku.id,
+                    InventoryEvent.event_type == "opening_stock",
+                )
+            )).scalar() or 0
+
+            if has_opening > 0:
+                # Get current qty for the skip response
+                inv_state = (await self.db.execute(
+                    select(InventoryState).where(InventoryState.sku_id == sku.id)
+                )).scalar_one_or_none()
+                skipped.append({
+                    "sku_code": sku_code,
+                    "sku_id": str(sku.id),
+                    "existing_qty": inv_state.total_qty if inv_state else 0,
+                })
+                continue
+
+            # Set base_price if not already set
+            if sku.base_price is None and item.unit_cost is not None:
+                sku.base_price = item.unit_cost
+
+            metadata = {"is_opening_stock": True}
+            if item.unit_cost is not None:
+                metadata["unit_cost"] = float(item.unit_cost)
+
+            await inv_svc.create_event(
+                event_type="opening_stock",
+                item_type="finished_goods",
+                reference_type="opening_stock",
+                reference_id=_uuid.uuid4(),
+                sku_id=sku.id,
+                quantity=item.qty,
+                performed_by=performed_by,
+                metadata=metadata,
+            )
+            created += 1
+            results.append({
+                "sku_code": sku_code,
+                "sku_id": str(sku.id),
+                "created_new_sku": created_new_sku,
+                "qty": item.qty,
+                "unit_cost": float(item.unit_cost) if item.unit_cost else None,
+            })
+
+        skip_msg = f", {len(skipped)} skipped (already have opening stock)" if skipped else ""
+        return {
+            "created": created,
+            "skipped": skipped,
+            "results": results,
+            "message": f"{created} opening stock entries created{skip_msg}",
         }
 
     async def get_purchase_invoices(self, params, fy_id: UUID) -> dict:

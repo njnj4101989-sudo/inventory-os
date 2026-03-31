@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, get_current_user, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
-from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest
+from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest, SKUOpeningStockRequest
 from app.services.sku_service import SKUService
 
 router = APIRouter(prefix="/skus", tags=["SKUs"])
@@ -28,6 +28,18 @@ async def purchase_stock(
     svc = SKUService(db)
     result = await svc.purchase_stock(req, current_user.id, fy_id)
     return {"success": True, "data": result, "message": f"{len(req.line_items)} items stocked in"}
+
+
+@router.post("/opening-stock", response_model=None, status_code=201)
+async def sku_opening_stock(
+    req: SKUOpeningStockRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_adjust"),
+):
+    """Bulk opening stock: find/create SKUs + create opening_stock events."""
+    svc = SKUService(db)
+    result = await svc.create_opening_stock(req, current_user.id)
+    return {"success": True, "data": result, "message": result["message"]}
 
 
 @router.get("/purchase-invoices", response_model=None)

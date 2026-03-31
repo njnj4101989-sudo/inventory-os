@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getInventory, getEvents, adjust, reconcile, createOpeningStock, getVerifications, createVerification, getVerification, updateVerificationCounts, completeVerification, approveVerification } from '../api/inventory'
-import { getSKUs } from '../api/skus'
+import { getInventory, getEvents, adjust, reconcile, getVerifications, createVerification, getVerification, updateVerificationCounts, completeVerification, approveVerification } from '../api/inventory'
 import { getInventorySummary, getRawMaterialSummary, getWIPSummary } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import DataTable from '../components/common/DataTable'
@@ -408,12 +407,6 @@ export default function InventoryPage() {
   const [adjusting, setAdjusting] = useState(false)
   const [adjustError, setAdjustError] = useState(null)
 
-  // Opening stock modal
-  const [openingOpen, setOpeningOpen] = useState(false)
-  const [openingRows, setOpeningRows] = useState([{ sku_id: '', quantity: '', unit_cost: '' }])
-  const [openingSaving, setOpeningSaving] = useState(false)
-  const [openingError, setOpeningError] = useState(null)
-  const [allSkus, setAllSkus] = useState([])
 
   // Verification state
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -497,54 +490,6 @@ export default function InventoryPage() {
       setTimeout(() => setSuccessMsg(null), 3000)
     } catch (err) {
       setError(err.response?.data?.detail || 'Reconciliation failed')
-    }
-  }
-
-  const handleOpenOpening = async () => {
-    setOpeningError(null)
-    setOpeningOpen(true)
-    if (allSkus.length === 0) {
-      try {
-        const res = await getSKUs({ is_active: true, page_size: 500 })
-        setAllSkus(res.data.data || [])
-      } catch { /* ignore */ }
-    }
-  }
-
-  const handleOpeningRowChange = (idx, field, value) => {
-    setOpeningRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
-  }
-
-  const handleAddOpeningRow = () => {
-    setOpeningRows(prev => [...prev, { sku_id: '', quantity: '', unit_cost: '' }])
-  }
-
-  const handleRemoveOpeningRow = (idx) => {
-    setOpeningRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
-  }
-
-  const handleSubmitOpening = async () => {
-    const validRows = openingRows.filter(r => r.sku_id && r.quantity)
-    if (validRows.length === 0) { setOpeningError('Add at least one SKU with quantity'); return }
-    setOpeningSaving(true)
-    setOpeningError(null)
-    try {
-      const res = await createOpeningStock({
-        items: validRows.map(r => ({
-          sku_id: r.sku_id,
-          quantity: parseInt(r.quantity),
-          unit_cost: r.unit_cost ? parseFloat(r.unit_cost) : null,
-        })),
-      })
-      setOpeningOpen(false)
-      setOpeningRows([{ sku_id: '', quantity: '', unit_cost: '' }])
-      setSuccessMsg(res.data.message)
-      fetchData()
-      setTimeout(() => setSuccessMsg(null), 4000)
-    } catch (err) {
-      setOpeningError(err.response?.data?.detail || 'Opening stock entry failed')
-    } finally {
-      setOpeningSaving(false)
     }
   }
 
@@ -657,14 +602,6 @@ export default function InventoryPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Reconcile
-            </span>
-          </button>
-          <button onClick={handleOpenOpening} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
-            <span className="flex items-center gap-1.5">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-              </svg>
-              Opening Stock
             </span>
           </button>
           <button onClick={() => { setAdjustError(null); setAdjustOpen(true) }} className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 transition-colors">
@@ -864,101 +801,6 @@ export default function InventoryPage() {
               className="typo-input"
               placeholder="Reason for this adjustment..." />
           </div>
-        </div>
-      </Modal>
-
-      {/* Opening Stock Modal */}
-      <Modal
-        open={openingOpen}
-        onClose={() => setOpeningOpen(false)}
-        title=""
-        extraWide
-        actions={
-          <>
-            <button onClick={() => setOpeningOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSubmitOpening} disabled={openingSaving}
-              className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-              {openingSaving ? 'Saving...' : `Add ${openingRows.filter(r => r.sku_id && r.quantity).length} SKU Opening Stock`}
-            </button>
-          </>
-        }
-      >
-        {/* Emerald gradient header */}
-        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4">
-          <h2 className="text-lg font-bold text-white">Opening Stock Entry</h2>
-          <p className="text-sm text-amber-100 mt-0.5">Enter existing finished goods inventory for Day 1 setup</p>
-        </div>
-
-        {openingError && <div className="mb-4"><ErrorAlert message={openingError} onDismiss={() => setOpeningError(null)} /></div>}
-
-        {/* Column headers */}
-        <div className="grid grid-cols-[1fr_100px_120px_40px] gap-3 mb-2 px-1">
-          <span className="typo-label">SKU</span>
-          <span className="typo-label">Quantity</span>
-          <span className="typo-label">Unit Cost</span>
-          <span />
-        </div>
-
-        {/* Rows */}
-        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {openingRows.map((row, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_100px_120px_40px] gap-3 items-center">
-              <FilterSelect
-                full
-                searchable
-                value={row.sku_id}
-                onChange={(v) => handleOpeningRowChange(idx, 'sku_id', v)}
-                options={[{ value: '', label: 'Select SKU...' }, ...allSkus.map(s => ({
-                  value: s.id, label: `${s.sku_code} — ${s.product_name}`,
-                }))]}
-                autoFocus={idx === 0}
-              />
-              <input
-                type="number"
-                min="1"
-                value={row.quantity}
-                onChange={(e) => handleOpeningRowChange(idx, 'quantity', e.target.value)}
-                className="typo-input"
-                placeholder="Qty"
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={row.unit_cost}
-                onChange={(e) => handleOpeningRowChange(idx, 'unit_cost', e.target.value)}
-                className="typo-input"
-                placeholder="Cost/pc"
-              />
-              <button
-                onClick={() => handleRemoveOpeningRow(idx)}
-                className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                title="Remove row"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* Add row button */}
-        <button
-          onClick={handleAddOpeningRow}
-          className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 typo-btn-sm text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors w-full justify-center"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Another SKU
-        </button>
-
-        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-          <p className="text-sm text-amber-700">
-            <strong>Opening Stock</strong> is for entering existing inventory on Day 1. Each SKU can only have one opening stock entry.
-            Unit cost is optional but recommended for accurate closing stock valuation.
-          </p>
         </div>
       </Modal>
 
