@@ -11,7 +11,7 @@ from sqlalchemy import text
 from migrations.tenant_utils import get_tenant_schemas, col_exists, index_exists
 
 revision = "b2c3d4e5f6g7"
-down_revision = "z0a1b2c3d4e5"
+down_revision = "a1b2c3d4e5f6"
 branch_labels = None
 depends_on = None
 
