@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, createSKUOpeningStock } from '../api/skus'
-import { adjust } from '../api/inventory'
+import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
 import { getAllProductTypes, getAllColors } from '../api/masters'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
@@ -241,14 +241,16 @@ export default function SKUsPage() {
   }, [skus])
 
   const [costHistory, setCostHistory] = useState(null)
+  const [skuEvents, setSkuEvents] = useState([])
 
   // SKU detail
   const openDetail = async (row) => {
-    setDetailLoading(true); setDetailError(null); setCostHistory(null)
+    setDetailLoading(true); setDetailError(null); setCostHistory(null); setSkuEvents([])
     try {
-      const [skuRes, costRes] = await Promise.all([
+      const [skuRes, costRes, evtRes] = await Promise.all([
         getSKU(row.id),
         getSKUCostHistory(row.id).catch(() => null),
+        getEvents(row.id, { page_size: 100 }).catch(() => null),
       ])
       const sku = skuRes.data.data || skuRes.data
       setDetailSKU(sku)
@@ -259,6 +261,7 @@ export default function SKUsPage() {
         stitching_cost: sku.stitching_cost ?? '', other_cost: sku.other_cost ?? '',
       })
       if (costRes) setCostHistory(costRes.data.data)
+      if (evtRes) setSkuEvents(evtRes.data.data || [])
     } catch (err) { setError(err.response?.data?.detail || 'Failed to load SKU') }
     finally { setDetailLoading(false) }
   }
@@ -523,7 +526,7 @@ export default function SKUsPage() {
                 </button>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-x-auto">
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <table className="min-w-full">
                   <thead>
                     <tr className="bg-amber-600">
@@ -549,7 +552,7 @@ export default function SKUsPage() {
                               options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
                           </td>
                           <td className="px-2 py-1.5">
-                            <input data-field="design_no" className="typo-input-sm" value={line.design_no} onChange={e => updateOpeningLine(idx, 'design_no', e.target.value)}
+                            <input data-field="design_no" data-master="design" className="typo-input-sm" value={line.design_no} onChange={e => updateOpeningLine(idx, 'design_no', e.target.value)}
                               placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
                           </td>
                           <td className="px-2 py-1.5">
@@ -696,7 +699,7 @@ export default function SKUsPage() {
                             options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input data-field="design_no" className="typo-input-sm" value={line.design_no} onChange={e => updateLine(idx, 'design_no', e.target.value)}
+                          <input data-field="design_no" data-master="design" className="typo-input-sm" value={line.design_no} onChange={e => updateLine(idx, 'design_no', e.target.value)}
                             placeholder="e.g. 702" onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="color"]'); if (next) next.focus() } }} />
                         </td>
                         <td className="px-2 py-1.5">
@@ -931,6 +934,74 @@ export default function SKUsPage() {
                     {b.tailor && <div className="typo-caption">Tailor: <span className="font-medium text-gray-700">{b.tailor.full_name}</span></div>}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Inventory History */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="typo-card-title mb-3">Inventory History <span className="text-gray-400 font-normal">({skuEvents.length})</span></h3>
+            {skuEvents.length === 0 ? (
+              <p className="typo-empty italic">No inventory events recorded yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-gray-500 border-b">
+                      <th className="px-3 py-2 font-medium">Date</th>
+                      <th className="px-3 py-2 font-medium">Event</th>
+                      <th className="px-3 py-2 font-medium">Source</th>
+                      <th className="px-3 py-2 font-medium text-right">Qty</th>
+                      <th className="px-3 py-2 font-medium text-right">Cost/pc</th>
+                      <th className="px-3 py-2 font-medium">By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skuEvents.map((evt) => {
+                      const isIn = ['stock_in', 'return', 'ready_stock_in', 'opening_stock', 'adjustment'].includes(evt.event_type)
+                      const evtLabel = {
+                        opening_stock: 'Opening Stock',
+                        ready_stock_in: 'Stock In',
+                        stock_in: 'Stock In',
+                        stock_out: 'Stock Out',
+                        loss: 'Loss',
+                        return: 'Return',
+                        adjustment: 'Adjustment',
+                      }[evt.event_type] || evt.event_type
+                      const evtColor = {
+                        opening_stock: 'bg-amber-100 text-amber-700',
+                        ready_stock_in: 'bg-green-100 text-green-700',
+                        stock_in: 'bg-green-100 text-green-700',
+                        stock_out: 'bg-red-100 text-red-700',
+                        loss: 'bg-red-100 text-red-700',
+                        return: 'bg-blue-100 text-blue-700',
+                        adjustment: 'bg-purple-100 text-purple-700',
+                      }[evt.event_type] || 'bg-gray-100 text-gray-700'
+                      const sourceLabel = {
+                        opening_stock: 'Day 1 Entry',
+                        purchase_item: 'Purchase',
+                        shipment: 'Shipment',
+                        manual_adjustment: 'Manual',
+                        batch_pack: 'Batch Pack',
+                      }[evt.reference_type] || evt.reference_type || '—'
+                      const unitCost = evt.metadata?.unit_cost
+                      return (
+                        <tr key={evt.id} className="border-b last:border-0 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-500">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${evtColor}`}>{evtLabel}</span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{sourceLabel}</td>
+                          <td className={`px-3 py-2 text-right font-semibold ${isIn ? 'text-green-600' : 'text-red-600'}`}>
+                            {isIn ? '+' : '−'}{evt.quantity}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500">{unitCost ? `₹${parseFloat(unitCost).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2 text-gray-500">{evt.performed_by?.full_name || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transport import Transport
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import DuplicateError, NotFoundError
 
 
 class TransportService:
@@ -57,8 +57,14 @@ class TransportService:
         return self._to_response(transport)
 
     async def create_transport(self, data) -> dict:
+        name = data.name.strip().title()
+        existing = await self.db.execute(
+            select(Transport).where(func.lower(Transport.name) == name.lower())
+        )
+        if existing.scalar_one_or_none():
+            raise DuplicateError(f"Transport '{name}' already exists")
         obj = Transport(
-            name=data.name.strip(),
+            name=name,
             contact_person=data.contact_person.strip() if data.contact_person else None,
             phone=data.phone.strip() if data.phone else None,
             phone_alt=data.phone_alt.strip() if data.phone_alt else None,

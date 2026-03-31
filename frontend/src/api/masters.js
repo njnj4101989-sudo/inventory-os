@@ -110,6 +110,31 @@ export async function updateFabric(id, data) {
   return client.patch(`/masters/fabrics/${id}`, data)
 }
 
+// ── Designs ───────────────────────────────────────────
+
+export async function getDesigns() {
+  if (USE_MOCK) return mockResponse([])
+  return client.get('/masters/designs')
+}
+
+export async function getAllDesigns() {
+  if (USE_MOCK) return mockResponse([])
+  return client.get('/masters/designs/all')
+}
+
+export async function createDesign(data) {
+  if (USE_MOCK) {
+    const obj = { id: crypto.randomUUID(), design_no: data.design_no, description: data.description || null, is_active: true }
+    return mockResponse(obj, 'Design created')
+  }
+  return client.post('/masters/designs', data)
+}
+
+export async function updateDesign(id, data) {
+  if (USE_MOCK) return mockResponse({ id, ...data })
+  return client.patch(`/masters/designs/${id}`, data)
+}
+
 // ── Value Additions ────────────────────────────────────
 
 export async function getValueAdditions() {

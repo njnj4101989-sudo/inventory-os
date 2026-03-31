@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.broker import Broker
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import DuplicateError, NotFoundError
 
 
 class BrokerService:
@@ -57,8 +57,14 @@ class BrokerService:
         return self._to_response(broker)
 
     async def create_broker(self, data) -> dict:
+        name = data.name.strip().title()
+        existing = await self.db.execute(
+            select(Broker).where(func.lower(Broker.name) == name.lower())
+        )
+        if existing.scalar_one_or_none():
+            raise DuplicateError(f"Broker '{name}' already exists")
         obj = Broker(
-            name=data.name.strip(),
+            name=name,
             contact_person=data.contact_person.strip() if data.contact_person else None,
             phone=data.phone.strip() if data.phone else None,
             phone_alt=data.phone_alt.strip() if data.phone_alt else None,

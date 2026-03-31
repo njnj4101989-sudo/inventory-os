@@ -7,7 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.customer import Customer
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import DuplicateError, NotFoundError
 
 
 class CustomerService:
@@ -60,8 +60,14 @@ class CustomerService:
         return self._to_response(customer)
 
     async def create_customer(self, data) -> dict:
+        name = data.name.strip().title()
+        existing = await self.db.execute(
+            select(Customer).where(func.lower(Customer.name) == name.lower())
+        )
+        if existing.scalar_one_or_none():
+            raise DuplicateError(f"Customer '{name}' already exists")
         obj = Customer(
-            name=data.name.strip(),
+            name=name,
             contact_person=data.contact_person.strip() if data.contact_person else None,
             short_name=data.short_name.strip() if data.short_name else None,
             phone=data.phone.strip() if data.phone else None,

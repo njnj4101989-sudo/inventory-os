@@ -103,6 +103,27 @@ class FabricResponse(BaseSchema):
     is_active: bool = True
 
 
+# ── Design ─────────────────────────────────────────────
+
+
+class DesignCreate(BaseModel):
+    design_no: str
+    description: str | None = None
+
+
+class DesignUpdate(BaseModel):
+    design_no: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class DesignResponse(BaseSchema):
+    id: UUID
+    design_no: str
+    description: str | None = None
+    is_active: bool = True
+
+
 # ── Value Addition ──────────────────────────────────────
 
 

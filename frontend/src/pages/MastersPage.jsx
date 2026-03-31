@@ -3,6 +3,7 @@ import {
   getProductTypes, createProductType, updateProductType,
   getColors, createColor, updateColor,
   getFabrics, createFabric, updateFabric,
+  getDesigns, createDesign, updateDesign,
   getValueAdditions, createValueAddition, updateValueAddition,
 } from '../api/masters'
 import DataTable from '../components/common/DataTable'
@@ -17,6 +18,7 @@ const TABS = [
   { key: 'product_types', label: 'Product Types', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z' },
   { key: 'colors', label: 'Colors', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
   { key: 'fabrics', label: 'Fabrics', icon: 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16' },
+  { key: 'designs', label: 'Designs', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { key: 'value_additions', label: 'VA Types', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
 ]
 
@@ -49,6 +51,12 @@ const COLOR_COLUMNS = [
 const FABRIC_COLUMNS = [
   { key: 'code', label: 'Code', render: (v) => <span className="font-mono font-semibold text-primary-700">{v}</span> },
   { key: 'name', label: 'Name' },
+  { key: 'description', label: 'Description', render: (v) => v || <span className="text-gray-400">—</span> },
+  { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
+]
+
+const DESIGN_COLUMNS = [
+  { key: 'design_no', label: 'Design No.', render: (v) => <span className="font-semibold text-emerald-700">{v}</span> },
   { key: 'description', label: 'Description', render: (v) => v || <span className="text-gray-400">—</span> },
   { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
 ]
@@ -88,6 +96,7 @@ export default function MastersPage() {
   const [ptData, setPtData] = useState([])
   const [colorData, setColorData] = useState([])
   const [fabricData, setFabricData] = useState([])
+  const [designData, setDesignData] = useState([])
   const [vaData, setVaData] = useState([])
 
   // VA filter
@@ -114,6 +123,9 @@ export default function MastersPage() {
       } else if (tab === 'fabrics') {
         const res = await getFabrics()
         setFabricData(res.data.data)
+      } else if (tab === 'designs') {
+        const res = await getDesigns()
+        setDesignData(res.data.data)
       } else if (tab === 'value_additions') {
         const res = await getValueAdditions()
         setVaData(res.data.data)
@@ -130,15 +142,15 @@ export default function MastersPage() {
   // ── Filtered data ──
   const q = search.toLowerCase()
   const filteredData = (() => {
-    let list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : vaData
+    let list = tab === 'product_types' ? ptData : tab === 'colors' ? colorData : tab === 'fabrics' ? fabricData : tab === 'designs' ? designData : vaData
     // VA applicable_to filter
     if (tab === 'value_additions' && vaFilter !== 'all') {
       list = list.filter((item) => (item.applicable_to || 'both') === vaFilter)
     }
     if (!q) return list
     return list.filter((item) =>
-      item.name.toLowerCase().includes(q) ||
-      (item.code || item.short_code || '').toLowerCase().includes(q) ||
+      (item.name || item.design_no || '').toLowerCase().includes(q) ||
+      (item.code || item.short_code || item.design_no || '').toLowerCase().includes(q) ||
       (item.description || '').toLowerCase().includes(q) ||
       (item.phone || '').toLowerCase().includes(q) ||
       (item.city || '').toLowerCase().includes(q) ||
@@ -152,6 +164,7 @@ export default function MastersPage() {
     setFormError(null)
     if (tab === 'product_types') setForm({ code: '', name: '', description: '' })
     else if (tab === 'colors') setForm({ name: '', code: '', color_no: '', hex_code: '#000000' })
+    else if (tab === 'designs') setForm({ design_no: '', description: '' })
     else if (tab === 'value_additions') setForm({ short_code: '', name: '', description: '', applicable_to: 'both' })
     else setForm({ code: '', name: '', description: '' })
     setModalOpen(true)
@@ -162,6 +175,7 @@ export default function MastersPage() {
     setFormError(null)
     if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     else if (tab === 'colors') setForm({ name: item.name, code: item.code || '', color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
+    else if (tab === 'designs') setForm({ design_no: item.design_no, description: item.description || '', is_active: item.is_active })
     else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', applicable_to: item.applicable_to || 'both', is_active: item.is_active })
     else setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
     setModalOpen(true)
@@ -172,7 +186,9 @@ export default function MastersPage() {
     setFormError(null)
 
     // Validation
-    if (!editing) {
+    if (tab === 'designs') {
+      if (!form.design_no?.trim()) { setFormError('Design No. is required'); return }
+    } else if (!editing) {
       if (tab === 'value_additions') {
         if (!form.short_code?.trim()) { setFormError('Short code is required'); return }
         if (form.short_code.trim().length > 4) { setFormError('Short code max 4 characters'); return }
@@ -182,7 +198,7 @@ export default function MastersPage() {
     }
     if (tab === 'colors' && form.code?.trim().length > 5) { setFormError('Color code max 5 characters'); return }
     if (tab === 'fabrics' && !editing && form.code?.trim().length > 3) { setFormError('Fabric code max 3 characters'); return }
-    if (!form.name?.trim()) { setFormError('Name is required'); return }
+    if (tab !== 'designs' && !form.name?.trim()) { setFormError('Name is required'); return }
 
     setSaving(true)
     try {
@@ -198,6 +214,9 @@ export default function MastersPage() {
       } else if (tab === 'fabrics') {
         if (editing) await updateFabric(editing.id, form)
         else await createFabric({ code: form.code.trim(), name: form.name.trim(), description: form.description || null })
+      } else if (tab === 'designs') {
+        if (editing) await updateDesign(editing.id, form)
+        else await createDesign({ design_no: form.design_no.trim(), description: form.description || null })
       } else if (tab === 'value_additions') {
         if (editing) await updateValueAddition(editing.id, form)
         else await createValueAddition({ short_code: form.short_code.trim(), name: form.name.trim(), description: form.description || null, applicable_to: form.applicable_to || 'both' })
@@ -214,8 +233,8 @@ export default function MastersPage() {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   // ── Labels ──
-  const entityLabel = tab === 'product_types' ? 'Product Type' : tab === 'colors' ? 'Color' : tab === 'fabrics' ? 'Fabric' : 'VA Type'
-  const columns = tab === 'product_types' ? PT_COLUMNS : tab === 'colors' ? COLOR_COLUMNS : tab === 'fabrics' ? FABRIC_COLUMNS : VA_COLUMNS
+  const entityLabel = tab === 'product_types' ? 'Product Type' : tab === 'colors' ? 'Color' : tab === 'fabrics' ? 'Fabric' : tab === 'designs' ? 'Design' : 'VA Type'
+  const columns = tab === 'product_types' ? PT_COLUMNS : tab === 'colors' ? COLOR_COLUMNS : tab === 'fabrics' ? FABRIC_COLUMNS : tab === 'designs' ? DESIGN_COLUMNS : VA_COLUMNS
 
   return (
     <div>
@@ -223,7 +242,7 @@ export default function MastersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Masters</h1>
-          <p className="text-xs text-gray-500">Manage product types, colors, fabrics, and VA types</p>
+          <p className="text-xs text-gray-500">Manage product types, colors, fabrics, designs, and VA types</p>
         </div>
         <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -296,8 +315,18 @@ export default function MastersPage() {
         <div className="space-y-4">
           {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
-          {/* Code — only on create (not for VA Parties) */}
-          {!editing && tab !== 'value_additions' && (
+          {/* Design No — designs tab */}
+          {tab === 'designs' && (
+            <div>
+              <label className="typo-label">Design No. <span className="text-red-500">*</span></label>
+              <input type="text" value={form.design_no || ''} onChange={(e) => set('design_no', e.target.value)}
+                placeholder="e.g. 702 or Chandni" className="typo-input" />
+              <p className="mt-1 text-xs text-gray-400">Used in SKU codes. Must be unique. Auto Title Case on save.</p>
+            </div>
+          )}
+
+          {/* Code — only on create (not for VA Parties or Designs) */}
+          {!editing && tab !== 'value_additions' && tab !== 'designs' && (
             <div>
               <label className="typo-label">Code <span className="text-red-500">*</span></label>
               <input type="text" value={form.code || ''} onChange={(e) => set('code', e.target.value.toUpperCase())}
@@ -345,7 +374,7 @@ export default function MastersPage() {
                 placeholder="e.g. RED" maxLength={5} className={`typo-input font-mono uppercase max-w-[160px]`} />
             </div>
           )}
-          {editing && tab !== 'value_additions' && tab !== 'colors' && (
+          {editing && tab !== 'value_additions' && tab !== 'colors' && tab !== 'designs' && (
             <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-2.5 flex items-center gap-2">
               <span className="text-xs text-gray-400 uppercase tracking-wide">Code:</span>
               <span className="font-mono font-semibold text-primary-700">{editing.code}</span>
@@ -353,13 +382,15 @@ export default function MastersPage() {
             </div>
           )}
 
-          {/* Name */}
-          <div>
-            <label className="typo-label">Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.name || ''} onChange={(e) => set('name', e.target.value)}
-              placeholder={tab === 'product_types' ? 'e.g. Blouse' : tab === 'colors' ? 'e.g. Coral' : 'e.g. Cotton'}
-              className="typo-input" />
-          </div>
+          {/* Name — not for designs (design_no is the identifier) */}
+          {tab !== 'designs' && (
+            <div>
+              <label className="typo-label">Name <span className="text-red-500">*</span></label>
+              <input type="text" value={form.name || ''} onChange={(e) => set('name', e.target.value)}
+                placeholder={tab === 'product_types' ? 'e.g. Blouse' : tab === 'colors' ? 'e.g. Coral' : 'e.g. Cotton'}
+                className="typo-input" />
+            </div>
+          )}
 
           {/* Color-specific: color_no */}
           {tab === 'colors' && (

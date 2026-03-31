@@ -38,6 +38,7 @@ from app.models.financial_year import FinancialYear
 from app.models.return_note import ReturnNote, ReturnNoteItem
 from app.models.sales_return import SalesReturn, SalesReturnItem
 from app.models.stock_verification import StockVerification, StockVerificationItem
+from app.models.design import Design
 
 __all__ = [
     "Role",

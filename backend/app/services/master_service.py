@@ -1,4 +1,4 @@
-"""Service for Product Type, Color, and Fabric master entities."""
+"""Service for Product Type, Color, Fabric, Design, and VA master entities."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from app.models.color import Color
 from app.models.fabric import Fabric
 from app.models.value_addition import ValueAddition
 from app.models.va_party import VAParty
+from app.models.design import Design
 
 
 class MasterService:
@@ -59,7 +60,7 @@ class MasterService:
         await MasterService._check_code(db, ProductType, code, "Product type")
         obj = ProductType(
             code=code,
-            name=data.name.strip(),
+            name=data.name.strip().title(),
             description=data.description,
             palla_mode=getattr(data, 'palla_mode', 'weight') or 'weight',
         )
@@ -116,7 +117,7 @@ class MasterService:
             next_no = await MasterService._next_color_no(db)
             raise DuplicateError(f"Color No. {color_no} is already taken. Next available: {next_no}")
         obj = Color(
-            name=data.name.strip(),
+            name=data.name.strip().title(),
             code=code,
             color_no=color_no,
             hex_code=data.hex_code,
@@ -166,7 +167,7 @@ class MasterService:
             code = code[:3]
         await MasterService._check_code(db, Fabric, code, "Fabric")
         obj = Fabric(
-            name=data.name.strip(),
+            name=data.name.strip().title(),
             code=code,
             description=data.description,
         )
@@ -213,7 +214,7 @@ class MasterService:
             db, ValueAddition, code, "Value addition", field_name="short_code"
         )
         obj = ValueAddition(
-            name=data.name.strip(),
+            name=data.name.strip().title(),
             short_code=code,
             description=data.description,
         )
@@ -233,6 +234,56 @@ class MasterService:
                     db, ValueAddition, new_code, "Value addition", field_name="short_code"
                 )
                 obj.short_code = new_code
+        if data.description is not None:
+            obj.description = data.description
+        if data.is_active is not None:
+            obj.is_active = data.is_active
+        await db.flush()
+        return obj
+
+    # ── Designs ──────────────────────────────────────────────
+
+    @staticmethod
+    async def get_designs(db: AsyncSession):
+        stmt = select(Design).order_by(Design.design_no)
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def get_active_designs(db: AsyncSession):
+        stmt = select(Design).where(Design.is_active == True).order_by(Design.design_no)  # noqa: E712
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    @staticmethod
+    async def create_design(db: AsyncSession, data) -> Design:
+        design_no = data.design_no.strip().title()
+        # Case-insensitive duplicate check
+        existing = await db.execute(
+            select(Design).where(func.lower(Design.design_no) == design_no.lower())
+        )
+        if existing.scalar_one_or_none():
+            raise DuplicateError(f"Design '{design_no}' already exists")
+        obj = Design(
+            design_no=design_no,
+            description=data.description,
+        )
+        db.add(obj)
+        await db.flush()
+        return obj
+
+    @staticmethod
+    async def update_design(db: AsyncSession, design_id: UUID, data) -> Design:
+        obj = await MasterService._get(db, Design, design_id, "Design")
+        if data.design_no is not None:
+            new_no = data.design_no.strip().title()
+            if new_no.lower() != obj.design_no.lower():
+                existing = await db.execute(
+                    select(Design).where(func.lower(Design.design_no) == new_no.lower())
+                )
+                if existing.scalar_one_or_none():
+                    raise DuplicateError(f"Design '{new_no}' already exists")
+            obj.design_no = new_no
         if data.description is not None:
             obj.description = data.description
         if data.is_active is not None:
@@ -260,8 +311,14 @@ class MasterService:
 
     @staticmethod
     async def create_va_party(db: AsyncSession, data) -> VAParty:
+        name = data.name.strip().title()
+        existing = await db.execute(
+            select(VAParty).where(func.lower(VAParty.name) == name.lower())
+        )
+        if existing.scalar_one_or_none():
+            raise DuplicateError(f"VA Party '{name}' already exists")
         obj = VAParty(
-            name=data.name.strip(),
+            name=name,
             contact_person=data.contact_person.strip() if data.contact_person else None,
             phone=data.phone.strip() if data.phone else None,
             phone_alt=data.phone_alt.strip() if data.phone_alt else None,

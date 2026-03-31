@@ -46,13 +46,17 @@ class SupplierService:
         return self._to_response(supplier)
 
     async def create_supplier(self, req: SupplierCreate) -> dict:
+        from sqlalchemy import func
+        name = req.name.strip().title()
         existing = await self.db.execute(
-            select(Supplier).where(Supplier.name == req.name)
+            select(Supplier).where(func.lower(Supplier.name) == name.lower())
         )
         if existing.scalar_one_or_none():
-            raise DuplicateError(f"Supplier '{req.name}' already exists")
+            raise DuplicateError(f"Supplier '{name}' already exists")
 
-        supplier = Supplier(**req.model_dump())
+        data = req.model_dump()
+        data['name'] = name
+        supplier = Supplier(**data)
         self.db.add(supplier)
         await self.db.flush()
         return self._to_response(supplier)

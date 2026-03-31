@@ -11,6 +11,7 @@ from app.schemas.master import (
     ProductTypeCreate, ProductTypeUpdate, ProductTypeResponse,
     ColorCreate, ColorUpdate, ColorResponse,
     FabricCreate, FabricUpdate, FabricResponse,
+    DesignCreate, DesignUpdate, DesignResponse,
     ValueAdditionCreate, ValueAdditionUpdate, ValueAdditionResponse,
     VAPartyCreate, VAPartyUpdate, VAPartyResponse,
 )
@@ -185,6 +186,48 @@ async def update_value_addition(
 ):
     obj = await MasterService.update_value_addition(db, va_id, req)
     return {"success": True, "data": ValueAdditionResponse.model_validate(obj)}
+
+
+# ── Designs ────────────────────────────────────────────
+
+
+@router.get("/designs", response_model=None)
+async def list_designs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_designs(db)
+    return {"success": True, "data": [DesignResponse.model_validate(i) for i in items]}
+
+
+@router.get("/designs/all", response_model=None)
+async def all_active_designs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    items = await MasterService.get_active_designs(db)
+    return {"success": True, "data": [DesignResponse.model_validate(i) for i in items]}
+
+
+@router.post("/designs", response_model=None, status_code=201)
+async def create_design(
+    req: DesignCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.create_design(db, req)
+    return {"success": True, "data": DesignResponse.model_validate(obj)}
+
+
+@router.patch("/designs/{design_id}", response_model=None)
+async def update_design(
+    design_id: UUID,
+    req: DesignUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("supplier_manage"),
+):
+    obj = await MasterService.update_design(db, design_id, req)
+    return {"success": True, "data": DesignResponse.model_validate(obj)}
 
 
 # ── VA Parties ─────────────────────────────────────────

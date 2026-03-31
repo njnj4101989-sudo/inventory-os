@@ -609,7 +609,7 @@ export default function LotsPage() {
                       <label className="typo-badge text-indigo-600">Design {dIdx + 1}</label>
                     <input ref={dIdx === 0 ? designRef : undefined} type="text" value={d.design_no} onChange={e => setDesignField(dIdx, 'design_no', e.target.value)}
                       placeholder="e.g. 702" className="w-full h-[34px] rounded border border-gray-300 px-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      data-design-no="true"
+                      data-design-no="true" data-master="design"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
                           e.preventDefault()

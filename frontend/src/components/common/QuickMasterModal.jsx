@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal'
-import { createColor, createFabric, createProductType, createValueAddition, createVAParty } from '../../api/masters'
+import { createColor, createFabric, createProductType, createDesign, createValueAddition, createVAParty } from '../../api/masters'
 import { createSupplier } from '../../api/suppliers'
 import { createCustomer } from '../../api/customers'
 import { createBroker } from '../../api/brokers'
@@ -54,6 +54,14 @@ const MASTER_CONFIG = {
       ]},
     ],
     create: createValueAddition,
+  },
+  design: {
+    title: 'Add Design',
+    fields: [
+      { key: 'design_no', label: 'Design No.', required: true, placeholder: 'e.g. 702 or Chandni', autoFocus: true },
+      { key: 'description', label: 'Description', placeholder: 'Optional notes' },
+    ],
+    create: createDesign,
   },
   va_party: {
     title: 'Add VA Party',
