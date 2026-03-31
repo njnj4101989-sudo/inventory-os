@@ -130,8 +130,8 @@ function SkippedRow({ skipped, onAdjust }) {
 }
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Free']
-const EMPTY_LINE = { product_type: 'FBL', design_no: '', design_id: null, color: '', size: 'S', qty: '', unit_price: '' }
-const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, color: '', size: 'S', qty: '', unit_cost: '' }
+const EMPTY_LINE = { product_type: 'FBL', design_no: '', design_id: null, color: '', color_id: null, size: 'S', qty: '', unit_price: '' }
+const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, color: '', color_id: null, size: 'S', qty: '', unit_cost: '' }
 
 export default function SKUsPage() {
   const [activeTab, setActiveTab] = useState('skus')
@@ -345,7 +345,7 @@ export default function SKUsPage() {
   }, [purchaseSubtotal, purchaseHeader.gst_percent])
 
   const handlePurchaseSubmit = async () => {
-    const validLines = purchaseLines.filter(l => (l.design_no || l.design_id) && l.color && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
+    const validLines = purchaseLines.filter(l => (l.design_no || l.design_id) && (l.color || l.color_id) && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
     if (!purchaseHeader.supplier_id) { setPurchaseError('Select a supplier'); return }
     if (validLines.length === 0) { setPurchaseError('Add at least one valid line item'); return }
 
@@ -364,6 +364,7 @@ export default function SKUsPage() {
           design_no: l.design_no,
           design_id: l.design_id || null,
           color: l.color,
+          color_id: l.color_id || null,
           size: l.size,
           qty: parseInt(l.qty),
           unit_price: parseFloat(l.unit_price),
@@ -417,7 +418,7 @@ export default function SKUsPage() {
   const removeOpeningLine = (idx) => setOpeningLines(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
 
   const getSkuStatus = useCallback((line) => {
-    if (!line.design_no || !line.color) return null
+    if ((!line.design_no && !line.design_id) || !line.color) return null
     const code = `${line.product_type}-${line.design_no}-${line.color}-${line.size}`
     const existing = allSkuCodes.get(code)
     if (!existing) return { type: 'new', label: 'New', cls: 'bg-green-100 text-green-700' }
@@ -426,7 +427,7 @@ export default function SKUsPage() {
   }, [allSkuCodes])
 
   const handleOpeningSubmit = async () => {
-    const validLines = openingLines.filter(l => (l.design_no || l.design_id) && l.color && parseInt(l.qty) > 0)
+    const validLines = openingLines.filter(l => (l.design_no || l.design_id) && (l.color || l.color_id) && parseInt(l.qty) > 0)
     if (validLines.length === 0) { setOpeningError('Add at least one valid row (design, color, qty)'); return }
     setOpeningSaving(true); setOpeningError(null)
     try {
@@ -436,6 +437,7 @@ export default function SKUsPage() {
           design_no: l.design_no,
           design_id: l.design_id || null,
           color: l.color,
+          color_id: l.color_id || null,
           size: l.size,
           qty: parseInt(l.qty),
           unit_cost: l.unit_cost ? parseFloat(l.unit_cost) : null,
@@ -583,8 +585,15 @@ export default function SKUsPage() {
                             />
                           </td>
                           <td className="px-2 py-1.5">
-                            <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateOpeningLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
-                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="qty"]'); if (next) next.focus() } }} />
+                            <FilterSelect full searchable value={line.color_id || ''}
+                              onChange={v => {
+                                const sel = colors.find(c => c.id === v)
+                                updateOpeningLine(idx, 'color_id', v || null)
+                                updateOpeningLine(idx, 'color', sel?.name || '')
+                              }}
+                              options={colors.map(c => ({ value: c.id, label: c.name }))}
+                              data-master="color"
+                            />
                           </td>
                           <td className="px-2 py-1.5">
                             <FilterSelect full className="min-w-[70px]" value={line.size} onChange={v => updateOpeningLine(idx, 'size', v)}
@@ -738,8 +747,15 @@ export default function SKUsPage() {
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input data-field="color" className="typo-input-sm" value={line.color} onChange={e => updateLine(idx, 'color', e.target.value)} placeholder="e.g. Red"
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="qty"]'); if (next) next.focus() } }} />
+                          <FilterSelect full searchable value={line.color_id || ''}
+                            onChange={v => {
+                              const sel = colors.find(c => c.id === v)
+                              updateLine(idx, 'color_id', v || null)
+                              updateLine(idx, 'color', sel?.name || '')
+                            }}
+                            options={colors.map(c => ({ value: c.id, label: c.name }))}
+                            data-master="color"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
                           <FilterSelect full className="min-w-[70px]" value={line.size} onChange={v => updateLine(idx, 'size', v)}

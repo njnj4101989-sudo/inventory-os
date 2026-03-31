@@ -177,6 +177,7 @@ class OpeningStockLineItem(BaseModel):
     design_no: str
     design_id: UUID | None = None
     color: str
+    color_id: UUID | None = None
     size: str
     qty: int
     unit_cost: Decimal | None = None

@@ -204,7 +204,9 @@ class SKUService:
         result = await self.db.execute(stmt)
         sku = result.scalar_one_or_none()
         if sku:
-            # Backfill design_id if not set yet
+            # Backfill FKs if not set yet
+            if color_id and not sku.color_id:
+                sku.color_id = color_id
             if design_id and not sku.design_id:
                 sku.design_id = design_id
             return sku
@@ -389,6 +391,7 @@ class SKUService:
                 product_name=item.design_no,
                 color=item.color,
                 size=item.size,
+                color_id=item.color_id,
                 design_id=item.design_id,
             )
 
