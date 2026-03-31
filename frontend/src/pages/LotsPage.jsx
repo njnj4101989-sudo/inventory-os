@@ -534,9 +534,9 @@ export default function LotsPage() {
             {formError && <ErrorAlert message={formError} onDismiss={() => setFormError(null)} />}
 
             {/* ── Lot Details (tight toolbar) ── */}
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
               {/* Top bar — Type, Lot, Date, Palla */}
-              <div className="flex items-center gap-0 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-0 border-b border-gray-200 bg-gray-50 rounded-t-xl">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 border-r border-gray-200">
                   <label className="typo-data-label whitespace-nowrap">Type</label>
                   <select autoFocus data-master="product_type" value={form.product_type} onChange={e => setField('product_type', e.target.value)}
