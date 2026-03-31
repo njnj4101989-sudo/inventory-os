@@ -616,7 +616,7 @@ export default function LotsPage() {
                   <div key={dIdx} className="flex items-end gap-2 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-1.5" data-design-row={dIdx}>
                     <div className="w-32">
                       <label className="typo-badge text-indigo-600">Design {dIdx + 1}</label>
-                      <FilterSelect full searchable autoFocus={dIdx === 0}
+                      <FilterSelect full searchable
                         value={d.design_id || ''}
                         onChange={v => {
                           const sel = masterDesigns.find(md => md.id === v)
