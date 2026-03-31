@@ -33,7 +33,56 @@
 
 ---
 
-## Current State (Session 97 — 2026-03-30)
+## Current State (Session 98 — 2026-03-31)
+
+### S98: SKU Opening Stock Overhaul + Design Master + Party Unique Constraints + Inventory History
+
+**3 commits pushed. 1 migration on dev+prod. 45 models (1 new: Design).**
+
+**SKU Opening Stock — Moved from InventoryPage to SKUsPage:**
+- Old: InventoryPage modal requiring pre-existing SKU dropdown (broken — SKUs don't exist on Day 1)
+- New: `POST /skus/opening-stock` — bulk endpoint using `find_or_create` + `opening_stock` events
+- Full-page overlay on SKUsPage with inline Type/Design/Color/Size/Qty/Cost fields per row
+- Live status badges: green "New", blue "Exists", amber "Has Stock (X pcs)" — matched against loaded SKU list
+- Post-submit skipped rows panel: shows SKUs that already have opening stock with "Adjust" button per row
+- Removed opening stock button, modal, state, handlers from InventoryPage
+- Fixed FilterSelect auto-select on blur (single match) — was causing "SKU disappears on save" bug
+- Fixed overflow-y-auto clipping on Rolls opening stock modal + SKU opening stock table
+
+**Design Master (45th model):**
+- `Design` model: design_no (unique), description, is_active — same pattern as Fabric/Color
+- Full CRUD: service, API (`/masters/designs`, `/masters/designs/all`), migration
+- MastersPage: 5th "Designs" tab with DataTable + create/edit modal
+- QuickMasterModal: `data-master="design"` config for Shift+M quick-create
+- `data-master="design"` added to design_no inputs on LotsPage, SKUsPage (Opening Stock + Purchase)
+- **NOT YET:** design_id UUID FK on Lot/Batch/SKU models — planned for S99
+
+**Party Name Unique Constraints:**
+- Case-insensitive unique index (`lower(name)`) on 5 party models: suppliers, customers, va_parties, brokers, transports
+- Duplicate check in all 5 party create services: `func.lower(Model.name) == name.lower()`
+
+**Title Case Normalization:**
+- `.title()` on save for all 10 master create methods (4 ref masters + 5 parties + Design)
+- "RATAN FABRICS" → "Ratan Fabrics", "chandni" → "Chandni"
+
+**SKU Detail — Inventory History:**
+- New section in SKU detail overlay showing all `InventoryEvent` records for the SKU
+- Chronological table: Date, Event (colored badge), Source, +/- Qty, Cost/pc, By
+- Event types: Opening Stock (amber), Stock In (green), Stock Out (red), Return (blue), Adjustment (purple), Loss (red)
+
+**Bug Fixes:**
+- Cost breakdown tab: `items` → `filteredSKUs` (ReferenceError)
+- FilterSelect: auto-select on click-outside when single match (prevents "SKU disappears" bug)
+
+**Backend files modified (10):** masters.py (API), master_service.py, supplier_service.py, customer_service.py, broker_service.py, transport_service.py, skus.py (API), sku_service.py, schemas/sku.py, schemas/master.py
+**Backend files new (2):** models/design.py, migration `a1b2c3d4e5f6`
+**Frontend files modified (8):** SKUsPage, InventoryPage, RollsPage, MastersPage, LotsPage, FilterSelect, QuickMasterModal, api/skus.js, api/masters.js
+
+**NEXT (S99):** Add `design_id` UUID FK to Lot (designs JSON), Batch, SKU models. Replace design_no free-text inputs with searchable FilterSelect linked to Design master via FK. Migration + backfill. Update lot distribute, batch pack, SKU find_or_create, purchase stock, opening stock services. This is the proper FK wiring — same pattern as color + color_id.
+
+---
+
+## Previous State (Session 97 — 2026-03-30)
 
 ### S97: FY Transition P4-P6 + 5-Component Cost System + Tailor Costing
 
