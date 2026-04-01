@@ -1208,27 +1208,8 @@ When `sku` is present:
 **Request:** `{ transport_id?, lr_number?, lr_date?, eway_bill_no?, eway_bill_date? }`
 **Response:** Updated order. **Note:** Prefer updating via `PATCH /shipments/{id}` (per-shipment) instead.
 
-### POST `/orders/{id}/return` (S92 — Quick Return)
-**Request:**
-```json
-{
-  "items": [
-    { "sku_id": "uuid", "quantity": 5, "reason": "defective" }
-  ],
-  "return_date": "2026-03-29",
-  "return_notes": "Customer reported defects"
-}
-```
-- Validates returnable qty: `fulfilled_qty - returned_qty >= quantity`
-- Creates RETURN inventory event per item
-- Increments `returned_qty` on OrderItem
-- Status → `partially_returned` or `returned`
-- Creates `credit_note` ledger entry for customer
-- Reason options: `defective`, `wrong_item`, `size_mismatch`, `color_mismatch`, `damaged_in_transit`, `customer_changed_mind`, `other`
-
-**Response:** Updated order with `items[].returned_qty` populated.
-
-**Note:** This is a quick-action flow. For full document-based returns with QC inspection, use Sales Returns (§25).
+### ~~POST `/orders/{id}/return`~~ — REMOVED (S100)
+**Replaced by** Sales Returns (§25). Use `POST /sales-returns` with `order_id` to create a proper document-based return with QC inspection, restock/damage split, and credit note generation. The OrdersPage "Create Sales Return" button navigates to the Sales Returns page with order pre-fill.
 
 ### POST `/orders/{id}/cancel`
 **Response:** Updated order (status → `cancelled`)

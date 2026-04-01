@@ -54,14 +54,6 @@ class OrderItemResponse(BaseSchema):
     returned_qty: int = 0
 
 
-class ReturnItemInput(BaseModel):
-    """Single item in return request."""
-
-    sku_id: UUID
-    quantity: int
-    reason: str | None = None  # defective, wrong_item, size_mismatch, color_mismatch, damaged_in_transit, customer_changed_mind, other
-
-
 # --- Requests ---
 
 
@@ -110,14 +102,6 @@ class UpdateShippingRequest(BaseModel):
     lr_date: date | None = None
     eway_bill_no: str | None = None
     eway_bill_date: date | None = None
-
-
-class ReturnRequest(BaseModel):
-    """POST /orders/{id}/return."""
-
-    items: list[ReturnItemInput]
-    return_date: date | None = None  # defaults to today
-    return_notes: str | None = None
 
 
 # --- Response ---

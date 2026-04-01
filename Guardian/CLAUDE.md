@@ -33,7 +33,40 @@
 
 ---
 
-## Current State (Session 99 — 2026-03-31)
+## Current State (Session 100 — 2026-04-01)
+
+### S100: Sales Return Audit + Legacy Dead Code Cleanup + Migration Sync
+
+**0 new models. 0 migrations. 4 files cleaned. Dev DB at head.**
+
+**Full codebase scan revealed Sales Return system already fully built (unrecorded session):**
+- Backend: `SalesReturn` + `SalesReturnItem` models (41st+42nd), `SalesReturnService` (514 lines, 5-status lifecycle), 10 API endpoints at `/sales-returns`, schemas, code generators (SRN-XXXX, CN-XXXX)
+- Frontend: Sales Returns tab on ReturnsPage (1795 lines), create/detail/inspect overlays, `SalesReturnPrint` + `CreditNotePrint`, deep-linking from OrdersPage
+- DB tables exist in both tenant schemas (created via `create_all()`)
+- API_REFERENCE.md §25 already documents all endpoints
+
+**Legacy dead code removed (replaced by Sales Returns system):**
+- `return_order()` method removed from `order_service.py` (was 80 lines, zero callers)
+- `POST /orders/{id}/return` endpoint removed from `orders.py`
+- `ReturnRequest` + `ReturnItemInput` schemas removed from `order.py`
+- `returnOrder()` function removed from frontend `api/orders.js`
+- API_REFERENCE.md §10: marked endpoint as removed, points to §25
+
+**Kept (actively used by Sales Returns):**
+- `Order.sales_returns` relationship + `selectinload` in `_get_or_404`
+- `_to_response()` includes `sales_returns[]` array
+- OrdersPage displays linked SRNs on order detail + "Create Sales Return" navigates to ReturnsPage
+- `process_external_return()` in order_service (used by external API)
+
+**Migration `b2c3d4e5f6g7` (S99) applied to dev DB** — was 1 revision behind head.
+
+**S93 plan in CLAUDE.md is now COMPLETE** — all items were built in an unrecorded session.
+
+**NEXT:** Deploy cleanup to prod. Test full sales return flow (create → receive → inspect → restock → close) on dev. Verify credit note generation + ledger entries.
+
+---
+
+## Previous State (Session 99 — 2026-03-31)
 
 ### S99: design_id FK Wiring + Color/Design Dropdowns on SKU Forms
 
@@ -48,8 +81,6 @@
 - **LotsPage:** design_no text input → searchable FilterSelect linked to Design master. Removed autoFocus. Fixed overflow-hidden clipping dropdown (Protocol 6).
 - **SKUsPage (purchase + opening stock):** design_no → FilterSelect (Design master), color → FilterSelect (Color master), `color_id` wired through opening stock path, `useQuickMaster` + `QuickMasterModal` added (3 render paths)
 - **No cascading breaks:** size was already a FilterSelect, batch _to_response already returned design_no
-
-**NEXT (S100):** Update CLAUDE.md session history. Sales Return system (S93 plan). API_REFERENCE.md update.
 
 ---
 
@@ -282,11 +313,11 @@
 
 ---
 
-## S93 Plan: Sales Return System (Upgrade P1 → Full Document Flow)
+## S93 Plan: Sales Return System — COMPLETE (built in unrecorded session, verified S100)
 
-**Problem:** Current customer return is a quick modal on the order page (picks qty, reason, done). No dedicated document, no return shipment tracking, no QC inspection, no credit note document, no proper form. Not industry standard.
+**Status:** All items below implemented. Legacy quick-return endpoint removed S100. Full document-based workflow live: `draft → received → inspected → restocked → closed`. Models: SalesReturn (41st) + SalesReturnItem (42nd). Frontend: Sales Returns tab on ReturnsPage + OrdersPage integration. Print: SalesReturnPrint + CreditNotePrint.
 
-**What industry needs:**
+**Original problem (solved):**
 
 ### Backend — SalesReturn Model (41st + 42nd)
 - [ ] `SalesReturn` model: srn_no (SRN-XXXX per FY), order_id FK, customer_id FK, status (`draft → received → inspected → restocked → closed`), return_date, received_date, transport_id, lr_number, lr_date, reason_summary, credit_note_id FK (linked invoice), qc_notes, total_amount, fy_id
