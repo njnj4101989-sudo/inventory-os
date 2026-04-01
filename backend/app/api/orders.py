@@ -1,4 +1,4 @@
-"""Order routes — lifecycle: create, ship, cancel."""
+"""Order routes — lifecycle: create, edit, ship, cancel."""
 
 from uuid import UUID
 
@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.order import OrderCreate, OrderFilterParams, ShipOrderRequest, UpdateShippingRequest
+from app.schemas.order import OrderCreate, OrderFilterParams, OrderUpdate, ShipOrderRequest, UpdateShippingRequest
 from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -87,6 +87,19 @@ async def update_shipping(
     """Update transport/LR/eway bill on shipped order."""
     svc = OrderService(db)
     result = await svc.update_shipping(order_id, req)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{order_id}", response_model=None)
+async def update_order(
+    order_id: UUID,
+    req: OrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("order_manage"),
+):
+    """Edit order — header fields and/or items. Only pending/processing."""
+    svc = OrderService(db)
+    result = await svc.update_order(order_id, req, current_user.id)
     return {"success": True, "data": result}
 
 

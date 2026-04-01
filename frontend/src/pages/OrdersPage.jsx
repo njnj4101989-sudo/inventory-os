@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { getOrders, getOrder, createOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
+import { getOrders, getOrder, createOrder, updateOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
 import { getSKUs } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
@@ -180,6 +180,8 @@ export default function OrdersPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
+  const [editMode, setEditMode] = useState(false)
+  const [editingOrderId, setEditingOrderId] = useState(null)
 
   // Quick master for customer Shift+M
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
@@ -216,6 +218,8 @@ export default function OrdersPage() {
   const confirmAndClose = useCallback(() => {
     setConfirmDiscard(false)
     setCreateMode(false)
+    setEditMode(false)
+    setEditingOrderId(null)
   }, [])
 
   const cancelDiscard = useCallback(() => {
@@ -224,7 +228,7 @@ export default function OrdersPage() {
 
   /* ── Line helpers ── */
   const addOrderLine = useCallback(() => {
-    setOrderLines(prev => [...prev, { design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0 }])
+    setOrderLines(prev => [...prev, { design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0, item_id: null }])
   }, [])
 
   const updateOrderLine = useCallback((idx, field, value) => {
@@ -498,6 +502,61 @@ export default function OrdersPage() {
     }
   }
 
+  /* ── Edit overlay: prefill from existing order ── */
+  const openEdit = async (order) => {
+    setEditMode(true)
+    setEditingOrderId(order.id)
+    setCreateMode(true)
+    setSKULoading(true)
+    setNextOrderNo(order.order_number)
+    setCustomerForm({
+      customer_id: order.customer_id || '',
+      source: order.source || 'web',
+      notes: order.notes || '',
+      order_date: order.order_date || new Date().toISOString().split('T')[0],
+      broker_id: order.broker_id || '',
+      transport_id: order.transport_id || '',
+      gst_percent: String(order.gst_percent ?? '0'),
+      discount_amount: order.discount_amount ? String(order.discount_amount) : '',
+    })
+    setFormError(null)
+    try {
+      const [skuRes, custRes, brokersRes, transportsRes] = await Promise.all([
+        getSKUs({ is_active: true, page_size: 500 }),
+        getAllCustomers(),
+        getAllBrokers().catch(() => ({ data: { data: [] } })),
+        getAllTransports().catch(() => ({ data: { data: [] } })),
+      ])
+      const skuList = skuRes.data.data || []
+      setAllSKUs(skuList)
+      setCustomers(custRes.data.data || [])
+      setBrokers(brokersRes.data?.data || [])
+      setTransports(transportsRes.data?.data || [])
+
+      // Map existing order items to orderLines format
+      const lines = (order.items || []).map(item => {
+        const code = item.sku?.sku_code || ''
+        const parsed = parseSKU(code)
+        const designKey = parsed.type && parsed.design ? `${parsed.type}-${parsed.design}` : ''
+        return {
+          item_id: item.id,
+          design_key: designKey,
+          color: parsed.color || item.sku?.color || '',
+          size: parsed.size || item.sku?.size || '',
+          sku_id: item.sku?.id || null,
+          qty: item.quantity,
+          price: parseFloat(item.unit_price) || 0,
+        }
+      })
+      setOrderLines(lines.length > 0 ? lines : [{ design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0 }])
+    } catch {
+      setAllSKUs([])
+      setCustomers([])
+    } finally {
+      setSKULoading(false)
+    }
+  }
+
   /* ── Design groups for grid ── */
   const designGroups = useMemo(() => {
     const groups = {}
@@ -566,9 +625,11 @@ export default function OrdersPage() {
       const items = orderLines
         .filter(l => l.qty > 0)
         .map(l => {
-          // Resolve sku_id at submit time — fallback if onChange didn't set it
           const skuId = l.sku_id || resolveLineSKU(l)?.id || null
-          return skuId ? { sku_id: skuId, quantity: l.qty, unit_price: l.price || 0 } : null
+          if (!skuId) return null
+          const mapped = { sku_id: skuId, quantity: l.qty, unit_price: l.price || 0 }
+          if (editMode && l.item_id) mapped.id = l.item_id
+          return mapped
         })
         .filter(Boolean)
       if (!items.length) {
@@ -583,8 +644,7 @@ export default function OrdersPage() {
       if (!customerForm.customer_id) { setFormError('Please select a customer'); setSaving(false); return }
 
       const cust = customers.find(c => c.id === customerForm.customer_id)
-      await createOrder({
-        source: customerForm.source,
+      const payload = {
         customer_id: customerForm.customer_id,
         customer_name: cust?.name || null,
         customer_phone: cust?.phone || null,
@@ -596,11 +656,20 @@ export default function OrdersPage() {
         discount_amount: parseFloat(customerForm.discount_amount) || 0,
         notes: customerForm.notes.trim() || null,
         items,
-      })
+      }
+
+      if (editMode && editingOrderId) {
+        await updateOrder(editingOrderId, payload)
+      } else {
+        payload.source = customerForm.source
+        await createOrder(payload)
+      }
       setCreateMode(false)
+      setEditMode(false)
+      setEditingOrderId(null)
       fetchData()
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Failed to create order')
+      setFormError(err.response?.data?.detail || (editMode ? 'Failed to update order' : 'Failed to create order'))
     } finally {
       setSaving(false)
     }
@@ -822,10 +891,16 @@ export default function OrdersPage() {
             {(canAct || canReturn) && (
               <div className="flex justify-end gap-2 pt-3 border-t">
                 {(o.status === 'pending' || o.status === 'processing') && (
-                  <button onClick={() => handleAction('cancel')} disabled={actioning}
-                    className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
-                    {actioning ? 'Processing...' : 'Cancel Order'}
-                  </button>
+                  <>
+                    <button onClick={() => handleAction('cancel')} disabled={actioning}
+                      className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
+                      {actioning ? 'Processing...' : 'Cancel Order'}
+                    </button>
+                    <button onClick={() => { setDetailOrder(null); openEdit(o) }}
+                      className="rounded border border-emerald-300 text-emerald-700 px-4 py-1.5 typo-btn-sm hover:bg-emerald-50 transition-colors">
+                      Edit Order
+                    </button>
+                  </>
                 )}
                 {canReturn && (
                   <button onClick={handleReturnAction} disabled={actioning}
@@ -1077,8 +1152,8 @@ export default function OrdersPage() {
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
             <div>
-              <h2 className="text-lg font-bold tracking-tight">New Order</h2>
-              <p className="text-xs text-emerald-100">Pick designs &middot; set qty per color &times; size</p>
+              <h2 className="text-lg font-bold tracking-tight">{editMode ? `Edit Order — ${nextOrderNo}` : 'New Order'}</h2>
+              <p className="text-xs text-emerald-100">{editMode ? 'Update items, qty, or details' : 'Pick designs \u00b7 set qty per color \u00d7 size'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1093,7 +1168,7 @@ export default function OrdersPage() {
             <button onClick={requestClose} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
             <button onClick={handleCreate} disabled={saving || totalItems === 0}
               className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
-              {saving ? 'Creating...' : `Create Order (${totalItems})`}
+              {saving ? (editMode ? 'Saving...' : 'Creating...') : (editMode ? `Save Changes (${totalItems})` : `Create Order (${totalItems})`)}
             </button>
           </div>
         </div>

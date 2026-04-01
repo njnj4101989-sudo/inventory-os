@@ -1,4 +1,4 @@
-"""Order service — lifecycle: create, ship, cancel, return."""
+"""Order service — lifecycle: create, edit, ship, cancel."""
 
 import math
 from datetime import datetime, timezone
@@ -15,7 +15,7 @@ from app.models.shipment import Shipment
 from app.models.shipment_item import ShipmentItem
 from app.models.sku import SKU
 from app.models.customer import Customer
-from app.schemas.order import OrderCreate, OrderFilterParams, OrderResponse
+from app.schemas.order import OrderCreate, OrderFilterParams, OrderResponse, OrderUpdate
 from app.core.code_generator import next_order_number, next_shipment_number
 from app.core.exceptions import (
     NotFoundError,
@@ -387,6 +387,159 @@ class OrderService:
             order.eway_bill_no = data.eway_bill_no or None
         if data.eway_bill_date is not None:
             order.eway_bill_date = data.eway_bill_date
+
+        order.updated_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return await self.get_order(order_id)
+
+    async def update_order(self, order_id: UUID, req: OrderUpdate, user_id: UUID) -> dict:
+        """Edit a pending/processing order — header fields and/or items."""
+        order = await self._get_or_404(order_id)
+        if order.status not in ("pending", "processing"):
+            raise InvalidStateTransitionError(
+                f"Cannot edit order in '{order.status}' status (only pending/processing)"
+            )
+
+        # --- Update header fields (only non-None) ---
+        if req.customer_id is not None:
+            order.customer_id = req.customer_id
+            # Resolve customer name/phone from master
+            cust = (await self.db.execute(
+                select(Customer).where(Customer.id == req.customer_id)
+            )).scalar_one_or_none()
+            if cust:
+                order.customer_name = cust.name
+                order.customer_phone = cust.phone
+        if req.customer_name is not None:
+            order.customer_name = req.customer_name
+        if req.customer_phone is not None:
+            order.customer_phone = req.customer_phone
+        if req.customer_address is not None:
+            order.customer_address = req.customer_address
+        if req.order_date is not None:
+            order.order_date = req.order_date
+        if req.broker_id is not None:
+            order.broker_id = req.broker_id
+            from app.models.broker import Broker
+            b = (await self.db.execute(select(Broker).where(Broker.id == req.broker_id))).scalar_one_or_none()
+            order.broker_name = b.name if b else None
+        if req.transport_id is not None:
+            order.transport_id = req.transport_id
+            from app.models.transport import Transport
+            t = (await self.db.execute(select(Transport).where(Transport.id == req.transport_id))).scalar_one_or_none()
+            order.transport = t.name if t else None
+        if req.gst_percent is not None:
+            order.gst_percent = req.gst_percent
+        if req.discount_amount is not None:
+            order.discount_amount = req.discount_amount
+        if req.notes is not None:
+            order.notes = req.notes
+
+        # --- Update items (if provided) ---
+        if req.items is not None:
+            from app.models.inventory_state import InventoryState
+            from app.models.reservation import Reservation
+            from app.services.reservation_service import ReservationService
+            res_svc = ReservationService(self.db)
+
+            # Step 1: Release ALL active reservations for this order
+            res_stmt = select(Reservation).where(
+                Reservation.order_id == order_id,
+                Reservation.status == "active",
+            )
+            res_result = await self.db.execute(res_stmt)
+            for res in res_result.scalars().all():
+                await res_svc.release_reservation(res.id)
+
+            # Step 2: Build existing items map
+            existing_map = {item.id: item for item in order.items}
+            incoming_ids = {it.id for it in req.items if it.id is not None}
+
+            # Step 3: Delete removed items
+            for item_id, item in existing_map.items():
+                if item_id not in incoming_ids:
+                    await self.db.delete(item)
+
+            # Step 4: Update existing + create new items
+            # Batch-fetch SKUs and inventory states
+            sku_ids = [it.sku_id for it in req.items]
+            sku_result = await self.db.execute(select(SKU).where(SKU.id.in_(sku_ids)))
+            sku_map = {s.id: s for s in sku_result.scalars().all()}
+
+            inv_result = await self.db.execute(
+                select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
+            )
+            inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
+
+            total_amount = 0
+            final_items = []
+
+            for it in req.items:
+                sku = sku_map.get(it.sku_id)
+                if not sku:
+                    raise NotFoundError(f"SKU {it.sku_id} not found")
+
+                inv_state = inv_map.get(it.sku_id)
+                available = inv_state.available_qty if inv_state else 0
+                short = max(0, it.quantity - available)
+                total_price = it.quantity * it.unit_price
+                total_amount += total_price
+
+                if it.id and it.id in existing_map:
+                    # Update existing item
+                    oi = existing_map[it.id]
+                    oi.sku_id = it.sku_id
+                    oi.quantity = it.quantity
+                    oi.unit_price = it.unit_price
+                    oi.total_price = total_price
+                    oi.short_qty = short
+                    final_items.append(oi)
+                else:
+                    # New item
+                    oi = OrderItem(
+                        order_id=order_id,
+                        sku_id=it.sku_id,
+                        quantity=it.quantity,
+                        unit_price=it.unit_price,
+                        total_price=total_price,
+                        fulfilled_qty=0,
+                        short_qty=short,
+                    )
+                    self.db.add(oi)
+                    final_items.append(oi)
+
+            order.total_amount = total_amount
+            await self.db.flush()
+
+            # Step 5: Re-reserve stock for all current items
+            for oi in final_items:
+                reservable = oi.quantity - oi.short_qty
+                if reservable <= 0:
+                    continue
+                try:
+                    await res_svc.create_reservation(
+                        sku_id=oi.sku_id,
+                        quantity=reservable,
+                        order_id=order_id,
+                        permanent=True,
+                    )
+                except InsufficientStockError:
+                    fresh_inv = await self.db.execute(
+                        select(InventoryState).where(InventoryState.sku_id == oi.sku_id)
+                    )
+                    current = fresh_inv.scalar_one_or_none()
+                    current_available = current.available_qty if current else 0
+                    if current_available > 0:
+                        await res_svc.create_reservation(
+                            sku_id=oi.sku_id,
+                            quantity=current_available,
+                            order_id=order_id,
+                            permanent=True,
+                        )
+                        oi.short_qty = oi.quantity - current_available
+                    else:
+                        oi.short_qty = oi.quantity
+                    await self.db.flush()
 
         order.updated_at = datetime.now(timezone.utc)
         await self.db.flush()

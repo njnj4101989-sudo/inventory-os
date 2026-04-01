@@ -104,6 +104,31 @@ class UpdateShippingRequest(BaseModel):
     eway_bill_date: date | None = None
 
 
+class OrderUpdateItem(BaseModel):
+    """Single item in order update. id=None means new item to add."""
+
+    id: UUID | None = None
+    sku_id: UUID
+    quantity: int
+    unit_price: Decimal
+
+
+class OrderUpdate(BaseModel):
+    """PATCH /orders/{id} — edit pending/processing orders."""
+
+    customer_id: UUID | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    customer_address: str | None = None
+    order_date: date | None = None
+    broker_id: UUID | None = None
+    transport_id: UUID | None = None
+    gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    notes: str | None = None
+    items: list[OrderUpdateItem] | None = None
+
+
 # --- Response ---
 
 
