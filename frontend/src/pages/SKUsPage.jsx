@@ -1234,17 +1234,17 @@ export default function SKUsPage() {
               <div className="text-center py-12 typo-empty">No SKUs found. Pack batches to auto-generate SKUs.</div>
             ) : (
               <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="bg-emerald-600 text-white text-left">
                       <th className="px-3 py-2.5 font-semibold w-10"></th>
-                      <th className="px-3 py-2.5 font-semibold">Design</th>
-                      <th className="px-3 py-2.5 font-semibold">Colors</th>
-                      <th className="px-3 py-2.5 font-semibold">Sizes</th>
-                      <th className="px-3 py-2.5 font-semibold">Type</th>
-                      <th className="px-3 py-2.5 font-semibold">Price</th>
-                      <th className="px-3 py-2.5 font-semibold">Stock</th>
-                      <th className="px-3 py-2.5 font-semibold text-right">SKUs</th>
+                      <th className="px-3 py-2.5 font-semibold w-[25%]">Design</th>
+                      <th className="px-3 py-2.5 font-semibold w-[18%]">Colors</th>
+                      <th className="px-3 py-2.5 font-semibold w-[14%]">Sizes</th>
+                      <th className="px-3 py-2.5 font-semibold w-[8%]">Type</th>
+                      <th className="px-3 py-2.5 font-semibold w-[12%]">Price</th>
+                      <th className="px-3 py-2.5 font-semibold w-[15%]">Stock</th>
+                      <th className="px-3 py-2.5 font-semibold w-[8%] text-right">SKUs</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1326,20 +1326,20 @@ export default function SKUsPage() {
               <p className="text-emerald-100 text-xs mt-0.5">Cost per piece = Material + Roll VA + Stitching + Batch VA + Other</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead>
                   <tr className="bg-gray-50 text-left text-gray-500 border-b">
                     <th className="px-3 py-3 w-10"></th>
-                    <th className="px-3 py-3 typo-th">Design / SKU</th>
-                    <th className="px-3 py-3 typo-th">Type</th>
-                    <th className="px-3 py-3 typo-th text-right">Material</th>
-                    <th className="px-3 py-3 typo-th text-right">Roll VA</th>
-                    <th className="px-3 py-3 typo-th text-right">Stitching</th>
-                    <th className="px-3 py-3 typo-th text-right">Batch VA</th>
-                    <th className="px-3 py-3 typo-th text-right">Other</th>
-                    <th className="px-3 py-3 typo-th text-right">Cost/pc</th>
-                    <th className="px-3 py-3 typo-th text-right">Sale Rate</th>
-                    <th className="px-3 py-3 typo-th text-right">Margin</th>
+                    <th className="px-3 py-3 typo-th w-[20%]">Design / SKU</th>
+                    <th className="px-3 py-3 typo-th w-[6%]">Type</th>
+                    <th className="px-3 py-3 typo-th w-[9%] text-right">Material</th>
+                    <th className="px-3 py-3 typo-th w-[8%] text-right">Roll VA</th>
+                    <th className="px-3 py-3 typo-th w-[9%] text-right">Stitching</th>
+                    <th className="px-3 py-3 typo-th w-[8%] text-right">Batch VA</th>
+                    <th className="px-3 py-3 typo-th w-[8%] text-right">Other</th>
+                    <th className="px-3 py-3 typo-th w-[10%] text-right">Cost/pc</th>
+                    <th className="px-3 py-3 typo-th w-[10%] text-right">Sale Rate</th>
+                    <th className="px-3 py-3 typo-th w-[8%] text-right">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
