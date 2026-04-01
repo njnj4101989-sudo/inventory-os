@@ -25,7 +25,7 @@ jobs:
 
             # Deploy backup scripts
             mkdir -p /home/ubuntu/scripts
-            cp scripts/backup/backup.sh scripts/backup/restore.sh scripts/backup/snapshot.sh /home/ubuntu/scripts/ 2>/dev/null || true
+            cp scripts/backup/*.sh /home/ubuntu/scripts/ 2>/dev/null || true
             chmod +x /home/ubuntu/scripts/*.sh 2>/dev/null || true
 
             sudo systemctl restart fastapi

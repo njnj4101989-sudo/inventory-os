@@ -118,6 +118,19 @@ aws s3 ls "${S3_BUCKET}/monthly/" 2>/dev/null | while read -r line; do
     fi
 done
 
-# --- Step 6: Cleanup local temp ---
+# --- Step 6: Verify upload exists in S3 ---
+S3_CHECK=$(aws s3 ls "${S3_BUCKET}/${S3_DAILY_KEY}" 2>/dev/null | wc -l)
+if [ "$S3_CHECK" -eq 0 ]; then
+    log "ERROR: Upload verification FAILED — ${S3_DAILY_KEY} not found in S3"
+    HEALTH_FILE="/var/log/inventory-backup/BACKUP_FAILED"
+    echo "Last failure: ${TIMESTAMP} — upload verification failed" > "$HEALTH_FILE"
+    rm -f "$DUMP_FILE"
+    exit 1
+fi
+
+# Clear failure flag on success
+rm -f "/var/log/inventory-backup/BACKUP_FAILED"
+
+# --- Step 7: Cleanup local temp ---
 rm -f "$DUMP_FILE"
 log "=== Backup completed successfully ($(numfmt --to=iec "$DUMP_SIZE" 2>/dev/null || echo "${DUMP_SIZE} bytes")) ==="
