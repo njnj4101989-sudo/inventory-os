@@ -1355,11 +1355,13 @@ export default function SKUsPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                             </svg>
                           </td>
-                          <td className="px-3 py-2.5 typo-data font-bold text-emerald-700">{group.designKey} <span className="text-gray-400 font-normal text-xs">({group.skus.length} SKUs)</span></td>
+                          <td className="px-3 py-2.5 typo-data font-bold text-emerald-700 truncate">{group.designKey} <span className="text-gray-400 font-normal text-xs">({group.skus.length} SKUs)</span></td>
                           <td className="px-3 py-2.5 typo-td-secondary">{group.type}</td>
-                          <td colSpan={5} className="px-3 py-2.5 text-right typo-caption">
-                            {group.colors.length} colors × {group.sizes.length} sizes
-                          </td>
+                          <td className="px-3 py-2.5"></td>
+                          <td className="px-3 py-2.5"></td>
+                          <td className="px-3 py-2.5 text-right typo-caption" title={`${group.colors.length} colors × ${group.sizes.length} sizes`}>{group.colors.length}c × {group.sizes.length}s</td>
+                          <td className="px-3 py-2.5"></td>
+                          <td className="px-3 py-2.5"></td>
                           <td className="px-3 py-2.5 text-right typo-td font-semibold">{avgCost > 0 ? `₹${avgCost.toFixed(2)}` : '—'}</td>
                           <td className="px-3 py-2.5"></td>
                           <td className="px-3 py-2.5"></td>
