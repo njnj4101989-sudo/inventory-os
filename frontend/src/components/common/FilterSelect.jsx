@@ -156,13 +156,27 @@ export default function FilterSelect({ value, onChange, options = [], full = fal
       setOpen(false)
       return
     }
-    // Type-ahead
+    // Type-ahead with cycling
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       clearTimeout(typeTimer.current)
-      typeBuffer.current += e.key.toLowerCase()
+      const prevBuf = typeBuffer.current
+      const ch = e.key.toLowerCase()
+      // Same single letter repeated → cycle to next match after current highlight
+      const isCycle = prevBuf === ch
+      typeBuffer.current = isCycle ? ch : prevBuf + ch
       typeTimer.current = setTimeout(() => { typeBuffer.current = '' }, 500)
-      const match = options.findIndex(o => o.label.toLowerCase().startsWith(typeBuffer.current))
+      const query = typeBuffer.current
+      let match = -1
+      if (isCycle) {
+        // Search from highlight+1, wrap around
+        for (let i = 1; i <= options.length; i++) {
+          const idx = (highlight + i) % options.length
+          if (options[idx].label.toLowerCase().startsWith(query)) { match = idx; break }
+        }
+      } else {
+        match = options.findIndex(o => o.label.toLowerCase().startsWith(query))
+      }
       if (match >= 0) {
         setHighlight(match)
         if (!open) onChange(options[match].value)
