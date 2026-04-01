@@ -6,8 +6,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas import BaseSchema
+from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.supplier import SupplierBrief
+
+
+# --- Filter Params ---
+
+
+class SKUFilterParams(PaginatedParams):
+    search: str | None = None
+    product_type: str | None = None
+    is_active: bool | None = None
 
 
 # --- Brief ---

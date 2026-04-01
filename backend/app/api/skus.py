@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, get_current_user, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
-from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest, SKUOpeningStockRequest
+from app.schemas.sku import SKUCreate, SKUUpdate, PurchaseStockRequest, SKUOpeningStockRequest, SKUFilterParams
 from app.services.sku_service import SKUService
 
 router = APIRouter(prefix="/skus", tags=["SKUs"])
@@ -57,11 +57,11 @@ async def list_purchase_invoices(
 
 @router.get("", response_model=None)
 async def list_skus(
-    params: PaginatedParams = Depends(),
+    params: SKUFilterParams = Depends(),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("inventory_view"),
 ):
-    """List SKUs with stock levels. Filters: product_type, color, size, is_active, search."""
+    """List SKUs with stock levels. Filters: product_type, is_active, search."""
     svc = SKUService(db)
     result = await svc.get_skus(params)
     return {"success": True, **result}

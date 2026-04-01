@@ -18,7 +18,7 @@ from app.models.inventory_state import InventoryState
 from app.models.inventory_event import InventoryEvent
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
-from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest, SKUOpeningStockRequest
+from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest, SKUOpeningStockRequest, SKUFilterParams
 from app.schemas import PaginatedParams
 from app.core.exceptions import DuplicateError, NotFoundError
 
@@ -27,20 +27,41 @@ class SKUService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_skus(self, params: PaginatedParams) -> dict:
+    async def get_skus(self, params: SKUFilterParams) -> dict:
+        from sqlalchemy import or_
+
+        conditions = []
+        if params.search:
+            s = f"%{params.search}%"
+            conditions.append(
+                or_(
+                    SKU.sku_code.ilike(s),
+                    SKU.product_name.ilike(s),
+                    SKU.color.ilike(s),
+                    SKU.size.ilike(s),
+                )
+            )
+        if params.product_type:
+            conditions.append(SKU.product_type == params.product_type)
+        if params.is_active is not None:
+            conditions.append(SKU.is_active == params.is_active)
+
+        where_clause = conditions if conditions else []
+
         count_stmt = select(func.count()).select_from(SKU)
+        if where_clause:
+            count_stmt = count_stmt.where(*where_clause)
         total = (await self.db.execute(count_stmt)).scalar() or 0
         pages = max(1, math.ceil(total / params.page_size))
 
         sort_col = getattr(SKU, params.sort_by, SKU.created_at)
         order = sort_col.desc() if params.sort_order == "desc" else sort_col.asc()
 
-        stmt = (
-            select(SKU)
-            .order_by(order)
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
-        )
+        stmt = select(SKU).order_by(order)
+        if where_clause:
+            stmt = stmt.where(*where_clause)
+        stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
+
         result = await self.db.execute(stmt)
         skus = result.scalars().all()
 
