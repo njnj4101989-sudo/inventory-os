@@ -33,7 +33,35 @@
 
 ---
 
-## Current State (Session 100 — 2026-04-01)
+## Current State (Session 101 — 2026-04-02)
+
+### S101: Production Bug Fixes + SKU Page Grouped Accordion
+
+**10 commits pushed. 0 new models. 0 migrations. 45 models total.**
+
+**Bug Fixes (production — user-reported):**
+- **Opening Stock Adjust crash (white screen):** Frontend missing `item_type` field in `POST /inventory/adjust` → Pydantic 422 → error array passed to React render → crash. Fixed: added `item_type: 'finished_goods'` to adjust calls (SKUsPage + InventoryPage), made `AdjustRequest.item_type` optional with default, safely stringify 422 arrays in error handler.
+- **SKU search not filtering:** `GET /skus` endpoint had no search/filter logic — `PaginatedParams` had no `search` field, service did plain `SELECT *`. Fixed: added `SKUFilterParams(PaginatedParams)` with `search`, `product_type`, `is_active`, applied ilike filter on `sku_code/product_name/color/size` in both count and data queries.
+- **SKU detail Inventory History (0):** `_event_to_response()` used `e.metadata` (SQLAlchemy MetaData) instead of `e.metadata_` (mapped JSON column) → 500 error silently swallowed by `.catch(() => null)`. Fixed: `e.metadata_`.
+- **SKU detail Cost History missing adjustments:** `get_cost_history()` filtered `event_type IN (ready_stock_in, opening_stock, stock_in)` — excluded `adjustment`. Fixed: added `adjustment` to the filter.
+- **FilterSelect type-ahead stuck:** Pressing same letter repeatedly returned first match only — no cycling. Fixed: added cycling logic (wrap around from current highlight position).
+
+**SKU Page Overhaul:**
+- **Grouped accordion view (All SKUs tab):** Flat table → grouped by design (`TYPE-DESIGN`). Collapsed rows show design code, color dots, sizes, aggregate stock, price range, SKU count badge. Click to expand → individual SKU sub-rows. 38 SKUs → 4 collapsed groups.
+- **Grouped accordion view (Cost Breakdown tab):** Same pattern — collapsed design groups with avg cost, expand to per-SKU cost breakdown.
+- **Fixed column widths:** Both tables use `table-fixed` with explicit width percentages — no layout shift on expand/collapse.
+- **Stock column inline reserved:** `(5 res)` on same line as stock numbers, not separate row.
+- **Inventory History badges:** `text-[10px]` → `text-xs font-semibold` matching `typo-badge` standard. Table headers/cells upgraded to `typo-th`/`typo-td`.
+
+**Backend files modified (4):** `schemas/inventory.py`, `services/inventory_service.py`, `services/sku_service.py`, `api/skus.py`
+**Backend files new (1):** `schemas/sku.py` (SKUFilterParams added)
+**Frontend files modified (3):** `SKUsPage.jsx`, `InventoryPage.jsx`, `FilterSelect.jsx`
+
+**NEXT (S102):** Enter real opening stock (rolls + SKUs), party masters (suppliers, customers, VA parties, brokers, transports), opening balances. Start real transactions under FY 2026-27. Investigate blank screen on page navigation (lazy loading / Suspense issue).
+
+---
+
+## Previous State (Session 100 — 2026-04-01)
 
 ### S100: Sales Return Audit + Legacy Dead Code Cleanup + Migration Sync
 
