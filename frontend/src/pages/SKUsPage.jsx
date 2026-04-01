@@ -57,13 +57,11 @@ function StockIndicator({ stock }) {
   const isOut = available_qty <= 0 && total_qty === 0
   const isLow = available_qty > 0 && total_qty > 0 && (available_qty / total_qty) < 0.3
   return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1.5">
-        <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-green-500'}`} />
-        <span className="typo-data">{available_qty}</span>
-        <span className="typo-caption">/ {total_qty}</span>
-      </div>
-      {reserved_qty > 0 && <span className="text-yellow-600 text-[10px]">{reserved_qty} reserved</span>}
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className={`w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-green-500'}`} />
+      <span className="typo-data">{available_qty}</span>
+      <span className="typo-caption">/ {total_qty}</span>
+      {reserved_qty > 0 && <span className="text-amber-600 text-xs font-medium">({reserved_qty} res)</span>}
     </div>
   )
 }
