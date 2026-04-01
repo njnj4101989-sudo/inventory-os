@@ -570,7 +570,7 @@ export default function SKUsPage() {
                         <tr key={idx} data-opening-row className="border-b border-gray-100 hover:bg-gray-50/50">
                           <td className="px-2 py-1.5 typo-td-secondary">{idx + 1}</td>
                           <td className="px-2 py-1.5">
-                            <FilterSelect full value={line.product_type} onChange={v => updateOpeningLine(idx, 'product_type', v)}
+                            <FilterSelect full autoFocus={idx === 0} value={line.product_type} onChange={v => updateOpeningLine(idx, 'product_type', v)}
                               options={ptOptions.length ? ptOptions : [{ value: 'FBL', label: 'FBL' }, { value: 'SBL', label: 'SBL' }, { value: 'LHG', label: 'LHG' }, { value: 'SAR', label: 'SAR' }]} />
                           </td>
                           <td className="px-2 py-1.5">
