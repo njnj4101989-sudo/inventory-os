@@ -20,10 +20,9 @@ class Settings(BaseSettings):
     # External API
     API_KEY: str = "change-me"
 
-    # Supabase
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-    BACKUP_BUCKET: str = "inventory-backups"
+    # Backup (S3 — scheduling handled by cron on EC2, not by the app)
+    BACKUP_S3_BUCKET: str = "inventory-os-backups-ap-south-1"
+    BACKUP_S3_REGION: str = "ap-south-1"
 
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"

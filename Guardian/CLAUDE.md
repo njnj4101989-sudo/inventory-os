@@ -62,7 +62,18 @@
 
 **S93 plan in CLAUDE.md is now COMPLETE** — all items were built in an unrecorded session.
 
-**NEXT:** Deploy cleanup to prod. Test full sales return flow (create → receive → inspect → restock → close) on dev. Verify credit note generation + ledger entries.
+**Production Backup System built (S3 + cron):**
+- 4 shell scripts: `backup.sh` (daily pg_dump→S3), `restore.sh` (S3→pg_restore), `snapshot.sh` (pre-operation), `setup-backup.sh` (one-time EC2 setup)
+- `pg_dump --format=custom --compress=6 --encoding=UTF8 --no-owner --no-privileges` — binary format preserves all Numeric precision, UUIDs, JSON, timestamptz
+- S3 bucket: `inventory-os-backups-ap-south-1` (AES-256, versioned, private, STANDARD_IA)
+- Retention: 30 daily + 12 monthly (auto-pruned by backup.sh)
+- Cron: `30 20 * * *` (20:30 UTC = 2:00 AM IST)
+- Supabase config removed from `config.py` + `.env` → replaced with `BACKUP_S3_BUCKET` + `BACKUP_S3_REGION`
+- `backup_sync.py` simplified to no-op (cron handles scheduling, not Python asyncio)
+- CI/CD updated: deploys scripts to `/home/ubuntu/scripts/` on push
+- `AWS_DEPLOYMENT.md` updated with full backup runbook
+
+**NEXT:** SSH to EC2 → run `setup-backup.sh` → test backup → take pre-wipe snapshot → wipe test data → enter real opening stock.
 
 ---
 

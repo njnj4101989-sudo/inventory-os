@@ -142,9 +142,50 @@ Don't touch existing `www` and `api` records.
 
 ## Monitoring & Backup
 
-- **RDS:** Auto backup 7 days, encryption enabled
-- **Monthly:** `aws rds create-db-snapshot` from EC2
-- **Year-end:** `pg_dump` → upload to S3
+### Layer 1: RDS Automated (AWS-managed)
+- 7-day point-in-time recovery, encryption enabled
+- No code needed — AWS handles it
+
+### Layer 2: pg_dump → S3 (cron on EC2)
+- **Bucket:** `s3://inventory-os-backups-ap-south-1` (AES-256, versioned, private)
+- **Schedule:** Daily 2:00 AM IST (`30 20 * * *` UTC) via cron
+- **Retention:** 30 daily + 12 monthly (auto-pruned)
+- **Format:** `pg_dump --format=custom` (binary, preserves Numeric precision, parallel restore)
+- **Scripts:** `/home/ubuntu/scripts/backup.sh`, `restore.sh`, `snapshot.sh`
+- **Logs:** `/var/log/inventory-backup/backup.log`
+
+### Layer 3: Pre-operation Snapshots
+- Before FY close, data wipes, major migrations: `/home/ubuntu/scripts/snapshot.sh <label>`
+- Stored in `s3://inventory-os-backups-ap-south-1/snapshots/` (not auto-pruned)
+
+### Setup (one-time)
+```bash
+cd /home/ubuntu/inventory-os/backend/scripts/backup
+bash setup-backup.sh
+```
+
+### Quick Commands
+```bash
+# Manual backup
+/home/ubuntu/scripts/backup.sh
+
+# Pre-operation snapshot
+/home/ubuntu/scripts/snapshot.sh pre-fy-close
+
+# List available backups
+/home/ubuntu/scripts/restore.sh
+
+# Restore from backup (interactive, requires typing RESTORE)
+/home/ubuntu/scripts/restore.sh daily/2026-04-01_02-00.dump
+
+# Check logs
+tail -f /var/log/inventory-backup/backup.log
+
+# Check S3
+aws s3 ls s3://inventory-os-backups-ap-south-1/
+```
+
+### Alerts
 - **CloudWatch:** CPU > 80% alert, storage < 2GB alert
 - **Health check:** `curl https://api-inventory.drsblouse.com/api/v1/health`
 

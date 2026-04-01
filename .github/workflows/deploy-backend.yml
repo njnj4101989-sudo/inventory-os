@@ -22,6 +22,12 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt --quiet
             alembic upgrade head
+
+            # Deploy backup scripts
+            mkdir -p /home/ubuntu/scripts
+            cp scripts/backup/backup.sh scripts/backup/restore.sh scripts/backup/snapshot.sh /home/ubuntu/scripts/ 2>/dev/null || true
+            chmod +x /home/ubuntu/scripts/*.sh 2>/dev/null || true
+
             sudo systemctl restart fastapi
             sleep 3
             curl -sf http://localhost:8000/api/v1/health > /dev/null && echo "✅ Health check passed" || echo "❌ Health check failed"
