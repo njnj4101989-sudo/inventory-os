@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, createSKUOpeningStock } from '../api/skus'
 import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
@@ -144,6 +144,7 @@ export default function SKUsPage() {
   const [error, setError] = useState(null)
   const [filterType, setFilterType] = useState('')
   const [filterStock, setFilterStock] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState(new Set())
 
   // Purchase invoices state
   const [purchaseInvoices, setPurchaseInvoices] = useState([])
@@ -247,6 +248,37 @@ export default function SKUsPage() {
     if (filterStock === 'out_of_stock') list = list.filter(s => !s.stock || s.stock.available_qty <= 0)
     return list
   }, [skus, filterType, filterStock])
+
+  const groupedSKUs = useMemo(() => {
+    const groups = new Map()
+    filteredSKUs.forEach(sku => {
+      const parts = (sku.sku_code || '').split('-')
+      const designKey = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : sku.sku_code
+      if (!groups.has(designKey)) {
+        groups.set(designKey, { designKey, type: parts[0] || '', design: parts[1] || '', skus: [] })
+      }
+      groups.get(designKey).skus.push(sku)
+    })
+    return Array.from(groups.values()).map(g => {
+      const colors = new Set(g.skus.map(s => s.color))
+      const sizes = new Set(g.skus.map(s => s.size))
+      const totalStock = g.skus.reduce((sum, s) => sum + (s.stock?.total_qty || 0), 0)
+      const availableStock = g.skus.reduce((sum, s) => sum + (s.stock?.available_qty || 0), 0)
+      const reservedStock = g.skus.reduce((sum, s) => sum + (s.stock?.reserved_qty || 0), 0)
+      const prices = g.skus.map(s => parseFloat(s.base_price || 0)).filter(p => p > 0)
+      const priceMin = prices.length ? Math.min(...prices) : 0
+      const priceMax = prices.length ? Math.max(...prices) : 0
+      return { ...g, colors: [...colors], sizes: [...sizes], totalStock, availableStock, reservedStock, priceMin, priceMax }
+    })
+  }, [filteredSKUs])
+
+  const toggleGroup = useCallback((designKey) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      next.has(designKey) ? next.delete(designKey) : next.add(designKey)
+      return next
+    })
+  }, [])
 
   const kpis = useMemo(() => {
     const totalSKUs = skus.length
@@ -1196,8 +1228,90 @@ export default function SKUsPage() {
           {error && <div className="mt-3"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
 
           <div className="mt-3">
-            <DataTable columns={SKU_COLUMNS} data={filteredSKUs} loading={loading || detailLoading} onRowClick={openDetail}
-              emptyText="No SKUs found. Pack batches to auto-generate SKUs." />
+            {loading ? (
+              <div className="flex items-center justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" /></div>
+            ) : groupedSKUs.length === 0 ? (
+              <div className="text-center py-12 typo-empty">No SKUs found. Pack batches to auto-generate SKUs.</div>
+            ) : (
+              <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-emerald-600 text-white text-left">
+                      <th className="px-3 py-2.5 font-semibold w-10"></th>
+                      <th className="px-3 py-2.5 font-semibold">Design</th>
+                      <th className="px-3 py-2.5 font-semibold">Colors</th>
+                      <th className="px-3 py-2.5 font-semibold">Sizes</th>
+                      <th className="px-3 py-2.5 font-semibold">Type</th>
+                      <th className="px-3 py-2.5 font-semibold">Price</th>
+                      <th className="px-3 py-2.5 font-semibold">Stock</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">SKUs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedSKUs.map((group) => {
+                      const isExpanded = expandedGroups.has(group.designKey)
+                      return (
+                        <Fragment key={group.designKey}>
+                          <tr onClick={() => toggleGroup(group.designKey)}
+                            className={`border-b border-gray-100 cursor-pointer transition-colors ${isExpanded ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                            <td className="px-3 py-2.5 text-center">
+                              <svg className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </td>
+                            <td className="px-3 py-2.5 typo-data font-bold text-emerald-700">{group.designKey}</td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {group.colors.slice(0, 6).map(c => (
+                                  <span key={c} className="w-4 h-4 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(c) }} title={c} />
+                                ))}
+                                {group.colors.length > 6 && <span className="typo-caption">+{group.colors.length - 6}</span>}
+                                <span className="typo-caption ml-1">({group.colors.length})</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 typo-td">{group.sizes.join(', ')}</td>
+                            <td className="px-3 py-2.5 typo-td-secondary">{group.type}</td>
+                            <td className="px-3 py-2.5 typo-td">
+                              {group.priceMin > 0
+                                ? group.priceMin === group.priceMax
+                                  ? `₹${group.priceMin.toLocaleString('en-IN')}`
+                                  : `₹${group.priceMin.toLocaleString('en-IN')} – ₹${group.priceMax.toLocaleString('en-IN')}`
+                                : <span className="typo-caption">Not set</span>}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <StockIndicator stock={{ total_qty: group.totalStock, available_qty: group.availableStock, reserved_qty: group.reservedStock }} />
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{group.skus.length}</span>
+                            </td>
+                          </tr>
+                          {isExpanded && group.skus.map((sku, sIdx) => (
+                            <tr key={sku.id} onClick={() => openDetail(sku)}
+                              className={`border-b border-gray-50 cursor-pointer transition-colors hover:bg-emerald-50/40 ${sIdx % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2 pl-8 typo-td">{sku.sku_code}</td>
+                              <td className="px-3 py-2">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(sku.color) }} />
+                                  <span className="typo-td">{sku.color}</span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 typo-data">{sku.size}</td>
+                              <td className="px-3 py-2 typo-td-secondary">{sku.product_type}</td>
+                              <td className="px-3 py-2 typo-td">{sku.base_price && sku.base_price > 0 ? `₹${parseFloat(sku.base_price).toLocaleString('en-IN')}` : <span className="typo-caption">Set price</span>}</td>
+                              <td className="px-3 py-2"><StockIndicator stock={sku.stock} /></td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${sku.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{sku.is_active ? 'Active' : 'Inactive'}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <Pagination page={page} pages={pages} total={total} onChange={setPage} />
           </div>
         </>
