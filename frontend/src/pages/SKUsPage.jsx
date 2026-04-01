@@ -1003,13 +1003,13 @@ export default function SKUsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-left text-gray-500 border-b">
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">Event</th>
-                      <th className="px-3 py-2 font-medium">Source</th>
-                      <th className="px-3 py-2 font-medium text-right">Qty</th>
-                      <th className="px-3 py-2 font-medium text-right">Cost/pc</th>
-                      <th className="px-3 py-2 font-medium">By</th>
+                    <tr className="bg-gray-50 text-left border-b">
+                      <th className="px-3 py-2 typo-th">Date</th>
+                      <th className="px-3 py-2 typo-th">Event</th>
+                      <th className="px-3 py-2 typo-th">Source</th>
+                      <th className="px-3 py-2 typo-th text-right">Qty</th>
+                      <th className="px-3 py-2 typo-th text-right">Cost/pc</th>
+                      <th className="px-3 py-2 typo-th">By</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1043,16 +1043,16 @@ export default function SKUsPage() {
                       const unitCost = evt.metadata?.unit_cost
                       return (
                         <tr key={evt.id} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-500">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
+                          <td className="px-3 py-2 typo-td-secondary">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
                           <td className="px-3 py-2">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${evtColor}`}>{evtLabel}</span>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${evtColor}`}>{evtLabel}</span>
                           </td>
-                          <td className="px-3 py-2 text-gray-600">{sourceLabel}</td>
+                          <td className="px-3 py-2 typo-td">{sourceLabel}</td>
                           <td className={`px-3 py-2 text-right font-semibold ${isIn ? 'text-green-600' : 'text-red-600'}`}>
                             {isIn ? '+' : '−'}{evt.quantity}
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-500">{unitCost ? `₹${parseFloat(unitCost).toFixed(2)}` : '—'}</td>
-                          <td className="px-3 py-2 text-gray-500">{evt.performed_by?.full_name || '—'}</td>
+                          <td className="px-3 py-2 text-right typo-td-secondary">{unitCost ? `₹${parseFloat(unitCost).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2 typo-td-secondary">{evt.performed_by?.full_name || '—'}</td>
                         </tr>
                       )
                     })}
