@@ -116,12 +116,12 @@ class SKUService:
         """Per-batch cost breakdown from ready_stock_in event metadata."""
         sku = await self._get_or_404(sku_id)
 
-        # Get all ready_stock_in + opening_stock + stock_in events for this SKU
+        # Get all stock-adding events for this SKU
         events = (await self.db.execute(
             select(InventoryEvent)
             .where(
                 InventoryEvent.sku_id == sku_id,
-                InventoryEvent.event_type.in_(("ready_stock_in", "opening_stock", "stock_in")),
+                InventoryEvent.event_type.in_(("ready_stock_in", "opening_stock", "stock_in", "adjustment")),
             )
             .order_by(InventoryEvent.performed_at.desc())
         )).scalars().all()

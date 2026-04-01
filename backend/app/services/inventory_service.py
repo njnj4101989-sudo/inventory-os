@@ -371,5 +371,5 @@ class InventoryService:
                 "full_name": e.performed_by_user.full_name,
             } if e.performed_by_user else None,
             "performed_at": e.performed_at.isoformat() if e.performed_at else None,
-            "metadata": e.metadata,
+            "metadata": e.metadata_,
         }
