@@ -467,6 +467,7 @@ export default function InventoryPage() {
       const res = await adjust({
         sku_id: adjustForm.sku_id || items[0]?.sku?.id,
         event_type: adjustForm.event_type,
+        item_type: 'finished_goods',
         quantity: parseInt(adjustForm.quantity),
         reason: adjustForm.reason,
       })

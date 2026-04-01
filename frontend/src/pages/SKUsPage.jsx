@@ -461,6 +461,7 @@ export default function SKUsPage() {
       await adjust({
         sku_id: skipped.sku_id,
         event_type: 'adjustment',
+        item_type: 'finished_goods',
         quantity: parseInt(adjustQty),
         reason: 'Opening stock adjustment',
       })
@@ -469,7 +470,10 @@ export default function SKUsPage() {
         skipped: prev.skipped.map(s => s.sku_id === skipped.sku_id ? { ...s, adjusted: true, adjusted_qty: parseInt(adjustQty) } : s),
       }))
       fetchSKUs()
-    } catch (err) { setOpeningError(err.response?.data?.detail || 'Adjust failed') }
+    } catch (err) {
+      const d = err.response?.data?.detail
+      setOpeningError(typeof d === 'string' ? d : Array.isArray(d) ? d.map(e => e.msg || e).join(', ') : 'Adjust failed')
+    }
   }
 
   const ptOptions = productTypes.map(pt => ({ value: pt.code, label: `${pt.code} — ${pt.name}` }))

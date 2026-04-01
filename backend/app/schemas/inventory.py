@@ -28,7 +28,7 @@ class AdjustRequest(BaseModel):
     """POST /inventory/adjust — manual stock correction."""
 
     event_type: str  # LOSS, RETURN, etc.
-    item_type: str  # raw_material, finished_goods
+    item_type: str = "finished_goods"  # raw_material, finished_goods
     sku_id: UUID
     quantity: int
     reason: str
