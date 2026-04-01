@@ -1329,54 +1329,77 @@ export default function SKUsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left text-gray-500 border-b">
-                    <th className="px-4 py-3 font-medium">SKU Code</th>
-                    <th className="px-4 py-3 font-medium">Type</th>
-                    <th className="px-4 py-3 font-medium text-right">Material</th>
-                    <th className="px-4 py-3 font-medium text-right">Roll VA</th>
-                    <th className="px-4 py-3 font-medium text-right">Stitching</th>
-                    <th className="px-4 py-3 font-medium text-right">Batch VA</th>
-                    <th className="px-4 py-3 font-medium text-right">Other</th>
-                    <th className="px-4 py-3 font-medium text-right">Total Cost/pc</th>
-                    <th className="px-4 py-3 font-medium text-right">Sale Rate</th>
-                    <th className="px-4 py-3 font-medium text-right">Margin</th>
+                    <th className="px-3 py-3 w-10"></th>
+                    <th className="px-3 py-3 typo-th">Design / SKU</th>
+                    <th className="px-3 py-3 typo-th">Type</th>
+                    <th className="px-3 py-3 typo-th text-right">Material</th>
+                    <th className="px-3 py-3 typo-th text-right">Roll VA</th>
+                    <th className="px-3 py-3 typo-th text-right">Stitching</th>
+                    <th className="px-3 py-3 typo-th text-right">Batch VA</th>
+                    <th className="px-3 py-3 typo-th text-right">Other</th>
+                    <th className="px-3 py-3 typo-th text-right">Cost/pc</th>
+                    <th className="px-3 py-3 typo-th text-right">Sale Rate</th>
+                    <th className="px-3 py-3 typo-th text-right">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSKUs.map((row) => {
-                    const s = row
-                    const bp = s.base_price || 0
-                    const stitch = s.stitching_cost || 0
-                    const other = s.other_cost || 0
-                    const sr = s.sale_rate || 0
-                    // Material approximation: base_price - stitching - other (when no event breakdown)
-                    const material = bp > 0 ? Math.max(0, bp - stitch - other) : 0
-                    const margin = sr > 0 && bp > 0 ? Math.round(((sr - bp) / sr) * 100) : null
-                    const fmtR = (v) => v > 0 ? `\u20B9${v.toFixed(2)}` : '\u20B90'
-                    const zeroStyle = 'text-gray-300'
+                  {groupedSKUs.map((group) => {
+                    const isExp = expandedGroups.has(group.designKey)
+                    const avgCost = group.skus.reduce((s, sk) => s + parseFloat(sk.base_price || 0), 0) / group.skus.length
                     return (
-                      <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
-                        <td className="px-4 py-2.5 font-semibold text-emerald-600">{s.sku_code}</td>
-                        <td className="px-4 py-2.5">{s.product_type}</td>
-                        <td className={`px-4 py-2.5 text-right ${material === 0 ? zeroStyle : ''}`}>{fmtR(material)}</td>
-                        <td className={`px-4 py-2.5 text-right ${zeroStyle}`}>{fmtR(0)}</td>
-                        <td className={`px-4 py-2.5 text-right ${stitch === 0 ? zeroStyle : ''}`}>{fmtR(stitch)}</td>
-                        <td className={`px-4 py-2.5 text-right ${zeroStyle}`}>{fmtR(0)}</td>
-                        <td className={`px-4 py-2.5 text-right ${other === 0 ? zeroStyle : ''}`}>{fmtR(other)}</td>
-                        <td className="px-4 py-2.5 text-right font-semibold">{bp > 0 ? fmtR(bp) : <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Not set</span>}</td>
-                        <td className={`px-4 py-2.5 text-right ${sr === 0 ? zeroStyle : ''}`}>{fmtR(sr)}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          {margin !== null
-                            ? <span className={`font-medium ${margin >= 30 ? 'text-emerald-600' : margin >= 15 ? 'text-amber-600' : 'text-red-600'}`}>{margin}%</span>
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                      </tr>
+                      <Fragment key={group.designKey}>
+                        <tr onClick={() => toggleGroup(group.designKey)}
+                          className={`border-b border-gray-100 cursor-pointer transition-colors ${isExp ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                          <td className="px-3 py-2.5 text-center">
+                            <svg className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExp ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </td>
+                          <td className="px-3 py-2.5 typo-data font-bold text-emerald-700">{group.designKey} <span className="text-gray-400 font-normal text-xs">({group.skus.length} SKUs)</span></td>
+                          <td className="px-3 py-2.5 typo-td-secondary">{group.type}</td>
+                          <td colSpan={5} className="px-3 py-2.5 text-right typo-caption">
+                            {group.colors.length} colors × {group.sizes.length} sizes
+                          </td>
+                          <td className="px-3 py-2.5 text-right typo-td font-semibold">{avgCost > 0 ? `₹${avgCost.toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2.5"></td>
+                          <td className="px-3 py-2.5"></td>
+                        </tr>
+                        {isExp && group.skus.map((s, sIdx) => {
+                          const bp = parseFloat(s.base_price || 0)
+                          const stitch = parseFloat(s.stitching_cost || 0)
+                          const oth = parseFloat(s.other_cost || 0)
+                          const sr = parseFloat(s.sale_rate || 0)
+                          const mat = bp > 0 ? Math.max(0, bp - stitch - oth) : 0
+                          const mgn = sr > 0 && bp > 0 ? Math.round(((sr - bp) / sr) * 100) : null
+                          const fR = (v) => v > 0 ? `₹${v.toFixed(2)}` : '₹0'
+                          const zs = 'text-gray-300'
+                          return (
+                            <tr key={s.id} className={`border-b border-gray-50 hover:bg-emerald-50/40 ${sIdx % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}>
+                              <td className="px-3 py-2"></td>
+                              <td className="px-3 py-2 pl-8 font-semibold text-emerald-600">{s.sku_code}</td>
+                              <td className="px-3 py-2 typo-td-secondary">{s.product_type}</td>
+                              <td className={`px-3 py-2 text-right ${mat === 0 ? zs : ''}`}>{fR(mat)}</td>
+                              <td className={`px-3 py-2 text-right ${zs}`}>{fR(0)}</td>
+                              <td className={`px-3 py-2 text-right ${stitch === 0 ? zs : ''}`}>{fR(stitch)}</td>
+                              <td className={`px-3 py-2 text-right ${zs}`}>{fR(0)}</td>
+                              <td className={`px-3 py-2 text-right ${oth === 0 ? zs : ''}`}>{fR(oth)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{bp > 0 ? fR(bp) : <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Not set</span>}</td>
+                              <td className={`px-3 py-2 text-right ${sr === 0 ? zs : ''}`}>{fR(sr)}</td>
+                              <td className="px-3 py-2 text-right">
+                                {mgn !== null
+                                  ? <span className={`font-medium ${mgn >= 30 ? 'text-emerald-600' : mgn >= 15 ? 'text-amber-600' : 'text-red-600'}`}>{mgn}%</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </Fragment>
                     )
                   })}
                 </tbody>
               </table>
             </div>
-            {filteredSKUs.length === 0 && <p className="typo-empty py-8 text-center">No SKUs found.</p>}
+            {groupedSKUs.length === 0 && <p className="typo-empty py-8 text-center">No SKUs found.</p>}
           </div>
           <Pagination page={page} pages={pages} total={total} onChange={setPage} />
 
