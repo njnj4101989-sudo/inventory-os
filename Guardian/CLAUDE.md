@@ -37,43 +37,58 @@
 
 ### S100: Sales Return Audit + Legacy Dead Code Cleanup + Migration Sync
 
-**0 new models. 0 migrations. 4 files cleaned. Dev DB at head.**
+**4 commits pushed. 0 new models. 0 migrations. 45 models total. FY 2026-27 Year 1 LIVE.**
 
-**Full codebase scan revealed Sales Return system already fully built (unrecorded session):**
-- Backend: `SalesReturn` + `SalesReturnItem` models (41st+42nd), `SalesReturnService` (514 lines, 5-status lifecycle), 10 API endpoints at `/sales-returns`, schemas, code generators (SRN-XXXX, CN-XXXX)
-- Frontend: Sales Returns tab on ReturnsPage (1795 lines), create/detail/inspect overlays, `SalesReturnPrint` + `CreditNotePrint`, deep-linking from OrdersPage
-- DB tables exist in both tenant schemas (created via `create_all()`)
-- API_REFERENCE.md §25 already documents all endpoints
+**Part 1 — Sales Return Audit + Dead Code Cleanup:**
+- Full codebase scan revealed Sales Return system already fully built (unrecorded session)
+- Backend: SalesReturn + SalesReturnItem (41st+42nd), 5-status lifecycle, 10 endpoints, SRN-XXXX + CN-XXXX generators
+- Frontend: Sales Returns tab on ReturnsPage, OrdersPage integration, SalesReturnPrint + CreditNotePrint
+- Legacy dead code removed: `return_order()` (80 lines), `POST /orders/{id}/return`, `ReturnRequest` schema, `returnOrder()` frontend function — all zero callers, replaced by Sales Returns system
+- S93 plan marked COMPLETE. API_REFERENCE.md updated (§10 endpoint marked removed → §25)
 
-**Legacy dead code removed (replaced by Sales Returns system):**
-- `return_order()` method removed from `order_service.py` (was 80 lines, zero callers)
-- `POST /orders/{id}/return` endpoint removed from `orders.py`
-- `ReturnRequest` + `ReturnItemInput` schemas removed from `order.py`
-- `returnOrder()` function removed from frontend `api/orders.js`
-- API_REFERENCE.md §10: marked endpoint as removed, points to §25
-
-**Kept (actively used by Sales Returns):**
-- `Order.sales_returns` relationship + `selectinload` in `_get_or_404`
-- `_to_response()` includes `sales_returns[]` array
-- OrdersPage displays linked SRNs on order detail + "Create Sales Return" navigates to ReturnsPage
-- `process_external_return()` in order_service (used by external API)
-
-**Migration `b2c3d4e5f6g7` (S99) applied to dev DB** — was 1 revision behind head.
-
-**S93 plan in CLAUDE.md is now COMPLETE** — all items were built in an unrecorded session.
-
-**Production Backup System built (S3 + cron):**
-- 4 shell scripts: `backup.sh` (daily pg_dump→S3), `restore.sh` (S3→pg_restore), `snapshot.sh` (pre-operation), `setup-backup.sh` (one-time EC2 setup)
-- `pg_dump --format=custom --compress=6 --encoding=UTF8 --no-owner --no-privileges` — binary format preserves all Numeric precision, UUIDs, JSON, timestamptz
+**Part 2 — Production Backup System (S3 + cron):**
+- 6 shell scripts in `backend/scripts/backup/`:
+  - `backup.sh` — daily pg_dump→S3, validates dump, prunes expired, S3 upload verification + BACKUP_FAILED flag
+  - `restore.sh` — interactive S3→pg_restore with safety gate (type RESTORE to confirm)
+  - `snapshot.sh` — pre-operation named snapshots (not auto-pruned)
+  - `setup-backup.sh` — one-time EC2 setup (S3 bucket, .pgpass, cron, logrotate)
+  - `check-backup.sh` — health check (exits 1 if no backup today)
+  - `wipe-and-seed-fy.sh` — production data wipe (keeps 5 masters) + creates FY
+- `pg_dump --format=custom --compress=6 --encoding=UTF8 --no-owner --no-privileges`
 - S3 bucket: `inventory-os-backups-ap-south-1` (AES-256, versioned, private, STANDARD_IA)
-- Retention: 30 daily + 12 monthly (auto-pruned by backup.sh)
+- Retention: 30 daily + 12 monthly (auto-pruned)
 - Cron: `30 20 * * *` (20:30 UTC = 2:00 AM IST)
-- Supabase config removed from `config.py` + `.env` → replaced with `BACKUP_S3_BUCKET` + `BACKUP_S3_REGION`
-- `backup_sync.py` simplified to no-op (cron handles scheduling, not Python asyncio)
-- CI/CD updated: deploys scripts to `/home/ubuntu/scripts/` on push
-- `AWS_DEPLOYMENT.md` updated with full backup runbook
+- Supabase config removed → replaced with `BACKUP_S3_BUCKET` + `BACKUP_S3_REGION`
+- CI/CD updated: deploys all backup scripts to EC2 on push
 
-**NEXT:** SSH to EC2 → run `setup-backup.sh` → test backup → take pre-wipe snapshot → wipe test data → enter real opening stock.
+**Part 3 — EC2 Infrastructure Setup (done in-session):**
+- Installed PostgreSQL 16 client (pg_dump 16.13, matching RDS)
+- Installed AWS CLI v2.34.21
+- Configured AWS credentials (IAM user Nitish + AmazonS3FullAccess)
+- Created S3 bucket with versioning, encryption, public access block, lifecycle policy
+- Set up .pgpass (mode 600), cron, logrotate, deployed scripts
+
+**Part 4 — Backup Dry Run (wipe → restore → verify):**
+- Took pre-wipe snapshot → S3 (`snapshots/pre-data-wipe_2026-04-01_08-13.dump`)
+- Wiped all 35 non-master tables via TRUNCATE CASCADE — 5 masters preserved
+- Restored from snapshot — 0 errors, all row counts matched exactly
+- Verified: Decimal precision perfect (27.660 kg, 205.00 cost), UUIDs intact, timestamps UTC, alembic version correct
+- Finding: `co_mahaveer_fabrics` schema dropped during --clean restore (was empty, company record also not in backup — consistent, not a bug)
+
+**Part 5 — Production Data Wipe (REAL — FY 2026-27 Start):**
+- Took fresh snapshot: `snapshots/pre-real-wipe_2026-04-01_08-33.dump`
+- Wiped all transactional data on prod (35 tables, ~500 rows of test data)
+- Kept: 21 fabrics, 28 colors, 4 product types, 10 value additions, 1 design
+- FY 2026-27 created by Nit via app UI (Settings page, is_current=true)
+- Verified: login works, JWT has fy_id, all endpoints return success, counters reset (ORD-0001)
+- All API endpoints tested: dashboard, rolls, orders, SKUs, lots, batches, masters — all clean zeros, no errors
+- **Production is LIVE on clean slate for Year 1**
+
+**Backup recovery path:** `/home/ubuntu/scripts/restore.sh snapshots/pre-real-wipe_2026-04-01_08-33.dump`
+
+**Known gaps documented:** See `memory/project_backup_gaps.md` — intra-day recovery, single-table restore, cross-region S3, automated verification (all Year 2 items)
+
+**NEXT (S101):** Enter real opening stock (rolls + SKUs), party masters (suppliers, customers, VA parties, brokers, transports), opening balances. Start real transactions under FY 2026-27.
 
 ---
 
