@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 
 const HAS_BARCODE_DETECTOR = 'BarcodeDetector' in window
 
-export default function CameraScanner({ onScan, onClose }) {
+export default function CameraScanner({ onScan, onClose, continuous = false }) {
   const [error, setError] = useState(null)
   const [starting, setStarting] = useState(true)
   const videoRef = useRef(null)
   const scannedRef = useRef(false)
+  const lastCodeRef = useRef(null)
 
   useEffect(() => {
     if (!HAS_BARCODE_DETECTOR) return // handled by fallback branch
@@ -32,9 +33,21 @@ export default function CameraScanner({ onScan, onClose }) {
             try {
               const results = await detector.detect(video)
               if (results.length > 0 && !scannedRef.current) {
-                scannedRef.current = true
-                onScan(results[0].rawValue)
-                return
+                const code = results[0].rawValue
+                if (continuous) {
+                  // Gun mode: skip duplicate consecutive scans, keep camera open
+                  if (code !== lastCodeRef.current) {
+                    lastCodeRef.current = code
+                    onScan(code)
+                  }
+                  // Wait before next scan to avoid rapid-fire
+                  await new Promise(r => setTimeout(r, 1500))
+                  lastCodeRef.current = null
+                } else {
+                  scannedRef.current = true
+                  onScan(code)
+                  return
+                }
               }
             } catch (_) {}
             await new Promise(r => setTimeout(r, 60))
@@ -88,9 +101,17 @@ export default function CameraScanner({ onScan, onClose }) {
           { fps: 15, qrbox: { width: 250, height: 250 }, disableFlip: true },
           (text) => {
             if (scannedRef.current) return
-            scannedRef.current = true
-            scanner.stop().catch(() => {})
-            onScan(text)
+            if (continuous) {
+              if (text !== lastCodeRef.current) {
+                lastCodeRef.current = text
+                onScan(text)
+                setTimeout(() => { lastCodeRef.current = null }, 1500)
+              }
+            } else {
+              scannedRef.current = true
+              scanner.stop().catch(() => {})
+              onScan(text)
+            }
           },
           () => {}
         )

@@ -11,6 +11,7 @@ import { getRolls } from '../api/rolls'
 import { getCompany } from '../api/company'
 import { useAuth } from '../hooks/useAuth'
 import CameraScanner from '../components/common/CameraScanner'
+import { useRemoteScan } from '../hooks/useRemoteScan'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
@@ -421,6 +422,17 @@ export default function ReturnsPage() {
       setScanRowIdx(null)
     }
   }
+
+  /* ── Remote scan (phone → desktop) — resolve roll/SKU into return item ── */
+  useRemoteScan(useCallback((scan) => {
+    if (!createMode) return
+    if (scan.entity_type === 'roll' || scan.entity_type === 'sku') {
+      // Add a new item row and resolve the code
+      setFormItems(prev => [...prev, { roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
+      // Resolve into the newly added row
+      setTimeout(() => resolveRollCode(formItems.length, scan.code), 100)
+    }
+  }, [createMode, formItems.length]))
 
   const addItem = () => setFormItems(prev => [...prev, { roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const removeItem = (idx) => setFormItems(prev => prev.filter((_, i) => i !== idx))

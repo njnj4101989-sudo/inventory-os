@@ -5,6 +5,7 @@ import MobileLayout from './components/layout/MobileLayout'
 import ProtectedRoute from './routes/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import { useAuth } from './hooks/useAuth'
+import { useIsMobile } from './hooks/useIsMobile'
 import { NotificationProvider } from './context/NotificationContext'
 import Toast from './components/common/Toast'
 import routes from './routes/routes'
@@ -13,15 +14,19 @@ const ScanPage = lazy(() => import('./pages/ScanPage'))
 
 function DefaultRedirect() {
   const { role, isAuthenticated } = useAuth()
+  const isMobile = useIsMobile()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (role === 'tailor') return <Navigate to="/my-work" replace />
   if (role === 'checker') return <Navigate to="/qc-queue" replace />
-  return <Navigate to="/dashboard" replace />
+  return <Navigate to={isMobile ? '/scan' : '/dashboard'} replace />
 }
 
 const MOBILE_ROLES = ['tailor', 'checker']
+const MOBILE_ONLY_PATHS = ['my-work', 'qc-queue']
 
 function App() {
+  const isMobile = useIsMobile()
+
   return (
     <NotificationProvider>
     <Suspense
@@ -39,7 +44,7 @@ function App() {
         <Route path="/scan/sku/:skuCode" element={<ScanPage />} />
         <Route path="/scan" element={<ScanPage />} />
 
-        {/* Mobile layout — tailor/checker get bottom tabs */}
+        {/* Tailor/Checker — always MobileLayout with bottom tabs */}
         <Route
           element={
             <ProtectedRoute requiredRoles={MOBILE_ROLES}>
@@ -48,7 +53,7 @@ function App() {
           }
         >
           {routes
-            .filter((r) => ['my-work', 'qc-queue', 'profile'].includes(r.path))
+            .filter((r) => [...MOBILE_ONLY_PATHS, 'profile'].includes(r.path))
             .map((route) => (
               <Route
                 key={route.path}
@@ -62,16 +67,16 @@ function App() {
             ))}
         </Route>
 
-        {/* Desktop layout — admin/supervisor/billing get sidebar */}
+        {/* Admin/Supervisor/Billing — MobileLayout on phone, desktop Layout on >=768px */}
         <Route
           element={
             <ProtectedRoute>
-              <Layout />
+              {isMobile ? <MobileLayout /> : <Layout />}
             </ProtectedRoute>
           }
         >
           {routes
-            .filter((r) => !['my-work', 'qc-queue', 'profile'].includes(r.path))
+            .filter((r) => !MOBILE_ONLY_PATHS.includes(r.path))
             .map((route) => (
               <Route
                 key={route.path}
@@ -85,7 +90,7 @@ function App() {
             ))}
         </Route>
 
-        {/* Fallback — role-aware */}
+        {/* Fallback — role + viewport aware */}
         <Route path="*" element={<DefaultRedirect />} />
       </Routes>
     </Suspense>

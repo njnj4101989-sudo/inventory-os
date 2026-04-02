@@ -1,15 +1,27 @@
 import { NavLink } from 'react-router-dom'
 
+const SCAN_ICON = 'M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2'
+const PROFILE_ICON = 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+
+const ADMIN_TABS = [
+  { path: '/scan', label: 'Scan', icon: SCAN_ICON },
+  { path: '/activity', label: 'Activity', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { path: '/profile', label: 'Profile', icon: PROFILE_ICON },
+]
+
 const TABS = {
+  admin: ADMIN_TABS,
+  supervisor: ADMIN_TABS,
+  billing: ADMIN_TABS,
   tailor: [
-    { path: '/scan', label: 'Scan', icon: 'M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2' },
+    { path: '/scan', label: 'Scan', icon: SCAN_ICON },
     { path: '/my-work', label: 'My Work', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-    { path: '/profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+    { path: '/profile', label: 'Profile', icon: PROFILE_ICON },
   ],
   checker: [
-    { path: '/scan', label: 'Scan', icon: 'M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2' },
+    { path: '/scan', label: 'Scan', icon: SCAN_ICON },
     { path: '/qc-queue', label: 'QC Queue', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { path: '/profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+    { path: '/profile', label: 'Profile', icon: PROFILE_ICON },
   ],
 }
 

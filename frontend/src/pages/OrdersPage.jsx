@@ -13,6 +13,7 @@ import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 import CameraScanner from '../components/common/CameraScanner'
+import { useRemoteScan } from '../hooks/useRemoteScan'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
@@ -307,6 +308,12 @@ export default function OrdersPage() {
       })
     }
   }, [allSKUs])
+
+  /* ── Remote scan (phone → desktop) — auto-add SKU to form ── */
+  useRemoteScan(useCallback((scan) => {
+    if (!createMode || scan.entity_type !== 'sku') return
+    handleScanResult(scan.code)
+  }, [createMode, handleScanResult]))
 
   /* ── Global keyboard: Ctrl+S, Escape ── */
   useEffect(() => {

@@ -17,6 +17,7 @@ const EVENT_MESSAGES = {
   va_received: (p) => p.challan_no
     ? `VA received from ${p.vendor || 'vendor'} (${p.challan_no})`
     : `VA received — ${p.roll_code || ''} ${p.va_name || ''}`,
+  remote_scan: (p) => `Scanned: ${p.entity_type} ${p.code}`,
 }
 
 const EVENT_COLORS = {
@@ -28,6 +29,7 @@ const EVENT_COLORS = {
   lot_distributed: 'purple',
   va_sent: 'amber',
   va_received: 'amber',
+  remote_scan: 'emerald',
 }
 
 const EVENT_ROUTES = {
@@ -65,7 +67,7 @@ export function NotificationProvider({ children }) {
     }
 
     setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS))
-    setLastEvent({ type: event.type, payload: event.payload, ts: Date.now() })
+    setLastEvent({ type: event.type, payload: event.payload, actor_id: event.actor_id, ts: Date.now() })
 
     // Add toast (auto-dismiss 5s)
     setToasts((prev) => [...prev, notification].slice(-3))

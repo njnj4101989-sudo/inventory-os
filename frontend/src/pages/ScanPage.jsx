@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useReactToPrint } from 'react-to-print'
@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, unclaimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
 import { getSKUPassport } from '../api/skus'
+import { remoteScan } from '../api/scan'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
 
@@ -24,6 +25,9 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showScanner, setShowScanner] = useState(false)
+  const [gunMode, setGunMode] = useState(false)
+  const [gunResult, setGunResult] = useState(null) // { success, code, message }
+  const [gunSending, setGunSending] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [claimSuccess, setClaimSuccess] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -56,7 +60,7 @@ export default function ScanPage() {
     } else if (skuCode) {
       fetchSKUPassport(skuCode)
     } else {
-      setShowScanner(true)
+      // No params — show mode picker (don't auto-open camera)
       setLoading(false)
     }
   }, [rollCode, batchCode, skuCode])
@@ -268,9 +272,24 @@ export default function ScanPage() {
     } finally { setActionLoading(false) }
   }
 
+  function extractCode(decodedText) {
+    // Extract bare code from scan URL or raw text
+    const skuMatch = decodedText.match(/\/scan\/sku\/([^/?\s]+)/)
+    if (skuMatch) return decodeURIComponent(skuMatch[1])
+    const batchMatch = decodedText.match(/\/scan\/batch\/([^/?\s]+)/)
+    if (batchMatch) return decodeURIComponent(batchMatch[1])
+    const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
+    if (rollMatch) return decodeURIComponent(rollMatch[1])
+    return decodedText.trim()
+  }
+
   function handleScan(decodedText) {
+    if (gunMode) {
+      handleGunScan(decodedText)
+      return
+    }
     setShowScanner(false)
-    // Detect SKU, batch, or roll URL
+    // Passport mode — navigate to passport page
     const skuMatch = decodedText.match(/\/scan\/sku\/([^/?\s]+)/)
     if (skuMatch) {
       navigate(`/scan/sku/${encodeURIComponent(decodeURIComponent(skuMatch[1]))}`)
@@ -284,6 +303,46 @@ export default function ScanPage() {
     const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
     const code = rollMatch ? decodeURIComponent(rollMatch[1]) : decodedText.trim()
     navigate(`/scan/roll/${encodeURIComponent(code)}`)
+  }
+
+  async function handleGunScan(decodedText) {
+    const code = extractCode(decodedText)
+    setGunSending(true)
+    setGunResult(null)
+    try {
+      const res = await remoteScan(code)
+      const data = res?.data?.data || res?.data
+      setGunResult({ success: true, code, message: `${data?.entity_type || 'Item'}: ${code}` })
+      // Log to localStorage for ActivityPage
+      logScanActivity(code, data?.entity_type || 'unknown', 'sent')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Not found'
+      setGunResult({ success: false, code, message: msg })
+      logScanActivity(code, 'unknown', 'failed')
+    } finally {
+      setGunSending(false)
+      // Auto-clear result after 2s, keep scanner open for next scan
+      setTimeout(() => setGunResult(null), 2000)
+    }
+  }
+
+  function logScanActivity(code, type, status) {
+    try {
+      const key = 'scan_activity_log'
+      const all = JSON.parse(localStorage.getItem(key) || '[]')
+      const now = new Date()
+      all.unshift({
+        code,
+        type,
+        status,
+        date: now.toISOString().slice(0, 10),
+        time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        ts: now.toISOString(),
+      })
+      // Keep last 200 entries
+      localStorage.setItem(key, JSON.stringify(all.slice(0, 200)))
+      window.dispatchEvent(new Event('scan_activity_updated'))
+    } catch (_) {}
   }
 
   const statusColor = {
@@ -397,23 +456,49 @@ export default function ScanPage() {
           )
         )}
 
-        {/* No code — prompt to scan */}
+        {/* No code — mode picker */}
         {!loading && !error && !passport && !batchPassport && !skuPassport && (
-          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
-              </svg>
+          <div className="flex flex-col items-center justify-center py-12 gap-6">
+            <div className="text-center">
+              <h2 className="typo-section-title text-gray-900">QR Scanner</h2>
+              <p className="typo-caption mt-1">Choose scan mode</p>
             </div>
-            <div>
-              <h3 className="typo-data text-gray-900">Scan a QR Code</h3>
-              <p className="text-gray-500 text-sm mt-1">Point your camera at the QR label on any roll or batch</p>
+
+            <div className="w-full max-w-xs space-y-3">
+              {/* Passport Mode */}
+              <button
+                onClick={() => { setGunMode(false); setShowScanner(true) }}
+                className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-blue-300 hover:bg-blue-50/50 transition-colors active:bg-blue-50"
+              >
+                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="typo-data text-gray-900">Passport</p>
+                  <p className="typo-caption">Scan to view item details</p>
+                </div>
+              </button>
+
+              {/* Gun Mode */}
+              <button
+                onClick={() => { setGunMode(true); setShowScanner(true) }}
+                className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors active:bg-emerald-50"
+              >
+                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                      d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="typo-data text-gray-900">Scanner Gun</p>
+                  <p className="typo-caption">Scan items to desktop form</p>
+                </div>
+              </button>
             </div>
-            <button onClick={() => setShowScanner(true)}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700">
-              Open Camera
-            </button>
           </div>
         )}
 
@@ -1049,8 +1134,46 @@ export default function ScanPage() {
       {showScanner && (
         <CameraScanner
           onScan={handleScan}
-          onClose={() => setShowScanner(false)}
+          onClose={() => { setShowScanner(false); setGunMode(false) }}
+          continuous={gunMode}
         />
+      )}
+
+      {/* Gun mode result overlay — shows on top of camera */}
+      {showScanner && gunMode && gunResult && (
+        <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
+          <div className={`mx-auto max-w-sm rounded-xl px-4 py-3 shadow-lg flex items-center gap-3 ${
+            gunResult.success ? 'bg-emerald-600' : 'bg-red-600'
+          }`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              gunResult.success ? 'bg-white/20' : 'bg-white/20'
+            }`}>
+              {gunResult.success ? (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <div>
+              <p className="text-white text-sm font-semibold">{gunResult.code}</p>
+              <p className="text-white/80 text-xs">{gunResult.success ? 'Sent to desktop' : gunResult.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gun mode sending indicator */}
+      {showScanner && gunMode && gunSending && (
+        <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
+          <div className="mx-auto max-w-sm rounded-xl bg-gray-800 px-4 py-3 shadow-lg flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <p className="text-white text-sm">Sending...</p>
+          </div>
+        </div>
       )}
     </div>
   )

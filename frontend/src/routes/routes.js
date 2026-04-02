@@ -17,6 +17,7 @@ const ReturnsPage      = lazy(() => import('../pages/ReturnsPage'))
 const ReportsPage      = lazy(() => import('../pages/ReportsPage'))
 const MastersPage      = lazy(() => import('../pages/MastersPage'))
 const SettingsPage     = lazy(() => import('../pages/SettingsPage'))
+const ActivityPage     = lazy(() => import('../pages/ActivityPage'))
 const MyWorkPage       = lazy(() => import('../pages/MyWorkPage'))
 const QCQueuePage      = lazy(() => import('../pages/QCQueuePage'))
 const ProfilePage      = lazy(() => import('../pages/ProfilePage'))
@@ -42,6 +43,7 @@ const routes = [
   { path: 'reports',          element: ReportsPage,      requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'masters',          element: MastersPage,      requiredRoles: ['admin', 'supervisor'] },
   { path: 'settings',         element: SettingsPage,     requiredRoles: ['admin'] },
+  { path: 'activity',          element: ActivityPage,     requiredRoles: ['admin', 'supervisor', 'billing'] },
   { path: 'my-work',          element: MyWorkPage,       requiredRoles: ['tailor'] },
   { path: 'qc-queue',         element: QCQueuePage,      requiredRoles: ['checker'] },
   { path: 'profile',          element: ProfilePage,      requiredRoles: ['tailor', 'checker', 'admin', 'supervisor', 'billing'] },
