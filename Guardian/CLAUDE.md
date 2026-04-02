@@ -33,45 +33,54 @@
 
 ---
 
-## Current State (Session 103 — 2026-04-02)
+## Current State (Session 103 — 2026-04-03)
 
-### S103: Mobile-First UI
+### S103: Scanner Gun PWA — COMPLETE (pending UX polish)
 
-**S103 ready to start. 0 new models. 0 migrations. 45 models total.**
+**S103 done. 0 new models. 0 migrations. 45 models total. 4 commits pushed+deployed.**
 
-**S102 completed:** QR scan on order form, batch unclaim endpoint+UI, SKU identity design edit, InventoryState FOR UPDATE fix, PaginatedParams validation, CLAUDE.md trim (76K→26K). All committed+pushed+deployed.
+**What was built:**
+- **Option B (Smart):** Extend MobileLayout for admin/supervisor/billing on mobile (<768px)
+- **Scanner Gun mode:** Phone scans QR → POST /scan/remote → SSE event → desktop auto-adds to form
+- `useIsMobile` hook (viewport detection), `useRemoteScan` hook (SSE listener)
+- BottomNav: Scan / Activity / Profile tabs for admin-side roles
+- MobileLayout header: company name + FY badge for admin roles
+- CameraScanner continuous mode (Gun mode keeps camera open)
+- ActivityPage with localStorage-backed scan log
+- Backend `POST /scan/remote` resolves roll/batch/SKU + emits SSE
+- Desktop OrdersPage + ReturnsPage listen for `remote_scan` events
+- Profile route separated — all roles can access logout
 
-**Mobile-First UI Checklist (S103):**
+**New files (5):** `useIsMobile.js`, `useRemoteScan.js`, `ActivityPage.jsx`, `api/scan.js`, `backend/api/scan.py`
+
+**Architecture decisions:**
+- Phone = wireless QR scanner gun, desktop = data entry form
+- Viewport <768px → MobileLayout (admin only sees scan/activity/profile)
+- Viewport >=768px → desktop Layout (unchanged, zero regressions)
+- Tailor/checker PWA unchanged
+- Same tabs for all admin-side roles (admin/supervisor/billing)
+- SSE broadcasts to all clients, frontend filters by `actor_id` (same user)
+- Desktop pages still accessible only on desktop — no responsive compromise
+
+**S104 NEXT — Desktop Scanner UX:**
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Responsive Sidebar — hamburger + slide-out drawer on mobile (`< md`) | ⬜ |
-| 2 | Mobile top bar — sticky header with hamburger, logo, bell (admin roles) | ⬜ |
-| 3 | DataTable mobile card view — stacked cards below `md` breakpoint | ⬜ |
-| 4 | OrdersPage list — mobile cards, KPI 2-col stack, scrollable tabs | ⬜ |
-| 5 | OrdersPage create/edit — card-based line items, scan QR prominent | ⬜ |
-| 6 | OrdersPage detail — items as cards, shipments stack, buttons full-width | ⬜ |
-| 7 | ReturnsPage list — mobile cards for supplier + sales tabs | ⬜ |
-| 8 | ReturnsPage create forms — card-based line items + scan for both types | ⬜ |
-| 9 | ReturnsPage detail — cards, timeline vertical, buttons stacked | ⬜ |
-| 10 | Touch polish + viewport test — 44px tap targets, safe area, overflow check | ⬜ |
+| 1 | Desktop order form: replace "Scan QR" (laptop camera) with "Scan from Phone" indicator | ⬜ |
+| 2 | Show "Waiting for phone scan..." status when create form is open | ⬜ |
+| 3 | Toast on desktop when phone scan received: "SKU BLS-101-Red-M added via phone" | ⬜ |
+| 4 | Same UX for ChallansPage (roll/batch scan) and ReturnsPage | ⬜ |
+| 5 | End-to-end test: phone Gun mode → desktop form auto-add | ⬜ |
+| 6 | Optional: keep laptop "Scan QR" as fallback, but de-emphasize | ⬜ |
 
-**Architecture decisions:**
-- NO new routes, NO new layouts, NO role changes — same pages respond to screen width
-- Breakpoint: `md` (768px) — below = mobile card view, above = desktop table
-- Sidebar: auto-hide below md, hamburger slide-out drawer with backdrop
-- Line items: table on desktop, stacked cards on mobile
-- DataTable: reusable `mobileRender` prop pattern — each page defines its own card layout
-- Detail plan: `Guardian/MOBILE_AND_QR_PLAN.md`
-
-**Files to modify:** Layout.jsx, Sidebar.jsx, DataTable.jsx, OrdersPage.jsx, ReturnsPage.jsx
-
-**NEXT:** Start Task 1 (Responsive Sidebar)
+**Plan doc:** `Guardian/MOBILE_AND_QR_PLAN.md`
 
 ---
 
 ## Previous Sessions (S87-S102) — Invoice, Shipping, Returns, FY, Reports, SKU Overhaul
 
+- **S103:** Scanner Gun PWA. Option B: extend MobileLayout for admin/supervisor/billing on mobile. useIsMobile viewport hook, BottomNav role-aware tabs (Scan/Activity/Profile), Gun mode on ScanPage (continuous scan → POST /scan/remote → SSE → desktop auto-add). Backend scan.py endpoint. useRemoteScan hook on OrdersPage+ReturnsPage. ActivityPage scan log. Profile route fix. AWS budget $35/mo with 3 email alerts configured.
+- **S102:** QR scan on order form, batch unclaim endpoint+UI, SKU identity design edit, InventoryState FOR UPDATE fix, PaginatedParams validation, CLAUDE.md trim (76K→26K)
 - **S101:** 5 prod bug fixes (adjust crash, SKU search, inventory history 500, cost history filter, FilterSelect cycling). SKU page grouped accordion by design (All SKUs + Cost Breakdown tabs), fixed column widths, inline reserved qty
 - **S100:** Sales Return system verified COMPLETE (built in unrecorded S93). Legacy dead code removed (return_order, POST /orders/{id}/return). S3 backup system (6 scripts, cron 2AM IST, 30d+12mo retention). EC2 infra (pg_dump 16, AWS CLI, S3 bucket). Prod data wipe → FY 2026-27 LIVE on clean slate. Recovery: `restore.sh snapshots/pre-real-wipe_2026-04-01_08-33.dump`
 - **S99:** `design_id` UUID FK on Batch+SKU models, DesignBrief schema, lot→batch→SKU design_id flow, backfill migration `b2c3d4e5f6g7`. LotsPage+SKUsPage design_no→FilterSelect (Design master)
@@ -294,6 +303,7 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S103 | Scanner Gun PWA | Option B mobile layout, Gun mode scan→SSE→desktop, useIsMobile+useRemoteScan hooks, ActivityPage, backend /scan/remote, AWS budget alerts |
 | S102 | QR Scan + Mobile Plan | QR scan on order form, batch unclaim, mobile-first UI plan (0/10) |
 
 **Backend audit COMPLETE (S60-S64).** 4 phases, 59 findings, 58 fixed, 1 deferred. See `BACKEND_AUDIT_PLAN.md`.
