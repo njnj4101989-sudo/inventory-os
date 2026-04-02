@@ -39,6 +39,18 @@ async def claim_batch(
     return {"success": True, "data": result}
 
 
+@router.post("/unclaim/{batch_code}", response_model=None)
+async def unclaim_batch(
+    batch_code: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("batch_start"),
+):
+    """Tailor releases a claimed batch (ASSIGNED → CREATED). Only before starting work."""
+    svc = BatchService(db)
+    result = await svc.unclaim_batch(batch_code, current_user.id)
+    return {"success": True, "data": result, "message": "Batch released successfully"}
+
+
 @router.get("", response_model=None)
 async def list_batches(
     params: BatchFilterParams = Depends(),

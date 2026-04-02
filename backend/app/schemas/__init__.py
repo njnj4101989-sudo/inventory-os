@@ -1,6 +1,6 @@
 """Common base schemas and re-exports."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseSchema(BaseModel):
@@ -12,8 +12,8 @@ class BaseSchema(BaseModel):
 class PaginatedParams(BaseModel):
     """Query parameters for paginated list endpoints."""
 
-    page: int = 1
-    page_size: int = 20
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=500)
     sort_by: str = "created_at"
     sort_order: str = "desc"
 

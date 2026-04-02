@@ -91,6 +91,10 @@ export async function claimBatch(batchCode) {
   return client.post(`/batches/claim/${encodeURIComponent(batchCode)}`)
 }
 
+export async function unclaimBatch(batchCode) {
+  return client.post(`/batches/unclaim/${encodeURIComponent(batchCode)}`)
+}
+
 export async function getBatches(params = {}) {
   if (USE_MOCK) {
     let filtered = [...batches]

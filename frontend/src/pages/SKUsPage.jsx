@@ -304,6 +304,7 @@ export default function SKUsPage() {
       setDetailSKU(sku)
       setEditFields({
         color: sku.color || '', color_id: sku.color_id || '', size: sku.size || '',
+        design_id: sku.design_id || '',
         base_price: sku.base_price ?? '', description: sku.description || '',
         hsn_code: sku.hsn_code || '', gst_percent: sku.gst_percent ?? '',
         mrp: sku.mrp ?? '', sale_rate: sku.sale_rate ?? '', unit: sku.unit || '',
@@ -335,6 +336,7 @@ export default function SKUsPage() {
         if (editFields.color && editFields.color !== detailSKU.color) payload.color = editFields.color
         if (editFields.color_id && editFields.color_id !== detailSKU.color_id) payload.color_id = editFields.color_id
         if (editFields.size && editFields.size !== detailSKU.size) payload.size = editFields.size
+        if (editFields.design_id && editFields.design_id !== detailSKU.design_id) payload.design_id = editFields.design_id
       }
       const res = await updateSKU(detailSKU.id, payload)
       setDetailSKU(prev => ({ ...prev, ...(res.data.data || res.data) }))
@@ -911,6 +913,16 @@ export default function SKUsPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
+                <label className="typo-label-sm">Design</label>
+                {detailSKU.is_identity_editable ? (
+                  <FilterSelect full searchable value={editFields.design_id}
+                    onChange={v => setEditFields(p => ({ ...p, design_id: v }))}
+                    options={[{ value: '', label: 'Select design...' }, ...designs.map(d => ({ value: d.id, label: d.design_no }))]} />
+                ) : (
+                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.design}</div>
+                )}
+              </div>
+              <div>
                 <label className="typo-label-sm">Color</label>
                 {detailSKU.is_identity_editable ? (
                   <FilterSelect full searchable value={editFields.color_id}
@@ -933,12 +945,15 @@ export default function SKUsPage() {
                   <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
                 )}
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className="typo-label-sm">SKU Code</label>
                 <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
-                {detailSKU.is_identity_editable && (editFields.color !== detailSKU.color || editFields.size !== detailSKU.size) && (
-                  <p className="text-xs text-emerald-600 mt-1">Will update to: {parsed.type}-{parsed.design}-{editFields.color}-{editFields.size}</p>
-                )}
+                {(() => {
+                  const newDesign = editFields.design_id !== detailSKU.design_id ? designs.find(d => d.id === editFields.design_id)?.design_no : null
+                  const changed = editFields.color !== detailSKU.color || editFields.size !== detailSKU.size || newDesign
+                  if (!detailSKU.is_identity_editable || !changed) return null
+                  return <p className="text-xs text-emerald-600 mt-1">→ {parsed.type}-{newDesign || parsed.design}-{editFields.color}-{editFields.size}</p>
+                })()}
               </div>
             </div>
           </div>

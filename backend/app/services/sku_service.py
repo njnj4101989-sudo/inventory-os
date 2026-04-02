@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.sku import SKU
+from app.models.design import Design
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
@@ -233,20 +234,25 @@ class SKUService:
 
         # Regenerate sku_code if identity fields changed
         if has_identity_change:
-            color = sku.color
-            size = sku.size
-            # Parse current sku_code to get type-design prefix
-            parts = sku.sku_code.split('-')
-            if len(parts) >= 2:
-                prefix = f"{parts[0]}-{parts[1]}"
-                new_code = f"{prefix}-{color}-{size}"
-                # Duplicate check
-                existing = await self.db.scalar(
-                    select(SKU.id).where(SKU.sku_code == new_code, SKU.id != sku_id)
-                )
-                if existing:
-                    raise DuplicateError(f"SKU '{new_code}' already exists")
-                sku.sku_code = new_code
+            product_type = sku.product_type
+            # Get design_no — from Design model if design_id exists
+            design_no = None
+            if sku.design_id:
+                design_obj = await self.db.get(Design, sku.design_id)
+                if design_obj:
+                    design_no = design_obj.design_no
+            if not design_no:
+                # Fallback: parse from current sku_code
+                parts = sku.sku_code.split('-')
+                design_no = parts[1] if len(parts) >= 2 else ''
+            new_code = f"{product_type}-{design_no}-{sku.color}-{sku.size}"
+            # Duplicate check
+            existing = await self.db.scalar(
+                select(SKU.id).where(SKU.sku_code == new_code, SKU.id != sku_id)
+            )
+            if existing:
+                raise DuplicateError(f"SKU '{new_code}' already exists")
+            sku.sku_code = new_code
 
         await self.db.flush()
 

@@ -4,15 +4,15 @@ import { useAuth } from '../hooks/useAuth'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
-import { getBatchPassport, claimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
+import { getBatchPassport, claimBatch, unclaimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
 import { getSKUPassport } from '../api/skus'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
 
 /**
- * Public Passport page — /scan/roll/:rollCode OR /scan/batch/:batchCode
- * No auth required for viewing. Workers scan QR on roll/batch → see full chain.
- * Tailors can claim batches if logged in.
+ * Passport page — /scan/roll/:rollCode OR /scan/batch/:batchCode OR /scan/sku/:skuCode
+ * Auth required — workers must be logged in via PWA.
+ * Tailors can claim/unclaim batches, start work, submit for QC.
  */
 export default function ScanPage() {
   const { rollCode, batchCode, skuCode } = useParams()
@@ -115,6 +115,19 @@ export default function ScanPage() {
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to claim batch')
     } finally { setClaiming(false) }
+  }
+
+  async function handleUnclaim() {
+    if (!batchCode || !batchPassport) return
+    setActionLoading(true); setActionSuccess(null)
+    try {
+      await unclaimBatch(batchCode)
+      setActionSuccess('Batch released!')
+      setClaimSuccess(false)
+      await fetchBatchPassport(batchCode)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to release batch')
+    } finally { setActionLoading(false) }
   }
 
   async function handleStartBatch() {
@@ -528,12 +541,16 @@ export default function ScanPage() {
                 </div>
               )}
 
-              {/* Start Work (batch_start permission + assigned) */}
+              {/* Start Work + Release (batch_start permission + assigned) */}
               {perms.batch_start && batchPassport.status === 'assigned' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-2">
                   <button onClick={handleStartBatch} disabled={actionLoading}
                     className="w-full py-3 bg-blue-600 text-white rounded-xl typo-btn hover:bg-blue-700 disabled:opacity-50 transition-colors">
                     {actionLoading ? 'Starting...' : 'Start Work'}
+                  </button>
+                  <button onClick={handleUnclaim} disabled={actionLoading}
+                    className="w-full py-2.5 border border-gray-300 text-gray-600 rounded-xl typo-btn-sm hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                    {actionLoading ? 'Releasing...' : 'Wrong Batch? Release'}
                   </button>
                 </div>
               )}

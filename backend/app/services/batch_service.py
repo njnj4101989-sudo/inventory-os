@@ -398,7 +398,7 @@ class BatchService:
 
     async def pack_batch(self, batch_id: UUID, req: BatchPack, packer_id: UUID) -> dict:
         """Supervisor confirms packed — auto-generates per-color SKUs + inventory events."""
-        batch = await self._get_or_404(batch_id)
+        batch = await self._get_or_404(batch_id, for_update=True)
         if batch.status != "packing":
             raise InvalidStateTransitionError(
                 f"Cannot pack batch in '{batch.status}' status (expected 'packing')"
@@ -784,6 +784,43 @@ class BatchService:
 
         from app.core.event_bus import event_bus
         await event_bus.emit("batch_claimed", {
+            "batch_code": batch.batch_code,
+        }, str(tailor_id))
+
+        return await self.get_batch_passport(batch_code)
+
+    async def unclaim_batch(self, batch_code: str, tailor_id: UUID) -> dict:
+        """Tailor releases a wrongly claimed batch — only if status is 'assigned'."""
+        stmt = (
+            select(Batch)
+            .where(Batch.batch_code == batch_code)
+            .options(
+                selectinload(Batch.assignments).selectinload(BatchAssignment.tailor),
+            )
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        batch = result.scalar_one_or_none()
+        if not batch:
+            raise NotFoundError(f"Batch '{batch_code}' not found")
+        if batch.status != "assigned":
+            raise InvalidStateTransitionError(
+                f"Cannot release batch in '{batch.status}' status — only 'assigned' (claimed but not started) batches can be released"
+            )
+
+        # Verify the requesting tailor is the one who claimed it
+        assignment = batch.assignments[0] if batch.assignments else None
+        if not assignment or assignment.tailor_id != tailor_id:
+            raise ForbiddenError("Only the tailor who claimed this batch can release it")
+
+        # Remove assignment and reset status
+        await self.db.delete(assignment)
+        batch.status = "created"
+        batch.assigned_at = None
+        await self.db.flush()
+
+        from app.core.event_bus import event_bus
+        await event_bus.emit("batch_unclaimed", {
             "batch_code": batch.batch_code,
         }, str(tailor_id))
 

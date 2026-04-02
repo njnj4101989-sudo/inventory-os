@@ -149,8 +149,8 @@ class InventoryService:
         self.db.add(event)
         await self.db.flush()
 
-        # Upsert inventory state
-        inv_stmt = select(InventoryState).where(InventoryState.sku_id == sku_id)
+        # Upsert inventory state (FOR UPDATE prevents concurrent stock corruption)
+        inv_stmt = select(InventoryState).where(InventoryState.sku_id == sku_id).with_for_update()
         inv_result = await self.db.execute(inv_stmt)
         state = inv_result.scalar_one_or_none()
 

@@ -283,7 +283,7 @@ Roll: 1-COT-PINK/07-01
 4. **`process_type` is REMOVED** — `value_addition_id` is the ONLY required FK on RollProcessing (Session 26)
 5. **`Batch.qr_code_data` already exists** — populate it when batch is created (Phase 3)
 6. **Mobile scan works in-browser** — `html5-qrcode` uses device camera, no app install needed
-7. **`/scan/*` routes are PUBLIC** — no auth required (workers on floor scan without logging in)
+7. **`/scan/*` routes require auth** — workers must be logged in via PWA (passport endpoints use `get_current_user`)
 
 ---
 
@@ -652,24 +652,26 @@ def upgrade():
 
 
 
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-04-02 13:57:28_
+_Last sync: 2026-04-02 22:43:11_
 ```
 {
-  "summary": "Project has 20 tracked code files (~11642 lines total).",
+  "summary": "Project has 21 tracked code files (~11824 lines total).",
   "recent_files": [
-    "BACKUP_RESTORE_GUIDE.md (153 lines)",
-    "guardian.md (673 lines)",
-    "project-context.json (17 lines)",
-    "CLAUDE.md (1082 lines)",
-    "AWS_DEPLOYMENT.md (226 lines)"
+    "MOBILE_AND_QR_PLAN.md (138 lines)",
+    "guardian.md (675 lines)",
+    ".claude\\settings.local.json (150 lines)",
+    "CLAUDE.md (1119 lines)",
+    "project-context.json (17 lines)"
   ],
   "language_breakdown": {
-    ".md": 17,
+    ".md": 18,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 11642,
-  "last_updated": "2026-04-02 13:57:28"
+  "total_lines": 11824,
+  "last_updated": "2026-04-02 22:43:11"
 }
 ```
