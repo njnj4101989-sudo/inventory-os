@@ -369,19 +369,120 @@ export default function ScanPage() {
     PACKED: 'bg-green-100 text-green-700',
   }
 
-  const pageTitle = batchCode ? 'Batch Passport' : 'Roll Passport'
+  const hasParams = rollCode || batchCode || skuCode
+  const pageTitle = batchCode ? 'Batch Passport' : skuCode ? 'SKU Passport' : 'Roll Passport'
 
+  // Bare /scan — mode picker, no top bar (rendered inside MobileLayout with its own header)
+  if (!hasParams && !showScanner) {
+    return (
+      <div className="bg-gray-50 min-h-screen">
+        <div className="max-w-lg mx-auto px-4 py-6">
+          {/* Mode picker */}
+          {!loading && !error && (
+            <div className="flex flex-col items-center justify-center py-12 gap-6">
+              <div className="text-center">
+                <h2 className="typo-section-title text-gray-900">QR Scanner</h2>
+                <p className="typo-caption mt-1">Choose scan mode</p>
+              </div>
+
+              <div className="w-full max-w-xs space-y-3">
+                {/* Passport Mode */}
+                <button
+                  onClick={() => { setGunMode(false); setShowScanner(true) }}
+                  className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-blue-300 hover:bg-blue-50/50 transition-colors active:bg-blue-50"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="typo-data text-gray-900">Passport</p>
+                    <p className="typo-caption">Scan to view item details</p>
+                  </div>
+                </button>
+
+                {/* Gun Mode */}
+                <button
+                  onClick={() => { setGunMode(true); setShowScanner(true) }}
+                  className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors active:bg-emerald-50"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                    <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                        d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="typo-data text-gray-900">Scanner Gun</p>
+                    <p className="typo-caption">Scan items to desktop form</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Camera scanner overlay */}
+        {showScanner && (
+          <CameraScanner
+            onScan={handleScan}
+            onClose={() => { setShowScanner(false); setGunMode(false) }}
+            continuous={gunMode}
+          />
+        )}
+
+        {/* Gun mode result overlay */}
+        {showScanner && gunMode && gunResult && (
+          <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
+            <div className={`mx-auto max-w-sm rounded-xl px-4 py-3 shadow-lg flex items-center gap-3 ${
+              gunResult.success ? 'bg-emerald-600' : 'bg-red-600'
+            }`}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white/20 shrink-0">
+                {gunResult.success ? (
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <p className="text-white text-sm font-semibold">{gunResult.code}</p>
+                <p className="text-white/80 text-xs">{gunResult.success ? 'Sent to desktop' : gunResult.message}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gun mode sending indicator */}
+        {showScanner && gunMode && gunSending && (
+          <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
+            <div className="mx-auto max-w-sm rounded-xl bg-gray-800 px-4 py-3 shadow-lg flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <p className="text-white text-sm">Sending...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Passport view — has params, show top bar with back button
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top bar */}
+      {/* Top bar — only for passport view */}
       <div className="bg-white border-b border-gray-200 px-3 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => {
               if (window.history.length > 1) navigate(-1)
               else {
-                const r = currentUser.role
-                navigate(r === 'tailor' ? '/my-work' : r === 'checker' ? '/qc-queue' : '/dashboard', { replace: true })
+                const r = currentUser?.role
+                navigate(r === 'tailor' ? '/my-work' : r === 'checker' ? '/qc-queue' : '/scan', { replace: true })
               }
             }}
             className="p-1.5 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 active:bg-gray-200 transition-colors"
@@ -454,52 +555,6 @@ export default function ScanPage() {
               </button>
             </div>
           )
-        )}
-
-        {/* No code — mode picker */}
-        {!loading && !error && !passport && !batchPassport && !skuPassport && (
-          <div className="flex flex-col items-center justify-center py-12 gap-6">
-            <div className="text-center">
-              <h2 className="typo-section-title text-gray-900">QR Scanner</h2>
-              <p className="typo-caption mt-1">Choose scan mode</p>
-            </div>
-
-            <div className="w-full max-w-xs space-y-3">
-              {/* Passport Mode */}
-              <button
-                onClick={() => { setGunMode(false); setShowScanner(true) }}
-                className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-blue-300 hover:bg-blue-50/50 transition-colors active:bg-blue-50"
-              >
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="typo-data text-gray-900">Passport</p>
-                  <p className="typo-caption">Scan to view item details</p>
-                </div>
-              </button>
-
-              {/* Gun Mode */}
-              <button
-                onClick={() => { setGunMode(true); setShowScanner(true) }}
-                className="w-full flex items-center gap-4 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-left hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors active:bg-emerald-50"
-              >
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-                  <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
-                      d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8H3m2 8H3m10-10V4m0 16v-2" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="typo-data text-gray-900">Scanner Gun</p>
-                  <p className="typo-caption">Scan items to desktop form</p>
-                </div>
-              </button>
-            </div>
-          </div>
         )}
 
         {/* ═══════ BATCH PASSPORT ═══════ */}
@@ -1139,42 +1194,6 @@ export default function ScanPage() {
         />
       )}
 
-      {/* Gun mode result overlay — shows on top of camera */}
-      {showScanner && gunMode && gunResult && (
-        <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
-          <div className={`mx-auto max-w-sm rounded-xl px-4 py-3 shadow-lg flex items-center gap-3 ${
-            gunResult.success ? 'bg-emerald-600' : 'bg-red-600'
-          }`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-              gunResult.success ? 'bg-white/20' : 'bg-white/20'
-            }`}>
-              {gunResult.success ? (
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              )}
-            </div>
-            <div>
-              <p className="text-white text-sm font-semibold">{gunResult.code}</p>
-              <p className="text-white/80 text-xs">{gunResult.success ? 'Sent to desktop' : gunResult.message}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Gun mode sending indicator */}
-      {showScanner && gunMode && gunSending && (
-        <div className="fixed bottom-24 left-4 right-4 z-[60] pointer-events-none">
-          <div className="mx-auto max-w-sm rounded-xl bg-gray-800 px-4 py-3 shadow-lg flex items-center gap-3">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            <p className="text-white text-sm">Sending...</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

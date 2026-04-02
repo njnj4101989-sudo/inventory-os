@@ -18,7 +18,7 @@ function DefaultRedirect() {
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (role === 'tailor') return <Navigate to="/my-work" replace />
   if (role === 'checker') return <Navigate to="/qc-queue" replace />
-  return <Navigate to={isMobile ? '/scan' : '/dashboard'} replace />
+  return <Navigate to={isMobile ? '/activity' : '/dashboard'} replace />
 }
 
 const MOBILE_ROLES = ['tailor', 'checker']
