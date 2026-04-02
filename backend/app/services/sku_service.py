@@ -18,9 +18,10 @@ from app.models.inventory_state import InventoryState
 from app.models.inventory_event import InventoryEvent
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
+from app.models.shipment_item import ShipmentItem
 from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest, SKUOpeningStockRequest, SKUFilterParams
 from app.schemas import PaginatedParams
-from app.core.exceptions import DuplicateError, NotFoundError
+from app.core.exceptions import AppException, DuplicateError, NotFoundError
 
 
 class SKUService:
@@ -110,6 +111,13 @@ class SKUService:
         pipeline_map = await self._compute_pipeline_map()
         resp = self._to_response(sku, inv, pipeline_map.get(sku.sku_code, 0))
         resp["source_batches"] = [self._batch_brief(b) for b in batches]
+
+        # Check if identity fields (color/size) are editable — blocked if shipped
+        shipped_count = await self.db.scalar(
+            select(func.count(ShipmentItem.id)).where(ShipmentItem.sku_id == sku_id)
+        )
+        resp["is_identity_editable"] = (shipped_count or 0) == 0
+
         return resp
 
     async def get_cost_history(self, sku_id: UUID) -> dict:
@@ -206,8 +214,39 @@ class SKUService:
         sku = await self._get_or_404(sku_id)
 
         update_data = req.model_dump(exclude_unset=True)
+        identity_fields = {'color', 'color_id', 'size', 'design_id'}
+        has_identity_change = bool(identity_fields & update_data.keys())
+
+        # Guard: block identity edits if SKU has shipped/invoiced orders
+        if has_identity_change:
+            shipped_count = await self.db.scalar(
+                select(func.count(ShipmentItem.id)).where(ShipmentItem.sku_id == sku_id)
+            )
+            if shipped_count and shipped_count > 0:
+                raise AppException(
+                    status_code=409,
+                    detail="Cannot edit color/size — this SKU has shipped orders. Create a new SKU instead.",
+                )
+
         for field, value in update_data.items():
             setattr(sku, field, value)
+
+        # Regenerate sku_code if identity fields changed
+        if has_identity_change:
+            color = sku.color
+            size = sku.size
+            # Parse current sku_code to get type-design prefix
+            parts = sku.sku_code.split('-')
+            if len(parts) >= 2:
+                prefix = f"{parts[0]}-{parts[1]}"
+                new_code = f"{prefix}-{color}-{size}"
+                # Duplicate check
+                existing = await self.db.scalar(
+                    select(SKU.id).where(SKU.sku_code == new_code, SKU.id != sku_id)
+                )
+                if existing:
+                    raise DuplicateError(f"SKU '{new_code}' already exists")
+                sku.sku_code = new_code
 
         await self.db.flush()
 

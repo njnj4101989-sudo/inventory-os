@@ -37,10 +37,13 @@ export function colorHex(name) {
   // Exact match from master
   if (_map?.[lower]) return _map[lower]
 
-  // Partial match (e.g., "Light Green" matches "green")
+  // Normalize — strip spaces/dots/hyphens for fuzzy match
+  const norm = lower.replace(/[\s.\-_]/g, '')
   if (_map) {
     for (const [key, hex] of Object.entries(_map)) {
-      if (lower.includes(key) || key.includes(lower)) return hex
+      const normKey = key.replace(/[\s.\-_]/g, '')
+      if (norm === normKey) return hex
+      if (norm.includes(normKey) || normKey.includes(norm)) return hex
     }
   }
 

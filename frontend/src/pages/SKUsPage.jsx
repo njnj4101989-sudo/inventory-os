@@ -303,6 +303,7 @@ export default function SKUsPage() {
       const sku = skuRes.data.data || skuRes.data
       setDetailSKU(sku)
       setEditFields({
+        color: sku.color || '', color_id: sku.color_id || '', size: sku.size || '',
         base_price: sku.base_price ?? '', description: sku.description || '',
         hsn_code: sku.hsn_code || '', gst_percent: sku.gst_percent ?? '',
         mrp: sku.mrp ?? '', sale_rate: sku.sale_rate ?? '', unit: sku.unit || '',
@@ -328,6 +329,12 @@ export default function SKUsPage() {
         stitching_cost: editFields.stitching_cost !== '' ? parseFloat(editFields.stitching_cost) : null,
         other_cost: editFields.other_cost !== '' ? parseFloat(editFields.other_cost) : null,
         unit: editFields.unit || null,
+      }
+      // Include identity fields only if changed
+      if (detailSKU.is_identity_editable) {
+        if (editFields.color && editFields.color !== detailSKU.color) payload.color = editFields.color
+        if (editFields.color_id && editFields.color_id !== detailSKU.color_id) payload.color_id = editFields.color_id
+        if (editFields.size && editFields.size !== detailSKU.size) payload.size = editFields.size
       }
       const res = await updateSKU(detailSKU.id, payload)
       setDetailSKU(prev => ({ ...prev, ...(res.data.data || res.data) }))
@@ -885,6 +892,50 @@ export default function SKUsPage() {
                 <div className="typo-kpi-label mt-0.5">{k.label}</div>
               </div>
             ))}
+          </div>
+
+          {/* Identity editor — color, size (guarded by shipped status) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="typo-card-title">SKU Identity</h3>
+              {!detailSKU.is_identity_editable && (
+                <span className="typo-badge bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg">
+                  Locked — shipped orders exist
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="typo-label-sm">Color</label>
+                {detailSKU.is_identity_editable ? (
+                  <FilterSelect full searchable value={editFields.color_id}
+                    onChange={v => {
+                      const sel = colors.find(c => c.id === v)
+                      setEditFields(p => ({ ...p, color_id: v, color: sel?.name || p.color }))
+                    }}
+                    options={[{ value: '', label: 'Select color...' }, ...colors.map(c => ({ value: c.id, label: c.name }))]} />
+                ) : (
+                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.color}</div>
+                )}
+              </div>
+              <div>
+                <label className="typo-label-sm">Size</label>
+                {detailSKU.is_identity_editable ? (
+                  <FilterSelect full value={editFields.size}
+                    onChange={v => setEditFields(p => ({ ...p, size: v }))}
+                    options={[{ value: '', label: 'Select size...' }, ...['XS','S','M','L','XL','XXL','3XL','4XL','Free'].map(s => ({ value: s, label: s }))]} />
+                ) : (
+                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
+                )}
+              </div>
+              <div className="sm:col-span-2">
+                <label className="typo-label-sm">SKU Code</label>
+                <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
+                {detailSKU.is_identity_editable && (editFields.color !== detailSKU.color || editFields.size !== detailSKU.size) && (
+                  <p className="text-xs text-emerald-600 mt-1">Will update to: {parsed.type}-{parsed.design}-{editFields.color}-{editFields.size}</p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Pricing editor */}

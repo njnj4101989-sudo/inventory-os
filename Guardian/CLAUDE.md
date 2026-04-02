@@ -33,7 +33,44 @@
 
 ---
 
-## Current State (Session 101 — 2026-04-02)
+## Current State (Session 102 — 2026-04-02)
+
+### S102: QR Scan on Order Form + Mobile-First UI
+
+**S102 In Progress. 0 new models. 0 migrations. 45 models total.**
+
+**Completed:**
+- **QR Scan on OrdersPage:** Added `CameraScanner` + `handleScanResult` to order create form. Scan QR button next to Add Row. Scans SKU QR → auto-adds line item (or increments qty if already in order). Falls back to `getSKUByCode()` API if SKU not in local list. ESC guard added. Build clean.
+
+**Mobile-First UI Checklist (S102+):**
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | Responsive Sidebar — hamburger + slide-out drawer on mobile (`< md`) | ⬜ |
+| 2 | Mobile top bar — sticky header with hamburger, logo, bell (admin roles) | ⬜ |
+| 3 | DataTable mobile card view — stacked cards below `md` breakpoint | ⬜ |
+| 4 | OrdersPage list — mobile cards, KPI 2-col stack, scrollable tabs | ⬜ |
+| 5 | OrdersPage create/edit — card-based line items, scan QR prominent | ⬜ |
+| 6 | OrdersPage detail — items as cards, shipments stack, buttons full-width | ⬜ |
+| 7 | ReturnsPage list — mobile cards for supplier + sales tabs | ⬜ |
+| 8 | ReturnsPage create forms — card-based line items + scan for both types | ⬜ |
+| 9 | ReturnsPage detail — cards, timeline vertical, buttons stacked | ⬜ |
+| 10 | Touch polish + viewport test — 44px tap targets, safe area, overflow check | ⬜ |
+
+**Architecture decisions:**
+- NO new routes, NO new layouts, NO role changes — same pages respond to screen width
+- Breakpoint: `md` (768px) — below = mobile card view, above = desktop table
+- Sidebar: auto-hide below md, hamburger slide-out drawer with backdrop
+- Line items: table on desktop, stacked cards on mobile
+- DataTable: reusable `mobileRender` prop pattern — each page defines its own card layout
+
+**Files to modify:** Layout.jsx, Sidebar.jsx, DataTable.jsx, OrdersPage.jsx, ReturnsPage.jsx
+
+**NEXT:** Start Task 1 (Responsive Sidebar)
+
+---
+
+## Previous State (Session 101 — 2026-04-02)
 
 ### S101: Production Bug Fixes + SKU Page Grouped Accordion
 

@@ -60,6 +60,12 @@ class SKUCreate(BaseModel):
 
 
 class SKUUpdate(BaseModel):
+    # Identity fields — guarded: only editable if no shipped orders
+    color: str | None = None
+    color_id: UUID | None = None
+    size: str | None = None
+    design_id: UUID | None = None
+    # Price/meta fields — always editable
     product_name: str | None = None
     description: str | None = None
     base_price: Decimal | None = None

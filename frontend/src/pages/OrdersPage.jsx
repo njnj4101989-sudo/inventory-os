@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, updateOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
-import { getSKUs } from '../api/skus'
+import { getSKUs, getSKUByCode } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
 import { getAllTransports } from '../api/transports'
@@ -12,6 +12,7 @@ import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
+import CameraScanner from '../components/common/CameraScanner'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
@@ -182,6 +183,7 @@ export default function OrdersPage() {
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
   const [editMode, setEditMode] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState(null)
+  const [showScanner, setShowScanner] = useState(false)
 
   // Quick master for customer Shift+M
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
@@ -239,6 +241,73 @@ export default function OrdersPage() {
     setOrderLines(prev => prev.filter((_, i) => i !== idx))
   }, [])
 
+  /* ── QR Scan → add/increment SKU line ── */
+  const handleScanResult = useCallback((rawValue) => {
+    setShowScanner(false)
+    // Extract sku_code from QR URL or raw code
+    const skuMatch = rawValue.match(/\/scan\/sku\/([^/?\s]+)/)
+    const code = skuMatch ? decodeURIComponent(skuMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    // Find SKU in already-loaded allSKUs list
+    const parsed = parseSKU(code)
+    const foundSku = allSKUs.find(s => s.sku_code === code)
+
+    if (foundSku) {
+      setOrderLines(prev => {
+        // If this SKU already exists in lines, increment qty
+        const existingIdx = prev.findIndex(l => l.sku_id === foundSku.id)
+        if (existingIdx !== -1) {
+          return prev.map((l, i) => i === existingIdx ? { ...l, qty: l.qty + 1 } : l)
+        }
+        // Add as new line — fill first empty row or append
+        const emptyIdx = prev.findIndex(l => !l.sku_id && !l.design_key)
+        const newLine = {
+          design_key: `${parsed.type}-${parsed.design}`,
+          color: parsed.color,
+          size: parsed.size,
+          sku_id: foundSku.id,
+          qty: 1,
+          price: foundSku.base_price || foundSku.sale_rate || 0,
+          item_id: null,
+        }
+        if (emptyIdx !== -1) {
+          return prev.map((l, i) => i === emptyIdx ? newLine : l)
+        }
+        return [...prev, newLine]
+      })
+    } else {
+      // SKU not in local list — try API lookup
+      getSKUByCode(code).then(res => {
+        const sku = res.data?.data
+        if (!sku) {
+          setFormError(`SKU not found: ${code}`)
+          return
+        }
+        const p = parseSKU(sku.sku_code)
+        setAllSKUs(prev => [...prev, sku])
+        setOrderLines(prev => {
+          const emptyIdx = prev.findIndex(l => !l.sku_id && !l.design_key)
+          const newLine = {
+            design_key: `${p.type}-${p.design}`,
+            color: p.color,
+            size: p.size,
+            sku_id: sku.id,
+            qty: 1,
+            price: sku.base_price || sku.sale_rate || 0,
+            item_id: null,
+          }
+          if (emptyIdx !== -1) {
+            return prev.map((l, i) => i === emptyIdx ? newLine : l)
+          }
+          return [...prev, newLine]
+        })
+      }).catch(() => {
+        setFormError(`SKU not found: ${code}`)
+      })
+    }
+  }, [allSKUs])
+
   /* ── Global keyboard: Ctrl+S, Escape ── */
   useEffect(() => {
     if (!createMode) return
@@ -248,7 +317,7 @@ export default function OrdersPage() {
         handleCreate()
       }
       if (e.key === 'Escape') {
-        if (quickMasterOpen || shipModalOpen) return
+        if (quickMasterOpen || shipModalOpen || showScanner) return
         e.preventDefault()
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()
@@ -256,7 +325,7 @@ export default function OrdersPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, showScanner])
 
   /* ── Auto-focus Customer field on overlay open ── */
   useEffect(() => {
@@ -1257,10 +1326,16 @@ export default function OrdersPage() {
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({orderLines.filter(l => l.sku_id).length} items)</span>
-                  <button onClick={addOrderLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    Add Row
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowScanner(true)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-3 py-1.5 typo-btn-sm text-emerald-700 hover:bg-emerald-50 shadow-sm transition-colors">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                      Scan QR
+                    </button>
+                    <button onClick={addOrderLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      Add Row
+                    </button>
+                  </div>
                 </div>
                 <table className="w-full table-fixed">
                   <thead>
@@ -1422,6 +1497,12 @@ export default function OrdersPage() {
           </div>
         </div>
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+        {showScanner && (
+          <CameraScanner
+            onScan={handleScanResult}
+            onClose={() => setShowScanner(false)}
+          />
+        )}
       </div>
     )
   }
