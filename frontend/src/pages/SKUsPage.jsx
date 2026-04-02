@@ -898,10 +898,15 @@ export default function SKUsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="typo-card-title">SKU Identity</h3>
-              {!detailSKU.is_identity_editable && (
+              {!detailSKU.is_identity_editable ? (
                 <span className="typo-badge bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg">
                   Locked — shipped orders exist
                 </span>
+              ) : (
+                <button onClick={handleSaveDetail} disabled={savingDetail}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                  {savingDetail ? 'Saving...' : 'Save Changes'}
+                </button>
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
