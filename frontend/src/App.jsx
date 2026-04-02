@@ -23,6 +23,7 @@ function DefaultRedirect() {
 
 const MOBILE_ROLES = ['tailor', 'checker']
 const MOBILE_ONLY_PATHS = ['my-work', 'qc-queue']
+const ADMIN_MOBILE_PATHS = ['activity', 'profile']
 
 function App() {
   const isMobile = useIsMobile()
@@ -67,28 +68,55 @@ function App() {
             ))}
         </Route>
 
-        {/* Admin/Supervisor/Billing — MobileLayout on phone, desktop Layout on >=768px */}
-        <Route
-          element={
-            <ProtectedRoute>
-              {isMobile ? <MobileLayout /> : <Layout />}
-            </ProtectedRoute>
-          }
-        >
-          {routes
-            .filter((r) => !MOBILE_ONLY_PATHS.includes(r.path))
-            .map((route) => (
-              <Route
-                key={route.path}
-                path={route.path}
-                element={
-                  <ProtectedRoute requiredRoles={route.requiredRoles}>
-                    <route.element />
-                  </ProtectedRoute>
-                }
-              />
-            ))}
-        </Route>
+        {/* Admin/Supervisor/Billing on MOBILE — only scan-friendly pages */}
+        {isMobile && (
+          <Route
+            element={
+              <ProtectedRoute>
+                <MobileLayout />
+              </ProtectedRoute>
+            }
+          >
+            {routes
+              .filter((r) => ADMIN_MOBILE_PATHS.includes(r.path))
+              .map((route) => (
+                <Route
+                  key={route.path}
+                  path={route.path}
+                  element={
+                    <ProtectedRoute requiredRoles={route.requiredRoles}>
+                      <route.element />
+                    </ProtectedRoute>
+                  }
+                />
+              ))}
+          </Route>
+        )}
+
+        {/* Admin/Supervisor/Billing on DESKTOP — full sidebar layout */}
+        {!isMobile && (
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            {routes
+              .filter((r) => !MOBILE_ONLY_PATHS.includes(r.path))
+              .map((route) => (
+                <Route
+                  key={route.path}
+                  path={route.path}
+                  element={
+                    <ProtectedRoute requiredRoles={route.requiredRoles}>
+                      <route.element />
+                    </ProtectedRoute>
+                  }
+                />
+              ))}
+          </Route>
+        )}
 
         {/* Fallback — role + viewport aware */}
         <Route path="*" element={<DefaultRedirect />} />
