@@ -23,7 +23,7 @@ function DefaultRedirect() {
 
 const MOBILE_ROLES = ['tailor', 'checker']
 const MOBILE_ONLY_PATHS = ['my-work', 'qc-queue']
-const ADMIN_MOBILE_PATHS = ['activity', 'profile']
+const ADMIN_MOBILE_PATHS = ['activity']
 
 function App() {
   const isMobile = useIsMobile()
@@ -54,7 +54,30 @@ function App() {
           }
         >
           {routes
-            .filter((r) => [...MOBILE_ONLY_PATHS, 'profile'].includes(r.path))
+            .filter((r) => MOBILE_ONLY_PATHS.includes(r.path))
+            .map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={
+                  <ProtectedRoute requiredRoles={route.requiredRoles}>
+                    <route.element />
+                  </ProtectedRoute>
+                }
+              />
+            ))}
+        </Route>
+
+        {/* Profile — shared by all roles, always MobileLayout */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <MobileLayout />
+            </ProtectedRoute>
+          }
+        >
+          {routes
+            .filter((r) => r.path === 'profile')
             .map((route) => (
               <Route
                 key={route.path}
