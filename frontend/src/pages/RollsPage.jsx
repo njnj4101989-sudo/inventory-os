@@ -513,10 +513,11 @@ export default function RollsPage() {
   const [showJobChallan, setShowJobChallan] = useState(false)
   const [jobChallanData, setJobChallanData] = useState(null)
 
-  // Opening stock modal
+  // Opening stock — grouped entry (mirrors stock-in structure)
   const [openingRollOpen, setOpeningRollOpen] = useState(false)
-  const EMPTY_OPENING_ROW = { fabric_type: '', color: '', total_weight: '', cost_per_unit: '', color_id: '', fabric_code: '', color_code: '', color_no: '', at_va: false, va_party_id: '', value_addition_id: '', sent_date: '', weight_sent: '' }
-  const [openingRollRows, setOpeningRollRows] = useState([{ ...EMPTY_OPENING_ROW }])
+  const EMPTY_OPENING_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', at_va: false, va_party_id: '', value_addition_id: '', sent_date: '', colorRows: [{ color: '', weights: [''] }] }
+  const [openingGroups, setOpeningGroups] = useState([{ ...EMPTY_OPENING_GROUP, colorRows: [{ color: '', weights: [''] }] }])
+  const [pendingOpeningDeleteRow, setPendingOpeningDeleteRow] = useState(null)
   const [openingRollSaving, setOpeningRollSaving] = useState(false)
   const [openingRollError, setOpeningRollError] = useState(null)
 
@@ -573,34 +574,39 @@ export default function RollsPage() {
 
   const handleQuickMasterCreated = useCallback((masterType, newItem, triggerEl) => {
     refreshMasters()
-    // Auto-select the new item in the triggering select
-    if (triggerEl && triggerEl.tagName === 'SELECT') {
-      const selectName = triggerEl.getAttribute('data-master')
-      setTimeout(() => {
-        if (selectName === 'supplier' && newItem?.id) {
-          setHeader('supplier_id', newItem.id)
-        } else if (selectName === 'fabric' && newItem?.name) {
-          // Find which design group this select belongs to
-          const gIdx = triggerEl.closest('[data-design-group]')?.getAttribute('data-design-group')
-          if (gIdx != null) setGroupField(parseInt(gIdx), 'fabric_type', newItem.name)
-        } else if (selectName === 'color' && newItem?.name) {
-          // Find group + color row
-          const gIdx = triggerEl.closest('[data-design-group]')?.getAttribute('data-design-group')
-          const cIdx = triggerEl.getAttribute('data-color-idx')
-          if (gIdx != null && cIdx != null) {
-            updateGroup(parseInt(gIdx), (g) => ({
-              ...g, colorRows: g.colorRows.map((r, j) => j === parseInt(cIdx) ? { ...r, color: newItem.name } : r),
-            }))
-          }
-        } else if (selectName === 'value_addition' && newItem?.id) {
-          if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
-          else if (editProcOpen) setEditProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
-        } else if (selectName === 'va_party' && newItem?.id) {
-          if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, va_party_id: newItem.id }))
-          else if (editProcOpen) setEditProcForm((f) => ({ ...f, va_party_id: newItem.id }))
+    // Auto-select the new item in the triggering element (SELECT, INPUT, or BUTTON from FilterSelect)
+    if (!triggerEl) return
+    const selectName = triggerEl.getAttribute('data-master')
+    if (!selectName) return
+    setTimeout(() => {
+      // Stock-in form (data-design-group)
+      const stockInGroup = triggerEl.closest('[data-design-group]')
+      // Opening stock form (data-opening-group)
+      const openingGroup = triggerEl.closest('[data-opening-group]')
+
+      if (selectName === 'supplier' && newItem?.id) {
+        setHeader('supplier_id', newItem.id)
+      } else if (selectName === 'fabric' && newItem?.name) {
+        if (stockInGroup) setGroupField(parseInt(stockInGroup.getAttribute('data-design-group')), 'fabric_type', newItem.name)
+        else if (openingGroup) setOpeningGroupField(parseInt(openingGroup.getAttribute('data-opening-group')), 'fabric_type', newItem.name)
+      } else if (selectName === 'color' && newItem?.name) {
+        const cIdx = triggerEl.getAttribute('data-color-idx')
+        if (stockInGroup && cIdx != null) {
+          updateGroup(parseInt(stockInGroup.getAttribute('data-design-group')), (g) => ({
+            ...g, colorRows: g.colorRows.map((r, j) => j === parseInt(cIdx) ? { ...r, color: newItem.name } : r),
+          }))
         }
-      }, 200) // Wait for master list refresh
-    }
+        // Opening stock color auto-select not needed — FilterSelect refreshes options from masters
+      } else if (selectName === 'value_addition' && newItem?.id) {
+        if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, value_addition_id: newItem.id }))
+        else if (editProcOpen) setEditProcForm((f) => ({ ...f, value_addition_id: newItem.id }))
+        else if (openingGroup) updateOpeningGroup(parseInt(openingGroup.getAttribute('data-opening-group')), (g) => ({ ...g, value_addition_id: newItem.id }))
+      } else if (selectName === 'va_party' && newItem?.id) {
+        if (bulkSendOpen) setBulkSendForm((f) => ({ ...f, va_party_id: newItem.id }))
+        else if (editProcOpen) setEditProcForm((f) => ({ ...f, va_party_id: newItem.id }))
+        else if (openingGroup) updateOpeningGroup(parseInt(openingGroup.getAttribute('data-opening-group')), (g) => ({ ...g, va_party_id: newItem.id }))
+      }
+    }, 200) // Wait for master list refresh
   }, [refreshMasters, bulkSendOpen, editProcOpen])
 
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(handleQuickMasterCreated)
@@ -1057,22 +1063,24 @@ export default function RollsPage() {
     }
   }
 
-  // ── Ctrl+S to save stock-in form ──
+  // ── Ctrl+S to save stock-in or opening stock form ──
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && stockInOpen && !saving) {
-        e.preventDefault()
-        // Blur active input first so its onChange fires and state is committed
-        if (document.activeElement && document.activeElement.tagName !== 'BODY') {
-          document.activeElement.blur()
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        if (stockInOpen && !saving) {
+          e.preventDefault()
+          if (document.activeElement && document.activeElement.tagName !== 'BODY') document.activeElement.blur()
+          setTimeout(() => handleStockIn(), 50)
+        } else if (openingRollOpen && !openingRollSaving) {
+          e.preventDefault()
+          if (document.activeElement && document.activeElement.tagName !== 'BODY') document.activeElement.blur()
+          setTimeout(() => handleSubmitOpeningRolls(), 50)
         }
-        // Let React process the blur/onChange before saving
-        setTimeout(() => handleStockIn(), 50)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [stockInOpen, saving, designGroups, invoiceHeader, editingInvoice])
+  }, [stockInOpen, saving, designGroups, invoiceHeader, editingInvoice, openingRollOpen, openingRollSaving, openingGroups])
 
   // ── Auto-focus supplier field when stock-in overlay opens ──
   useEffect(() => {
@@ -1479,66 +1487,144 @@ export default function RollsPage() {
     return base
   })()
 
-  // ── Opening Roll Stock handlers ──
-  const handleOpeningRollRowChange = (idx, field, value) => {
-    setOpeningRollRows(prev => prev.map((r, i) => {
-      if (i !== idx) return r
-      const updated = { ...r, [field]: value }
-      // Auto-resolve fabric/color codes from masters
-      if (field === 'fabric_type') {
-        const fab = masterFabrics.find(f => f.name === value)
-        if (fab) updated.fabric_code = fab.code
-      }
-      if (field === 'color') {
-        const col = masterColors.find(c => c.name === value)
-        if (col) { updated.color_code = col.code; updated.color_id = col.id; updated.color_no = col.color_no }
-      }
-      return updated
+  // ── Opening Roll Stock helpers (grouped entry — mirrors stock-in structure) ──
+  const updateOpeningGroup = (gIdx, updater) => setOpeningGroups((gs) => gs.map((g, i) => i === gIdx ? updater(g) : g))
+  const setOpeningGroupField = (gIdx, k, v) => {
+    updateOpeningGroup(gIdx, (g) => ({ ...g, [k]: v }))
+    if (k === 'fabric_type' && v.trim()) {
+      getRolls({ fabric_type: v, page_size: 1 }).then((res) => {
+        const roll = res.data?.data?.[0]
+        if (roll) {
+          updateOpeningGroup(gIdx, (g) => ({
+            ...g,
+            panna: !g.panna && roll.panna != null ? String(roll.panna) : g.panna,
+            gsm: !g.gsm && roll.gsm != null ? String(roll.gsm) : g.gsm,
+            cost_per_unit: !g.cost_per_unit && roll.cost_per_unit != null ? String(roll.cost_per_unit) : g.cost_per_unit,
+            unit: roll.unit || g.unit,
+          }))
+        }
+      }).catch(() => {})
+    }
+  }
+  const addOpeningGroup = () => setOpeningGroups((gs) => [...gs, { ...EMPTY_OPENING_GROUP, colorRows: [{ color: '', weights: [''] }] }])
+  const removeOpeningGroup = (gIdx) => { if (openingGroups.length > 1) setOpeningGroups((gs) => gs.filter((_, i) => i !== gIdx)) }
+
+  const setOpeningColorName = (gIdx, cIdx, v) => updateOpeningGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, color: v } : r),
+  }))
+  const setOpeningWeight = (gIdx, cIdx, wIdx, v) => updateOpeningGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: r.weights.map((w, k) => k === wIdx ? v : w) } : r),
+  }))
+  const addOpeningWeight = (gIdx, cIdx) => updateOpeningGroup(gIdx, (g) => ({
+    ...g, colorRows: g.colorRows.map((r, j) => j === cIdx ? { ...r, weights: [...r.weights, ''] } : r),
+  }))
+  const removeOpeningWeight = (gIdx, cIdx, wIdx) => {
+    updateOpeningGroup(gIdx, (g) => {
+      const r = g.colorRows[cIdx]
+      if (!r) return g
+      return { ...g, colorRows: g.colorRows.map((row, j) => j === cIdx ? { ...row, weights: row.weights.length > 1 ? row.weights.filter((_, k) => k !== wIdx) : row.weights } : row) }
+    })
+  }
+  const addOpeningColorRow = (gIdx) => updateOpeningGroup(gIdx, (g) => ({
+    ...g, colorRows: [...g.colorRows, { color: '', weights: [''] }],
+  }))
+  const removeOpeningColorRow = (gIdx, cIdx) => {
+    updateOpeningGroup(gIdx, (g) => ({
+      ...g, colorRows: g.colorRows.length > 1 ? g.colorRows.filter((_, j) => j !== cIdx) : g.colorRows,
     }))
   }
+  const trimOpeningEmptyWeight = (gIdx, cIdx, wIdx) => updateOpeningGroup(gIdx, (g) => {
+    const r = g.colorRows[cIdx]
+    if (!r || r.weights.length <= 1) return g
+    return { ...g, colorRows: g.colorRows.map((row, j) => j === cIdx ? { ...row, weights: row.weights.filter((_, k) => k !== wIdx) } : row) }
+  })
 
-  const handleAddOpeningRollRow = () => {
-    setOpeningRollRows(prev => [...prev, { ...EMPTY_OPENING_ROW }])
-  }
-
-  const handleRemoveOpeningRollRow = (idx) => {
-    setOpeningRollRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
-  }
-
-  const handleSubmitOpeningRolls = async () => {
-    const validRows = openingRollRows.filter(r => r.fabric_type && r.color && r.total_weight)
-    if (validRows.length === 0) { setOpeningRollError('Add at least one roll with fabric, color, and weight'); return }
-    // Validate VA rows
-    for (let i = 0; i < validRows.length; i++) {
-      const r = validRows[i]
-      if (r.at_va) {
-        if (!r.va_party_id) { setOpeningRollError(`Row ${i + 1}: Select a VA Party for rolls at VA vendor`); return }
-        if (!r.value_addition_id) { setOpeningRollError(`Row ${i + 1}: Select a Value Addition type for rolls at VA vendor`); return }
-        if (!r.sent_date) { setOpeningRollError(`Row ${i + 1}: Enter the date when roll was sent to VA vendor`); return }
+  // ── Opening stock computed totals ──
+  const openingTotals = (() => {
+    let count = 0, totalWeight = 0, totalValue = 0, vaCount = 0
+    const colorSet = new Set()
+    let designs = 0
+    for (const grp of openingGroups) {
+      if (grp.fabric_type) designs++
+      const rate = parseFloat(grp.cost_per_unit) || 0
+      for (const row of grp.colorRows) {
+        if (row.color) colorSet.add(row.color)
+        for (const w of row.weights) {
+          const wt = parseFloat(w)
+          if (wt > 0) {
+            count++
+            totalWeight += wt
+            totalValue += wt * rate
+            if (grp.at_va) vaCount++
+          }
+        }
       }
     }
+    return { count, totalWeight, totalValue, colors: colorSet.size, designs, vaCount }
+  })()
+
+  // ── Opening stock validation ──
+  const validateOpeningStock = () => {
+    for (let g = 0; g < openingGroups.length; g++) {
+      const grp = openingGroups[g]
+      const label = `Group ${g + 1}${grp.fabric_type ? ` (${grp.fabric_type})` : ''}`
+      if (!grp.fabric_type?.trim()) return `${label}: Fabric is required`
+      if (grp.at_va) {
+        if (!grp.va_party_id) return `${label}: VA Party is required when "At VA" is checked`
+        if (!grp.value_addition_id) return `${label}: Value Addition type is required when "At VA" is checked`
+        if (!grp.sent_date) return `${label}: Sent date is required when "At VA" is checked`
+      }
+      for (let c = 0; c < grp.colorRows.length; c++) {
+        const row = grp.colorRows[c]
+        const hasWeights = row.weights.some(w => parseFloat(w) > 0)
+        if (hasWeights && !row.color?.trim()) return `${label}, Row ${c + 1}: Color is required when weights are entered`
+        if (row.color?.trim() && !hasWeights) return `${label}, ${row.color}: Enter at least one weight`
+      }
+    }
+    return null
+  }
+
+  // ── Opening stock submission ──
+  const handleSubmitOpeningRolls = async () => {
+    const err = validateOpeningStock()
+    if (err) { setOpeningRollError(err); return }
+    // Flatten groups → colors → weights into flat rolls array
+    const flatRolls = []
+    for (const grp of openingGroups) {
+      const fabricMatch = masterFabrics.find(f => f.name === grp.fabric_type)
+      for (const row of grp.colorRows) {
+        const colorMatch = masterColors.find(c => c.name === row.color)
+        for (const w of row.weights) {
+          const wt = parseFloat(w)
+          if (!(wt > 0) || !row.color?.trim()) continue
+          flatRolls.push({
+            fabric_type: grp.fabric_type.trim(),
+            color: row.color.trim(),
+            color_id: colorMatch?.id || undefined,
+            total_weight: wt,
+            unit: grp.unit,
+            cost_per_unit: grp.cost_per_unit ? parseFloat(grp.cost_per_unit) : undefined,
+            panna: grp.panna ? parseFloat(grp.panna) : undefined,
+            gsm: grp.gsm ? parseFloat(grp.gsm) : undefined,
+            notes: grp.notes || undefined,
+            fabric_code: fabricMatch?.code || undefined,
+            color_code: colorMatch?.code || undefined,
+            color_no: colorMatch?.color_no || undefined,
+            at_va: grp.at_va || false,
+            va_party_id: grp.at_va ? grp.va_party_id : undefined,
+            value_addition_id: grp.at_va ? grp.value_addition_id : undefined,
+            sent_date: grp.at_va ? grp.sent_date : undefined,
+          })
+        }
+      }
+    }
+    if (flatRolls.length === 0) { setOpeningRollError('Add at least one roll with fabric, color, and weight'); return }
     setOpeningRollSaving(true)
     setOpeningRollError(null)
     try {
-      const res = await createOpeningRollStock({
-        rolls: validRows.map(r => ({
-          fabric_type: r.fabric_type,
-          color: r.color,
-          color_id: r.color_id || undefined,
-          total_weight: parseFloat(r.total_weight),
-          cost_per_unit: r.cost_per_unit ? parseFloat(r.cost_per_unit) : undefined,
-          fabric_code: r.fabric_code || undefined,
-          color_code: r.color_code || undefined,
-          color_no: r.color_no || undefined,
-          at_va: r.at_va || false,
-          va_party_id: r.at_va ? r.va_party_id : undefined,
-          value_addition_id: r.at_va ? r.value_addition_id : undefined,
-          sent_date: r.at_va ? r.sent_date : undefined,
-          weight_sent: r.at_va && r.weight_sent ? parseFloat(r.weight_sent) : undefined,
-        })),
-      })
+      const res = await createOpeningRollStock({ rolls: flatRolls })
       setOpeningRollOpen(false)
-      setOpeningRollRows([{ ...EMPTY_OPENING_ROW }])
+      setOpeningGroups([{ ...EMPTY_OPENING_GROUP, colorRows: [{ color: '', weights: [''] }] }])
       setError(null)
       alert(res.data.message)
       fetchRolls()
@@ -1590,7 +1676,7 @@ export default function RollsPage() {
               Print Labels ({lastSavedRolls.length})
             </button>
           )}
-          <button onClick={() => { setOpeningRollError(null); setOpeningRollOpen(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
+          <button onClick={() => { setOpeningRollError(null); setOpeningGroups([{ ...EMPTY_OPENING_GROUP, colorRows: [{ color: '', weights: [''] }] }]); setOpeningRollOpen(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
             Opening Stock
           </button>
@@ -3702,139 +3788,312 @@ export default function RollsPage() {
       {/* Shift+M Quick Master Create */}
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
 
-      {/* Opening Roll Stock Modal */}
-      <Modal
-        open={openingRollOpen}
-        onClose={() => setOpeningRollOpen(false)}
-        title=""
-        extraWide
-        actions={
-          <>
-            <button onClick={() => setOpeningRollOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSubmitOpeningRolls} disabled={openingRollSaving}
-              className="rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-              {openingRollSaving ? 'Saving...' : `Add ${openingRollRows.filter(r => r.fabric_type && r.color && r.total_weight).length} Opening Rolls`}
-            </button>
-          </>
-        }
-      >
-        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4">
-          <h2 className="text-lg font-bold text-white">Opening Roll Stock</h2>
-          <p className="text-sm text-amber-100 mt-0.5">Enter existing fabric rolls in godown — no supplier invoice needed</p>
-        </div>
-
-        {openingRollError && <div className="mb-4"><ErrorAlert message={openingRollError} onDismiss={() => setOpeningRollError(null)} /></div>}
-
-        <div className="space-y-3">
-          {openingRollRows.map((row, idx) => (
-            <div key={idx} className="rounded-lg border border-gray-200 p-3 bg-white">
-              {/* Main row: Fabric, Color, Weight, Rate, Remove */}
-              <div className="grid grid-cols-[1fr_1fr_100px_100px_40px] gap-3 items-center">
-                <FilterSelect
-                  full searchable
-                  value={row.fabric_type}
-                  onChange={(v) => handleOpeningRollRowChange(idx, 'fabric_type', v)}
-                  options={[{ value: '', label: 'Fabric...' }, ...masterFabrics.map(f => ({ value: f.name, label: f.name }))]}
-                />
-                <FilterSelect
-                  full searchable
-                  value={row.color}
-                  onChange={(v) => handleOpeningRollRowChange(idx, 'color', v)}
-                  options={[{ value: '', label: 'Color...' }, ...masterColors.map(c => ({ value: c.name, label: c.name }))]}
-                />
-                <input
-                  type="number" min="0.001" step="0.001"
-                  value={row.total_weight}
-                  onChange={(e) => handleOpeningRollRowChange(idx, 'total_weight', e.target.value)}
-                  className="typo-input" placeholder="kg"
-                />
-                <input
-                  type="number" min="0" step="0.01"
-                  value={row.cost_per_unit}
-                  onChange={(e) => handleOpeningRollRowChange(idx, 'cost_per_unit', e.target.value)}
-                  className="typo-input" placeholder="Rs/kg"
-                />
-                <button onClick={() => handleRemoveOpeningRollRow(idx)}
-                  className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Remove">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+      {/* Opening Roll Stock — Full-page overlay (grouped entry) */}
+      {openingRollOpen && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
+          {/* ── Gradient Header Bar ── */}
+          <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-lg">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setOpeningRollOpen(false)} className="rounded-lg bg-white/20 p-2 text-white hover:bg-white/30 transition-colors">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div>
+                <h2 className="text-lg font-bold text-white">Opening Roll Stock</h2>
+                <p className="text-sm text-amber-100">Enter existing fabric rolls — no supplier invoice needed</p>
               </div>
-
-              {/* At VA toggle */}
-              <div className="mt-2 flex items-center gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={row.at_va}
-                    onChange={(e) => handleOpeningRollRowChange(idx, 'at_va', e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                  />
-                  <span className="text-xs font-medium text-orange-700">Currently at VA vendor</span>
-                </label>
-              </div>
-
-              {/* VA fields — shown when at_va is checked */}
-              {row.at_va && (
-                <div className="mt-2 grid grid-cols-[1fr_1fr_120px_100px] gap-3 items-end rounded-lg bg-orange-50 border border-orange-200 p-3">
-                  <div>
-                    <label className="typo-label-sm">VA Party</label>
-                    <FilterSelect
-                      full searchable
-                      value={row.va_party_id}
-                      onChange={(v) => handleOpeningRollRowChange(idx, 'va_party_id', v)}
-                      options={[{ value: '', label: 'Select VA Party...' }, ...vaParties.map(v => ({ value: v.id, label: v.name }))]}
-                    />
-                  </div>
-                  <div>
-                    <label className="typo-label-sm">Value Addition</label>
-                    <FilterSelect
-                      full searchable
-                      value={row.value_addition_id}
-                      onChange={(v) => handleOpeningRollRowChange(idx, 'value_addition_id', v)}
-                      options={[{ value: '', label: 'Select VA Type...' }, ...masterValueAdditions.map(va => ({ value: va.id, label: `${va.short_code} — ${va.name}` }))]}
-                    />
-                  </div>
-                  <div>
-                    <label className="typo-label-sm">Sent Date</label>
-                    <input
-                      type="date"
-                      value={row.sent_date}
-                      onChange={(e) => handleOpeningRollRowChange(idx, 'sent_date', e.target.value)}
-                      className="typo-input-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="typo-label-sm">Wt Sent</label>
-                    <input
-                      type="number" min="0.001" step="0.001"
-                      value={row.weight_sent}
-                      onChange={(e) => handleOpeningRollRowChange(idx, 'weight_sent', e.target.value)}
-                      className="typo-input-sm"
-                      placeholder={row.total_weight || 'kg'}
-                    />
-                  </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {openingTotals.count > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white">{openingTotals.count} rolls</span>
+                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white">{openingTotals.totalWeight.toFixed(3)} kg</span>
+                  {openingTotals.totalValue > 0 && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white">₹{openingTotals.totalValue.toLocaleString('en-IN')}</span>}
+                  {openingTotals.vaCount > 0 && <span className="rounded-full bg-orange-800/40 px-3 py-1 text-xs font-bold text-white">{openingTotals.vaCount} at VA</span>}
                 </div>
               )}
+              <span className="text-xs text-amber-200 hidden md:inline">Ctrl+S to save</span>
+              <button onClick={() => setOpeningRollOpen(false)} className="rounded-lg border border-white/30 px-4 py-2 typo-btn-sm text-white hover:bg-white/10">Cancel</button>
+              <button onClick={handleSubmitOpeningRolls} disabled={openingRollSaving || openingTotals.count === 0}
+                className="rounded-lg bg-white px-4 py-2 typo-btn-sm text-amber-700 font-bold hover:bg-amber-50 disabled:opacity-50 transition-colors shadow-sm">
+                {openingRollSaving ? 'Saving...' : `Add ${openingTotals.count} Opening Rolls`}
+              </button>
             </div>
-          ))}
-        </div>
+          </div>
 
-        <button onClick={handleAddOpeningRollRow}
-          className="mt-3 flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 typo-btn-sm text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors w-full justify-center">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Another Roll
-        </button>
+          {/* ── Scrollable Body ── */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50">
+            {openingRollError && <ErrorAlert message={openingRollError} onDismiss={() => setOpeningRollError(null)} />}
 
-        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-          <p className="text-sm text-amber-700">
-            <strong>Opening Stock</strong> is for Day 1 setup — entering existing fabric rolls. No supplier invoice or ledger entry is created. Check "Currently at VA vendor" for rolls that are with a VA party — this creates the processing log so you can receive them normally later.
-          </p>
+            {/* ── Design Groups ── */}
+            {openingGroups.map((grp, gIdx) => {
+              // Per-group totals
+              let grpRolls = 0, grpWeight = 0
+              const grpRate = parseFloat(grp.cost_per_unit) || 0
+              for (const row of grp.colorRows) for (const w of row.weights) { const wt = parseFloat(w); if (wt > 0) { grpRolls++; grpWeight += wt } }
+
+              return (
+                <div key={gIdx} data-opening-group={gIdx} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                  {/* Group header */}
+                  <div className={`flex items-center justify-between px-5 py-3 rounded-t-xl ${grp.at_va ? 'bg-orange-50 border-b border-orange-200' : 'bg-gray-50 border-b border-gray-200'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">{gIdx + 1}</span>
+                      <span className="typo-card-title">{grp.fabric_type || 'New Fabric Group'}</span>
+                      {grp.at_va && <span className="rounded-full bg-orange-200 px-2 py-0.5 text-[10px] font-bold text-orange-800 uppercase">At VA</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {grpRolls > 0 && (
+                        <span className="text-xs text-gray-500">
+                          {grpRolls} roll{grpRolls > 1 ? 's' : ''} · {grpWeight.toFixed(3)} {grp.unit}{grpRate > 0 ? ` · ₹${(grpWeight * grpRate).toLocaleString('en-IN')}` : ''}
+                        </span>
+                      )}
+                      {openingGroups.length > 1 && (
+                        <button onClick={() => removeOpeningGroup(gIdx)} className="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50" title="Remove group">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+                    {/* Group fields: Fabric, Panna, GSM, Rate, Unit, Notes */}
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                      <div>
+                        <label className="typo-label-sm">Fabric / Design *</label>
+                        <FilterSelect full searchable data-master="fabric"
+                          value={grp.fabric_type}
+                          onChange={(v) => setOpeningGroupField(gIdx, 'fabric_type', v)}
+                          options={[{ value: '', label: 'Select fabric...' }, ...masterFabrics.map(f => ({ value: f.name, label: f.name }))]}
+                        />
+                      </div>
+                      <div>
+                        <label className="typo-label-sm">Panna (″)</label>
+                        <input type="number" step="0.5" min="0" value={grp.panna}
+                          onChange={(e) => setOpeningGroupField(gIdx, 'panna', e.target.value)}
+                          className="typo-input-sm" placeholder="—" />
+                      </div>
+                      <div>
+                        <label className="typo-label-sm">GSM</label>
+                        <input type="number" step="1" min="0" value={grp.gsm}
+                          onChange={(e) => setOpeningGroupField(gIdx, 'gsm', e.target.value)}
+                          className="typo-input-sm" placeholder="—" />
+                      </div>
+                      <div>
+                        <label className="typo-label-sm">Rate / {grp.unit} (₹)</label>
+                        <input type="number" step="0.01" min="0" value={grp.cost_per_unit}
+                          onChange={(e) => setOpeningGroupField(gIdx, 'cost_per_unit', e.target.value)}
+                          className="typo-input-sm" placeholder="0.00" />
+                      </div>
+                      <div>
+                        <label className="typo-label-sm">Unit</label>
+                        <FilterSelect full value={grp.unit}
+                          onChange={(v) => setOpeningGroupField(gIdx, 'unit', v)}
+                          options={[{ value: 'kg', label: 'kg' }, { value: 'meters', label: 'meters' }]}
+                        />
+                      </div>
+                      <div>
+                        <label className="typo-label-sm">Notes</label>
+                        <input type="text" value={grp.notes}
+                          onChange={(e) => setOpeningGroupField(gIdx, 'notes', e.target.value)}
+                          className="typo-input-sm" placeholder="Optional" />
+                      </div>
+                    </div>
+
+                    {/* At VA toggle */}
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={grp.at_va}
+                          onChange={(e) => updateOpeningGroup(gIdx, (g) => ({ ...g, at_va: e.target.checked, ...(!e.target.checked ? { va_party_id: '', value_addition_id: '', sent_date: '' } : {}) }))}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+                        <span className="text-xs font-medium text-orange-700">Currently at VA vendor</span>
+                      </label>
+                      {grp.at_va && <span className="text-[10px] text-gray-400 ml-2">For mixed VA/godown rolls of same fabric, create separate groups</span>}
+                    </div>
+
+                    {/* VA fields — shown when at_va is checked */}
+                    {grp.at_va && (
+                      <div className="grid grid-cols-3 gap-3 rounded-lg bg-orange-50 border border-orange-200 p-3">
+                        <div>
+                          <label className="typo-label-sm">VA Party *</label>
+                          <FilterSelect full searchable data-master="va_party"
+                            value={grp.va_party_id}
+                            onChange={(v) => updateOpeningGroup(gIdx, (g) => ({ ...g, va_party_id: v }))}
+                            options={[{ value: '', label: 'Select VA Party...' }, ...vaParties.filter(p => p.is_active !== false).map(v => ({ value: v.id, label: `${v.name}${v.city ? ` (${v.city})` : ''}` }))]}
+                          />
+                        </div>
+                        <div>
+                          <label className="typo-label-sm">Value Addition *</label>
+                          <FilterSelect full searchable data-master="value_addition"
+                            value={grp.value_addition_id}
+                            onChange={(v) => updateOpeningGroup(gIdx, (g) => ({ ...g, value_addition_id: v }))}
+                            options={[{ value: '', label: 'Select VA Type...' }, ...masterValueAdditions.map(va => ({ value: va.id, label: `${va.short_code} — ${va.name}` }))]}
+                          />
+                        </div>
+                        <div>
+                          <label className="typo-label-sm">Sent Date *</label>
+                          <input type="date" value={grp.sent_date}
+                            onChange={(e) => updateOpeningGroup(gIdx, (g) => ({ ...g, sent_date: e.target.value }))}
+                            className="typo-input-sm" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Color-wise rolls grid */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Color-wise Rolls</span>
+                        <button onClick={() => addOpeningColorRow(gIdx)}
+                          className="text-xs text-emerald-600 font-medium hover:text-emerald-700">+ Add Color</button>
+                      </div>
+
+                      <div className="rounded-lg border border-gray-200 overflow-visible">
+                        {/* Grid header */}
+                        <div className="grid grid-cols-[160px_1fr_50px] bg-gray-100 px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                          <span>Color</span>
+                          <span>{grp.unit === 'meters' ? 'Lengths (meters)' : 'Weights (kg)'} — Enter/Tab between rolls</span>
+                          <span className="text-center">Rolls</span>
+                        </div>
+
+                        {grp.colorRows.map((crow, cIdx) => {
+                          const validWeights = crow.weights.filter(w => parseFloat(w) > 0)
+                          const totalWt = validWeights.reduce((s, w) => s + parseFloat(w), 0)
+                          return (
+                            <div key={cIdx} className={`grid grid-cols-[160px_1fr_50px] items-center px-3 py-1.5 ${cIdx > 0 ? 'border-t border-gray-100' : ''} ${pendingOpeningDeleteRow?.gIdx === gIdx && pendingOpeningDeleteRow?.cIdx === cIdx ? 'bg-red-50' : ''}`}>
+                              {/* Color select */}
+                              <div className="pr-2 flex items-center gap-1">
+                                <FilterSelect full searchable data-master="color"
+                                  value={crow.color}
+                                  onChange={(v) => setOpeningColorName(gIdx, cIdx, v)}
+                                  options={[{ value: '', label: 'Color...' }, ...masterColors.map(c => ({ value: c.name, label: c.name }))]}
+                                />
+                                {pendingOpeningDeleteRow?.gIdx === gIdx && pendingOpeningDeleteRow?.cIdx === cIdx ? (
+                                  <button onClick={() => { removeOpeningColorRow(gIdx, cIdx); setPendingOpeningDeleteRow(null) }}
+                                    className="text-[9px] text-red-600 font-bold whitespace-nowrap hover:underline">Confirm?</button>
+                                ) : (
+                                  <button onClick={() => grp.colorRows.length > 1 && (crow.color || crow.weights.some(w => w) ? setPendingOpeningDeleteRow({ gIdx, cIdx }) : removeOpeningColorRow(gIdx, cIdx))}
+                                    className={`p-0.5 rounded text-gray-300 hover:text-red-500 ${grp.colorRows.length <= 1 ? 'invisible' : ''}`}>
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Weight inputs */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {crow.weights.map((w, wIdx) => (
+                                  <input key={wIdx} type="number" step="0.001" min="0" placeholder="0.000"
+                                    value={w}
+                                    onChange={(e) => setOpeningWeight(gIdx, cIdx, wIdx, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      const val = e.target.value.trim()
+                                      const isLast = wIdx === crow.weights.length - 1
+                                      if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey && isLast)) {
+                                        if (val && parseFloat(val) > 0) {
+                                          e.preventDefault()
+                                          if (isLast) {
+                                            addOpeningWeight(gIdx, cIdx)
+                                            setTimeout(() => {
+                                              const grpEl = document.querySelector(`[data-opening-group="${gIdx}"]`)
+                                              const inputs = grpEl?.querySelectorAll(`[data-opening-color="${cIdx}"] input[type="number"]`)
+                                              inputs?.[inputs.length - 1]?.focus()
+                                            }, 30)
+                                          }
+                                        } else if (!val && isLast && e.key === 'Enter') {
+                                          e.preventDefault()
+                                          trimOpeningEmptyWeight(gIdx, cIdx, wIdx)
+                                          addOpeningColorRow(gIdx)
+                                          setTimeout(() => {
+                                            const grpEl = document.querySelector(`[data-opening-group="${gIdx}"]`)
+                                            const selects = grpEl?.querySelectorAll('[data-opening-color] button[role="combobox"], [data-opening-color] input[type="text"]')
+                                            selects?.[selects.length - 1]?.focus()
+                                          }, 30)
+                                        }
+                                      }
+                                      if (e.key === 'Backspace' && !val && crow.weights.length > 1) {
+                                        e.preventDefault()
+                                        removeOpeningWeight(gIdx, cIdx, wIdx)
+                                        setTimeout(() => {
+                                          const grpEl = document.querySelector(`[data-opening-group="${gIdx}"]`)
+                                          const inputs = grpEl?.querySelectorAll(`[data-opening-color="${cIdx}"] input[type="number"]`)
+                                          inputs?.[Math.max(0, wIdx - 1)]?.focus()
+                                        }, 30)
+                                      }
+                                    }}
+                                    data-opening-color={cIdx}
+                                    className="w-20 rounded border border-gray-300 px-2 py-1 text-sm text-right focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                                  />
+                                ))}
+                                <button onClick={() => { addOpeningWeight(gIdx, cIdx); setTimeout(() => {
+                                  const grpEl = document.querySelector(`[data-opening-group="${gIdx}"]`)
+                                  const inputs = grpEl?.querySelectorAll(`[data-opening-color="${cIdx}"] input[type="number"]`)
+                                  inputs?.[inputs.length - 1]?.focus()
+                                }, 30) }}
+                                  className="rounded border border-dashed border-gray-300 p-1 text-gray-400 hover:border-amber-400 hover:text-amber-600" title="Add roll">
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" /></svg>
+                                </button>
+                              </div>
+
+                              {/* Roll count */}
+                              <div className="text-center">
+                                {validWeights.length > 0 && (
+                                  <div>
+                                    <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-700">{validWeights.length}</span>
+                                    <div className="text-[9px] text-gray-400 mt-0.5">{totalWt.toFixed(1)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Add Another Design / Fabric */}
+            <button onClick={addOpeningGroup}
+              className="flex items-center gap-1.5 rounded-lg border-2 border-dashed border-gray-300 px-4 py-3 typo-btn-sm text-gray-500 hover:border-amber-400 hover:text-amber-600 transition-colors w-full justify-center">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" /></svg>
+              Add Another Design / Fabric (Shift+G)
+            </button>
+
+            {/* Summary KPI */}
+            {openingTotals.count > 0 && (
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                {[
+                  { label: 'Total Rolls', value: openingTotals.count },
+                  { label: 'Total Weight', value: `${openingTotals.totalWeight.toFixed(3)} kg` },
+                  { label: 'Colors', value: openingTotals.colors },
+                  { label: 'Designs', value: openingTotals.designs },
+                  { label: 'Subtotal', value: openingTotals.totalValue > 0 ? `₹${openingTotals.totalValue.toLocaleString('en-IN')}` : '—' },
+                  { label: 'At VA', value: openingTotals.vaCount > 0 ? `${openingTotals.vaCount} rolls` : '—' },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="rounded-lg bg-white border border-gray-200 p-3 text-center">
+                    <div className="typo-kpi-sm text-gray-800">{kpi.value}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{kpi.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Info banner */}
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+              <p className="text-sm text-amber-700">
+                <strong>Opening Stock</strong> is for Day 1 setup — entering existing fabric rolls. No supplier invoice or ledger entry is created. Check "Currently at VA vendor" for rolls that are with a VA party — this creates the processing log so you can receive them normally later.
+              </p>
+            </div>
+
+            {/* Keyboard hints */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
+              <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[9px]">Enter</kbd> next / new color</span>
+              <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[9px]">Backspace</kbd> back</span>
+              <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[9px]">Shift+G</kbd> new design</span>
+              <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[9px]">Shift+M</kbd> quick master</span>
+              <span><kbd className="rounded border border-gray-300 bg-gray-100 px-1 py-0.5 font-mono text-[9px]">Ctrl+S</kbd> save</span>
+            </div>
+          </div>
         </div>
-      </Modal>
+      )}
     </div>
   )
 }
