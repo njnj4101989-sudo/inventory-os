@@ -99,26 +99,29 @@ function SkippedRow({ skipped, onAdjust }) {
   const [qty, setQty] = useState('')
   const [saving, setSaving] = useState(false)
   if (skipped.adjusted) {
+    const isNeg = skipped.adjusted_qty < 0
     return (
       <tr className="border-b border-gray-100 bg-green-50">
         <td className="px-3 py-2 typo-data">{skipped.sku_code}</td>
         <td className="px-3 py-2 text-right typo-td">{skipped.existing_qty}</td>
-        <td className="px-3 py-2 text-right typo-data text-green-700">+{skipped.adjusted_qty}</td>
+        <td className={`px-3 py-2 text-right typo-data ${isNeg ? 'text-red-600' : 'text-green-700'}`}>{isNeg ? '' : '+'}{skipped.adjusted_qty}</td>
         <td className="px-3 py-2 text-center"><span className="text-green-600 text-xs font-semibold">Adjusted</span></td>
       </tr>
     )
   }
+  const parsed = parseInt(qty)
+  const isValid = qty !== '' && !isNaN(parsed) && parsed !== 0
   return (
     <tr className="border-b border-gray-100">
       <td className="px-3 py-2 typo-data">{skipped.sku_code}</td>
       <td className="px-3 py-2 text-right typo-td">{skipped.existing_qty}</td>
       <td className="px-3 py-2 text-right">
-        <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
-          className="typo-input-sm text-right w-20" placeholder="0" />
+        <input type="number" value={qty} onChange={e => setQty(e.target.value)}
+          className="typo-input-sm text-right w-20" placeholder="±qty" />
       </td>
       <td className="px-3 py-2 text-center">
         <button onClick={async () => { setSaving(true); await onAdjust(skipped, qty); setSaving(false) }}
-          disabled={saving || !qty || parseInt(qty) <= 0}
+          disabled={saving || !isValid}
           className="rounded bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition-colors">
           {saving ? '...' : 'Adjust'}
         </button>
@@ -495,18 +498,19 @@ export default function SKUsPage() {
   }
 
   const handleAdjustSkipped = async (skipped, adjustQty) => {
-    if (!adjustQty || parseInt(adjustQty) <= 0) return
+    const parsed = parseInt(adjustQty)
+    if (!adjustQty || isNaN(parsed) || parsed === 0) return
     try {
       await adjust({
         sku_id: skipped.sku_id,
         event_type: 'adjustment',
         item_type: 'finished_goods',
-        quantity: parseInt(adjustQty),
-        reason: 'Opening stock adjustment',
+        quantity: parsed,
+        reason: parsed < 0 ? 'Opening stock correction (reduce excess)' : 'Opening stock adjustment',
       })
       setOpeningResult(prev => ({
         ...prev,
-        skipped: prev.skipped.map(s => s.sku_id === skipped.sku_id ? { ...s, adjusted: true, adjusted_qty: parseInt(adjustQty) } : s),
+        skipped: prev.skipped.map(s => s.sku_id === skipped.sku_id ? { ...s, adjusted: true, adjusted_qty: parsed } : s),
       }))
       fetchSKUs()
     } catch (err) {
@@ -1115,7 +1119,7 @@ export default function SKUsPage() {
                   </thead>
                   <tbody>
                     {skuEvents.map((evt) => {
-                      const isIn = ['stock_in', 'return', 'ready_stock_in', 'opening_stock', 'adjustment'].includes(evt.event_type)
+                      const isIn = evt.event_type === 'adjustment' ? evt.quantity > 0 : ['stock_in', 'return', 'ready_stock_in', 'opening_stock'].includes(evt.event_type)
                       const evtLabel = {
                         opening_stock: 'Opening Stock',
                         ready_stock_in: 'Stock In',
@@ -1150,7 +1154,7 @@ export default function SKUsPage() {
                           </td>
                           <td className="px-3 py-2 typo-td">{sourceLabel}</td>
                           <td className={`px-3 py-2 text-right font-semibold ${isIn ? 'text-green-600' : 'text-red-600'}`}>
-                            {isIn ? '+' : '−'}{evt.quantity}
+                            {isIn ? '+' : '−'}{Math.abs(evt.quantity)}
                           </td>
                           <td className="px-3 py-2 text-right typo-td-secondary">{unitCost ? `₹${parseFloat(unitCost).toFixed(2)}` : '—'}</td>
                           <td className="px-3 py-2 typo-td-secondary">{evt.performed_by?.full_name || '—'}</td>

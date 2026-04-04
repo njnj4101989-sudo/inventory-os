@@ -22,7 +22,7 @@ from app.models.inventory_state import InventoryState
 from app.models.sku import SKU
 from app.schemas.inventory import AdjustRequest, InventoryFilterParams, InventoryResponse, EventResponse, ReconcileResponse
 from app.schemas import PaginatedParams
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import AppException, NotFoundError, ValidationError
 
 
 class InventoryService:
@@ -165,7 +165,10 @@ class InventoryService:
             await self.db.flush()
 
         # Update based on event type
-        if event_type in ("stock_in", "return", "ready_stock_in", "opening_stock", "adjustment"):
+        if event_type == "adjustment":
+            # Adjustment supports both positive (add) and negative (subtract)
+            state.total_qty = max(0, state.total_qty + quantity)
+        elif event_type in ("stock_in", "return", "ready_stock_in", "opening_stock"):
             state.total_qty += quantity
         elif event_type in ("stock_out", "loss"):
             state.total_qty = max(0, state.total_qty - quantity)
@@ -186,6 +189,19 @@ class InventoryService:
         sku_result = await self.db.execute(sku_stmt)
         if not sku_result.scalar_one_or_none():
             raise NotFoundError(f"SKU {req.sku_id} not found")
+
+        # Negative adjustment: validate against available stock
+        if req.quantity < 0:
+            inv_stmt = select(InventoryState).where(InventoryState.sku_id == req.sku_id)
+            inv_result = await self.db.execute(inv_stmt)
+            inv_state = inv_result.scalar_one_or_none()
+            available = inv_state.available_qty if inv_state else 0
+            reserved = inv_state.reserved_qty if inv_state else 0
+            if abs(req.quantity) > available:
+                msg = f"Cannot reduce by {abs(req.quantity)} — only {available} available"
+                if reserved > 0:
+                    msg += f" ({reserved} reserved for orders — cancel/edit orders first)"
+                raise AppException(msg)
 
         event = await self.create_event(
             event_type=req.event_type,

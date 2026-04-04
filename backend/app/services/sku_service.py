@@ -34,7 +34,11 @@ class SKUService:
 
         conditions = []
         if params.search:
-            s = f"%{params.search}%"
+            # Normalize: collapse whitespace, treat dots as wildcards
+            # so "b.green" matches "B. GREEN" and "sbl-1072-b.green" matches "SBL-1072-B. GREEN"
+            normalized = ' '.join(params.search.strip().split())
+            normalized = normalized.replace('.', '%')
+            s = f"%{normalized}%"
             conditions.append(
                 or_(
                     SKU.sku_code.ilike(s),
