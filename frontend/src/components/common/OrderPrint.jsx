@@ -23,6 +23,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
       * { box-sizing: border-box; }
       body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       tr { page-break-inside: avoid; }
+      .op-design-block { page-break-inside: avoid; }
       .op-totals, .op-signatures { page-break-inside: avoid; }
       thead { display: table-header-group; }
     `,
@@ -226,7 +227,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
               if (bands.length === 0) bands.push([])
 
               return (
-                <div key={group.design} style={{ marginBottom: gi < pivotData.length - 1 ? '8px' : '0' }}>
+                <div key={group.design} className="op-design-block" style={{ marginBottom: gi < pivotData.length - 1 ? '8px' : '0', pageBreakInside: 'avoid' }}>
                   {/* Design header */}
                   <div style={S.designHdr}>
                     <span style={S.designTitle}>Design {group.design}</span>
@@ -333,7 +334,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
           /* ═══ CONFIRMATION — ITEMS TABLE (GROUPED BY DESIGN) ═══ */
           <>
             {grouped.map((group, gi) => (
-              <div key={group.design} style={{ marginBottom: gi < grouped.length - 1 ? '6px' : '0' }}>
+              <div key={group.design} className="op-design-block" style={{ marginBottom: gi < grouped.length - 1 ? '6px' : '0', pageBreakInside: 'avoid' }}>
                 {/* Design header */}
                 <div style={S.designHdr}>
                   <span style={S.designTitle}>Design {group.design} <span style={{ fontSize: '9px', fontWeight: 500 }}>({group.items.length} item{group.items.length !== 1 ? 's' : ''})</span></span>
