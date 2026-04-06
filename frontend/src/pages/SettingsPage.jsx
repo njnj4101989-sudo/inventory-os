@@ -42,6 +42,7 @@ export default function SettingsPage() {
     name: '', address: '', city: '', state: '', pin_code: '',
     gst_no: '', state_code: '', pan_no: '', phone: '', email: '',
     logo_url: '', bank_name: '', bank_account: '', bank_ifsc: '', bank_branch: '',
+    upi_id: '',
   })
   const [companySaving, setCompanySaving] = useState(false)
   const [companyMsg, setCompanyMsg] = useState(null)
@@ -407,6 +408,7 @@ export default function SettingsPage() {
               { key: 'bank_account', label: 'Account No.' },
               { key: 'bank_ifsc', label: 'IFSC Code', upper: true, max: 11 },
               { key: 'bank_branch', label: 'Branch' },
+              { key: 'upi_id', label: 'UPI ID (VPA)', max: 100, placeholder: 'merchant@upi' },
             ]},
           ].map((section) => (
             <div key={section.title} className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -420,8 +422,8 @@ export default function SettingsPage() {
                 {section.fields.map((f) => (
                   <div key={f.key} className={f.span === 2 ? 'md:col-span-2' : ''}>
                     <label className="block typo-data-label mb-1">{f.label}</label>
-                    <input value={company[f.key]} onChange={(e) => set(f.key, f.upper ? e.target.value.toUpperCase() : e.target.value)}
-                      className="typo-input-sm" maxLength={f.max} />
+                    <input value={company[f.key] || ''} onChange={(e) => set(f.key, f.upper ? e.target.value.toUpperCase() : e.target.value)}
+                      className="typo-input-sm" maxLength={f.max} placeholder={f.placeholder} />
                   </div>
                 ))}
               </div>

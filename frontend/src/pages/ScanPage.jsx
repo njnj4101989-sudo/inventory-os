@@ -288,6 +288,8 @@ export default function ScanPage() {
     if (rollMatch) return decodeURIComponent(rollMatch[1])
     const challanMatch = decodedText.match(/\/scan\/challan\/([^/?\s]+)/)
     if (challanMatch) return decodeURIComponent(challanMatch[1])
+    const invoiceMatch = decodedText.match(/\/scan\/invoice\/([^/?\s]+)/)
+    if (invoiceMatch) return decodeURIComponent(invoiceMatch[1])
     return decodedText.trim()
   }
 
@@ -314,6 +316,13 @@ export default function ScanPage() {
       const challanNo = decodeURIComponent(challanMatch[1])
       const tab = challanNo.startsWith('BC-') ? 'batch' : 'job'
       navigate(`/challans?open=${encodeURIComponent(challanNo)}&tab=${tab}`)
+      return
+    }
+    // Invoice QR — navigate to InvoicesPage with deep-link
+    const invoiceMatch = decodedText.match(/\/scan\/invoice\/([^/?\s]+)/)
+    if (invoiceMatch) {
+      const invoiceNo = decodeURIComponent(invoiceMatch[1])
+      navigate(`/invoices?open=${encodeURIComponent(invoiceNo)}`)
       return
     }
     const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)

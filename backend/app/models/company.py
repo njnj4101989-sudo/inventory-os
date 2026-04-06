@@ -36,4 +36,6 @@ class Company(Base):
     bank_account: Mapped[str | None] = mapped_column(String(30))
     bank_ifsc: Mapped[str | None] = mapped_column(String(11))
     bank_branch: Mapped[str | None] = mapped_column(String(200))
+    # UPI VPA for invoice payment QR (e.g., merchant@upi)
+    upi_id: Mapped[str | None] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")

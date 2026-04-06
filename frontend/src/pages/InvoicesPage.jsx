@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
-import { getInvoices, getInvoice, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
+import { QRCodeSVG } from 'qrcode.react'
+import { getInvoices, getInvoice, getInvoiceByNo, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
 import { getSalesReturns, getSalesReturn } from '../api/salesReturns'
 import { getReturnNotes, getReturnNote } from '../api/returns'
 import DebitNotePrint from '../components/common/DebitNotePrint'
@@ -233,16 +234,18 @@ export default function InvoicesPage() {
 
   useEffect(() => { if (viewMode === 'debit_notes') fetchDebitNotes() }, [viewMode, fetchDebitNotes])
 
-  /* ── Deep-link: ?open=<invoiceId> → auto-open detail ── */
+  /* ── Deep-link: ?open=<uuid|invoice_number> → auto-open detail ── */
   useEffect(() => {
-    const openId = searchParams.get('open')
-    if (!openId) return
+    const openParam = searchParams.get('open')
+    if (!openParam) return
     searchParams.delete('open')
     setSearchParams(searchParams, { replace: true })
+    // UUID format: 8-4-4-4-12 hex chars; otherwise treat as invoice_number (e.g., INV-0005)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(openParam)
     ;(async () => {
       setDetailLoading(true)
       try {
-        const res = await getInvoice(openId)
+        const res = isUuid ? await getInvoice(openParam) : await getInvoiceByNo(openParam)
         setDetailInvoice(res.data.data || res.data)
       } catch { /* ignore — invoice may not exist */ }
       finally { setDetailLoading(false) }
@@ -657,11 +660,21 @@ export default function InvoicesPage() {
               {co.gst_no && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>GSTIN: <strong>{co.gst_no}</strong>{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
               {(co.phone || co.email) && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>{co.phone ? `Ph: ${co.phone}` : ''}{co.email ? ` | ${co.email}` : ''}</p>}
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>{inv.invoice_number}</p>
-              <p style={{ fontSize: '10px', margin: '2px 0' }}>Date: {fmtDate(inv.issued_at)}</p>
-              <p style={{ fontSize: '10px', margin: '1px 0' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}{inv.shipment?.shipment_no ? ` · ${inv.shipment.shipment_no}` : ''}</p>
-              {inv.due_date && <p style={{ fontSize: '10px', margin: '1px 0' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>{inv.invoice_number}</p>
+                <p style={{ fontSize: '10px', margin: '2px 0' }}>Date: {fmtDate(inv.issued_at)}</p>
+                <p style={{ fontSize: '10px', margin: '1px 0' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}{inv.shipment?.shipment_no ? ` · ${inv.shipment.shipment_no}` : ''}</p>
+                {inv.due_date && <p style={{ fontSize: '10px', margin: '1px 0' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
+              </div>
+              <div style={{ border: '1px solid #ddd', borderRadius: '3px', padding: '3px', background: '#fff' }}>
+                <QRCodeSVG
+                  value={`${window.location.origin}/scan/invoice/${encodeURIComponent(inv.invoice_number)}`}
+                  size={64}
+                  level="M"
+                  includeMargin={false}
+                />
+              </div>
             </div>
           </div>
 
@@ -744,19 +757,33 @@ export default function InvoicesPage() {
 
           {/* ═══ FOOTER ═══ */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2px' }}>
-            {/* Left: Amount in words + Bank + Terms */}
-            <div style={{ flex: 1, paddingRight: '10px' }}>
-              <p style={{ fontSize: '9px', margin: '2px 0 3px', border: '1px solid #000', padding: '2px 6px' }}>
-                <strong>Amount in Words:</strong> {amountInWords(inv.total_amount)}
-              </p>
-              {co.bank_name && (
-                <div style={{ border: '1px solid #000', padding: '2px 6px', marginBottom: '3px', fontSize: '9px' }}>
-                  <strong>Bank:</strong> {co.bank_name}{co.bank_branch ? ` (${co.bank_branch})` : ''} | <strong>A/C:</strong> {co.bank_account || '—'} | <strong>IFSC:</strong> {co.bank_ifsc || '—'}
+            {/* Left: Amount in words + Bank + Terms (+ optional UPI QR) */}
+            <div style={{ flex: 1, paddingRight: '10px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '9px', margin: '2px 0 3px', border: '1px solid #000', padding: '2px 6px' }}>
+                  <strong>Amount in Words:</strong> {amountInWords(inv.total_amount)}
+                </p>
+                {co.bank_name && (
+                  <div style={{ border: '1px solid #000', padding: '2px 6px', marginBottom: '3px', fontSize: '9px' }}>
+                    <strong>Bank:</strong> {co.bank_name}{co.bank_branch ? ` (${co.bank_branch})` : ''} | <strong>A/C:</strong> {co.bank_account || '—'} | <strong>IFSC:</strong> {co.bank_ifsc || '—'}
+                  </div>
+                )}
+                <div style={{ fontSize: '7px', lineHeight: '1.4' }}>
+                  <strong>Terms:</strong> 1. Goods once sold will not be taken back. 2. Subject to Surat jurisdiction. 3. E.&O.E.
+                </div>
+              </div>
+              {co.upi_id && (
+                <div style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', flexShrink: 0 }}>
+                  <QRCodeSVG
+                    value={`upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.name || 'Merchant')}&am=${(inv.total_amount || 0).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + inv.invoice_number)}`}
+                    size={70}
+                    level="M"
+                    includeMargin={false}
+                  />
+                  <p style={{ fontSize: '7px', fontWeight: 700, margin: '2px 0 0', lineHeight: 1.1 }}>Scan to Pay</p>
+                  <p style={{ fontSize: '6px', margin: 0, color: '#555' }}>{co.upi_id}</p>
                 </div>
               )}
-              <div style={{ fontSize: '7px', lineHeight: '1.4' }}>
-                <strong>Terms:</strong> 1. Goods once sold will not be taken back. 2. Subject to Surat jurisdiction. 3. E.&O.E.
-              </div>
             </div>
             {/* Right: Tax totals */}
             <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '210px', flexShrink: 0 }}>

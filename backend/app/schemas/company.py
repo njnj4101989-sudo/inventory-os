@@ -23,6 +23,7 @@ class CompanyUpdate(BaseModel):
     bank_account: str | None = None
     bank_ifsc: str | None = None
     bank_branch: str | None = None
+    upi_id: str | None = None
 
 
 class CompanyResponse(BaseSchema):
@@ -44,6 +45,7 @@ class CompanyResponse(BaseSchema):
     bank_account: str | None = None
     bank_ifsc: str | None = None
     bank_branch: str | None = None
+    upi_id: str | None = None
     is_active: bool = True
 
 

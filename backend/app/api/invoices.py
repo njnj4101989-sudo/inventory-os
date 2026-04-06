@@ -53,6 +53,18 @@ async def create_from_order(
     return {"success": True, "data": result}
 
 
+@router.get("/by-no/{invoice_no}", response_model=None)
+async def get_invoice_by_no(
+    invoice_no: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Get single invoice by invoice_number (used by QR scan deep-link)."""
+    svc = InvoiceService(db)
+    result = await svc.get_invoice_by_no(invoice_no)
+    return {"success": True, "data": result}
+
+
 @router.get("/{invoice_id}", response_model=None)
 async def get_invoice(
     invoice_id: UUID,

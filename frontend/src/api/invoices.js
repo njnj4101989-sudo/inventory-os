@@ -27,6 +27,14 @@ export async function getInvoice(id) {
   return client.get(`/invoices/${id}`)
 }
 
+export async function getInvoiceByNo(invoiceNo) {
+  if (USE_MOCK) {
+    const invoice = invoices.find((inv) => inv.invoice_number === invoiceNo)
+    return mockResponse(invoice)
+  }
+  return client.get(`/invoices/by-no/${encodeURIComponent(invoiceNo)}`)
+}
+
 export async function markPaid(id) {
   if (USE_MOCK) {
     const invoice = invoices.find((inv) => inv.id === id)

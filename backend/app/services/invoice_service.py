@@ -84,6 +84,26 @@ class InvoiceService:
         invoice = await self._get_or_404(invoice_id)
         return self._to_response(invoice)
 
+    async def get_invoice_by_no(self, invoice_no: str) -> dict:
+        """Lookup invoice by invoice_number (used by QR scan deep-link)."""
+        stmt = (
+            select(Invoice)
+            .where(Invoice.invoice_number == invoice_no)
+            .options(
+                selectinload(Invoice.order),
+                selectinload(Invoice.shipment),
+                selectinload(Invoice.customer),
+                selectinload(Invoice.broker),
+                selectinload(Invoice.transport),
+                selectinload(Invoice.items).selectinload(InvoiceItem.sku),
+            )
+        )
+        result = await self.db.execute(stmt)
+        invoice = result.scalar_one_or_none()
+        if not invoice:
+            raise NotFoundError(f"Invoice {invoice_no} not found")
+        return self._to_response(invoice)
+
     # ── Helpers for customer + due date ──
 
     async def _get_customer(self, customer_id: UUID | None) -> Customer | None:
