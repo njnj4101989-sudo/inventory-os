@@ -182,7 +182,7 @@ export default function InvoicesPage() {
       body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #000; }
       tr { page-break-inside: avoid; }
       thead { display: table-header-group; }
-      .inv-footer-block { page-break-inside: avoid; }
+      tfoot { display: table-footer-group; }
     `,
   })
 
@@ -626,6 +626,19 @@ export default function InvoicesPage() {
     const inv = printInvoice
     const isIGST = inv.place_of_supply && co.state_code && inv.place_of_supply !== co.state_code
     const totalQty = (inv.items || []).reduce((s, it) => s + (it.quantity || 0), 0)
+    // Dynamic row padding — fill to bottom of whichever page items end on
+    const ROWS_PAGE1 = 22 // items that fit on page 1 (header + bill-to take space)
+    const ROWS_OTHER = 38 // items per continuation page (just column headers)
+    const itemCount = inv.items?.length || 0
+    let minRows
+    if (itemCount <= ROWS_PAGE1) {
+      minRows = ROWS_PAGE1
+    } else {
+      const extraPages = Math.ceil((itemCount - ROWS_PAGE1) / ROWS_OTHER)
+      minRows = ROWS_PAGE1 + extraPages * ROWS_OTHER
+    }
+    const padCount = Math.max(0, minRows - itemCount)
+
     const IS = {
       th: { padding: '3px 5px', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1.5px solid #000', borderRight: '1px solid #ccc', background: '#f0f0f0', color: '#000' },
       thLast: { padding: '3px 5px', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1.5px solid #000', background: '#f0f0f0', color: '#000' },
@@ -717,10 +730,10 @@ export default function InvoicesPage() {
                   <td style={{ ...IS.tdLast, textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(item.total_price)}</td>
                 </tr>
               ))}
-              {/* Pad empty rows to fill page — min 20 rows */}
-              {(inv.items?.length || 0) < 20 && Array.from({ length: 20 - (inv.items?.length || 0) }).map((_, i) => (
+              {/* Pad empty rows to fill page */}
+              {padCount > 0 && Array.from({ length: padCount }).map((_, i) => (
                 <tr key={`pad-${i}`}>
-                  <td style={{ ...IS.td, textAlign: 'center', color: '#ccc', fontSize: '9px' }}>{(inv.items?.length || 0) + i + 1}</td>
+                  <td style={{ ...IS.td, textAlign: 'center', color: '#ccc', fontSize: '9px' }}>{itemCount + i + 1}</td>
                   <td style={IS.td}></td>
                   <td style={IS.td}></td>
                   <td style={IS.td}></td>
@@ -730,18 +743,19 @@ export default function InvoicesPage() {
                   <td style={IS.tdLast}></td>
                 </tr>
               ))}
-              {/* Total qty row */}
+            </tbody>
+            <tfoot>
               <tr style={{ borderTop: '1.5px solid #000' }}>
                 <td colSpan={5} style={{ padding: '3px 5px', fontSize: '9px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>TOTAL</td>
                 <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>{totalQty}</td>
                 <td style={{ padding: '3px 5px', borderRight: '1px solid #ccc' }}></td>
                 <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.subtotal)}</td>
               </tr>
-            </tbody>
+            </tfoot>
           </table>
 
-          {/* ═══ FOOTER BLOCK — stays together ═══ */}
-          <div className="inv-footer-block">
+          {/* ═══ FOOTER BLOCK ═══ */}
+          <div>
             {/* ═══ TAX + GRAND TOTAL ═══ */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', marginBottom: '6px' }}>
               <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '240px' }}>
