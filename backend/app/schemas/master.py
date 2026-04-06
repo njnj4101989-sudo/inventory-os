@@ -22,12 +22,14 @@ class ProductTypeCreate(BaseModel):
     name: str
     description: str | None = None
     palla_mode: str = "weight"  # weight | meter | both
+    hsn_code: str | None = None
 
 
 class ProductTypeUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     palla_mode: str | None = None
+    hsn_code: str | None = None
     is_active: bool | None = None
 
 
@@ -37,6 +39,7 @@ class ProductTypeResponse(BaseSchema):
     name: str
     description: str | None = None
     palla_mode: str = "weight"
+    hsn_code: str | None = None
     is_active: bool = True
 
 

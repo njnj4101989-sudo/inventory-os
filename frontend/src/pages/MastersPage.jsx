@@ -27,6 +27,7 @@ const TABS = [
 const PT_COLUMNS = [
   { key: 'code', label: 'Code', render: (v) => <span className="font-mono font-semibold text-primary-700">{v}</span> },
   { key: 'name', label: 'Name' },
+  { key: 'hsn_code', label: 'HSN', render: (v) => v ? <span className="font-mono text-xs">{v}</span> : <span className="text-gray-400">—</span> },
   { key: 'description', label: 'Description', render: (v) => v || <span className="text-gray-400">—</span> },
   { key: 'is_active', label: 'Status', render: (v) => <StatusBadge status={v ? 'active' : 'inactive'} /> },
 ]
@@ -162,7 +163,7 @@ export default function MastersPage() {
   const openCreate = () => {
     setEditing(null)
     setFormError(null)
-    if (tab === 'product_types') setForm({ code: '', name: '', description: '' })
+    if (tab === 'product_types') setForm({ code: '', name: '', description: '', hsn_code: '' })
     else if (tab === 'colors') setForm({ name: '', code: '', color_no: '', hex_code: '#000000' })
     else if (tab === 'designs') setForm({ design_no: '', description: '' })
     else if (tab === 'value_additions') setForm({ short_code: '', name: '', description: '', applicable_to: 'both' })
@@ -173,7 +174,7 @@ export default function MastersPage() {
   const openEdit = (item) => {
     setEditing(item)
     setFormError(null)
-    if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', is_active: item.is_active })
+    if (tab === 'product_types') setForm({ name: item.name, description: item.description || '', hsn_code: item.hsn_code || '', is_active: item.is_active })
     else if (tab === 'colors') setForm({ name: item.name, code: item.code || '', color_no: item.color_no ?? '', hex_code: item.hex_code || '#000000', is_active: item.is_active })
     else if (tab === 'designs') setForm({ design_no: item.design_no, description: item.description || '', is_active: item.is_active })
     else if (tab === 'value_additions') setForm({ name: item.name, short_code: item.short_code || '', description: item.description || '', applicable_to: item.applicable_to || 'both', is_active: item.is_active })
@@ -203,8 +204,8 @@ export default function MastersPage() {
     setSaving(true)
     try {
       if (tab === 'product_types') {
-        if (editing) await updateProductType(editing.id, form)
-        else await createProductType({ code: form.code.trim(), name: form.name.trim(), description: form.description || null })
+        if (editing) await updateProductType(editing.id, { ...form, hsn_code: form.hsn_code?.trim() || null })
+        else await createProductType({ code: form.code.trim(), name: form.name.trim(), description: form.description || null, hsn_code: form.hsn_code?.trim() || null })
       } else if (tab === 'colors') {
         const colorPayload = editing
           ? { ...form, color_no: form.color_no !== '' ? parseInt(form.color_no, 10) : null }
@@ -389,6 +390,18 @@ export default function MastersPage() {
               <input type="text" value={form.name || ''} onChange={(e) => set('name', e.target.value)}
                 placeholder={tab === 'product_types' ? 'e.g. Blouse' : tab === 'colors' ? 'e.g. Coral' : 'e.g. Cotton'}
                 className="typo-input" />
+            </div>
+          )}
+
+          {/* HSN Code (product_types only) */}
+          {tab === 'product_types' && (
+            <div>
+              <label className="typo-label">HSN Code</label>
+              <input type="text" value={form.hsn_code || ''} onChange={(e) => set('hsn_code', e.target.value)}
+                placeholder="e.g. 6206 (Blouse), 6204 (Lehenga), 5407 (Saree)"
+                maxLength={8}
+                className="typo-input font-mono max-w-[280px]" />
+              <p className="mt-1 text-xs text-gray-400">GST HSN — auto-applied to all SKUs of this product type, then to invoice line items.</p>
             </div>
           )}
 

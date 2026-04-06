@@ -577,11 +577,11 @@ export const financialReport = {
 
 // ── Master Data ──────────────────────────────────────────
 export const productTypes = [
-  { id: crypto.randomUUID(), code: 'BLS', name: 'Blouse', description: 'Traditional and modern blouse designs', is_active: true },
-  { id: crypto.randomUUID(), code: 'KRT', name: 'Kurti', description: 'Kurti and kurta designs', is_active: true },
-  { id: crypto.randomUUID(), code: 'SAR', name: 'Saree', description: 'Saree blouse and saree pieces', is_active: true },
-  { id: crypto.randomUUID(), code: 'DRS', name: 'Dress', description: 'Western and Indo-western dresses', is_active: true },
-  { id: crypto.randomUUID(), code: 'OTH', name: 'Other', description: 'Other garment types', is_active: true },
+  { id: crypto.randomUUID(), code: 'BLS', name: 'Blouse', description: 'Traditional and modern blouse designs', hsn_code: '6206', is_active: true },
+  { id: crypto.randomUUID(), code: 'KRT', name: 'Kurti', description: 'Kurti and kurta designs', hsn_code: '6206', is_active: true },
+  { id: crypto.randomUUID(), code: 'SAR', name: 'Saree', description: 'Saree blouse and saree pieces', hsn_code: '5407', is_active: true },
+  { id: crypto.randomUUID(), code: 'DRS', name: 'Dress', description: 'Western and Indo-western dresses', hsn_code: '6204', is_active: true },
+  { id: crypto.randomUUID(), code: 'OTH', name: 'Other', description: 'Other garment types', hsn_code: null, is_active: true },
 ]
 
 export const colors = [

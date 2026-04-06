@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.sku import SKU
 from app.models.design import Design
+from app.models.product_type import ProductType
 from app.models.batch import Batch
 from app.models.batch_assignment import BatchAssignment
 from app.models.batch_processing import BatchProcessing
@@ -192,6 +193,15 @@ class SKUService:
         if existing.scalar_one_or_none():
             raise DuplicateError(f"SKU code '{sku_code}' already exists")
 
+        # HSN: explicit request value takes precedence, else inherit from ProductType
+        hsn = req.hsn_code
+        if not hsn:
+            pt_result = await self.db.execute(
+                select(ProductType).where(ProductType.code == req.product_type)
+            )
+            pt = pt_result.scalar_one_or_none()
+            hsn = pt.hsn_code if pt else None
+
         sku = SKU(
             sku_code=sku_code,
             product_type=req.product_type,
@@ -201,6 +211,7 @@ class SKUService:
             size=req.size,
             description=req.description,
             base_price=req.base_price,
+            hsn_code=hsn,
         )
         self.db.add(sku)
         await self.db.flush()
@@ -271,7 +282,11 @@ class SKUService:
         self, sku_code: str, product_type: str, product_name: str, color: str, size: str,
         color_id: UUID | None = None, design_id: UUID | None = None,
     ) -> SKU:
-        """Find existing SKU by code, or create new one with InventoryState."""
+        """Find existing SKU by code, or create new one with InventoryState.
+
+        New SKUs inherit hsn_code from the matching ProductType (by code).
+        Existing SKUs are NOT modified — preserves any explicit HSN already set.
+        """
         stmt = select(SKU).where(SKU.sku_code == sku_code)
         result = await self.db.execute(stmt)
         sku = result.scalar_one_or_none()
@@ -283,6 +298,11 @@ class SKUService:
                 sku.design_id = design_id
             return sku
 
+        # Lookup ProductType for HSN inheritance
+        pt_stmt = select(ProductType).where(ProductType.code == product_type)
+        pt_result = await self.db.execute(pt_stmt)
+        pt = pt_result.scalar_one_or_none()
+
         sku = SKU(
             sku_code=sku_code,
             product_type=product_type,
@@ -291,6 +311,7 @@ class SKUService:
             color_id=color_id,
             design_id=design_id,
             size=size,
+            hsn_code=pt.hsn_code if pt else None,
             is_active=True,
         )
         self.db.add(sku)

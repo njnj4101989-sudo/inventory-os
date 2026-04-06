@@ -261,10 +261,10 @@ class CompanyService:
             await session.execute(text(f"SET search_path TO {schema_name}, public"))
 
             for pt in [
-                {"code": "FBL", "name": "Fancy Blouse", "description": "Fancy blouse designs (meter rolls)", "palla_mode": "meter"},
-                {"code": "SBL", "name": "Stretchable Blouse", "description": "Stretchable blouse designs", "palla_mode": "both"},
-                {"code": "LHG", "name": "Lehenga", "description": "Lehenga designs (weight or meter)", "palla_mode": "both"},
-                {"code": "SAR", "name": "Saree", "description": "Saree pieces (meter rolls)", "palla_mode": "meter"},
+                {"code": "FBL", "name": "Fancy Blouse", "description": "Fancy blouse designs (meter rolls)", "palla_mode": "meter", "hsn_code": "6206"},
+                {"code": "SBL", "name": "Stretchable Blouse", "description": "Stretchable blouse designs", "palla_mode": "both", "hsn_code": "6206"},
+                {"code": "LHG", "name": "Lehenga", "description": "Lehenga designs (weight or meter)", "palla_mode": "both", "hsn_code": "6204"},
+                {"code": "SAR", "name": "Saree", "description": "Saree pieces (meter rolls)", "palla_mode": "meter", "hsn_code": "5407"},
             ]:
                 session.add(ProductType(**pt))
 

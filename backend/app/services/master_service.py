@@ -58,11 +58,13 @@ class MasterService:
     async def create_product_type(db: AsyncSession, data) -> ProductType:
         code = data.code.strip().upper()
         await MasterService._check_code(db, ProductType, code, "Product type")
+        hsn = getattr(data, 'hsn_code', None)
         obj = ProductType(
             code=code,
             name=data.name.strip().title(),
             description=data.description,
             palla_mode=getattr(data, 'palla_mode', 'weight') or 'weight',
+            hsn_code=hsn.strip() if hsn else None,
         )
         db.add(obj)
         await db.flush()
@@ -77,6 +79,8 @@ class MasterService:
             obj.description = data.description
         if data.palla_mode is not None:
             obj.palla_mode = data.palla_mode
+        if data.hsn_code is not None:
+            obj.hsn_code = data.hsn_code.strip() or None
         if data.is_active is not None:
             obj.is_active = data.is_active
         await db.flush()

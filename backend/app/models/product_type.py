@@ -21,4 +21,6 @@ class ProductType(Base):
     description: Mapped[str | None] = mapped_column(Text)
     # weight = only palla_weight, meter = only palla_meter, both = either
     palla_mode: Mapped[str] = mapped_column(String(10), default="weight", server_default="'weight'")
+    # GST HSN code — propagates to SKU at creation, then to InvoiceItem at invoice time
+    hsn_code: Mapped[str | None] = mapped_column(String(8))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
