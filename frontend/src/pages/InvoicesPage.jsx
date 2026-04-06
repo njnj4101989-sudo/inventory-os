@@ -646,7 +646,7 @@ export default function InvoicesPage() {
           </div>
         </div>
 
-        <div ref={printRef} style={{ width: '210mm', background: '#fff', padding: '12mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#000', fontSize: '10px', lineHeight: '1.4' }} className="shadow-2xl rounded-lg mb-6">
+        <div ref={printRef} style={{ width: '210mm', background: '#fff', padding: '12mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#000', fontSize: '10px', lineHeight: '1.4' }} className="shadow-2xl rounded-lg mb-6 print:shadow-none print:rounded-none">
 
           {/* ═══ HEADER ═══ */}
           <div style={{ borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
