@@ -176,7 +176,13 @@ export default function InvoicesPage() {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: printInvoice ? `Invoice-${printInvoice.invoice_number}` : 'Invoice',
-    pageStyle: `@page { size: A4 portrait; margin: 15mm; } * { box-sizing: border-box; }`,
+    pageStyle: `
+      @page { size: A4 portrait; margin: 12mm; }
+      * { box-sizing: border-box; }
+      body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #000; }
+      tr { page-break-inside: avoid; }
+      .inv-footer-block { page-break-inside: avoid; }
+    `,
   })
 
   useEffect(() => { loadColorMap() }, [])
@@ -593,12 +599,43 @@ export default function InvoicesPage() {
   }
 
   /* ═══════════════════════ PRINT OVERLAY ═══════════════════════ */
+  // Amount in words (Indian numbering)
+  const amountInWords = (num) => {
+    if (!num || num === 0) return 'Zero'
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+      'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+    const convert = (n) => {
+      if (n === 0) return ''
+      if (n < 20) return ones[n] + ' '
+      if (n < 100) return tens[Math.floor(n / 10)] + ' ' + ones[n % 10] + ' '
+      if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred ' + convert(n % 100)
+      if (n < 100000) return convert(Math.floor(n / 1000)) + 'Thousand ' + convert(n % 1000)
+      if (n < 10000000) return convert(Math.floor(n / 100000)) + 'Lakh ' + convert(n % 100000)
+      return convert(Math.floor(n / 10000000)) + 'Crore ' + convert(n % 10000000)
+    }
+    const rupees = Math.floor(num)
+    const paise = Math.round((num - rupees) * 100)
+    let result = 'Rupees ' + convert(rupees).trim()
+    if (paise > 0) result += ' and ' + convert(paise).trim() + ' Paise'
+    return result + ' Only'
+  }
+
   if (printInvoice) {
     const inv = printInvoice
     const isIGST = inv.place_of_supply && co.state_code && inv.place_of_supply !== co.state_code
+    const totalQty = (inv.items || []).reduce((s, it) => s + (it.quantity || 0), 0)
+    const IS = {
+      th: { padding: '3px 5px', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1.5px solid #000', borderRight: '1px solid #ccc', background: '#f0f0f0', color: '#000' },
+      thLast: { padding: '3px 5px', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1.5px solid #000', background: '#f0f0f0', color: '#000' },
+      td: { padding: '2px 5px', fontSize: '10px', borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc' },
+      tdLast: { padding: '2px 5px', fontSize: '10px', borderBottom: '1px solid #ccc' },
+      secLabel: { fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', margin: '0 0 3px' },
+    }
+
     return (
-      <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto">
-        <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
+      <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto py-4">
+        <div className="w-full max-w-[220mm] mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg mx-4">
           <span className="font-semibold text-gray-800">Invoice {inv.invoice_number}</span>
           <div className="flex gap-2">
             <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">Print</button>
@@ -606,157 +643,157 @@ export default function InvoicesPage() {
           </div>
         </div>
 
-        <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.5' }}>
-          {/* Header */}
-          <div style={{ borderBottom: '3px solid #059669', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div ref={printRef} style={{ width: '210mm', background: '#fff', padding: '12mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#000', fontSize: '10px', lineHeight: '1.4' }} className="shadow-2xl rounded-lg mb-6">
+
+          {/* ═══ HEADER ═══ */}
+          <div style={{ borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px' }}>TAX INVOICE</h1>
-              <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{co.name || 'Company'}</p>
-              {co.address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
-              {co.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: {co.gst_no}{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
-              {co.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {co.phone}{co.email ? ` | ${co.email}` : ''}</p>}
+              <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>TAX INVOICE</h1>
+              <p style={{ fontSize: '13px', fontWeight: 700, margin: '2px 0 0' }}>{co.name || 'Company'}</p>
+              {co.address && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
+              {co.gst_no && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>GSTIN: <strong>{co.gst_no}</strong>{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
+              {(co.phone || co.email) && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>{co.phone ? `Ph: ${co.phone}` : ''}{co.email ? ` | ${co.email}` : ''}</p>}
             </div>
             <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: '13px', fontWeight: 600 }}>{inv.invoice_number}</p>
-              <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(inv.issued_at)}</p>
-              <p style={{ fontSize: '11px', color: '#6b7280' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}{inv.shipment?.shipment_no ? ` · ${inv.shipment.shipment_no}` : ''}</p>
-              {inv.due_date && <p style={{ fontSize: '11px', color: '#6b7280' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
+              <p style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>{inv.invoice_number}</p>
+              <p style={{ fontSize: '10px', margin: '2px 0' }}>Date: {fmtDate(inv.issued_at)}</p>
+              <p style={{ fontSize: '10px', margin: '1px 0' }}>{inv.order?.order_number ? `Order: ${inv.order.order_number}` : 'Direct Sale'}{inv.shipment?.shipment_no ? ` · ${inv.shipment.shipment_no}` : ''}</p>
+              {inv.due_date && <p style={{ fontSize: '10px', margin: '1px 0' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
             </div>
           </div>
 
-          {/* Bill To + Payment Info */}
-          <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
-            <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bill To</p>
-              <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{inv.customer_name || '—'}</p>
-              {inv.customer_phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {inv.customer_phone}</p>}
-              {inv.customer_address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{inv.customer_address}</p>}
-              {inv.customer_gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {inv.customer_gst_no}</p>}
-              {inv.place_of_supply && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Place of Supply: {inv.place_of_supply}</p>}
+          {/* ═══ BILL TO + DISPATCH ═══ */}
+          <div style={{ display: 'flex', border: '1px solid #000', marginBottom: '10px' }}>
+            <div style={{ flex: 1, padding: '6px 8px', borderRight: '1px solid #000' }}>
+              <p style={IS.secLabel}>Bill To</p>
+              <p style={{ fontSize: '12px', fontWeight: 700, margin: 0 }}>{inv.customer_name || '—'}</p>
+              {inv.customer_phone && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>Ph: {inv.customer_phone}</p>}
+              {inv.customer_address && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>{inv.customer_address}</p>}
+              {inv.customer_gst_no && <p style={{ fontSize: '10px', fontWeight: 600, margin: '1px 0 0' }}>GSTIN: {inv.customer_gst_no}</p>}
+              {inv.place_of_supply && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>Place of Supply: {inv.place_of_supply}</p>}
             </div>
-            <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Payment Details</p>
-              <p style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, background: inv.status === 'paid' ? '#dcfce7' : inv.status === 'cancelled' ? '#fee2e2' : '#fef3c7', color: inv.status === 'paid' ? '#166534' : inv.status === 'cancelled' ? '#991b1b' : '#92400e' }}>
-                {inv.status === 'paid' ? 'PAID' : inv.status === 'cancelled' ? 'CANCELLED' : 'PENDING'}
-              </p>
-              {inv.paid_at && <p style={{ fontSize: '11px', color: '#166534', margin: '4px 0 0' }}>Paid: {fmtDate(inv.paid_at)}</p>}
-              {inv.payment_terms && <p style={{ fontSize: '11px', margin: '4px 0 0' }}>Terms: {inv.payment_terms}</p>}
-              {inv.due_date && !inv.paid_at && <p style={{ fontSize: '11px', margin: '2px 0 0' }}>Due: {fmtDate(inv.due_date + 'T00:00:00')}</p>}
+            <div style={{ flex: 1, padding: '6px 8px' }}>
+              <p style={IS.secLabel}>Dispatch & Transport</p>
+              {inv.transport_detail && <p style={{ fontSize: '10px', margin: '1px 0' }}>Transport: <strong>{inv.transport_detail.name}</strong></p>}
+              {inv.lr_number && <p style={{ fontSize: '10px', margin: '1px 0' }}>L.R. No.: <strong>{inv.lr_number}</strong>{inv.lr_date ? ` | Date: ${fmtDate(inv.lr_date + 'T00:00:00')}` : ''}</p>}
+              {inv.broker && <p style={{ fontSize: '10px', margin: '1px 0' }}>Broker: <strong>{inv.broker.name}</strong></p>}
+              {inv.payment_terms && <p style={{ fontSize: '10px', margin: '1px 0' }}>Terms: {inv.payment_terms}</p>}
+              {!inv.transport_detail && !inv.lr_number && !inv.broker && <p style={{ fontSize: '10px', margin: '1px 0' }}>—</p>}
             </div>
           </div>
-
-          {/* Transport / LR / Broker */}
-          {(inv.transport_detail || inv.lr_number || inv.broker) && (
-            <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
-              {inv.transport_detail && (
-                <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Transport</p>
-                  <p style={{ fontSize: '13px', fontWeight: 600, margin: 0 }}>{inv.transport_detail.name}</p>
-                  {inv.transport_detail.gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {inv.transport_detail.gst_no}</p>}
-                  {inv.transport_detail.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {inv.transport_detail.phone}</p>}
-                </div>
-              )}
-              {(inv.lr_number || inv.broker) && (
-                <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-                  <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Dispatch Details</p>
-                  {inv.lr_number && <p style={{ fontSize: '12px', margin: '2px 0' }}>L.R. No.: <strong>{inv.lr_number}</strong>{inv.lr_date ? ` | Date: ${fmtDate(inv.lr_date + 'T00:00:00')}` : ''}</p>}
-                  {inv.broker && <p style={{ fontSize: '12px', margin: '2px 0' }}>Broker: <strong>{inv.broker.name}</strong></p>}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Notes */}
           {inv.notes && (
-            <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: '#92400e' }}>
+            <div style={{ border: '1px solid #000', padding: '4px 8px', marginBottom: '10px', fontSize: '10px' }}>
               <strong>Notes:</strong> {inv.notes}
             </div>
           )}
 
-          {/* Line items */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+          {/* ═══ LINE ITEMS ═══ */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0' }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                {['#', 'HSN', 'SKU Code', 'Description', 'Size', 'Qty', 'Rate', 'Amount'].map(h => (
-                  <th key={h} style={{ padding: '8px 6px', textAlign: h === 'Qty' || h === 'Rate' || h === 'Amount' ? 'right' : 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{h}</th>
-                ))}
+              <tr>
+                <th style={{ ...IS.th, width: '24px', textAlign: 'center' }}>#</th>
+                <th style={{ ...IS.th, textAlign: 'left' }}>SKU Code</th>
+                <th style={{ ...IS.th, textAlign: 'left', width: '14%' }}>Color</th>
+                <th style={{ ...IS.th, textAlign: 'center', width: '8%' }}>Size</th>
+                <th style={{ ...IS.th, textAlign: 'left', width: '10%' }}>HSN</th>
+                <th style={{ ...IS.th, textAlign: 'right', width: '7%' }}>Qty</th>
+                <th style={{ ...IS.th, textAlign: 'right', width: '10%' }}>Rate</th>
+                <th style={{ ...IS.thLast, textAlign: 'right', width: '12%' }}>Amount</th>
               </tr>
             </thead>
             <tbody>
               {inv.items?.map((item, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '8px 6px', color: '#9ca3af' }}>{i + 1}</td>
-                  <td style={{ padding: '8px 6px', color: '#6b7280', fontSize: '11px' }}>{item.hsn_code || '—'}</td>
-                  <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
-                  <td style={{ padding: '8px 6px', color: '#6b7280' }}>{item.sku?.product_name || '—'}</td>
-                  <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.size || '—'}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{item.quantity}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(item.total_price)}</td>
+                <tr key={i} style={{ pageBreakInside: 'avoid' }}>
+                  <td style={{ ...IS.td, textAlign: 'center', fontWeight: 600 }}>{i + 1}</td>
+                  <td style={{ ...IS.td, fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
+                  <td style={{ ...IS.td }}>{item.sku?.color || '—'}</td>
+                  <td style={{ ...IS.td, textAlign: 'center', fontWeight: 600 }}>{item.sku?.size || '—'}</td>
+                  <td style={{ ...IS.td, fontSize: '9px' }}>{item.hsn_code || '—'}</td>
+                  <td style={{ ...IS.td, textAlign: 'right', fontWeight: 700 }}>{item.quantity}</td>
+                  <td style={{ ...IS.td, textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
+                  <td style={{ ...IS.tdLast, textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(item.total_price)}</td>
                 </tr>
               ))}
+              {/* Total qty row */}
+              <tr style={{ borderTop: '1.5px solid #000' }}>
+                <td colSpan={5} style={{ padding: '3px 5px', fontSize: '9px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>TOTAL</td>
+                <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>{totalQty}</td>
+                <td style={{ padding: '3px 5px', borderRight: '1px solid #ccc' }}></td>
+                <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.subtotal)}</td>
+              </tr>
             </tbody>
           </table>
 
-          {/* Tax breakdown */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ width: '280px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#6b7280' }}>Subtotal</span>
-                <span style={{ fontWeight: 600 }}>{fmtCurrency(inv.subtotal)}</span>
-              </div>
-              {(inv.discount_amount || 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                  <span style={{ color: '#16a34a' }}>Discount</span>
-                  <span style={{ color: '#16a34a' }}>-{fmtCurrency(inv.discount_amount)}</span>
-                </div>
-              )}
-              {(inv.gst_percent || 0) > 0 && (isIGST ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                  <span style={{ color: '#6b7280' }}>IGST ({inv.gst_percent}%)</span>
-                  <span>{fmtCurrency(inv.tax_amount)}</span>
-                </div>
-              ) : (<>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                  <span style={{ color: '#6b7280' }}>CGST ({(inv.gst_percent || 0) / 2}%)</span>
-                  <span>{fmtCurrency((inv.tax_amount || 0) / 2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                  <span style={{ color: '#6b7280' }}>SGST ({(inv.gst_percent || 0) / 2}%)</span>
-                  <span>{fmtCurrency((inv.tax_amount || 0) / 2)}</span>
-                </div>
-              </>))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '4px', borderTop: '2px solid #059669', fontSize: '16px', fontWeight: 800 }}>
-                <span>Grand Total</span>
-                <span>{fmtCurrency(inv.total_amount)}</span>
-              </div>
+          {/* ═══ FOOTER BLOCK — stays together ═══ */}
+          <div className="inv-footer-block">
+            {/* ═══ TAX + GRAND TOTAL ═══ */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', marginBottom: '6px' }}>
+              <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '240px' }}>
+                <tbody>
+                  {(inv.discount_amount || 0) > 0 && (
+                    <tr>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Discount</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>-{fmtCurrency(inv.discount_amount)}</td>
+                    </tr>
+                  )}
+                  {(inv.gst_percent || 0) > 0 && (isIGST ? (
+                    <tr>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>IGST ({inv.gst_percent}%)</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency(inv.tax_amount)}</td>
+                    </tr>
+                  ) : (<>
+                    <tr>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>CGST ({(inv.gst_percent || 0) / 2}%)</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>SGST ({(inv.gst_percent || 0) / 2}%)</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
+                    </tr>
+                  </>))}
+                  <tr>
+                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, borderRight: '1px solid #000' }}>Grand Total</td>
+                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
 
-          {/* Bank Details */}
-          {co.bank_name && (
-            <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginTop: '24px' }}>
-              <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bank Details</p>
-              <p style={{ fontSize: '12px', margin: '2px 0' }}>Bank: <strong>{co.bank_name}</strong></p>
-              {co.bank_account && <p style={{ fontSize: '12px', margin: '2px 0' }}>A/C No: <strong>{co.bank_account}</strong></p>}
-              {co.bank_ifsc && <p style={{ fontSize: '12px', margin: '2px 0' }}>IFSC: <strong>{co.bank_ifsc}</strong>{co.bank_branch ? ` | Branch: ${co.bank_branch}` : ''}</p>}
+            {/* ═══ AMOUNT IN WORDS ═══ */}
+            <div style={{ border: '1px solid #000', padding: '4px 8px', marginBottom: '8px', fontSize: '10px' }}>
+              <strong>Amount in Words:</strong> {amountInWords(inv.total_amount)}
             </div>
-          )}
 
-          {/* Footer */}
-          <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div>
-              <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Thank you for your business!</p>
-              <p style={{ fontSize: '10px', color: '#9ca3af', margin: '2px 0 0' }}>This is a computer-generated invoice.</p>
-            </div>
-            <div style={{ display: 'flex', gap: '60px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-                <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Customer Signature</p>
+            {/* ═══ BANK DETAILS ═══ */}
+            {co.bank_name && (
+              <div style={{ border: '1px solid #000', padding: '4px 8px', marginBottom: '8px' }}>
+                <p style={IS.secLabel}>Bank Details</p>
+                <p style={{ fontSize: '10px', margin: '1px 0' }}>Bank: <strong>{co.bank_name}</strong>{co.bank_branch ? ` | Branch: ${co.bank_branch}` : ''}</p>
+                {co.bank_account && <p style={{ fontSize: '10px', margin: '1px 0' }}>A/C No: <strong>{co.bank_account}</strong></p>}
+                {co.bank_ifsc && <p style={{ fontSize: '10px', margin: '1px 0' }}>IFSC: <strong>{co.bank_ifsc}</strong></p>}
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-                <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Authorized Signatory</p>
+            )}
+
+            {/* ═══ TERMS + E&OE ═══ */}
+            <div style={{ fontSize: '8px', marginBottom: '8px', lineHeight: '1.5' }}>
+              <p style={{ margin: 0 }}><strong>Terms & Conditions:</strong></p>
+              <p style={{ margin: '1px 0' }}>1. Goods once sold will not be taken back or exchanged.</p>
+              <p style={{ margin: '1px 0' }}>2. Subject to Surat jurisdiction only.</p>
+              <p style={{ margin: '1px 0' }}>3. E. & O.E. (Errors and Omissions Excepted)</p>
+            </div>
+
+            {/* ═══ SIGNATURES ═══ */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', gap: '20px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ borderBottom: '1px solid #000', height: '24px', marginBottom: '4px' }}></div>
+                <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Customer Signature</p>
+              </div>
+              <div style={{ flex: 1, textAlign: 'right' }}>
+                <p style={{ fontSize: '10px', fontWeight: 700, margin: '0 0 14px' }}>For {co.name || 'Company'}</p>
+                <div style={{ borderBottom: '1px solid #000', height: '10px', marginBottom: '4px' }}></div>
+                <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Authorized Signatory</p>
               </div>
             </div>
           </div>
