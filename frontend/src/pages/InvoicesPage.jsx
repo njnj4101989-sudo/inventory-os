@@ -791,7 +791,7 @@ export default function InvoicesPage() {
           </div>
 
           {/* ═══ SIGNATURES ═══ */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '12px', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '18px', gap: '20px' }}>
             <div style={{ flex: 1 }}>
               <div style={{ borderBottom: '1px solid #000', height: '24px', marginBottom: '3px' }}></div>
               <p style={{ fontSize: '8px', fontWeight: 600, margin: 0 }}>Customer Signature</p>
