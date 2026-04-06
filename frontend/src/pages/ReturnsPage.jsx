@@ -11,7 +11,7 @@ import { getRolls } from '../api/rolls'
 import { getCompany } from '../api/company'
 import { useAuth } from '../hooks/useAuth'
 import CameraScanner from '../components/common/CameraScanner'
-import { useRemoteScan } from '../hooks/useRemoteScan'
+import { useScanPair } from '../hooks/useScanPair'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
 import StatusBadge from '../components/common/StatusBadge'
@@ -169,7 +169,10 @@ export default function ReturnsPage() {
   const [formError, setFormError] = useState(null)
   const [supplierRolls, setSupplierRolls] = useState([])
   const [supplierSkus, setSupplierSkus] = useState([])
-  const [scanRowIdx, setScanRowIdx] = useState(null) // which row is scanning
+  const [scanRowIdx, setScanRowIdx] = useState(null) // which row is scanning (camera)
+  const [scanMode, setScanMode] = useState(false) // phone scan pairing mode
+  const [scanStatus, setScanStatus] = useState(null) // { type: 'added'|'error', message }
+  const scanInputRef = useRef(null)
   const [rollSuggestions, setRollSuggestions] = useState([]) // dropdown suggestions for roll code
   const [rollSuggestIdx, setRollSuggestIdx] = useState(null) // which row is showing suggestions
   const [rollHighlight, setRollHighlight] = useState(-1) // highlighted suggestion index
@@ -185,7 +188,10 @@ export default function ReturnsPage() {
   const [salesItems, setSalesItems] = useState([])
   const [salesSaving, setSalesSaving] = useState(false)
   const [salesFormError, setSalesFormError] = useState(null)
-  const [salesScanRowIdx, setSalesScanRowIdx] = useState(null)
+  const [salesScanRowIdx, setSalesScanRowIdx] = useState(null) // which row is scanning (camera)
+  const [salesScanMode, setSalesScanMode] = useState(false) // phone scan pairing mode
+  const [salesScanStatus, setSalesScanStatus] = useState(null) // { type: 'added'|'error', message }
+  const salesScanInputRef = useRef(null)
   const [skuSuggestions, setSkuSuggestions] = useState([])
   const [skuSuggestIdx, setSkuSuggestIdx] = useState(null)
   const [skuHighlight, setSkuHighlight] = useState(-1)
@@ -326,6 +332,8 @@ export default function ReturnsPage() {
   const openSupplierCreate = async () => {
     setCreateMode(true)
     setFormError(null)
+    setScanMode(false)
+    setScanStatus(null)
     setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', notes: '' })
     setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
     setSupplierRolls([])
@@ -423,16 +431,103 @@ export default function ReturnsPage() {
     }
   }
 
-  /* ── Remote scan (phone → desktop) — resolve roll/SKU into return item ── */
-  useRemoteScan(useCallback((scan) => {
-    if (!createMode) return
-    if (scan.entity_type === 'roll' || scan.entity_type === 'sku') {
-      // Add a new item row and resolve the code
-      setFormItems(prev => [...prev, { roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
-      // Resolve into the newly added row
-      setTimeout(() => resolveRollCode(formItems.length, scan.code), 100)
+  /* ── Refs for stale-closure-safe scan callbacks ── */
+  const formItemsRef = useRef(formItems)
+  formItemsRef.current = formItems
+  const supplierRollsRef = useRef(supplierRolls)
+  supplierRollsRef.current = supplierRolls
+
+  /* ── Phone scan handler for supplier returns (roll codes) ── */
+  const handlePhoneScanRoll = useCallback((rawValue, source = 'phone') => {
+    const rollMatch = rawValue.match(/\/scan\/roll\/([^/?\s]+)/)
+    const code = rollMatch ? decodeURIComponent(rollMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    if (!form.supplier_id) {
+      setScanStatus({ type: 'error', message: 'Select a supplier first — cannot resolve roll without supplier' })
+      setTimeout(() => setScanStatus(null), 4000)
+      return
     }
-  }, [createMode, formItems.length]))
+
+    const rolls = supplierRollsRef.current
+    if (rolls.length === 0) {
+      setScanStatus({ type: 'error', message: 'No rolls loaded for this supplier — try re-selecting supplier' })
+      setTimeout(() => setScanStatus(null), 4000)
+      return
+    }
+
+    const roll = rolls.find(r => r.roll_code === code)
+    if (!roll) {
+      setScanStatus({ type: 'error', message: `Roll not found for this supplier: ${code}` })
+      setTimeout(() => setScanStatus(null), 4000)
+      return
+    }
+
+    // Check for duplicate
+    const items = formItemsRef.current
+    const existingIdx = items.findIndex(i => i.roll_id === roll.id)
+    if (existingIdx !== -1) {
+      setScanStatus({ type: 'duplicate', message: `${code} already added — row ${existingIdx + 1}` })
+      setTimeout(() => setScanStatus(null), 3000)
+      return
+    }
+
+    // Add to empty row or append
+    const newItem = {
+      roll_id: roll.id, sku_id: '', roll_code: roll.roll_code, roll_detail: roll,
+      quantity: 1, weight: roll.current_weight || roll.total_weight || '',
+      unit_price: '', reason: '', notes: '',
+    }
+    setFormItems(prev => {
+      const emptyIdx = prev.findIndex(i => !i.roll_id && !i.roll_code)
+      if (emptyIdx !== -1) return prev.map((i, idx) => idx === emptyIdx ? newItem : i)
+      return [...prev, newItem]
+    })
+    setScanStatus({ type: 'added', message: `${code} added${source === 'phone' ? ' via phone' : ''}` })
+    setTimeout(() => setScanStatus(null), 2500)
+  }, [form.supplier_id])
+
+  /* ── WebSocket scan pairing — supplier returns (phone → desktop) ── */
+  const { phoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: createMode && scanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handlePhoneScanRoll(data.code, 'phone')
+    }, [handlePhoneScanRoll]),
+  })
+
+  /* ── POS scan bar: handle manual roll code submit ── */
+  const handlePOSRollSubmit = useCallback((code) => {
+    if (!code.trim()) return
+    handlePhoneScanRoll(code.trim(), 'type')
+    // Re-focus the scan input for next entry
+    setTimeout(() => {
+      const input = scanInputRef.current?.querySelector('input')
+      if (input) { input.focus(); input.value = '' }
+    }, 50)
+  }, [handlePhoneScanRoll])
+
+  /* ── POS roll search options ── */
+  const rollSearchOptions = useMemo(() => {
+    return supplierRolls.map(r => ({
+      value: r.roll_code,
+      label: `${r.roll_code} · ${r.fabric_type || ''} · ${r.color?.name || r.color || ''} · ${r.current_weight || r.total_weight || '?'} kg`,
+    }))
+  }, [supplierRolls])
+
+  /* ── Escape key: close scan mode first, then form ── */
+  useEffect(() => {
+    if (!createMode && !salesCreateMode) return
+    const handler = (e) => {
+      if (e.key !== 'Escape') return
+      if (quickMasterOpen) return
+      e.preventDefault()
+      if (createMode && scanMode) { setScanMode(false); setScanStatus(null); return }
+      if (salesCreateMode && salesScanMode) { setSalesScanMode(false); setSalesScanStatus(null); return }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [createMode, salesCreateMode, scanMode, salesScanMode, quickMasterOpen])
 
   const addItem = () => setFormItems(prev => [...prev, { roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const removeItem = (idx) => setFormItems(prev => prev.filter((_, i) => i !== idx))
@@ -515,6 +610,8 @@ export default function ReturnsPage() {
   const openSalesCreate = async (prefillCustomerId, prefillOrderId) => {
     setSalesCreateMode(true)
     setSalesFormError(null)
+    setSalesScanMode(false)
+    setSalesScanStatus(null)
     setSalesForm({ customer_id: prefillCustomerId || '', order_id: prefillOrderId || '', transport_id: '', lr_number: '', lr_date: '', reason_summary: '', gst_percent: '0' })
     setSalesItems([])
     setCustomerOrders([])
@@ -668,6 +765,92 @@ export default function ReturnsPage() {
       setSalesScanRowIdx(null)
     }
   }
+
+  /* ── Ref for stale-closure-safe sales items access ── */
+  const salesItemsRef = useRef(salesItems)
+  salesItemsRef.current = salesItems
+
+  /* ── Phone scan handler for sales returns (SKU codes) ── */
+  const handlePhoneScanSKU = useCallback(async (rawValue, source = 'phone') => {
+    const skuMatch = rawValue.match(/\/scan\/sku\/([^/?\s]+)/)
+    const code = skuMatch ? decodeURIComponent(skuMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    if (!salesForm.customer_id) {
+      setSalesScanStatus({ type: 'error', message: 'Select a customer first — cannot add items without customer' })
+      setTimeout(() => setSalesScanStatus(null), 4000)
+      return
+    }
+
+    try {
+      // Check for duplicate in current items
+      const items = salesItemsRef.current
+      const existingIdx = items.findIndex(i => i.sku_code === code)
+      if (existingIdx !== -1) {
+        setSalesScanStatus({ type: 'duplicate', message: `${code} already added — row ${existingIdx + 1}` })
+        setTimeout(() => setSalesScanStatus(null), 3000)
+        return
+      }
+
+      // Try local cache first
+      let sku = skus.find(s => s.sku_code === code)
+      if (!sku) {
+        const res = await getSKUByCode(code)
+        sku = res.data?.data || res.data
+      }
+
+      if (!sku) {
+        setSalesScanStatus({ type: 'error', message: `SKU not found: ${code}` })
+        setTimeout(() => setSalesScanStatus(null), 4000)
+        return
+      }
+
+      const newItem = {
+        sku_id: sku.id, sku_code: sku.sku_code, sku_detail: sku,
+        color: sku.color || '', size: sku.size || '',
+        qty: 1, unit_price: sku.base_price || sku.sale_rate || '',
+        reason: '', checked: true, fromOrder: false,
+      }
+      setSalesItems(prev => {
+        const emptyIdx = prev.findIndex(i => !i.sku_id && !i.sku_code && !i.fromOrder)
+        if (emptyIdx !== -1) return prev.map((i, idx) => idx === emptyIdx ? newItem : i)
+        return [...prev, newItem]
+      })
+      setSalesScanStatus({ type: 'added', message: `${sku.sku_code} added${source === 'phone' ? ' via phone' : ''}` })
+      setTimeout(() => setSalesScanStatus(null), 2500)
+    } catch (err) {
+      const isNetwork = !err.response && (err.code === 'ERR_NETWORK' || err.message === 'Network Error' || !navigator.onLine)
+      setSalesScanStatus({ type: 'error', message: isNetwork ? 'Connection error — check internet' : `SKU not found: ${code}` })
+      setTimeout(() => setSalesScanStatus(null), 4000)
+    }
+  }, [salesForm.customer_id, skus])
+
+  /* ── WebSocket scan pairing — sales returns (phone → desktop) ── */
+  const { phoneConnected: salesPhoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: salesCreateMode && salesScanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handlePhoneScanSKU(data.code, 'phone')
+    }, [handlePhoneScanSKU]),
+  })
+
+  /* ── POS scan bar: handle manual SKU code submit ── */
+  const handlePOSSKUSubmit = useCallback((code) => {
+    if (!code.trim()) return
+    handlePhoneScanSKU(code.trim(), 'type')
+    setTimeout(() => {
+      const input = salesScanInputRef.current?.querySelector('input')
+      if (input) { input.focus(); input.value = '' }
+    }, 50)
+  }, [handlePhoneScanSKU])
+
+  /* ── POS SKU search options ── */
+  const skuSearchOptions = useMemo(() => {
+    return skus.map(s => ({
+      value: s.sku_code,
+      label: `${s.sku_code}${s.color ? ` · ${s.color}` : ''}${s.size ? ` · ${s.size}` : ''}`,
+    }))
+  }, [skus])
 
   const handleSalesCreate = async () => {
     if (!salesForm.customer_id) { setSalesFormError('Select a customer'); return }
@@ -1306,9 +1489,81 @@ export default function ReturnsPage() {
           {/* Line Items card */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({formItems.length} items)</span>
-              <button onClick={addItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({formItems.filter(i => i.roll_id || i.sku_id).length} items)</span>
+              <div className="flex items-center gap-2">
+                {form.return_type === 'roll_return' && (
+                  <button onClick={() => { setScanMode(m => !m); setScanStatus(null) }}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 typo-btn-sm shadow-sm transition-colors ${scanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                    {scanMode ? 'Scanning Active' : 'Scan from Phone'}
+                  </button>
+                )}
+                <button onClick={addItem} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add Row
+                </button>
+              </div>
             </div>
+
+            {/* ── POS Scan Bar (supplier roll return) ── */}
+            {scanMode && form.return_type === 'roll_return' && (
+              <div className="border-b border-gray-200 bg-emerald-50/50 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 relative" ref={scanInputRef}>
+                    <FilterSelect
+                      searchable
+                      autoFocus
+                      full
+                      value=""
+                      onChange={(code) => { if (code) handlePOSRollSubmit(code) }}
+                      options={[{ value: '', label: 'Type or scan roll code...' }, ...rollSearchOptions]}
+                    />
+                  </div>
+                  <button onClick={() => { setScanMode(false); setScanStatus(null) }}
+                    className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                {/* Status indicator */}
+                <div className="flex items-center gap-2 min-h-[20px]">
+                  {scanStatus ? (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                      scanStatus.type === 'added' ? 'text-emerald-600' :
+                      scanStatus.type === 'duplicate' ? 'text-amber-600' :
+                      'text-red-500'
+                    }`}>
+                      {scanStatus.type === 'added' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                      {scanStatus.type === 'duplicate' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      )}
+                      {scanStatus.type === 'error' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      )}
+                      {scanStatus.message}
+                    </span>
+                  ) : phoneConnected ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                      <span className="relative flex h-2 w-2">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      Phone connected — ready to scan
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                      </span>
+                      Phone not connected — open Gun mode on phone
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-emerald-600">
@@ -1537,9 +1792,78 @@ export default function ReturnsPage() {
             <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({salesItems.filter(i => i.checked).length} items)</span>
               {!hasOrderItems && (
-                <button onClick={addManualItem} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700 transition-colors">+ Add Row</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setSalesScanMode(m => !m); setSalesScanStatus(null) }}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 typo-btn-sm shadow-sm transition-colors ${salesScanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                    {salesScanMode ? 'Scanning Active' : 'Scan from Phone'}
+                  </button>
+                  <button onClick={addManualItem} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add Row
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* ── POS Scan Bar (sales SKU return) ── */}
+            {salesScanMode && !hasOrderItems && (
+              <div className="border-b border-gray-200 bg-emerald-50/50 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 relative" ref={salesScanInputRef}>
+                    <FilterSelect
+                      searchable
+                      autoFocus
+                      full
+                      value=""
+                      onChange={(code) => { if (code) handlePOSSKUSubmit(code) }}
+                      options={[{ value: '', label: 'Type or scan SKU code...' }, ...skuSearchOptions]}
+                    />
+                  </div>
+                  <button onClick={() => { setSalesScanMode(false); setSalesScanStatus(null) }}
+                    className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                {/* Status indicator */}
+                <div className="flex items-center gap-2 min-h-[20px]">
+                  {salesScanStatus ? (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                      salesScanStatus.type === 'added' ? 'text-emerald-600' :
+                      salesScanStatus.type === 'duplicate' ? 'text-amber-600' :
+                      'text-red-500'
+                    }`}>
+                      {salesScanStatus.type === 'added' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                      {salesScanStatus.type === 'duplicate' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      )}
+                      {salesScanStatus.type === 'error' && (
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      )}
+                      {salesScanStatus.message}
+                    </span>
+                  ) : salesPhoneConnected ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                      <span className="relative flex h-2 w-2">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      Phone connected — ready to scan
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                      </span>
+                      Phone not connected — open Gun mode on phone
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {salesItems.length > 0 ? (
               <table className="w-full text-xs">

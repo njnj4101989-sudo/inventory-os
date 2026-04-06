@@ -1,7 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { getJobChallans, getJobChallan, receiveJobChallan, updateJobChallan, cancelJobChallan } from '../api/jobChallans'
-import { getBatchChallans, getBatchChallan, updateBatchChallan, cancelBatchChallan } from '../api/batchChallans'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { getJobChallans, getJobChallan, getJobChallanByNo, createJobChallan, getNextJCNumber, receiveJobChallan, updateJobChallan, cancelJobChallan } from '../api/jobChallans'
+import { getBatchChallans, getBatchChallan, getBatchChallanByNo, updateBatchChallan, cancelBatchChallan } from '../api/batchChallans'
+import { getBatches } from '../api/batches'
+import { getRolls } from '../api/rolls'
 import { getAllValueAdditions, getAllVAParties } from '../api/masters'
+import { useScanPair } from '../hooks/useScanPair'
+import useQuickMaster from '../hooks/useQuickMaster'
+import QuickMasterModal from '../components/common/QuickMasterModal'
 import SearchInput from '../components/common/SearchInput'
 import Pagination from '../components/common/Pagination'
 import ErrorAlert from '../components/common/ErrorAlert'
@@ -9,6 +15,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import Modal from '../components/common/Modal'
 import JobChallan from '../components/common/JobChallan'
 import BatchChallan from '../components/common/BatchChallan'
+import SendForVAModal from '../components/batches/SendForVAModal'
 import FilterSelect from '../components/common/FilterSelect'
 
 const VA_COLORS = {
@@ -40,7 +47,9 @@ const TABS = [
 ]
 
 export default function ChallansPage() {
-  const [tab, setTab] = useState('job')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkHandled = useRef(false)
+  const [tab, setTab] = useState(searchParams.get('tab') || 'job')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [vaFilter, setVaFilter] = useState('')
@@ -79,6 +88,24 @@ export default function ChallansPage() {
   const [editForm, setEditForm] = useState({ va_party_id: '', value_addition_id: '', sent_date: '', notes: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState(null)
+
+  // Batch challan create (SendForVAModal)
+  const [showSendVA, setShowSendVA] = useState(false)
+  const [allBatches, setAllBatches] = useState([])
+
+  // Job challan create
+  const [jcCreateMode, setJcCreateMode] = useState(false)
+  const [jcRolls, setJcRolls] = useState([]) // all available rolls
+  const [jcSelected, setJcSelected] = useState(new Set()) // selected roll IDs
+  const [jcWeights, setJcWeights] = useState({}) // {rollId: weightStr}
+  const [jcForm, setJcForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '' })
+  const [jcSaving, setJcSaving] = useState(false)
+  const [jcError, setJcError] = useState(null)
+  const [jcNextNo, setJcNextNo] = useState('')
+  const [jcRollSearch, setJcRollSearch] = useState('')
+  const [jcScanMode, setJcScanMode] = useState(false)
+  const [jcScanStatus, setJcScanStatus] = useState(null)
+  const jcScanInputRef = useRef(null)
 
   // Cancel confirmation
   const [cancelConfirm, setCancelConfirm] = useState(null)
@@ -221,6 +248,41 @@ export default function ChallansPage() {
     getAllVAParties().then(r => setVaParties(r.data?.data || [])).catch((e) => console.error('Failed to load VA parties:', e.message))
   }, [])
 
+  /* ── Deep-link: ?open=JC-xxx&tab=job → auto-open detail ── */
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    const openNo = searchParams.get('open')
+    if (!openNo) return
+    deepLinkHandled.current = true
+
+    const isJob = openNo.startsWith('JC-')
+    const targetTab = isJob ? 'job' : 'batch'
+    setTab(targetTab)
+
+    // Direct lookup by challan_no (unique, indexed — single query)
+    const fetchAndOpen = async () => {
+      setDetailLoading(true)
+      try {
+        const res = isJob
+          ? await getJobChallanByNo(openNo)
+          : await getBatchChallanByNo(openNo)
+        const challan = res.data?.data || res.data
+        if (challan) {
+          setDetail(challan)
+        } else {
+          setError(`Challan not found: ${openNo}`)
+        }
+      } catch (err) {
+        setError(err.response?.data?.detail || `Challan not found: ${openNo}`)
+      } finally {
+        setDetailLoading(false)
+      }
+      // Clean URL params
+      setSearchParams({}, { replace: true })
+    }
+    fetchAndOpen()
+  }, [searchParams])
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -246,6 +308,181 @@ export default function ChallansPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { setPage(1) }, [tab, statusFilter, vaFilter, partyFilter])
+
+  /* ── Open batch challan create — fetch eligible batches ── */
+  const openBatchCreate = async () => {
+    try {
+      const res = await getBatches({ page: 1, page_size: 0, sort_by: 'created_at', sort_order: 'desc' })
+      setAllBatches(res.data.data || res.data?.data || [])
+    } catch {
+      setAllBatches([])
+    }
+    setShowSendVA(true)
+  }
+
+  const handleBatchChallanPrint = (challan) => {
+    setPrintChallan(challan)
+  }
+
+  /* ── Job Challan Create ── */
+  const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
+    (type, newItem) => {
+      if (type === 'value_addition') {
+        getAllValueAdditions().then(r => setVaTypes(r.data?.data || [])).catch(() => {})
+        setTimeout(() => setJcForm(f => ({ ...f, value_addition_id: newItem.id })), 200)
+      }
+      if (type === 'va_party') {
+        getAllVAParties().then(r => setVaParties(r.data?.data || [])).catch(() => {})
+        setTimeout(() => setJcForm(f => ({ ...f, va_party_id: newItem.id })), 200)
+      }
+    }
+  )
+
+  const openJobCreate = async () => {
+    setJcCreateMode(true)
+    setJcError(null)
+    setJcScanMode(false)
+    setJcScanStatus(null)
+    setJcSelected(new Set())
+    setJcWeights({})
+    setJcRollSearch('')
+    setJcForm({ value_addition_id: '', va_party_id: '', sent_date: new Date().toISOString().split('T')[0], notes: '' })
+    try {
+      const [rollRes, nextRes] = await Promise.all([
+        getRolls({ page_size: 0, status: 'in_stock' }),
+        getNextJCNumber(),
+      ])
+      const rd = rollRes.data?.data || rollRes.data
+      setJcRolls(Array.isArray(rd) ? rd : rd?.data || [])
+      setJcNextNo(nextRes.data?.data?.next_challan_no || nextRes.data?.next_challan_no || '')
+    } catch {
+      setJcRolls([])
+      setJcNextNo('')
+    }
+  }
+
+  const jcToggleRoll = useCallback((roll) => {
+    setJcSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(roll.id)) {
+        next.delete(roll.id)
+        setJcWeights(w => { const copy = { ...w }; delete copy[roll.id]; return copy })
+      } else {
+        next.add(roll.id)
+        setJcWeights(w => ({ ...w, [roll.id]: String(roll.remaining_weight || roll.current_weight || roll.total_weight || '') }))
+      }
+      return next
+    })
+  }, [])
+
+  const jcFilteredRolls = useMemo(() => {
+    if (!jcRollSearch.trim()) return jcRolls
+    const q = jcRollSearch.toLowerCase()
+    return jcRolls.filter(r =>
+      (r.roll_code || '').toLowerCase().includes(q) ||
+      (r.fabric_type || '').toLowerCase().includes(q) ||
+      (r.color?.name || r.color || '').toLowerCase().includes(q)
+    )
+  }, [jcRolls, jcRollSearch])
+
+  /* ── Phone scan → auto-select roll ── */
+  const jcSelectedRef = useRef(jcSelected)
+  jcSelectedRef.current = jcSelected
+
+  const handleJcPhoneScan = useCallback((rawValue, source = 'phone') => {
+    const rollMatch = rawValue.match(/\/scan\/roll\/([^/?\s]+)/)
+    const code = rollMatch ? decodeURIComponent(rollMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    const roll = jcRolls.find(r => r.roll_code === code)
+    if (!roll) {
+      setJcScanStatus({ type: 'error', message: `Roll not found or not in stock: ${code}` })
+      setTimeout(() => setJcScanStatus(null), 4000)
+      return
+    }
+    if (jcSelectedRef.current.has(roll.id)) {
+      setJcScanStatus({ type: 'duplicate', message: `${code} already selected` })
+      setTimeout(() => setJcScanStatus(null), 3000)
+      return
+    }
+    jcToggleRoll(roll)
+    setJcScanStatus({ type: 'added', message: `${code} added${source === 'phone' ? ' via phone' : ''}` })
+    setTimeout(() => setJcScanStatus(null), 2500)
+  }, [jcRolls, jcToggleRoll])
+
+  const { phoneConnected: jcPhoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: jcCreateMode && jcScanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handleJcPhoneScan(data.code, 'phone')
+    }, [handleJcPhoneScan]),
+  })
+
+  const handleJcPOSSubmit = useCallback((code) => {
+    if (!code.trim()) return
+    handleJcPhoneScan(code.trim(), 'type')
+    setTimeout(() => {
+      const input = jcScanInputRef.current?.querySelector('input')
+      if (input) { input.focus(); input.value = '' }
+    }, 50)
+  }, [handleJcPhoneScan])
+
+  const jcRollSearchOptions = useMemo(() => {
+    return jcRolls.map(r => ({
+      value: r.roll_code,
+      label: `${r.roll_code} · ${r.fabric_type || ''} · ${r.color?.name || r.color || ''} · ${r.remaining_weight || r.current_weight || '?'} kg`,
+    }))
+  }, [jcRolls])
+
+  const handleJobCreate = async () => {
+    if (!jcForm.value_addition_id) { setJcError('Select a value addition type'); return }
+    if (!jcForm.va_party_id) { setJcError('Select a VA party'); return }
+    if (jcSelected.size === 0) { setJcError('Select at least one roll'); return }
+
+    const rolls = [...jcSelected].map(id => ({
+      roll_id: id,
+      weight_to_send: parseFloat(jcWeights[id]) || 0,
+    }))
+    const zeroWeight = rolls.find(r => r.weight_to_send <= 0)
+    if (zeroWeight) { setJcError('All selected rolls must have send weight > 0'); return }
+
+    setJcSaving(true)
+    setJcError(null)
+    try {
+      const vaObj = vaTypes.find(v => v.id === jcForm.value_addition_id)
+      const rollObjs = jcRolls.filter(r => jcSelected.has(r.id))
+      const res = await createJobChallan({
+        value_addition_id: jcForm.value_addition_id,
+        va_party_id: jcForm.va_party_id,
+        sent_date: jcForm.sent_date,
+        notes: jcForm.notes?.trim() || null,
+        rolls,
+        _rolls: rollObjs,
+        _vaObj: vaObj || null,
+      })
+      const challan = res.data?.data || res.data
+      setJcCreateMode(false)
+      setPrintChallan(challan)
+      fetchData()
+    } catch (err) {
+      setJcError(err.response?.data?.detail || 'Failed to create job challan — check roll availability')
+    } finally {
+      setJcSaving(false)
+    }
+  }
+
+  /* ── Escape key for job create ── */
+  useEffect(() => {
+    if (!jcCreateMode) return
+    const handler = (e) => {
+      if (e.key !== 'Escape') return
+      if (quickMasterOpen) return
+      e.preventDefault()
+      if (jcScanMode) { setJcScanMode(false); setJcScanStatus(null); return }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [jcCreateMode, jcScanMode, quickMasterOpen])
 
   const data = tab === 'job' ? jcData : bcData
   const filtered = useMemo(() => {
@@ -693,6 +930,183 @@ export default function ChallansPage() {
     </>)
   }
 
+  // ── Job Challan Create Overlay ──
+  if (jcCreateMode) {
+    const vaRollOptions = vaTypes.filter(v => v.is_active && (v.applicable_to || 'both') !== 'garment')
+    const selectedRollObjs = jcRolls.filter(r => jcSelected.has(r.id))
+    const totalWeight = selectedRollObjs.reduce((s, r) => s + (parseFloat(jcWeights[r.id]) || 0), 0)
+
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setJcCreateMode(false)} className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-bold tracking-tight">New Job Challan</h2>
+              <p className="text-xs text-emerald-100">{jcNextNo ? `Next: ${jcNextNo}` : 'Send rolls for VA processing'}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold">{jcSelected.size} rolls · {totalWeight.toFixed(2)} kg</span>
+            <button onClick={() => setJcCreateMode(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
+            <button onClick={handleJobCreate} disabled={jcSaving}
+              className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+              {jcSaving ? 'Creating...' : 'Create Job Challan'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          {jcError && <ErrorAlert message={jcError} onDismiss={() => setJcError(null)} />}
+
+          {/* Challan Details card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Challan Details</span>
+            </div>
+            <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="typo-label-sm">VA TYPE *</label>
+                <FilterSelect full data-master="value_addition" value={jcForm.value_addition_id}
+                  onChange={v => setJcForm(f => ({ ...f, value_addition_id: v }))}
+                  options={[{ value: '', label: 'Select VA type' }, ...vaRollOptions.map(v => ({ value: v.id, label: `${v.name} (${v.short_code})` }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">VA PARTY *</label>
+                <FilterSelect searchable full data-master="va_party" value={jcForm.va_party_id}
+                  onChange={v => setJcForm(f => ({ ...f, va_party_id: v }))}
+                  options={[{ value: '', label: 'Select VA party' }, ...vaParties.map(p => ({ value: p.id, label: p.name }))]} />
+              </div>
+              <div>
+                <label className="typo-label-sm">SENT DATE *</label>
+                <input type="date" className="typo-input" value={jcForm.sent_date}
+                  onChange={e => setJcForm(f => ({ ...f, sent_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="typo-label-sm">NOTES</label>
+                <input className="typo-input" value={jcForm.notes}
+                  onChange={e => setJcForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional" />
+              </div>
+            </div>
+          </div>
+
+          {/* Roll Selection card */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 rounded-t-xl px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Select Rolls ({jcSelected.size} selected)</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setJcScanMode(m => !m); setJcScanStatus(null) }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 typo-btn-sm shadow-sm transition-colors ${jcScanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                  {jcScanMode ? 'Scanning Active' : 'Scan from Phone'}
+                </button>
+              </div>
+            </div>
+
+            {/* POS Scan Bar */}
+            {jcScanMode && (
+              <div className="border-b border-gray-200 bg-emerald-50/50 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 relative" ref={jcScanInputRef}>
+                    <FilterSelect searchable autoFocus full value=""
+                      onChange={(code) => { if (code) handleJcPOSSubmit(code) }}
+                      options={[{ value: '', label: 'Type or scan roll code...' }, ...jcRollSearchOptions]} />
+                  </div>
+                  <button onClick={() => { setJcScanMode(false); setJcScanStatus(null) }}
+                    className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 min-h-[20px]">
+                  {jcScanStatus ? (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                      jcScanStatus.type === 'added' ? 'text-emerald-600' : jcScanStatus.type === 'duplicate' ? 'text-amber-600' : 'text-red-500'
+                    }`}>
+                      {jcScanStatus.type === 'added' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      {jcScanStatus.type === 'duplicate' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                      {jcScanStatus.type === 'error' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+                      {jcScanStatus.message}
+                    </span>
+                  ) : jcPhoneConnected ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                      <span className="relative flex h-2 w-2"><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+                      Phone connected — ready to scan
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                      </span>
+                      Phone not connected — open Gun mode on phone
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Roll search filter */}
+            <div className="px-4 py-2 border-b border-gray-100">
+              <input className="typo-input-sm w-full" placeholder="Filter rolls by code, fabric, or color..."
+                value={jcRollSearch} onChange={e => setJcRollSearch(e.target.value)} />
+            </div>
+
+            {/* Roll list */}
+            <div className="max-h-[45vh] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-emerald-600">
+                    <th className="px-2 py-2 text-xs font-semibold text-white uppercase tracking-wider w-[4%] border-r border-emerald-500"></th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-emerald-500">Roll Code</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Fabric</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider w-[15%] border-r border-emerald-500">Color</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Available</th>
+                    <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[15%]">Send Weight</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {jcFilteredRolls.map(r => {
+                    const selected = jcSelected.has(r.id)
+                    const availWt = r.remaining_weight || r.current_weight || r.total_weight || 0
+                    return (
+                      <tr key={r.id} className={`hover:bg-gray-50 transition-colors ${selected ? 'bg-emerald-50' : ''}`}>
+                        <td className="px-2 py-2 text-center">
+                          <input type="checkbox" checked={selected} onChange={() => jcToggleRoll(r)} />
+                        </td>
+                        <td className="px-2 py-2 font-semibold">{r.roll_code}</td>
+                        <td className="px-2 py-2 text-gray-600">{r.fabric_type || '—'}</td>
+                        <td className="px-2 py-2 text-gray-600">{r.color?.name || r.color || '—'}</td>
+                        <td className="px-2 py-2 text-right text-gray-600">{parseFloat(availWt).toFixed(2)} kg</td>
+                        <td className="px-2 py-2">
+                          {selected ? (
+                            <input type="number" step="0.001" min="0.001" max={availWt}
+                              className="typo-input-sm w-full text-right"
+                              value={jcWeights[r.id] || ''}
+                              onChange={e => setJcWeights(w => ({ ...w, [r.id]: e.target.value }))} />
+                          ) : (
+                            <span className="text-gray-300 text-right block">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {jcFilteredRolls.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No in-stock rolls found{jcRollSearch ? ' matching filter' : ''}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+      </div>
+    )
+  }
+
   // ── Main list view ──
   return (
     <div className="space-y-4">
@@ -702,10 +1116,24 @@ export default function ChallansPage() {
           <h1 className="typo-page-title">Challans</h1>
           <p className="typo-caption">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
         </div>
-        <button onClick={fetchData} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60">
-          <svg className={`h-4 w-4 transition-transform ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={fetchData} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50 shadow-sm transition-colors disabled:opacity-60">
+            <svg className={`h-4 w-4 transition-transform ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            Refresh
+          </button>
+          {tab === 'job' && (
+            <button onClick={openJobCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              New Job Challan
+            </button>
+          )}
+          {tab === 'batch' && (
+            <button onClick={openBatchCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              New Batch Challan
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -846,6 +1274,23 @@ export default function ChallansPage() {
       {/* Pagination */}
       {data.pages > 1 && (
         <Pagination page={page} pages={data.pages} total={data.total} onChange={setPage} />
+      )}
+
+      {/* Batch Challan Create Modal */}
+      <SendForVAModal
+        open={showSendVA}
+        onClose={() => setShowSendVA(false)}
+        batches={allBatches}
+        onSuccess={() => { setShowSendVA(false); fetchData() }}
+        onPrintChallan={handleBatchChallanPrint}
+      />
+
+      {/* Challan Print Overlay */}
+      {printChallan && tab === 'batch' && (
+        <BatchChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
+      )}
+      {printChallan && tab === 'job' && (
+        <JobChallan challan={printChallan} onClose={() => setPrintChallan(null)} />
       )}
 
     </div>

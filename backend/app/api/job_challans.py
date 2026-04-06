@@ -92,6 +92,18 @@ async def update_challan(
     return {"success": True, "data": result}
 
 
+@router.get("/by-no/{challan_no}", response_model=None)
+async def get_challan_by_no(
+    challan_no: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Get a single job challan by challan_no (unique, indexed)."""
+    svc = JobChallanService(db)
+    result = await svc.get_challan_by_no(challan_no)
+    return {"success": True, "data": result}
+
+
 @router.get("/{challan_id}", response_model=None)
 async def get_challan(
     challan_id: UUID,

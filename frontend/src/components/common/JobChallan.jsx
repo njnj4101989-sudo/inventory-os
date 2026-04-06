@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useReactToPrint } from 'react-to-print'
+import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * Job Challan — A4 print document for sending rolls to VA vendor.
@@ -96,18 +97,28 @@ export default function JobChallan({ challan, onClose }) {
           <p style={{ fontSize: '9pt', color: '#555', margin: 0 }}>INVENTORY-OS</p>
         </div>
 
-        {/* Meta: Vendor + Challan info */}
+        {/* Meta: Vendor + Challan info + QR */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', fontSize: '10pt' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To</div>
             <div style={{ fontWeight: 700, fontSize: '12pt' }}>{vaPartyName}</div>
             {vaPartyPhone && <div style={{ color: '#555' }}>Ph: {vaPartyPhone}</div>}
           </div>
-          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Challan No.</div>
-            <div style={{ fontWeight: 700 }}>{challanNo}</div>
-            <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Date</div>
-            <div style={{ fontWeight: 600 }}>{dateStr}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Challan No.</div>
+              <div style={{ fontWeight: 700 }}>{challanNo}</div>
+              <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Date</div>
+              <div style={{ fontWeight: 600 }}>{dateStr}</div>
+            </div>
+            <div style={{ border: '1px solid #ddd', borderRadius: '4px', padding: '4px', background: '#fff' }}>
+              <QRCodeSVG
+                value={`${window.location.origin}/scan/challan/${encodeURIComponent(challanNo)}`}
+                size={72}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
           </div>
         </div>
 

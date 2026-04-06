@@ -66,6 +66,15 @@ export async function getJobChallan(id) {
   return client.get(`/job-challans/${id}`)
 }
 
+export async function getJobChallanByNo(challanNo) {
+  if (USE_MOCK) {
+    const challan = mockChallans.find((c) => c.challan_no === challanNo)
+    if (!challan) throw { response: { data: { detail: 'Job challan not found' } } }
+    return mockResponse(challan)
+  }
+  return client.get(`/job-challans/by-no/${encodeURIComponent(challanNo)}`)
+}
+
 export async function updateJobChallan(id, data) {
   if (USE_MOCK) {
     const challan = mockChallans.find((c) => c.id === id)

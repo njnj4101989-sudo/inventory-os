@@ -6,7 +6,6 @@ import { QRCodeSVG } from 'qrcode.react'
 import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, unclaimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
 import { getSKUPassport } from '../api/skus'
-import { remoteScan } from '../api/scan'
 import { useScanPair } from '../hooks/useScanPair'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
@@ -287,6 +286,8 @@ export default function ScanPage() {
     if (batchMatch) return decodeURIComponent(batchMatch[1])
     const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
     if (rollMatch) return decodeURIComponent(rollMatch[1])
+    const challanMatch = decodedText.match(/\/scan\/challan\/([^/?\s]+)/)
+    if (challanMatch) return decodeURIComponent(challanMatch[1])
     return decodedText.trim()
   }
 
@@ -307,36 +308,33 @@ export default function ScanPage() {
       navigate(`/scan/batch/${encodeURIComponent(batchMatch[1])}`)
       return
     }
+    // Challan QR — navigate to ChallansPage with deep-link
+    const challanMatch = decodedText.match(/\/scan\/challan\/([^/?\s]+)/)
+    if (challanMatch) {
+      const challanNo = decodeURIComponent(challanMatch[1])
+      const tab = challanNo.startsWith('BC-') ? 'batch' : 'job'
+      navigate(`/challans?open=${encodeURIComponent(challanNo)}&tab=${tab}`)
+      return
+    }
     const rollMatch = decodedText.match(/\/scan\/roll\/([^/?\s]+)/)
     const code = rollMatch ? decodeURIComponent(rollMatch[1]) : decodedText.trim()
     navigate(`/scan/roll/${encodeURIComponent(code)}`)
   }
 
-  async function handleGunScan(decodedText) {
+  function handleGunScan(decodedText) {
     const code = extractCode(decodedText)
     setGunSending(true)
     setGunResult(null)
-    try {
-      if (wsConnected) {
-        // Send via WebSocket — instant, no HTTP overhead
-        wsSend({ type: 'scan', code })
-        setGunResult({ success: true, code, message: `Sent: ${code}` })
-        logScanActivity(code, 'ws', 'sent')
-      } else {
-        // Fallback to POST if WS not connected
-        const res = await remoteScan(code)
-        const data = res?.data?.data || res?.data
-        setGunResult({ success: true, code, message: `${data?.entity_type || 'Item'}: ${code}` })
-        logScanActivity(code, data?.entity_type || 'unknown', 'sent')
-      }
-    } catch (err) {
-      const msg = err?.response?.data?.detail || 'Not found'
-      setGunResult({ success: false, code, message: msg })
+    if (wsConnected) {
+      wsSend({ type: 'scan', code })
+      setGunResult({ success: true, code, message: `Sent: ${code}` })
+      logScanActivity(code, 'ws', 'sent')
+    } else {
+      setGunResult({ success: false, code, message: 'Desktop not connected — open a form on desktop first' })
       logScanActivity(code, 'unknown', 'failed')
-    } finally {
-      setGunSending(false)
-      setTimeout(() => setGunResult(null), 2000)
     }
+    setGunSending(false)
+    setTimeout(() => setGunResult(null), 2000)
   }
 
   function logScanActivity(code, type, status) {

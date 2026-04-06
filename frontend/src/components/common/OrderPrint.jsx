@@ -19,15 +19,20 @@ export default function OrderPrint({ order, companyName, company, onClose }) {
       @page { size: A4 portrait; margin: 15mm; }
       * { box-sizing: border-box; }
       body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tr { page-break-inside: avoid; }
+      .op-totals { page-break-inside: avoid; }
+      .op-signatures { page-break-inside: avoid; }
+      thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
     `,
   })
 
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto">
+    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center justify-start overflow-y-auto py-6">
       {/* Toolbar */}
-      <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
+      <div className="w-full max-w-[220mm] mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg mx-4">
         <span className="font-semibold text-gray-800">Order {o.order_number}</span>
         <div className="flex gap-2">
           <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 transition-colors">
@@ -41,10 +46,10 @@ export default function OrderPrint({ order, companyName, company, onClose }) {
 
       {/* A4 printable */}
       <div ref={printRef} style={{
-        width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm',
+        width: '210mm', background: '#fff', padding: '15mm',
         fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937',
         fontSize: '12px', lineHeight: '1.5',
-      }}>
+      }} className="shadow-2xl rounded-lg mb-6">
         {/* Header */}
         <div style={{ borderBottom: '3px solid #1e40af', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
@@ -107,7 +112,7 @@ export default function OrderPrint({ order, companyName, company, onClose }) {
           </thead>
           <tbody>
             {items.map((item, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', pageBreakInside: 'avoid' }}>
                 <td style={{ padding: '8px 6px', color: '#9ca3af' }}>{i + 1}</td>
                 <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
                 <td style={{ padding: '8px 6px', color: '#6b7280' }}>{item.sku?.product_name || '—'}</td>
@@ -121,7 +126,7 @@ export default function OrderPrint({ order, companyName, company, onClose }) {
         </table>
 
         {/* Totals */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="op-totals" style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <div style={{ width: '260px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
               <span style={{ color: '#6b7280' }}>Total Qty</span>
@@ -149,7 +154,7 @@ export default function OrderPrint({ order, companyName, company, onClose }) {
         </div>
 
         {/* Signature area */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', paddingTop: '0' }}>
+        <div className="op-signatures" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', paddingTop: '0' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ borderTop: '1px solid #9ca3af', width: '160px', paddingTop: '6px' }}>
               <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Customer Signature</p>

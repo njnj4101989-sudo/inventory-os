@@ -76,6 +76,18 @@ async def update_batch_challan(
     return {"success": True, "data": result}
 
 
+@router.get("/by-no/{challan_no}", response_model=None)
+async def get_batch_challan_by_no(
+    challan_no: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_any_permission("batch_send_va", "batch_receive_va"),
+):
+    """Get a single batch challan by challan_no (unique, indexed)."""
+    svc = BatchChallanService(db)
+    result = await svc.get_challan_by_no(challan_no)
+    return {"success": True, "data": result}
+
+
 @router.get("/{challan_id}", response_model=None)
 async def get_batch_challan(
     challan_id: UUID,

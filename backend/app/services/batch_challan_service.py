@@ -384,6 +384,24 @@ class BatchChallanService:
         challan = await self._get_or_404(challan_id)
         return self._to_response(challan)
 
+    async def get_challan_by_no(self, challan_no: str) -> dict:
+        """Get a single batch challan by challan_no (unique, indexed)."""
+        stmt = (
+            select(BatchChallan)
+            .where(BatchChallan.challan_no == challan_no)
+            .options(
+                selectinload(BatchChallan.value_addition),
+                selectinload(BatchChallan.va_party),
+                selectinload(BatchChallan.created_by_user),
+                selectinload(BatchChallan.batch_items).selectinload(BatchProcessing.batch),
+            )
+        )
+        result = await self.db.execute(stmt)
+        challan = result.scalar_one_or_none()
+        if not challan:
+            raise NotFoundError(f"Batch challan '{challan_no}' not found")
+        return self._to_response(challan)
+
     async def _get_or_404(self, challan_id: UUID) -> BatchChallan:
         stmt = (
             select(BatchChallan)

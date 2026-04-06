@@ -64,6 +64,15 @@ export async function getBatchChallan(id) {
   return client.get(`/batch-challans/${id}`)
 }
 
+export async function getBatchChallanByNo(challanNo) {
+  if (USE_MOCK) {
+    const challan = mockBatchChallans.find((c) => c.challan_no === challanNo)
+    if (!challan) throw { response: { data: { detail: 'Batch challan not found' } } }
+    return mockResponse(challan)
+  }
+  return client.get(`/batch-challans/by-no/${encodeURIComponent(challanNo)}`)
+}
+
 export async function updateBatchChallan(id, data) {
   if (USE_MOCK) {
     const challan = mockBatchChallans.find((c) => c.id === id)

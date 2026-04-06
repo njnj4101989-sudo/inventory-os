@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Modal from '../common/Modal'
 import ErrorAlert from '../common/ErrorAlert'
 import QuickMasterModal from '../common/QuickMasterModal'
 import useQuickMaster from '../../hooks/useQuickMaster'
+import { useScanPair } from '../../hooks/useScanPair'
 import { getValueAdditions, getAllVAParties } from '../../api/masters'
 import { createBatchChallan, getNextBCNumber } from '../../api/batchChallans'
 
@@ -16,6 +17,8 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [nextChallanNo, setNextChallanNo] = useState('')
+  const [scanMode, setScanMode] = useState(false)
+  const [scanStatus, setScanStatus] = useState(null)
 
   // ── Shift+M Quick Master ──
   const refreshVAList = useCallback(() => {
@@ -43,9 +46,46 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   // Eligible batches: in_progress (stitching VA) or checked (post-QC VA)
   const eligible = (batches || []).filter((b) => b.status === 'in_progress' || b.status === 'checked')
 
+  /* ── Phone scan → auto-select batch ── */
+  const selectedBatchesRef = useRef(selectedBatches)
+  selectedBatchesRef.current = selectedBatches
+  const eligibleRef = useRef(eligible)
+  eligibleRef.current = eligible
+
+  const handlePhoneScanBatch = useCallback((rawValue) => {
+    const batchMatch = rawValue.match(/\/scan\/batch\/([^/?\s]+)/)
+    const code = batchMatch ? decodeURIComponent(batchMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    const batch = eligibleRef.current.find(b => b.batch_code === code)
+    if (!batch) {
+      setScanStatus({ type: 'error', message: `Batch not eligible or not found: ${code}` })
+      setTimeout(() => setScanStatus(null), 4000)
+      return
+    }
+    if (selectedBatchesRef.current[batch.id]) {
+      setScanStatus({ type: 'duplicate', message: `${code} already selected` })
+      setTimeout(() => setScanStatus(null), 3000)
+      return
+    }
+    setSelectedBatches(prev => ({ ...prev, [batch.id]: batch.piece_count || 0 }))
+    setScanStatus({ type: 'added', message: `${code} added via phone` })
+    setTimeout(() => setScanStatus(null), 2500)
+  }, [])
+
+  const { phoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: open && scanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handlePhoneScanBatch(data.code)
+    }, [handlePhoneScanBatch]),
+  })
+
   useEffect(() => {
     if (open) {
       refreshVAList()
+      setScanMode(false)
+      setScanStatus(null)
       getAllVAParties()
         .then((res) => setVaParties(res.data.data || res.data || []))
         .catch(() => {})
@@ -176,9 +216,43 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         </div>
 
         <div>
-          <label className="typo-label mb-2">
-            Select Batches ({eligible.length} eligible)
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="typo-label">
+              Select Batches ({eligible.length} eligible)
+            </label>
+            <button onClick={() => { setScanMode(m => !m); setScanStatus(null) }}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium shadow-sm transition-colors ${scanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+              {scanMode ? 'Scanning' : 'Scan from Phone'}
+            </button>
+          </div>
+          {scanMode && (
+            <div className="flex items-center gap-2 mb-2 min-h-[20px]">
+              {scanStatus ? (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                  scanStatus.type === 'added' ? 'text-emerald-600' : scanStatus.type === 'duplicate' ? 'text-amber-600' : 'text-red-500'
+                }`}>
+                  {scanStatus.type === 'added' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                  {scanStatus.type === 'duplicate' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                  {scanStatus.type === 'error' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+                  {scanStatus.message}
+                </span>
+              ) : phoneConnected ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                  <span className="relative flex h-2 w-2"><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+                  Phone connected — scan batch QR
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                  </span>
+                  Phone not connected — open Gun mode on phone
+                </span>
+              )}
+            </div>
+          )}
           {eligible.length === 0 ? (
             <p className="typo-empty">No batches in "In Progress" or "Checked" status</p>
           ) : (
