@@ -33,37 +33,38 @@
 
 ---
 
-## Current State (Session 104 — 2026-04-04)
+## Current State (Session 106 — 2026-04-06)
 
-### S104: SKU Search Fix + Negative Adjustments — COMPLETE
+### S106: Scan Pairing Everywhere + ChallansPage Overhaul + OrderPrint Redesign — COMPLETE
 
-**S104 done. 0 new models. 0 migrations. 45 models total. 1 commit pushed+deployed.**
+**S106 done. 0 new models. 0 migrations. 45 models total. 3 commits pushed+deployed.**
 
-**What was fixed:**
-- **SKU search normalization:** dots treated as wildcards — "b.green" now matches "B. GREEN"
-- **Negative stock adjustments:** ±qty in opening stock adjust, validated against available stock
-- **Reservation protection:** negative adjustment can't exceed available (reserved stock protected with clear error message)
-- **Inventory history:** adjustment events show correct +/- sign and color (green/red)
+**What was built:**
+- **ReturnsPage scan pairing:** `useScanPair` for supplier returns (roll scan) and sales returns (SKU scan). POS bar, phone status, user-friendly errors ("Select supplier first", duplicate detection, network errors).
+- **ChallansPage overhaul:** QR deep-link (`?open=JC-xxx`), "New Job Challan" create overlay with roll picker + phone scan, "New Batch Challan" button reusing SendForVAModal. `GET /job-challans/by-no/{no}` + `/batch-challans/by-no/{no}` backend endpoints.
+- **QR on challan prints:** JobChallan + BatchChallan print pages now have QR code encoding challan URL. Scan QR → ScanPage → ChallansPage detail → Receive.
+- **SendForVAModal scan:** Phone scan batch QR → auto-select batch in modal.
+- **OrderPrint redesign:** Wholesale pick-and-pack sheet — grouped by design, ☐ checkbox column, size summary, B&W optimized (zero grey), 4 signature fields, page-break-safe.
+- **Dead code removed:** `useRemoteScan.js`, `scan.js`, `POST /scan/remote`, `remote_scan` SSE event type. SSE intact for batch/notification events.
 
-**Files changed (3):** `sku_service.py` (search), `inventory_service.py` (adjust logic + validation), `SKUsPage.jsx` (SkippedRow ±qty, history display)
+**Files changed (19):** `ReturnsPage.jsx`, `ChallansPage.jsx`, `ScanPage.jsx`, `SendForVAModal.jsx`, `OrderPrint.jsx`, `JobChallan.jsx`, `BatchChallan.jsx`, `NotificationContext.jsx`, `job_challans.py` (api+service), `batch_challans.py` (api+service), `router.py`, + 3 deleted files
 
-**S105 NEXT — Desktop Scanner UX:**
+**Scan pairing now active on:** OrdersPage (SKU), ReturnsPage supplier (roll), ReturnsPage sales (SKU), ChallansPage job create (roll), SendForVAModal (batch)
+
+**S107 NEXT — Candidates:**
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Desktop order form: replace "Scan QR" (laptop camera) with "Scan from Phone" indicator | ⬜ |
-| 2 | Show "Waiting for phone scan..." status when create form is open | ⬜ |
-| 3 | Toast on desktop when phone scan received: "SKU BLS-101-Red-M added via phone" | ⬜ |
-| 4 | Same UX for ChallansPage (roll/batch scan) and ReturnsPage | ⬜ |
-| 5 | End-to-end test: phone Gun mode → desktop form auto-add | ⬜ |
-| 6 | Optional: keep laptop "Scan QR" as fallback, but de-emphasize | ⬜ |
-
-**Plan doc:** `Guardian/MOBILE_AND_QR_PLAN.md`
+| 1 | LotsPage cutting sheet: scan QR to add rolls | ⬜ |
+| 2 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
+| 3 | ChallansPage 4d discussion: scan-to-receive flow refinement | ⬜ |
 
 ---
 
 ## Previous Sessions (S87-S102) — Invoice, Shipping, Returns, FY, Reports, SKU Overhaul
 
+- **S106:** Scan pairing on ReturnsPage (supplier roll + sales SKU) + ChallansPage (QR prints, deep-link, job/batch create with phone scan) + SendForVAModal scan. OrderPrint wholesale B&W redesign (grouped by design, checkbox, size summary). Dead SSE scan code removed. 2 new backend endpoints (`by-no`).
+- **S105:** `POST /skus/stock-check` bulk endpoint. `page_size:0` = fetch all (11 services + 13 frontend calls). Reservation-aware ship (order's own reserved stock counts as available). QuickMasterModal z-index fix in ship modal.
 - **S104:** SKU search fix (dots→wildcards, "b.green" matches "B. GREEN"). Negative stock adjustments (±qty, reservation-aware validation, clear error messages). Inventory history ±sign fix.
 - **S103:** Scanner Gun PWA. Option B: extend MobileLayout for admin/supervisor/billing on mobile. useIsMobile viewport hook, BottomNav role-aware tabs (Scan/Activity/Profile), Gun mode on ScanPage (continuous scan → POST /scan/remote → SSE → desktop auto-add). Backend scan.py endpoint. useRemoteScan hook on OrdersPage+ReturnsPage. ActivityPage scan log. Profile route fix. AWS budget $35/mo with 3 email alerts configured.
 - **S102:** QR scan on order form, batch unclaim endpoint+UI, SKU identity design edit, InventoryState FOR UPDATE fix, PaginatedParams validation, CLAUDE.md trim (76K→26K)
@@ -300,6 +301,8 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S106 | Scan Pairing + Challans + OrderPrint | useScanPair on Returns+Challans+SendForVAModal, QR on challan prints, challan create from ChallansPage, by-no endpoints, OrderPrint B&W wholesale redesign, dead SSE scan removed |
+| S105 | Stock-Check + Pagination + Ship Fix | POST /skus/stock-check, page_size:0 all services, reservation-aware ship, QuickMasterModal z-index |
 | S104 | SKU Search + Neg Adjust | Search dots→wildcards, ±qty adjustments, reservation validation, history ±sign fix |
 | S103 | Scanner Gun PWA | Option B mobile layout, Gun mode scan→SSE→desktop, useIsMobile+useRemoteScan hooks, ActivityPage, backend /scan/remote, AWS budget alerts |
 | S102 | QR Scan + Mobile Plan | QR scan on order form, batch unclaim, mobile-first UI plan (0/10) |

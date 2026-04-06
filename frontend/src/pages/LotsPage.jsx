@@ -14,6 +14,7 @@ import ErrorAlert from '../components/common/ErrorAlert'
 import CuttingSheet from '../components/common/CuttingSheet'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
 import useQuickMaster from '../hooks/useQuickMaster'
+import { useScanPair } from '../hooks/useScanPair'
 import QuickMasterModal from '../components/common/QuickMasterModal'
 
 // Typography: use typo-input and typo-label globally
@@ -133,6 +134,9 @@ export default function LotsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // index of row awaiting delete confirmation
+  const [scanMode, setScanMode] = useState(false)
+  const [scanStatus, setScanStatus] = useState(null)
+  const scanInputRef = useRef(null)
   const designRef = useRef(null)
   const saveRef = useRef(null)
   const pallaDebounce = useRef(null)
@@ -378,8 +382,60 @@ export default function LotsPage() {
     const rolls = [...f.rolls]; rolls[i] = { ...rolls[i], palla_weight: v }; return { ...f, rolls }
   })
 
+  // ── Scan pairing (phone → desktop roll add) ──
+  const availableRollsRef = useRef(availableRolls)
+  availableRollsRef.current = availableRolls
+
+  const handlePhoneScanRoll = useCallback((rawValue, source = 'phone') => {
+    const rollMatch = rawValue.match(/\/scan\/roll\/([^/?\s]+)/)
+    const code = rollMatch ? decodeURIComponent(rollMatch[1]) : rawValue.trim()
+    if (!code) return
+
+    const roll = availableRollsRef.current.find(r => r.roll_code === code)
+    if (!roll) {
+      setScanStatus({ type: 'error', message: `Roll not found or not available: ${code}` })
+      setTimeout(() => setScanStatus(null), 4000)
+      return
+    }
+    // Duplicate check via form state — addRoll already guards, but we need feedback
+    setForm(f => {
+      if (f.rolls.some(r => r.roll_id === roll.id)) {
+        setScanStatus({ type: 'duplicate', message: `${code} already added` })
+        setTimeout(() => setScanStatus(null), 3000)
+        return f
+      }
+      setScanStatus({ type: 'added', message: `${code} added${source === 'phone' ? ' via phone' : ''}` })
+      setTimeout(() => setScanStatus(null), 2500)
+      return { ...f, rolls: [...f.rolls, { roll_id: roll.id, palla_weight: getPallaForRoll(roll.id, f) }] }
+    })
+  }, [getPallaForRoll])
+
+  const { phoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: showCreate && scanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handlePhoneScanRoll(data.code, 'phone')
+    }, [handlePhoneScanRoll]),
+  })
+
+  const handlePOSSubmit = useCallback((code) => {
+    if (!code.trim()) return
+    handlePhoneScanRoll(code.trim(), 'type')
+    setTimeout(() => {
+      const input = scanInputRef.current?.querySelector('input')
+      if (input) { input.focus(); input.value = '' }
+    }, 50)
+  }, [handlePhoneScanRoll])
+
+  const scanRollOptions = useMemo(() => {
+    return availableRolls.map(r => ({
+      value: r.roll_code,
+      label: `${r.roll_code} · ${r.fabric_type || ''} · ${r.color || ''} · ${r.remaining_weight || '?'} ${r.unit || 'kg'}`,
+    }))
+  }, [availableRolls])
+
   const openCreate = () => {
-    setFormError(null); setRollSearch(''); setRollsExpanded(false)
+    setFormError(null); setRollSearch(''); setRollsExpanded(false); setScanMode(false); setScanStatus(null)
     setRollFilterStatus('all'); setRollFilterFabric(''); setRollFilterColor(''); setRollFilterSupplier(''); setRollFilterUnit(''); setRollFilterVA(''); setRollGroupBy('sr_no')
     setForm({ lot_date: new Date().toISOString().split('T')[0], product_type: masterProductTypes[0]?.code || 'FBL', standard_palla_weight: '', standard_palla_meter: '', designs: [{ design_no: '', design_id: null, size_pattern: { ...DEFAULT_SIZE_PATTERN } }], rolls: [], notes: '' })
     setShowCreate(true)
@@ -686,9 +742,9 @@ export default function LotsPage() {
 
             {/* ── Rolls Section ── */}
             <div className="rounded-xl border bg-white shadow-sm">
-              <button type="button" onClick={() => setRollsExpanded(v => !v)}
-                className="w-full flex items-center justify-between px-5 py-2 hover:bg-gray-50/50 transition-colors border-b border-gray-100">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-5 py-2 border-b border-gray-100">
+                <button type="button" onClick={() => setRollsExpanded(v => !v)}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   <svg className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${rollsExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
@@ -696,11 +752,58 @@ export default function LotsPage() {
                     {rollsExpanded ? 'Select Rolls' : 'Roll Picker'}
                     <span className="ml-1.5 typo-caption font-normal normal-case tracking-normal">{addableRolls.length} available</span>
                   </h3>
+                  <span className={`typo-badge rounded-full px-2.5 py-0.5 ${rollsExpanded ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                    {rollsExpanded ? 'Collapse' : 'Expand'}
+                  </span>
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setScanMode(m => !m); setScanStatus(null) }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 typo-btn-sm shadow-sm transition-colors ${scanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                  {scanMode ? 'Scanning Active' : 'Scan from Phone'}
+                </button>
+              </div>
+
+              {/* POS Scan Bar */}
+              {scanMode && (
+                <div className="border-b border-gray-200 bg-emerald-50/50 px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 relative" ref={scanInputRef}>
+                      <FilterSelect searchable autoFocus full value=""
+                        onChange={(code) => { if (code) handlePOSSubmit(code) }}
+                        options={[{ value: '', label: 'Type or scan roll code...' }, ...scanRollOptions]} />
+                    </div>
+                    <button onClick={() => { setScanMode(false); setScanStatus(null) }}
+                      className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 min-h-[20px]">
+                    {scanStatus ? (
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                        scanStatus.type === 'added' ? 'text-emerald-600' : scanStatus.type === 'duplicate' ? 'text-amber-600' : 'text-red-500'
+                      }`}>
+                        {scanStatus.type === 'added' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                        {scanStatus.type === 'duplicate' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                        {scanStatus.type === 'error' && <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+                        {scanStatus.message}
+                      </span>
+                    ) : phoneConnected ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                        <span className="relative flex h-2 w-2"><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+                        Phone connected — ready to scan
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                        </span>
+                        Phone not connected — open Gun mode on phone
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className={`typo-badge rounded-full px-2.5 py-0.5 ${rollsExpanded ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                  {rollsExpanded ? 'Collapse' : 'Expand'}
-                </span>
-              </button>
+              )}
               <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${rollsExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
               <div className="overflow-hidden">
               <div className="flex items-center justify-between border-t border-b px-5 py-2">

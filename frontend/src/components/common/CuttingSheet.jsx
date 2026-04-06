@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useReactToPrint } from 'react-to-print'
+import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * Cutting Sheet — A4 print document for a lot's cutting details.
@@ -70,24 +71,34 @@ export default function CuttingSheet({ lot, onClose }) {
         </div>
 
         {/* Meta: Lot info */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px', fontSize: '10pt' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', fontSize: '10pt' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Lot No.</div>
             <div style={{ fontWeight: 700, fontSize: '14pt' }}>{lot.lot_code}</div>
             <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Design No.</div>
             <div style={{ fontWeight: 700, fontSize: '12pt' }}>{(lot.designs || []).map(d => d.design_no).join(', ') || '—'}</div>
           </div>
-          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</div>
-            <div style={{ fontWeight: 600 }}>{dateStr}</div>
-            <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Weight</div>
-            <div style={{ fontWeight: 600 }}>{lot.standard_palla_weight} {unitShort}</div>
-            {lot.standard_palla_meter && (
-              <>
-                <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Meter</div>
-                <div style={{ fontWeight: 600 }}>{lot.standard_palla_meter} m</div>
-              </>
-            )}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</div>
+              <div style={{ fontWeight: 600 }}>{dateStr}</div>
+              <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Weight</div>
+              <div style={{ fontWeight: 600 }}>{lot.standard_palla_weight} {unitShort}</div>
+              {lot.standard_palla_meter && (
+                <>
+                  <div style={{ fontSize: '8pt', fontWeight: 700, color: '#333', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' }}>Palla Meter</div>
+                  <div style={{ fontWeight: 600 }}>{lot.standard_palla_meter} m</div>
+                </>
+              )}
+            </div>
+            <div style={{ border: '1px solid #ddd', borderRadius: '4px', padding: '4px', background: '#fff' }}>
+              <QRCodeSVG
+                value={`${window.location.origin}/scan/lot/${encodeURIComponent(lot.lot_code)}`}
+                size={72}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
           </div>
         </div>
 
