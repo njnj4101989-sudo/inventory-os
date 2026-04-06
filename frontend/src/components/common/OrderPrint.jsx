@@ -417,7 +417,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
         )}
 
         {/* ═══ SIGNATURES ═══ */}
-        <div className="op-signatures" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', gap: '20px' }}>
+        <div className="op-signatures" style={{ display: 'flex', justifyContent: 'space-between', marginTop: mode === 'picksheet' ? '10px' : '30px', gap: '20px' }}>
           <div style={{ flex: 1 }}>
             <div style={{ borderBottom: '1px solid #000', height: '24px', marginBottom: '4px' }}></div>
             <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Packed By (Name & Sign)</p>
