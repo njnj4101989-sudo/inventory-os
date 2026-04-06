@@ -113,15 +113,18 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
   const grandTotal = subtotal + cgst + sgst
   const fmtINR = (v) => '\u20B9' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  // Styles — all B&W, solid borders, no grey
+  // Styles — B&W, light headers, tight padding
   const S = {
     border: '1px solid #000',
     borderB: { borderBottom: '1px solid #000' },
     borderB2: { borderBottom: '2px solid #000' },
-    cell: { padding: '4px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' },
-    cellLast: { padding: '4px 6px', fontSize: '10px', borderBottom: '1px solid #000' },
-    th: { padding: '5px 6px', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '2px solid #000', borderRight: '1px solid #000', background: '#000', color: '#fff' },
-    thLast: { padding: '5px 6px', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '2px solid #000', background: '#000', color: '#fff' },
+    cell: { padding: '2px 5px', fontSize: '10px', borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc' },
+    cellLast: { padding: '2px 5px', fontSize: '10px', borderBottom: '1px solid #ccc' },
+    th: { padding: '3px 5px', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '1.5px solid #000', borderRight: '1px solid #ccc', background: '#f0f0f0', color: '#000' },
+    thLast: { padding: '3px 5px', fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '1.5px solid #000', background: '#f0f0f0', color: '#000' },
+    designHdr: { borderLeft: '3px solid #000', padding: '4px 8px', marginBottom: '0', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' },
+    designTitle: { fontSize: '13px', fontWeight: 800, letterSpacing: '0.2px' },
+    designMeta: { fontSize: '10px', fontWeight: 600 },
     label: { fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' },
     value: { fontSize: '11px', fontWeight: 600 },
     sm: { fontSize: '10px' },
@@ -215,11 +218,11 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
               })
 
               return (
-                <div key={group.design} style={{ marginBottom: gi < pivotData.length - 1 ? '10px' : '0', pageBreakInside: 'avoid' }}>
+                <div key={group.design} style={{ marginBottom: gi < pivotData.length - 1 ? '8px' : '0', pageBreakInside: 'avoid' }}>
                   {/* Design header */}
-                  <div style={{ background: '#000', color: '#fff', padding: '5px 8px', fontSize: '11px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-                    <span>DESIGN {group.design}</span>
-                    <span>{group.totalQty} pcs</span>
+                  <div style={S.designHdr}>
+                    <span style={S.designTitle}>Design {group.design}</span>
+                    <span style={S.designMeta}>{group.totalQty} pcs</span>
                   </div>
 
                   <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000' }}>
@@ -231,7 +234,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
                             {color}
                           </th>
                         ))}
-                        <th style={{ ...S.thLast, textAlign: 'center', width: '50px', borderLeft: '2px solid #fff' }}>Total</th>
+                        <th style={{ ...S.thLast, textAlign: 'center', width: '50px', borderLeft: '1.5px solid #000' }}>Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -260,17 +263,17 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
                         )
                       })}
                       {/* Column totals row */}
-                      <tr style={{ borderTop: '2px solid #000' }}>
-                        <td style={{ padding: '5px 6px', fontSize: '10px', fontWeight: 800, borderRight: '1px solid #000' }}>TOTAL</td>
+                      <tr style={{ borderTop: '1.5px solid #000' }}>
+                        <td style={{ padding: '2px 5px', fontSize: '9px', fontWeight: 800, borderRight: '1px solid #ccc' }}>TOTAL</td>
                         {group.colors.map((color, ci) => (
                           <td key={color} style={{
-                            padding: '5px 6px', fontSize: '11px', fontWeight: 800, textAlign: 'center',
-                            borderRight: ci < group.colors.length - 1 ? '1px solid #000' : 'none',
+                            padding: '2px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'center',
+                            borderRight: ci < group.colors.length - 1 ? '1px solid #ccc' : 'none',
                           }}>
                             {colTotals[color]}
                           </td>
                         ))}
-                        <td style={{ padding: '5px 6px', fontSize: '12px', fontWeight: 800, textAlign: 'center', borderLeft: '2px solid #000' }}>
+                        <td style={{ padding: '2px 5px', fontSize: '11px', fontWeight: 800, textAlign: 'center', borderLeft: '1.5px solid #000' }}>
                           {group.totalQty}
                         </td>
                       </tr>
@@ -296,17 +299,17 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
           /* ═══ CONFIRMATION — ITEMS TABLE (GROUPED BY DESIGN) ═══ */
           <>
             {grouped.map((group, gi) => (
-              <div key={group.design} style={{ marginBottom: gi < grouped.length - 1 ? '8px' : '0' }}>
+              <div key={group.design} style={{ marginBottom: gi < grouped.length - 1 ? '6px' : '0' }}>
                 {/* Design header */}
-                <div style={{ background: '#000', color: '#fff', padding: '4px 8px', fontSize: '10px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>DESIGN {group.design} ({group.items.length} item{group.items.length !== 1 ? 's' : ''})</span>
-                  <span>{group.totalQty} pcs · {fmtINR(group.totalAmount)}</span>
+                <div style={S.designHdr}>
+                  <span style={S.designTitle}>Design {group.design} <span style={{ fontSize: '9px', fontWeight: 500 }}>({group.items.length} item{group.items.length !== 1 ? 's' : ''})</span></span>
+                  <span style={S.designMeta}>{group.totalQty} pcs · {fmtINR(group.totalAmount)}</span>
                 </div>
 
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000' }}>
                   <thead>
                     <tr>
-                      <th style={{ ...S.th, width: '22px', textAlign: 'center', padding: '4px 2px' }}>☐</th>
+                      <th style={{ ...S.th, width: '22px', textAlign: 'center', padding: '2px 2px' }}>☐</th>
                       <th style={{ ...S.th, width: '24px', textAlign: 'center' }}>#</th>
                       <th style={{ ...S.th, textAlign: 'left' }}>SKU Code</th>
                       <th style={{ ...S.th, textAlign: 'left', width: '18%' }}>Color</th>
@@ -319,7 +322,7 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
                   <tbody>
                     {group.items.map((item) => (
                       <tr key={item._idx} style={{ pageBreakInside: 'avoid' }}>
-                        <td style={{ ...S.cell, textAlign: 'center', width: '22px', padding: '4px 2px' }}>☐</td>
+                        <td style={{ ...S.cell, textAlign: 'center', width: '22px', padding: '2px 2px' }}>☐</td>
                         <td style={{ ...S.cell, textAlign: 'center', fontWeight: 600 }}>{item._idx}</td>
                         <td style={{ ...S.cell, fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
                         <td style={{ ...S.cell }}>{item.sku?.color || '—'}</td>
@@ -347,30 +350,30 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
             </div>
 
             {/* ═══ TOTALS ═══ */}
-            <div className="op-totals" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-              <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '260px' }}>
+            <div className="op-totals" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '240px' }}>
                 <tbody>
                   <tr>
-                    <td style={{ padding: '4px 8px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Total Qty</td>
-                    <td style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #000' }}>{totalQty} pcs</td>
+                    <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Total Qty</td>
+                    <td style={{ padding: '2px 6px', fontSize: '10px', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #000' }}>{totalQty} pcs</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '4px 8px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Subtotal</td>
-                    <td style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(subtotal)}</td>
+                    <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Subtotal</td>
+                    <td style={{ padding: '2px 6px', fontSize: '10px', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(subtotal)}</td>
                   </tr>
                   {gstPct > 0 && <>
                     <tr>
-                      <td style={{ padding: '4px 8px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>CGST ({gstPct / 2}%)</td>
-                      <td style={{ padding: '4px 8px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(cgst)}</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>CGST ({gstPct / 2}%)</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(cgst)}</td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '4px 8px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>SGST ({gstPct / 2}%)</td>
-                      <td style={{ padding: '4px 8px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(sgst)}</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>SGST ({gstPct / 2}%)</td>
+                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtINR(sgst)}</td>
                     </tr>
                   </>}
                   <tr>
-                    <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: 800, borderRight: '1px solid #000' }}>Grand Total</td>
-                    <td style={{ padding: '6px 8px', fontSize: '12px', fontWeight: 800, textAlign: 'right' }}>{fmtINR(grandTotal)}</td>
+                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, borderRight: '1px solid #000' }}>Grand Total</td>
+                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, textAlign: 'right' }}>{fmtINR(grandTotal)}</td>
                   </tr>
                 </tbody>
               </table>
