@@ -460,7 +460,7 @@ export default function OrdersPage() {
       let stockMap = {}
       const skuIds = (detailOrder.items || []).map(i => i.sku?.id).filter(Boolean)
       try {
-        const res = await stockCheck(skuIds)
+        const res = await stockCheck(skuIds, detailOrder.id)
         stockMap = res.data?.data || res.data || {}
       } catch { /* proceed with 0 stock fallback */ }
 

@@ -107,7 +107,7 @@ export async function getSKUPassport(skuCode) {
   return client.get(`/skus/passport/${encodeURIComponent(skuCode)}`)
 }
 
-export async function stockCheck(skuIds) {
+export async function stockCheck(skuIds, orderId = null) {
   if (USE_MOCK) {
     const map = {}
     for (const id of skuIds) {
@@ -116,7 +116,9 @@ export async function stockCheck(skuIds) {
     }
     return mockResponse(map)
   }
-  return client.post('/skus/stock-check', { sku_ids: skuIds })
+  const body = { sku_ids: skuIds }
+  if (orderId) body.order_id = orderId
+  return client.post('/skus/stock-check', body)
 }
 
 export async function getSKUByCode(skuCode) {

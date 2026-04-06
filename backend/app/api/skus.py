@@ -94,13 +94,14 @@ async def get_sku_by_code(
 
 @router.post("/stock-check", response_model=None)
 async def stock_check(
-    sku_ids: List[UUID] = Body(..., embed=True),
+    sku_ids: List[UUID] = Body(...),
+    order_id: UUID | None = Body(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("inventory_view"),
 ):
-    """Bulk stock check — returns {sku_id: available_qty} map in a single query."""
+    """Bulk stock check — returns {sku_id: available_qty} map. If order_id provided, includes that order's reservations as available."""
     svc = SKUService(db)
-    result = await svc.stock_check(sku_ids)
+    result = await svc.stock_check(sku_ids, order_id)
     return {"success": True, "data": result}
 
 

@@ -242,20 +242,33 @@ class OrderService:
             raise ValidationError("No items to ship — all items are already fulfilled")
 
         # Validate stock availability for each item
+        # NOTE: available_qty excludes reserved stock, but THIS order's reservations
+        # are "available" for this order — add them back before checking.
         from app.models.inventory_state import InventoryState
+        from app.models.reservation import Reservation as ReservationModel
         ship_sku_ids = [oi.sku_id for oi, _ in ship_items]
         inv_result = await self.db.execute(
             select(InventoryState).where(InventoryState.sku_id.in_(ship_sku_ids)).with_for_update()
         )
         inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
 
+        # Fetch this order's active reservations per SKU
+        res_result = await self.db.execute(
+            select(ReservationModel.sku_id, func.sum(ReservationModel.quantity).label("qty"))
+            .where(ReservationModel.order_id == order_id, ReservationModel.status == "active")
+            .group_by(ReservationModel.sku_id)
+        )
+        order_reserved = {row.sku_id: row.qty for row in res_result.all()}
+
         insufficient = []
         for oi, qty in ship_items:
             state = inv_map.get(oi.sku_id)
-            available = state.available_qty if state else 0
-            if qty > available:
+            base_available = state.available_qty if state else 0
+            total = state.total_qty if state else 0
+            effective_available = min(base_available + order_reserved.get(oi.sku_id, 0), total)
+            if qty > effective_available:
                 sku_code = oi.sku.sku_code if oi.sku else str(oi.sku_id)
-                insufficient.append(f"{sku_code}: need {qty}, available {available}")
+                insufficient.append(f"{sku_code}: need {qty}, available {effective_available}")
         if insufficient:
             raise ValidationError(
                 f"Insufficient stock to ship: {'; '.join(insufficient)}"

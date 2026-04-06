@@ -589,15 +589,36 @@ class SKUService:
             "total_amount": float(total_amount),
         }
 
-    async def stock_check(self, sku_ids: list) -> dict:
-        """Bulk stock check — single query, returns {sku_id: available_qty} map."""
+    async def stock_check(self, sku_ids: list, order_id=None) -> dict:
+        """Bulk stock check — returns {sku_id: available_qty} map.
+        If order_id provided, adds back that order's active reservations
+        (reserved stock belongs to the order requesting the check)."""
         if not sku_ids:
             return {}
         result = await self.db.execute(
-            select(InventoryState.sku_id, InventoryState.available_qty)
+            select(InventoryState.sku_id, InventoryState.available_qty, InventoryState.total_qty)
             .where(InventoryState.sku_id.in_(sku_ids))
         )
-        return {str(row.sku_id): row.available_qty for row in result.all()}
+        stock_map = {row.sku_id: {"available": row.available_qty, "total": row.total_qty} for row in result.all()}
+
+        # Add back this order's own reservations (they're "available" for this order)
+        order_reserved = {}
+        if order_id:
+            from app.models.reservation import Reservation
+            res_result = await self.db.execute(
+                select(Reservation.sku_id, func.sum(Reservation.quantity).label("qty"))
+                .where(Reservation.order_id == order_id, Reservation.status == "active")
+                .group_by(Reservation.sku_id)
+            )
+            order_reserved = {row.sku_id: row.qty for row in res_result.all()}
+
+        output = {}
+        for sku_id, info in stock_map.items():
+            effective = info["available"] + order_reserved.get(sku_id, 0)
+            # Cap at total_qty — can't ship more than physically exists
+            output[str(sku_id)] = min(effective, info["total"])
+
+        return output
 
     async def get_sku_by_code(self, sku_code: str) -> dict:
         """Lookup SKU by code — returns SKU + stock + price. Used by sales return form."""
