@@ -1301,6 +1301,13 @@ When `sku` is present:
 **Response:** Updated invoice (status → `cancelled`). Only `draft` or `issued` invoices can be cancelled. Reverses ledger entry (credit note).
 **Permission:** `invoice_manage`
 
+### GET `/invoices/by-no/{invoice_no}` (S107)
+**Path:** `invoice_no` — invoice_number string (e.g., `INV-0005`)
+**Response:** Same shape as `GET /invoices/{id}` with full eager loading.
+**Use case:** QR scan deep-link from invoice print. ScanPage navigates to `/invoices?open={invoice_no}` which calls this endpoint.
+**Route ordering:** Declared before `/{invoice_id}` so FastAPI matches the fixed path first.
+**Permission:** `invoice_manage`
+
 ### GET `/invoices/{id}/pdf`
 **Response:** Binary PDF blob (Content-Type: application/pdf)
 
@@ -2588,14 +2595,17 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
   "bank_name": "HDFC Bank",
   "bank_account": "50200012345678",
   "bank_ifsc": "HDFC0001234",
-  "bank_branch": "Ring Road, Surat"
+  "bank_branch": "Ring Road, Surat",
+  "upi_id": "drsblouse@hdfcbank"
 }
 ```
 
 ### PATCH `/company`
 **Auth:** `supplier_manage` permission
-**Request:** All fields optional: `{ name?, address?, city?, state?, pin_code?, gst_no?, state_code?, pan_no?, phone?, email?, logo_url?, bank_name?, bank_account?, bank_ifsc?, bank_branch? }`
+**Request:** All fields optional: `{ name?, address?, city?, state?, pin_code?, gst_no?, state_code?, pan_no?, phone?, email?, logo_url?, bank_name?, bank_account?, bank_ifsc?, bank_branch?, upi_id? }`
 **Response:** Updated company object
+
+**S107 — UPI payment QR:** When `upi_id` is set, invoice print renders a UPI payment QR in the footer encoding `upi://pay?pa={upi_id}&pn={company.name}&am={total}&cu=INR&tn=Invoice%20{invoice_number}`. Customer scans with any UPI app (GPay/PhonePe/Paytm) and pays directly. Renders only if upi_id is present.
 
 ### GET `/financial-years`
 **Auth:** `supplier_manage` permission

@@ -33,29 +33,34 @@
 
 ---
 
-## Current State (Session 106 — 2026-04-06)
+## Current State (Session 107 — 2026-04-07)
 
-### S106: Scan Pairing Everywhere + ChallansPage Overhaul + OrderPrint Redesign — COMPLETE
+### S107: HSN Propagation + Invoice QR + UPI Payment + Print Polish — COMPLETE
 
-**S106 done. 0 new models. 0 migrations. 45 models total. 3 commits pushed+deployed.**
+**S107 done. 0 new models. 2 migrations. 45 models total. Multiple commits pushed+deployed.**
 
 **What was built:**
-- **ReturnsPage scan pairing:** `useScanPair` for supplier returns (roll scan) and sales returns (SKU scan). POS bar, phone status, user-friendly errors ("Select supplier first", duplicate detection, network errors).
-- **ChallansPage overhaul:** QR deep-link (`?open=JC-xxx`), "New Job Challan" create overlay with roll picker + phone scan, "New Batch Challan" button reusing SendForVAModal. `GET /job-challans/by-no/{no}` + `/batch-challans/by-no/{no}` backend endpoints.
-- **QR on challan prints:** JobChallan + BatchChallan print pages now have QR code encoding challan URL. Scan QR → ScanPage → ChallansPage detail → Receive.
-- **SendForVAModal scan:** Phone scan batch QR → auto-select batch in modal.
-- **OrderPrint redesign:** Wholesale pick-and-pack sheet — grouped by design, ☐ checkbox column, size summary, B&W optimized (zero grey), 4 signature fields, page-break-safe.
-- **Dead code removed:** `useRemoteScan.js`, `scan.js`, `POST /scan/remote`, `remote_scan` SSE event type. SSE intact for batch/notification events.
+- **LotsPage scan pairing + CuttingSheet QR** — `useScanPair` on lot create overlay (roll scan), QR code on cutting sheet print
+- **OrderPrint pivot Pick Sheet** — second print mode for warehouse picking (rows=sizes, cols=colors, ☐+qty cells, chunked into 8-col bands when overflow). Two print buttons on order detail: "Print Order" (confirmation) + "Pick Sheet"
+- **Invoice print B&W redesign** — wholesale GST-compliant layout: solid borders, light gray headers, tight padding, amount in words, T&C, E&OE, 20-row table padding, page-break handling, footer side-by-side
+- **HSN propagation (Option A)** — `hsn_code` on ProductType → auto-flows to SKU at creation → snapshot to InvoiceItem at invoice time. Backfill script ran on prod: 796 SKUs + 164 invoice items updated. FBL/SBL=6206, LHG=6204, SAR=5407.
+- **Invoice QR codes** — 2 QRs on invoice print:
+  - Lookup QR (header, 64px) → `/scan/invoice/{no}` → opens invoice in app
+  - UPI payment QR (footer, 70px) → `upi://pay?...` → customer scans and pays directly. Renders only when `co.upi_id` is set.
+- **New backend endpoints:** `GET /invoices/by-no/{no}` (route ordering: before `/{id}`)
+- **Company.upi_id** field added (public schema), SettingsPage Bank section UI
 
-**Files changed (19):** `ReturnsPage.jsx`, `ChallansPage.jsx`, `ScanPage.jsx`, `SendForVAModal.jsx`, `OrderPrint.jsx`, `JobChallan.jsx`, `BatchChallan.jsx`, `NotificationContext.jsx`, `job_challans.py` (api+service), `batch_challans.py` (api+service), `router.py`, + 3 deleted files
+**Migrations:**
+- `c3d4e5f6g7h8` — ProductType.hsn_code (tenant)
+- `d4e5f6g7h8i9` — Company.upi_id (public)
 
-**Scan pairing now active on:** OrdersPage (SKU), ReturnsPage supplier (roll), ReturnsPage sales (SKU), ChallansPage job create (roll), SendForVAModal (batch)
+**Backfill:** `backend/scripts/backfill_hsn.py` — idempotent, ran on prod (796 SKUs + 164 invoice items, 100% coverage)
 
-**S107 NEXT — Candidates:**
+**S108 NEXT — Candidates:**
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | LotsPage cutting sheet: scan QR to add rolls | ⬜ |
+| 1 | Set DRS Blouse UPI ID via SettingsPage UI | ⬜ |
 | 2 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
 | 3 | ChallansPage 4d discussion: scan-to-receive flow refinement | ⬜ |
 
@@ -63,6 +68,7 @@
 
 ## Previous Sessions (S87-S102) — Invoice, Shipping, Returns, FY, Reports, SKU Overhaul
 
+- **S107:** LotsPage scan pairing + CuttingSheet QR. OrderPrint pivot Pick Sheet (chunked column bands). Invoice print B&W redesign (amount in words, T&C, padded rows, page-break handling). HSN propagation (Option A): ProductType.hsn_code → SKU → InvoiceItem snapshot. Backfill script ran on prod (796 SKUs + 164 invoice items). Invoice QR codes: lookup (header) + UPI payment (footer). Company.upi_id field. New endpoint `GET /invoices/by-no/{no}`. Migrations `c3d4e5f6g7h8` (tenant) + `d4e5f6g7h8i9` (public).
 - **S106:** Scan pairing on ReturnsPage (supplier roll + sales SKU) + ChallansPage (QR prints, deep-link, job/batch create with phone scan) + SendForVAModal scan. OrderPrint wholesale B&W redesign (grouped by design, checkbox, size summary). Dead SSE scan code removed. 2 new backend endpoints (`by-no`).
 - **S105:** `POST /skus/stock-check` bulk endpoint. `page_size:0` = fetch all (11 services + 13 frontend calls). Reservation-aware ship (order's own reserved stock counts as available). QuickMasterModal z-index fix in ship modal.
 - **S104:** SKU search fix (dots→wildcards, "b.green" matches "B. GREEN"). Negative stock adjustments (±qty, reservation-aware validation, clear error messages). Inventory history ±sign fix.
@@ -301,6 +307,7 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S107 | HSN + Invoice QR + UPI | LotsPage scan + CuttingSheet QR. OrderPrint Pick Sheet pivot. Invoice B&W redesign + amount-in-words. HSN on ProductType (Option A) + backfill script (796 SKUs + 164 inv items). Invoice QR: lookup + UPI pay. Company.upi_id. Migrations `c3d4e5f6g7h8` + `d4e5f6g7h8i9` |
 | S106 | Scan Pairing + Challans + OrderPrint | useScanPair on Returns+Challans+SendForVAModal, QR on challan prints, challan create from ChallansPage, by-no endpoints, OrderPrint B&W wholesale redesign, dead SSE scan removed |
 | S105 | Stock-Check + Pagination + Ship Fix | POST /skus/stock-check, page_size:0 all services, reservation-aware ship, QuickMasterModal z-index |
 | S104 | SKU Search + Neg Adjust | Search dots→wildcards, ±qty adjustments, reservation validation, history ±sign fix |
