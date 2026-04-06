@@ -742,75 +742,64 @@ export default function InvoicesPage() {
             </tbody>
           </table>
 
-          {/* ═══ FOOTER BLOCK ═══ */}
-          <div>
-            {/* ═══ TAX + GRAND TOTAL ═══ */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', marginBottom: '6px' }}>
-              <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '240px' }}>
-                <tbody>
-                  {(inv.discount_amount || 0) > 0 && (
-                    <tr>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Discount</td>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>-{fmtCurrency(inv.discount_amount)}</td>
-                    </tr>
-                  )}
-                  {(inv.gst_percent || 0) > 0 && (isIGST ? (
-                    <tr>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>IGST ({inv.gst_percent}%)</td>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency(inv.tax_amount)}</td>
-                    </tr>
-                  ) : (<>
-                    <tr>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>CGST ({(inv.gst_percent || 0) / 2}%)</td>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>SGST ({(inv.gst_percent || 0) / 2}%)</td>
-                      <td style={{ padding: '2px 6px', fontSize: '10px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
-                    </tr>
-                  </>))}
+          {/* ═══ FOOTER ═══ */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2px' }}>
+            {/* Left: Amount in words + Bank + Terms */}
+            <div style={{ flex: 1, paddingRight: '10px' }}>
+              <p style={{ fontSize: '9px', margin: '2px 0 3px', border: '1px solid #000', padding: '2px 6px' }}>
+                <strong>Amount in Words:</strong> {amountInWords(inv.total_amount)}
+              </p>
+              {co.bank_name && (
+                <div style={{ border: '1px solid #000', padding: '2px 6px', marginBottom: '3px', fontSize: '9px' }}>
+                  <strong>Bank:</strong> {co.bank_name}{co.bank_branch ? ` (${co.bank_branch})` : ''} | <strong>A/C:</strong> {co.bank_account || '—'} | <strong>IFSC:</strong> {co.bank_ifsc || '—'}
+                </div>
+              )}
+              <div style={{ fontSize: '7px', lineHeight: '1.4' }}>
+                <strong>Terms:</strong> 1. Goods once sold will not be taken back. 2. Subject to Surat jurisdiction. 3. E.&O.E.
+              </div>
+            </div>
+            {/* Right: Tax totals */}
+            <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '210px', flexShrink: 0 }}>
+              <tbody>
+                {(inv.discount_amount || 0) > 0 && (
                   <tr>
-                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, borderRight: '1px solid #000' }}>Grand Total</td>
-                    <td style={{ padding: '4px 6px', fontSize: '11px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Discount</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>-{fmtCurrency(inv.discount_amount)}</td>
                   </tr>
-                </tbody>
-              </table>
+                )}
+                {(inv.gst_percent || 0) > 0 && (isIGST ? (
+                  <tr>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>IGST ({inv.gst_percent}%)</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency(inv.tax_amount)}</td>
+                  </tr>
+                ) : (<>
+                  <tr>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>CGST ({(inv.gst_percent || 0) / 2}%)</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>SGST ({(inv.gst_percent || 0) / 2}%)</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>{fmtCurrency((inv.tax_amount || 0) / 2)}</td>
+                  </tr>
+                </>))}
+                <tr>
+                  <td style={{ padding: '2px 5px', fontSize: '10px', fontWeight: 800, borderRight: '1px solid #000' }}>Grand Total</td>
+                  <td style={{ padding: '2px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* ═══ SIGNATURES ═══ */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '12px', gap: '20px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ borderBottom: '1px solid #000', height: '24px', marginBottom: '3px' }}></div>
+              <p style={{ fontSize: '8px', fontWeight: 600, margin: 0 }}>Customer Signature</p>
             </div>
-
-            {/* ═══ AMOUNT IN WORDS ═══ */}
-            <div style={{ border: '1px solid #000', padding: '4px 8px', marginBottom: '8px', fontSize: '10px' }}>
-              <strong>Amount in Words:</strong> {amountInWords(inv.total_amount)}
-            </div>
-
-            {/* ═══ BANK DETAILS ═══ */}
-            {co.bank_name && (
-              <div style={{ border: '1px solid #000', padding: '4px 8px', marginBottom: '8px' }}>
-                <p style={IS.secLabel}>Bank Details</p>
-                <p style={{ fontSize: '10px', margin: '1px 0' }}>Bank: <strong>{co.bank_name}</strong>{co.bank_branch ? ` | Branch: ${co.bank_branch}` : ''}</p>
-                {co.bank_account && <p style={{ fontSize: '10px', margin: '1px 0' }}>A/C No: <strong>{co.bank_account}</strong></p>}
-                {co.bank_ifsc && <p style={{ fontSize: '10px', margin: '1px 0' }}>IFSC: <strong>{co.bank_ifsc}</strong></p>}
-              </div>
-            )}
-
-            {/* ═══ TERMS + E&OE ═══ */}
-            <div style={{ fontSize: '8px', marginBottom: '8px', lineHeight: '1.5' }}>
-              <p style={{ margin: 0 }}><strong>Terms & Conditions:</strong></p>
-              <p style={{ margin: '1px 0' }}>1. Goods once sold will not be taken back or exchanged.</p>
-              <p style={{ margin: '1px 0' }}>2. Subject to Surat jurisdiction only.</p>
-              <p style={{ margin: '1px 0' }}>3. E. & O.E. (Errors and Omissions Excepted)</p>
-            </div>
-
-            {/* ═══ SIGNATURES ═══ */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '20px', gap: '20px' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ borderBottom: '1px solid #000', height: '30px', marginBottom: '4px' }}></div>
-                <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Customer Signature</p>
-              </div>
-              <div style={{ flex: 1, textAlign: 'right' }}>
-                <p style={{ fontSize: '10px', fontWeight: 700, margin: '0 0 20px' }}>For {co.name || 'Company'}</p>
-                <div style={{ borderBottom: '1px solid #000', height: '0', marginBottom: '4px' }}></div>
-                <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Authorized Signatory</p>
-              </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ fontSize: '9px', fontWeight: 700, margin: '0 0 14px' }}>For {co.name || 'Company'}</p>
+              <div style={{ borderBottom: '1px solid #000', height: '0', marginBottom: '3px' }}></div>
+              <p style={{ fontSize: '8px', fontWeight: 600, margin: 0 }}>Authorized Signatory</p>
             </div>
           </div>
         </div>
