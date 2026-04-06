@@ -74,4 +74,10 @@ export function getBaseUrl() {
   return API_URL
 }
 
+/** WebSocket URL — converts http(s) to ws(s). */
+export function getWsUrl() {
+  const base = API_URL.startsWith('http') ? API_URL : `${window.location.origin}${API_URL}`
+  return base.replace(/^http/, 'ws')
+}
+
 export default client

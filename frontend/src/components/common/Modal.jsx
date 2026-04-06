@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 /**
  * Overlay dialog.
  */
-export default function Modal({ open, onClose, title, children, actions, wide = false, extraWide = false }) {
+export default function Modal({ open, onClose, title, children, actions, wide = false, extraWide = false, zIndex }) {
   const bodyRef = useRef(null)
   const overlayRef = useRef(null)
 
@@ -36,7 +36,7 @@ export default function Modal({ open, onClose, title, children, actions, wide = 
   const maxW = extraWide ? 'max-w-6xl' : wide ? 'max-w-2xl' : 'max-w-md'
 
   return (
-    <div ref={overlayRef} className="fixed inset-0 z-50" style={{ overflowY: 'auto' }}>
+    <div ref={overlayRef} className={`fixed inset-0 ${zIndex || 'z-50'}`} style={{ overflowY: 'auto' }}>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
 

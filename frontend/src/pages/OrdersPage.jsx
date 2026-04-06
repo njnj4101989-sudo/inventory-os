@@ -12,8 +12,7 @@ import StatusBadge from '../components/common/StatusBadge'
 import ErrorAlert from '../components/common/ErrorAlert'
 import SearchInput from '../components/common/SearchInput'
 import QuickMasterModal from '../components/common/QuickMasterModal'
-import CameraScanner from '../components/common/CameraScanner'
-import { useRemoteScan } from '../hooks/useRemoteScan'
+import { useScanPair } from '../hooks/useScanPair'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
@@ -184,7 +183,12 @@ export default function OrdersPage() {
   const [confirmDiscard, setConfirmDiscard] = useState(false) // discard confirmation bar
   const [editMode, setEditMode] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState(null)
-  const [showScanner, setShowScanner] = useState(false)
+  // POS scan mode
+  const [scanMode, setScanMode] = useState(false)
+  const [scanInput, setScanInput] = useState('')
+  const [scanStatus, setScanStatus] = useState(null) // { type: 'added'|'duplicate'|'error', message: string, rowIdx?: number }
+  const [flashRowIdx, setFlashRowIdx] = useState(null)
+  const scanInputRef = useRef(null)
 
   // Quick master for customer Shift+M
   const { quickMasterType, quickMasterOpen, closeQuickMaster, onMasterCreated } = useQuickMaster(
@@ -199,7 +203,11 @@ export default function OrdersPage() {
       }
       if (type === 'transport') {
         setTransports(prev => [...prev, newItem])
-        setCustomerForm(f => ({ ...f, transport_id: newItem.id }))
+        if (shipModalOpen) {
+          setShipForm(f => ({ ...f, transport_id: newItem.id }))
+        } else {
+          setCustomerForm(f => ({ ...f, transport_id: newItem.id }))
+        }
       }
     }
   )
@@ -242,78 +250,86 @@ export default function OrdersPage() {
     setOrderLines(prev => prev.filter((_, i) => i !== idx))
   }, [])
 
-  /* ── QR Scan → add/increment SKU line ── */
-  const handleScanResult = useCallback((rawValue) => {
-    setShowScanner(false)
-    // Extract sku_code from QR URL or raw code
+  /* ── Flash row helper ── */
+  const flashRow = useCallback((idx) => {
+    setFlashRowIdx(idx)
+    setTimeout(() => setFlashRowIdx(null), 1500)
+  }, [])
+
+  /* ── Keep a ref to orderLines for stale-closure-safe duplicate check ── */
+  const orderLinesRef = useRef(orderLines)
+  orderLinesRef.current = orderLines
+
+  /* ── Add SKU line (shared by scan + POS type) ── */
+  const addSKULine = useCallback((sku, parsed, source) => {
+    const lines = orderLinesRef.current
+    const existingIdx = lines.findIndex(l => l.sku_id === sku.id)
+    if (existingIdx !== -1) {
+      setScanStatus({ type: 'duplicate', message: `${sku.sku_code} already in order — row ${existingIdx + 1}` })
+      flashRow(existingIdx)
+      setTimeout(() => setScanStatus(null), 3000)
+      return
+    }
+    const newLine = {
+      design_key: `${parsed.type}-${parsed.design}`,
+      color: parsed.color,
+      size: parsed.size,
+      sku_id: sku.id,
+      qty: 1,
+      price: sku.base_price || sku.sale_rate || 0,
+      item_id: null,
+    }
+    setOrderLines(prev => {
+      const emptyIdx = prev.findIndex(l => !l.sku_id && !l.design_key)
+      if (emptyIdx !== -1) {
+        flashRow(emptyIdx)
+        return prev.map((l, i) => i === emptyIdx ? newLine : l)
+      }
+      flashRow(prev.length)
+      return [...prev, newLine]
+    })
+    setScanStatus({ type: 'added', message: `${sku.sku_code} added${source === 'phone' ? ' via phone' : ''}` })
+    setTimeout(() => setScanStatus(null), 2500)
+  }, [flashRow])
+
+  /* ── QR Scan → add SKU line ── */
+  const handleScanResult = useCallback((rawValue, source = 'scan') => {
     const skuMatch = rawValue.match(/\/scan\/sku\/([^/?\s]+)/)
     const code = skuMatch ? decodeURIComponent(skuMatch[1]) : rawValue.trim()
     if (!code) return
 
-    // Find SKU in already-loaded allSKUs list
     const parsed = parseSKU(code)
     const foundSku = allSKUs.find(s => s.sku_code === code)
 
     if (foundSku) {
-      setOrderLines(prev => {
-        // If this SKU already exists in lines, increment qty
-        const existingIdx = prev.findIndex(l => l.sku_id === foundSku.id)
-        if (existingIdx !== -1) {
-          return prev.map((l, i) => i === existingIdx ? { ...l, qty: l.qty + 1 } : l)
-        }
-        // Add as new line — fill first empty row or append
-        const emptyIdx = prev.findIndex(l => !l.sku_id && !l.design_key)
-        const newLine = {
-          design_key: `${parsed.type}-${parsed.design}`,
-          color: parsed.color,
-          size: parsed.size,
-          sku_id: foundSku.id,
-          qty: 1,
-          price: foundSku.base_price || foundSku.sale_rate || 0,
-          item_id: null,
-        }
-        if (emptyIdx !== -1) {
-          return prev.map((l, i) => i === emptyIdx ? newLine : l)
-        }
-        return [...prev, newLine]
-      })
+      addSKULine(foundSku, parsed, source)
     } else {
-      // SKU not in local list — try API lookup
       getSKUByCode(code).then(res => {
         const sku = res.data?.data
         if (!sku) {
-          setFormError(`SKU not found: ${code}`)
+          setScanStatus({ type: 'error', message: `SKU not found: ${code}` })
+          setTimeout(() => setScanStatus(null), 3000)
           return
         }
         const p = parseSKU(sku.sku_code)
         setAllSKUs(prev => [...prev, sku])
-        setOrderLines(prev => {
-          const emptyIdx = prev.findIndex(l => !l.sku_id && !l.design_key)
-          const newLine = {
-            design_key: `${p.type}-${p.design}`,
-            color: p.color,
-            size: p.size,
-            sku_id: sku.id,
-            qty: 1,
-            price: sku.base_price || sku.sale_rate || 0,
-            item_id: null,
-          }
-          if (emptyIdx !== -1) {
-            return prev.map((l, i) => i === emptyIdx ? newLine : l)
-          }
-          return [...prev, newLine]
-        })
-      }).catch(() => {
-        setFormError(`SKU not found: ${code}`)
+        addSKULine(sku, p, source)
+      }).catch((err) => {
+        const isNetwork = !err.response && (err.code === 'ERR_NETWORK' || err.message === 'Network Error' || !navigator.onLine)
+        setScanStatus({ type: 'error', message: isNetwork ? 'Connection error — check internet' : `SKU not found: ${code}` })
+        setTimeout(() => setScanStatus(null), 4000)
       })
     }
   }, [allSKUs])
 
-  /* ── Remote scan (phone → desktop) — auto-add SKU to form ── */
-  useRemoteScan(useCallback((scan) => {
-    if (!createMode || scan.entity_type !== 'sku') return
-    handleScanResult(scan.code)
-  }, [createMode, handleScanResult]))
+  /* ── WebSocket scan pairing (phone → desktop) ── */
+  const { phoneConnected } = useScanPair({
+    role: 'desktop',
+    enabled: createMode && scanMode,
+    onScan: useCallback((data) => {
+      if (data.code) handleScanResult(data.code, 'phone')
+    }, [handleScanResult]),
+  })
 
   /* ── Global keyboard: Ctrl+S, Escape ── */
   useEffect(() => {
@@ -324,15 +340,36 @@ export default function OrdersPage() {
         handleCreate()
       }
       if (e.key === 'Escape') {
-        if (quickMasterOpen || shipModalOpen || showScanner) return
+        if (quickMasterOpen || shipModalOpen) return
         e.preventDefault()
+        if (scanMode) { setScanMode(false); setScanInput(''); setScanStatus(null); return }
         if (confirmDiscard) { cancelDiscard(); return }
         requestClose()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, showScanner])
+  }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, scanMode])
+
+  /* ── POS mode: handle SKU input submit ── */
+  const handlePOSSubmit = useCallback((code) => {
+    if (!code.trim()) return
+    handleScanResult(code.trim(), 'type')
+    setScanInput('')
+    // Re-focus the search input for next scan
+    setTimeout(() => {
+      const input = scanInputRef.current?.querySelector('input')
+      if (input) { input.focus(); input.value = '' }
+    }, 50)
+  }, [handleScanResult])
+
+  /* ── POS mode: SKU options for searchable dropdown ── */
+  const skuSearchOptions = useMemo(() => {
+    return allSKUs.map(s => ({
+      value: s.sku_code,
+      label: `${s.sku_code}${s.stock?.available_qty != null ? ` (${s.stock.available_qty} avail)` : ''}`,
+    }))
+  }, [allSKUs])
 
   /* ── Auto-focus Customer field on overlay open ── */
   useEffect(() => {
@@ -423,8 +460,8 @@ export default function OrdersPage() {
       let stockMap = {}
       try {
         const res = await getSKUs({ is_active: true, page_size: 500 })
-        const skuList = res.data?.data || []
-        for (const sku of skuList) {
+        const skuList = res.data?.data?.data || res.data?.data || []
+        for (const sku of Array.isArray(skuList) ? skuList : []) {
           stockMap[sku.id] = sku.stock?.available_qty || 0
         }
       } catch { /* proceed with 0 stock fallback */ }
@@ -1334,9 +1371,10 @@ export default function OrdersPage() {
                 <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Line Items ({orderLines.filter(l => l.sku_id).length} items)</span>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowScanner(true)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-3 py-1.5 typo-btn-sm text-emerald-700 hover:bg-emerald-50 shadow-sm transition-colors">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-                      Scan QR
+                    <button onClick={() => { setScanMode(m => !m); setScanInput(''); setScanStatus(null) }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 typo-btn-sm shadow-sm transition-colors ${scanMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'border border-emerald-600 text-emerald-700 hover:bg-emerald-50'}`}>
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                      {scanMode ? 'Scanning Active' : 'Scan from Phone'}
                     </button>
                     <button onClick={addOrderLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -1344,6 +1382,65 @@ export default function OrdersPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* ── POS Scan Bar ── */}
+                {scanMode && (
+                  <div className="border-b border-gray-200 bg-emerald-50/50 px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 relative" ref={scanInputRef}>
+                        <FilterSelect
+                          searchable
+                          autoFocus
+                          full
+                          value=""
+                          onChange={(code) => { if (code) handlePOSSubmit(code) }}
+                          options={[{ value: '', label: 'Type or scan SKU code...' }, ...skuSearchOptions]}
+                        />
+                      </div>
+                      <button onClick={() => { setScanMode(false); setScanInput(''); setScanStatus(null) }}
+                        className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+
+                    {/* Status indicator */}
+                    <div className="flex items-center gap-2 min-h-[20px]">
+                      {scanStatus ? (
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                          scanStatus.type === 'added' ? 'text-emerald-600' :
+                          scanStatus.type === 'duplicate' ? 'text-amber-600' :
+                          'text-red-500'
+                        }`}>
+                          {scanStatus.type === 'added' && (
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          )}
+                          {scanStatus.type === 'duplicate' && (
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          )}
+                          {scanStatus.type === 'error' && (
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          )}
+                          {scanStatus.message}
+                        </span>
+                      ) : phoneConnected ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                          <span className="relative flex h-2 w-2">
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          Phone connected — ready to scan
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                          </span>
+                          Phone not connected — open Gun mode on phone
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <table className="w-full table-fixed">
                   <thead>
                     <tr className="bg-emerald-600">
@@ -1367,7 +1464,7 @@ export default function OrdersPage() {
                       const lineTotal = line.qty * (line.price || 0)
                       const isShort = line.qty > 0 && line.qty > avail
                       return (
-                        <tr key={idx} className={`border-b border-gray-100 hover:bg-gray-50/50 ${idx % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                        <tr key={idx} className={`border-b border-gray-100 hover:bg-gray-50/50 ${idx % 2 === 1 ? 'bg-gray-50/30' : ''} ${flashRowIdx === idx ? 'animate-flash-row' : ''}`}>
                           <td className="px-2 py-1.5 typo-td-secondary">{idx + 1}</td>
                           <td className="px-2 py-1.5">
                             <FilterSelect full searchable value={line.design_key}
@@ -1504,12 +1601,6 @@ export default function OrdersPage() {
           </div>
         </div>
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
-        {showScanner && (
-          <CameraScanner
-            onScan={handleScanResult}
-            onClose={() => setShowScanner(false)}
-          />
-        )}
       </div>
     )
   }

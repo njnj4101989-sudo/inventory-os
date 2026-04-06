@@ -218,3 +218,11 @@
 .animate-slide-in-right {
   animation: slide-in-right 0.25s ease-out;
 }
+
+@keyframes flash-row {
+  0%   { background-color: rgb(16 185 129 / 0.25); }
+  100% { background-color: transparent; }
+}
+.animate-flash-row {
+  animation: flash-row 1.5s ease-out;
+}

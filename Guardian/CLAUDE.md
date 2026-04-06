@@ -33,36 +33,21 @@
 
 ---
 
-## Current State (Session 103 — 2026-04-03)
+## Current State (Session 104 — 2026-04-04)
 
-### S103: Scanner Gun PWA — COMPLETE (pending UX polish)
+### S104: SKU Search Fix + Negative Adjustments — COMPLETE
 
-**S103 done. 0 new models. 0 migrations. 45 models total. 4 commits pushed+deployed.**
+**S104 done. 0 new models. 0 migrations. 45 models total. 1 commit pushed+deployed.**
 
-**What was built:**
-- **Option B (Smart):** Extend MobileLayout for admin/supervisor/billing on mobile (<768px)
-- **Scanner Gun mode:** Phone scans QR → POST /scan/remote → SSE event → desktop auto-adds to form
-- `useIsMobile` hook (viewport detection), `useRemoteScan` hook (SSE listener)
-- BottomNav: Scan / Activity / Profile tabs for admin-side roles
-- MobileLayout header: company name + FY badge for admin roles
-- CameraScanner continuous mode (Gun mode keeps camera open)
-- ActivityPage with localStorage-backed scan log
-- Backend `POST /scan/remote` resolves roll/batch/SKU + emits SSE
-- Desktop OrdersPage + ReturnsPage listen for `remote_scan` events
-- Profile route separated — all roles can access logout
+**What was fixed:**
+- **SKU search normalization:** dots treated as wildcards — "b.green" now matches "B. GREEN"
+- **Negative stock adjustments:** ±qty in opening stock adjust, validated against available stock
+- **Reservation protection:** negative adjustment can't exceed available (reserved stock protected with clear error message)
+- **Inventory history:** adjustment events show correct +/- sign and color (green/red)
 
-**New files (5):** `useIsMobile.js`, `useRemoteScan.js`, `ActivityPage.jsx`, `api/scan.js`, `backend/api/scan.py`
+**Files changed (3):** `sku_service.py` (search), `inventory_service.py` (adjust logic + validation), `SKUsPage.jsx` (SkippedRow ±qty, history display)
 
-**Architecture decisions:**
-- Phone = wireless QR scanner gun, desktop = data entry form
-- Viewport <768px → MobileLayout (admin only sees scan/activity/profile)
-- Viewport >=768px → desktop Layout (unchanged, zero regressions)
-- Tailor/checker PWA unchanged
-- Same tabs for all admin-side roles (admin/supervisor/billing)
-- SSE broadcasts to all clients, frontend filters by `actor_id` (same user)
-- Desktop pages still accessible only on desktop — no responsive compromise
-
-**S104 NEXT — Desktop Scanner UX:**
+**S105 NEXT — Desktop Scanner UX:**
 
 | # | Task | Status |
 |---|------|--------|
@@ -79,6 +64,7 @@
 
 ## Previous Sessions (S87-S102) — Invoice, Shipping, Returns, FY, Reports, SKU Overhaul
 
+- **S104:** SKU search fix (dots→wildcards, "b.green" matches "B. GREEN"). Negative stock adjustments (±qty, reservation-aware validation, clear error messages). Inventory history ±sign fix.
 - **S103:** Scanner Gun PWA. Option B: extend MobileLayout for admin/supervisor/billing on mobile. useIsMobile viewport hook, BottomNav role-aware tabs (Scan/Activity/Profile), Gun mode on ScanPage (continuous scan → POST /scan/remote → SSE → desktop auto-add). Backend scan.py endpoint. useRemoteScan hook on OrdersPage+ReturnsPage. ActivityPage scan log. Profile route fix. AWS budget $35/mo with 3 email alerts configured.
 - **S102:** QR scan on order form, batch unclaim endpoint+UI, SKU identity design edit, InventoryState FOR UPDATE fix, PaginatedParams validation, CLAUDE.md trim (76K→26K)
 - **S101:** 5 prod bug fixes (adjust crash, SKU search, inventory history 500, cost history filter, FilterSelect cycling). SKU page grouped accordion by design (All SKUs + Cost Breakdown tabs), fixed column widths, inline reserved qty
@@ -210,6 +196,17 @@
 - Frontend: `NotificationContext.jsx` (EventSource + exponential backoff), `Toast.jsx`, `NotificationBell.jsx`
 - 10 emit calls across 6 services. 30s heartbeat. Nginx: `proxy_buffering off; proxy_read_timeout 86400;`
 
+### WebSocket Scan Pairing (S105)
+- Backend: `scan_ws.py` — ScanPairManager + WS endpoint `/api/v1/scan/ws/pair?role=phone|desktop`
+- Frontend: `useScanPair.js` hook (connect, presence, scan, auto-reconnect with backoff)
+- Auth: HttpOnly cookie sent automatically on WS handshake (same as SSE)
+- Pairing: keyed by user_id from JWT. One phone + multiple desktops per user. Isolated per user.
+- SSE stays for notifications (bell/toasts). WS handles scan pairing only.
+- **DEPLOY NOTE:** Nginx needs WS upgrade headers. Add to EC2 Nginx config on next push:
+  ```
+  location /api/v1/scan/ws/ { proxy_pass http://127.0.0.1:8000; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
+  ```
+
 ### AWS Deployment (S42)
 - **Frontend:** Vercel (free forever) — `vercel.json` SPA rewrites + `allowedHosts`
 - **Backend:** AWS EC2 t2.micro + Nginx + Gunicorn + FastAPI (free 12 months)
@@ -303,6 +300,7 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S104 | SKU Search + Neg Adjust | Search dots→wildcards, ±qty adjustments, reservation validation, history ±sign fix |
 | S103 | Scanner Gun PWA | Option B mobile layout, Gun mode scan→SSE→desktop, useIsMobile+useRemoteScan hooks, ActivityPage, backend /scan/remote, AWS budget alerts |
 | S102 | QR Scan + Mobile Plan | QR scan on order form, batch unclaim, mobile-first UI plan (0/10) |
 

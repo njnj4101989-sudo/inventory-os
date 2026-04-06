@@ -173,6 +173,7 @@ export default function QuickMasterModal({ type, open, onClose, onCreated }) {
       open={open}
       onClose={onClose}
       title={config.title}
+      zIndex="z-[60]"
       actions={
         <>
           <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 typo-btn text-gray-600 hover:bg-gray-50">

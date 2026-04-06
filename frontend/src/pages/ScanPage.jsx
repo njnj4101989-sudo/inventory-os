@@ -7,6 +7,7 @@ import { getRollPassport } from '../api/rolls'
 import { getBatchPassport, claimBatch, unclaimBatch, startBatch, submitBatch, checkBatch, readyForPacking, packBatch } from '../api/batches'
 import { getSKUPassport } from '../api/skus'
 import { remoteScan } from '../api/scan'
+import { useScanPair } from '../hooks/useScanPair'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import CameraScanner from '../components/common/CameraScanner'
 
@@ -28,6 +29,12 @@ export default function ScanPage() {
   const [gunMode, setGunMode] = useState(false)
   const [gunResult, setGunResult] = useState(null) // { success, code, message }
   const [gunSending, setGunSending] = useState(false)
+
+  // WebSocket scan pairing — connects when Gun mode is active
+  const { connected: wsConnected, phoneConnected: _pc, send: wsSend } = useScanPair({
+    role: 'phone',
+    enabled: gunMode && showScanner,
+  })
   const [claiming, setClaiming] = useState(false)
   const [claimSuccess, setClaimSuccess] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -310,18 +317,24 @@ export default function ScanPage() {
     setGunSending(true)
     setGunResult(null)
     try {
-      const res = await remoteScan(code)
-      const data = res?.data?.data || res?.data
-      setGunResult({ success: true, code, message: `${data?.entity_type || 'Item'}: ${code}` })
-      // Log to localStorage for ActivityPage
-      logScanActivity(code, data?.entity_type || 'unknown', 'sent')
+      if (wsConnected) {
+        // Send via WebSocket — instant, no HTTP overhead
+        wsSend({ type: 'scan', code })
+        setGunResult({ success: true, code, message: `Sent: ${code}` })
+        logScanActivity(code, 'ws', 'sent')
+      } else {
+        // Fallback to POST if WS not connected
+        const res = await remoteScan(code)
+        const data = res?.data?.data || res?.data
+        setGunResult({ success: true, code, message: `${data?.entity_type || 'Item'}: ${code}` })
+        logScanActivity(code, data?.entity_type || 'unknown', 'sent')
+      }
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Not found'
       setGunResult({ success: false, code, message: msg })
       logScanActivity(code, 'unknown', 'failed')
     } finally {
       setGunSending(false)
-      // Auto-clear result after 2s, keep scanner open for next scan
       setTimeout(() => setGunResult(null), 2000)
     }
   }
@@ -464,6 +477,23 @@ export default function ScanPage() {
             <div className="mx-auto max-w-sm rounded-xl bg-gray-800 px-4 py-3 shadow-lg flex items-center gap-3">
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               <p className="text-white text-sm">Sending...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Gun mode connection status — top bar */}
+        {showScanner && gunMode && !gunSending && !gunResult && (
+          <div className="fixed top-2 left-4 right-4 z-[60] pointer-events-none">
+            <div className={`mx-auto max-w-sm rounded-xl px-4 py-2 shadow-lg flex items-center gap-2 ${wsConnected ? 'bg-emerald-600' : 'bg-gray-700'}`}>
+              <span className="relative flex h-2.5 w-2.5">
+                {wsConnected ? (
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                ) : (<>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                </>)}
+              </span>
+              <p className="text-white text-xs font-medium">{wsConnected ? 'Connected to desktop' : 'Connecting...'}</p>
             </div>
           </div>
         )}

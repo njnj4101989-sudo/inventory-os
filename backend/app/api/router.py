@@ -35,6 +35,7 @@ from app.api import (
     return_notes,
     sales_returns,
     scan,
+    scan_ws,
 )
 
 api_router = APIRouter()
@@ -66,3 +67,4 @@ api_router.include_router(company.router)
 api_router.include_router(return_notes.router)
 api_router.include_router(sales_returns.router)
 api_router.include_router(scan.router)
+api_router.include_router(scan_ws.router)
