@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, Fragment } from 'react'
 import { useReactToPrint } from 'react-to-print'
 
 /**
@@ -208,17 +208,25 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
         )}
 
         {mode === 'picksheet' ? (
-          /* ═══ PICK SHEET — PIVOT TABLES ═══ */
+          /* ═══ PICK SHEET — PIVOT TABLES (chunked columns) ═══ */
           <>
             {pivotData.map((group, gi) => {
-              // Column totals
+              const MAX_COLS = 8 // max color columns per band
               const colTotals = {}
               group.colors.forEach(c => {
                 colTotals[c] = group.sizes.reduce((s, sz) => s + (group.cells[`${sz}|${c}`] || 0), 0)
               })
 
+              // Chunk colors into bands
+              const bands = []
+              for (let i = 0; i < group.colors.length; i += MAX_COLS) {
+                bands.push(group.colors.slice(i, i + MAX_COLS))
+              }
+              // If colors fit in one band, no chunking needed
+              if (bands.length === 0) bands.push([])
+
               return (
-                <div key={group.design} style={{ marginBottom: gi < pivotData.length - 1 ? '8px' : '0', pageBreakInside: 'avoid' }}>
+                <div key={group.design} style={{ marginBottom: gi < pivotData.length - 1 ? '8px' : '0' }}>
                   {/* Design header */}
                   <div style={S.designHdr}>
                     <span style={S.designTitle}>Design {group.design}</span>
@@ -226,57 +234,83 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
                   </div>
 
                   <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...S.th, textAlign: 'left', width: '70px' }}>Size</th>
-                        {group.colors.map((color, ci) => (
-                          <th key={color} style={ci < group.colors.length - 1 ? { ...S.th, textAlign: 'center' } : { ...S.thLast, textAlign: 'center' }}>
-                            {color}
-                          </th>
-                        ))}
-                        <th style={{ ...S.thLast, textAlign: 'center', width: '50px', borderLeft: '1.5px solid #000' }}>Total</th>
-                      </tr>
-                    </thead>
                     <tbody>
-                      {group.sizes.map(size => {
-                        const rowTotal = group.colors.reduce((s, c) => s + (group.cells[`${size}|${c}`] || 0), 0)
+                      {bands.map((bandColors, bi) => {
+                        const isLast = bi === bands.length - 1
+                        // Fixed column count: SIZE + MAX_COLS color slots + TOTAL on last band
+                        const padCount = MAX_COLS - bandColors.length
+                        const colWidth = `${Math.floor(100 / (MAX_COLS + 1 + (isLast ? 1 : 0)))}%`
+
                         return (
-                          <tr key={size} style={{ pageBreakInside: 'avoid' }}>
-                            <td style={{ ...S.cell, fontWeight: 700, fontSize: '11px' }}>{size}</td>
-                            {group.colors.map((color, ci) => {
-                              const qty = group.cells[`${size}|${color}`] || 0
+                          <Fragment key={bi}>
+                            {/* Band header row */}
+                            <tr style={bi > 0 ? { borderTop: '1.5px solid #000' } : undefined}>
+                              <th style={{ ...S.th, textAlign: 'left', width: '56px' }}>Size</th>
+                              {bandColors.map(color => (
+                                <th key={color} style={{ ...S.th, textAlign: 'center', width: colWidth }}>{color}</th>
+                              ))}
+                              {isLast && padCount > 0 && Array.from({ length: padCount }).map((_, pi) => (
+                                <th key={`pad-${pi}`} style={{ ...S.th, width: colWidth }}></th>
+                              ))}
+                              {isLast && (
+                                <th style={{ ...S.thLast, textAlign: 'center', width: '50px', borderLeft: '1.5px solid #000' }}>Total</th>
+                              )}
+                              {!isLast && <th style={{ ...S.thLast, width: '50px' }}></th>}
+                            </tr>
+
+                            {/* Size data rows */}
+                            {group.sizes.map(size => {
+                              const rowTotal = group.colors.reduce((s, c) => s + (group.cells[`${size}|${c}`] || 0), 0)
                               return (
-                                <td key={color} style={ci < group.colors.length - 1 ? { ...S.cell, textAlign: 'center' } : { ...S.cellLast, textAlign: 'center' }}>
-                                  {qty > 0 ? (
-                                    <span style={{ fontSize: '11px' }}>
-                                      <span style={{ fontSize: '9px', marginRight: '2px' }}>☐</span>
-                                      <span style={{ fontWeight: 700 }}>{qty}</span>
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: '#999', fontSize: '9px' }}>—</span>
+                                <tr key={`${bi}-${size}`} style={{ pageBreakInside: 'avoid' }}>
+                                  <td style={{ ...S.cell, fontWeight: 700, fontSize: '11px' }}>{size}</td>
+                                  {bandColors.map(color => {
+                                    const qty = group.cells[`${size}|${color}`] || 0
+                                    return (
+                                      <td key={color} style={{ ...S.cell, textAlign: 'center' }}>
+                                        {qty > 0 ? (
+                                          <span style={{ fontSize: '11px' }}>
+                                            <span style={{ fontSize: '9px', marginRight: '2px' }}>☐</span>
+                                            <span style={{ fontWeight: 700 }}>{qty}</span>
+                                          </span>
+                                        ) : (
+                                          <span style={{ color: '#999', fontSize: '9px' }}>—</span>
+                                        )}
+                                      </td>
+                                    )
+                                  })}
+                                  {isLast && padCount > 0 && Array.from({ length: padCount }).map((_, pi) => (
+                                    <td key={`pad-${pi}`} style={{ ...S.cell }}></td>
+                                  ))}
+                                  {isLast && (
+                                    <td style={{ ...S.cellLast, textAlign: 'center', fontWeight: 800, fontSize: '11px', borderLeft: '1.5px solid #000' }}>{rowTotal}</td>
                                   )}
-                                </td>
+                                  {!isLast && <td style={{ ...S.cellLast }}></td>}
+                                </tr>
                               )
                             })}
-                            <td style={{ ...S.cellLast, textAlign: 'center', fontWeight: 800, fontSize: '11px', borderLeft: '2px solid #000' }}>{rowTotal}</td>
-                          </tr>
+
+                            {/* Band totals row */}
+                            <tr style={{ borderTop: '1px solid #000' }}>
+                              <td style={{ padding: '2px 5px', fontSize: '9px', fontWeight: 800, borderRight: '1px solid #ccc' }}>TOTAL</td>
+                              {bandColors.map(color => (
+                                <td key={color} style={{ padding: '2px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'center', borderRight: '1px solid #ccc' }}>
+                                  {colTotals[color]}
+                                </td>
+                              ))}
+                              {isLast && padCount > 0 && Array.from({ length: padCount }).map((_, pi) => (
+                                <td key={`pad-${pi}`} style={{ padding: '2px 5px', borderRight: '1px solid #ccc' }}></td>
+                              ))}
+                              {isLast && (
+                                <td style={{ padding: '2px 5px', fontSize: '11px', fontWeight: 800, textAlign: 'center', borderLeft: '1.5px solid #000' }}>
+                                  {group.totalQty}
+                                </td>
+                              )}
+                              {!isLast && <td style={{ padding: '2px 5px' }}></td>}
+                            </tr>
+                          </Fragment>
                         )
                       })}
-                      {/* Column totals row */}
-                      <tr style={{ borderTop: '1.5px solid #000' }}>
-                        <td style={{ padding: '2px 5px', fontSize: '9px', fontWeight: 800, borderRight: '1px solid #ccc' }}>TOTAL</td>
-                        {group.colors.map((color, ci) => (
-                          <td key={color} style={{
-                            padding: '2px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'center',
-                            borderRight: ci < group.colors.length - 1 ? '1px solid #ccc' : 'none',
-                          }}>
-                            {colTotals[color]}
-                          </td>
-                        ))}
-                        <td style={{ padding: '2px 5px', fontSize: '11px', fontWeight: 800, textAlign: 'center', borderLeft: '1.5px solid #000' }}>
-                          {group.totalQty}
-                        </td>
-                      </tr>
                     </tbody>
                   </table>
                 </div>
