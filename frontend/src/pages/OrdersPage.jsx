@@ -804,9 +804,13 @@ export default function OrdersPage() {
             <p className="text-xs opacity-80">{o.order_number} &middot; <StatusBadge status={o.status} /></p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setPrintOrder(detailOrder); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors flex items-center gap-1">
+            <button onClick={() => { setPrintOrder({ order: detailOrder, mode: 'confirmation' }); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors flex items-center gap-1">
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-              Print
+              Print Order
+            </button>
+            <button onClick={() => { setPrintOrder({ order: detailOrder, mode: 'picksheet' }); setDetailOrder(null) }} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors flex items-center gap-1">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+              Pick Sheet
             </button>
             <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
@@ -1659,7 +1663,7 @@ export default function OrdersPage() {
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
 
       {/* Order Print Overlay */}
-      {printOrder && <OrderPrint order={printOrder} companyName={company?.name} company={company} onClose={() => setPrintOrder(null)} />}
+      {printOrder && <OrderPrint order={printOrder.order || printOrder} mode={printOrder.mode || 'confirmation'} companyName={company?.name} company={company} onClose={() => setPrintOrder(null)} />}
     </div>
   )
 }
