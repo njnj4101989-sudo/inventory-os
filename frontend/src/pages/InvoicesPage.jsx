@@ -181,6 +181,7 @@ export default function InvoicesPage() {
       * { box-sizing: border-box; }
       body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #000; }
       tr { page-break-inside: avoid; }
+      thead { display: table-header-group; }
       .inv-footer-block { page-break-inside: avoid; }
     `,
   })
@@ -714,6 +715,19 @@ export default function InvoicesPage() {
                   <td style={{ ...IS.td, textAlign: 'right', fontWeight: 700 }}>{item.quantity}</td>
                   <td style={{ ...IS.td, textAlign: 'right' }}>{fmtCurrency(item.unit_price)}</td>
                   <td style={{ ...IS.tdLast, textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(item.total_price)}</td>
+                </tr>
+              ))}
+              {/* Pad empty rows to fill page — min 20 rows */}
+              {(inv.items?.length || 0) < 20 && Array.from({ length: 20 - (inv.items?.length || 0) }).map((_, i) => (
+                <tr key={`pad-${i}`}>
+                  <td style={{ ...IS.td, textAlign: 'center', color: '#ccc', fontSize: '9px' }}>{(inv.items?.length || 0) + i + 1}</td>
+                  <td style={IS.td}></td>
+                  <td style={IS.td}></td>
+                  <td style={IS.td}></td>
+                  <td style={IS.td}></td>
+                  <td style={IS.td}></td>
+                  <td style={IS.td}></td>
+                  <td style={IS.tdLast}></td>
                 </tr>
               ))}
               {/* Total qty row */}
