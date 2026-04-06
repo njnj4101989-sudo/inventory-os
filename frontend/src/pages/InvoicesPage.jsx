@@ -182,7 +182,6 @@ export default function InvoicesPage() {
       body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #000; }
       tr { page-break-inside: avoid; }
       thead { display: table-header-group; }
-      tfoot { display: table-footer-group; }
     `,
   })
 
@@ -626,18 +625,8 @@ export default function InvoicesPage() {
     const inv = printInvoice
     const isIGST = inv.place_of_supply && co.state_code && inv.place_of_supply !== co.state_code
     const totalQty = (inv.items || []).reduce((s, it) => s + (it.quantity || 0), 0)
-    // Dynamic row padding — fill to bottom of whichever page items end on
-    const ROWS_PAGE1 = 22 // items that fit on page 1 (header + bill-to take space)
-    const ROWS_OTHER = 38 // items per continuation page (just column headers)
     const itemCount = inv.items?.length || 0
-    let minRows
-    if (itemCount <= ROWS_PAGE1) {
-      minRows = ROWS_PAGE1
-    } else {
-      const extraPages = Math.ceil((itemCount - ROWS_PAGE1) / ROWS_OTHER)
-      minRows = ROWS_PAGE1 + extraPages * ROWS_OTHER
-    }
-    const padCount = Math.max(0, minRows - itemCount)
+    const padCount = Math.max(0, 20 - itemCount)
 
     const IS = {
       th: { padding: '3px 5px', fontSize: '7.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1.5px solid #000', borderRight: '1px solid #ccc', background: '#f0f0f0', color: '#000' },
@@ -743,15 +732,14 @@ export default function InvoicesPage() {
                   <td style={IS.tdLast}></td>
                 </tr>
               ))}
-            </tbody>
-            <tfoot>
+              {/* Total qty row */}
               <tr style={{ borderTop: '1.5px solid #000' }}>
                 <td colSpan={5} style={{ padding: '3px 5px', fontSize: '9px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>TOTAL</td>
                 <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right', borderRight: '1px solid #ccc' }}>{totalQty}</td>
                 <td style={{ padding: '3px 5px', borderRight: '1px solid #ccc' }}></td>
                 <td style={{ padding: '3px 5px', fontSize: '10px', fontWeight: 800, textAlign: 'right' }}>{fmtCurrency(inv.subtotal)}</td>
               </tr>
-            </tfoot>
+            </tbody>
           </table>
 
           {/* ═══ FOOTER BLOCK ═══ */}
