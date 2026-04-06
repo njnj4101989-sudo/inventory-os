@@ -192,8 +192,8 @@ export default function LotsPage() {
     try {
       // Fetch both in_stock and remnant rolls for the picker
       const [stockRes, remnantRes] = await Promise.all([
-        getRolls({ status: 'in_stock', page_size: 500 }),
-        getRolls({ status: 'remnant', page_size: 500 }),
+        getRolls({ status: 'in_stock', page_size: 0 }),
+        getRolls({ status: 'remnant', page_size: 0 }),
       ])
       const stockArr = Array.isArray(stockRes.data.data) ? stockRes.data.data : []
       const remnantArr = Array.isArray(remnantRes.data.data) ? remnantRes.data.data : []

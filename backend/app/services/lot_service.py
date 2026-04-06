@@ -63,7 +63,8 @@ class LotService:
         if conditions:
             count_stmt = count_stmt.where(*conditions)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         sort_col = getattr(Lot, params.sort_by, Lot.created_at)
         order = sort_col.desc() if params.sort_order == "desc" else sort_col.asc()
@@ -75,9 +76,9 @@ class LotService:
                 selectinload(Lot.created_by_user),
             )
             .order_by(order)
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         if conditions:
             stmt = stmt.where(*conditions)
         result = await self.db.execute(stmt)

@@ -25,7 +25,7 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
   async function fetchChallans() {
     setLoadingChallans(true)
     try {
-      const res = await getBatchChallans({ page: 1, page_size: 100 })
+      const res = await getBatchChallans({ page: 1, page_size: 0 })
       const all = res.data?.data || []
       // Only show pending challans (status='sent')
       setChallans(all.filter((c) => c.status === 'sent'))

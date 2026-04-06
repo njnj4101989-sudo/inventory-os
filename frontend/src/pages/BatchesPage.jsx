@@ -364,7 +364,7 @@ export default function BatchesPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await getBatches({ page: 1, page_size: 500, sort_by: 'created_at', sort_order: 'desc' })
+      const res = await getBatches({ page: 1, page_size: 0, sort_by: 'created_at', sort_order: 'desc' })
       setAllBatches(res.data.data || [])
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load batches')
@@ -388,7 +388,7 @@ export default function BatchesPage() {
   const fetchBatchChallans = useCallback(async () => {
     setBcLoading(true)
     try {
-      const res = await getBatchChallans({ status: 'sent', page_size: 200 })
+      const res = await getBatchChallans({ status: 'sent', page_size: 0 })
       setBatchChallansData(res.data?.data || res.data || [])
     } catch {
       setBatchChallansData([])

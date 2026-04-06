@@ -107,6 +107,18 @@ export async function getSKUPassport(skuCode) {
   return client.get(`/skus/passport/${encodeURIComponent(skuCode)}`)
 }
 
+export async function stockCheck(skuIds) {
+  if (USE_MOCK) {
+    const map = {}
+    for (const id of skuIds) {
+      const sku = skus.find(s => s.id === id)
+      map[id] = sku?.stock?.available_qty || 0
+    }
+    return mockResponse(map)
+  }
+  return client.post('/skus/stock-check', { sku_ids: skuIds })
+}
+
 export async function getSKUByCode(skuCode) {
   return client.get(`/skus/by-code/${encodeURIComponent(skuCode)}`)
 }

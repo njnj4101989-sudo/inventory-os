@@ -351,7 +351,8 @@ class BatchChallanService:
         if conditions:
             count_stmt = count_stmt.where(*conditions)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         stmt = (
             select(BatchChallan)
@@ -362,9 +363,9 @@ class BatchChallanService:
                 selectinload(BatchChallan.batch_items).selectinload(BatchProcessing.batch),
             )
             .order_by(BatchChallan.created_at.desc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         if conditions:
             stmt = stmt.where(*conditions)
 

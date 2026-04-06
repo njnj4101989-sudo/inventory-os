@@ -23,7 +23,8 @@ class UserService:
         # Count
         count_stmt = select(func.count()).select_from(User)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         # Query
         stmt = (
@@ -31,9 +32,9 @@ class UserService:
             .options(selectinload(User.role))
             .order_by(getattr(User, params.sort_by, User.created_at).desc() if params.sort_order == "desc"
                       else getattr(User, params.sort_by, User.created_at).asc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         result = await self.db.execute(stmt)
         users = result.scalars().all()
 

@@ -58,7 +58,8 @@ class SKUService:
         if where_clause:
             count_stmt = count_stmt.where(*where_clause)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         sort_col = getattr(SKU, params.sort_by, SKU.created_at)
         order = sort_col.desc() if params.sort_order == "desc" else sort_col.asc()
@@ -66,7 +67,8 @@ class SKUService:
         stmt = select(SKU).order_by(order)
         if where_clause:
             stmt = stmt.where(*where_clause)
-        stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
 
         result = await self.db.execute(stmt)
         skus = result.scalars().all()
@@ -530,7 +532,8 @@ class SKUService:
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         stmt = (
             base
@@ -539,9 +542,9 @@ class SKUService:
                 selectinload(SupplierInvoice.purchase_items).selectinload(PurchaseItem.sku),
             )
             .order_by(SupplierInvoice.received_at.desc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         result = await self.db.execute(stmt)
         invoices = result.scalars().all()
 
@@ -585,6 +588,16 @@ class SKUService:
             "item_count": len(items),
             "total_amount": float(total_amount),
         }
+
+    async def stock_check(self, sku_ids: list) -> dict:
+        """Bulk stock check — single query, returns {sku_id: available_qty} map."""
+        if not sku_ids:
+            return {}
+        result = await self.db.execute(
+            select(InventoryState.sku_id, InventoryState.available_qty)
+            .where(InventoryState.sku_id.in_(sku_ids))
+        )
+        return {str(row.sku_id): row.available_qty for row in result.all()}
 
     async def get_sku_by_code(self, sku_code: str) -> dict:
         """Lookup SKU by code — returns SKU + stock + price. Used by sales return form."""

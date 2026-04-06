@@ -65,15 +65,16 @@ class InventoryService:
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         stmt = (
             base
             .options(selectinload(InventoryState.sku))
             .order_by(InventoryState.last_updated.desc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         result = await self.db.execute(stmt)
         states = result.scalars().all()
 
@@ -103,16 +104,17 @@ class InventoryService:
             .where(InventoryEvent.sku_id == sku_id)
         )
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         stmt = (
             select(InventoryEvent)
             .where(InventoryEvent.sku_id == sku_id)
             .options(selectinload(InventoryEvent.performed_by_user))
             .order_by(InventoryEvent.performed_at.desc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         result = await self.db.execute(stmt)
         events = result.scalars().all()
 

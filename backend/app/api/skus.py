@@ -1,8 +1,9 @@
 """SKU routes — product CRUD with auto-code generation."""
 
+from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, get_current_user, get_fy_id, require_permission
@@ -88,6 +89,18 @@ async def get_sku_by_code(
     """Lookup SKU by code — for sales return form auto-fill."""
     svc = SKUService(db)
     result = await svc.get_sku_by_code(sku_code)
+    return {"success": True, "data": result}
+
+
+@router.post("/stock-check", response_model=None)
+async def stock_check(
+    sku_ids: List[UUID] = Body(..., embed=True),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Bulk stock check — returns {sku_id: available_qty} map in a single query."""
+    svc = SKUService(db)
+    result = await svc.stock_check(sku_ids)
     return {"success": True, "data": result}
 
 

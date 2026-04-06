@@ -48,7 +48,8 @@ class InvoiceService:
             for f in filters:
                 count_stmt = count_stmt.where(f)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         stmt = (
             select(Invoice)
@@ -61,9 +62,9 @@ class InvoiceService:
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
             .order_by(Invoice.created_at.desc())
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         if params.search:
             stmt = stmt.join(Order, Invoice.order_id == Order.id, isouter=True)
         if filters:

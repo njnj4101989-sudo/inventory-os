@@ -100,7 +100,7 @@ export default function SettingsPage() {
       setOBLoading(true)
       setOBError(null)
       const PARTY_FETCHERS = {
-        supplier: () => getSuppliers({ page_size: 500 }).then(r => (r.data.data || [])),
+        supplier: () => getSuppliers({ page_size: 0 }).then(r => (r.data.data || [])),
         customer: () => getAllCustomers().then(r => (r.data.data || [])),
         va_party: () => getAllVAParties().then(r => (r.data.data || [])),
         broker: () => getAllBrokers().then(r => (r.data.data || [])),

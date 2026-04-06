@@ -1025,7 +1025,7 @@ export default function RollsPage() {
       // Show label sheet only for new stock-in, not edits
       if (!wasEditing) {
         try {
-          const filterParams = { page: 1, page_size: 100 }
+          const filterParams = { page: 1, page_size: 0 }
           if (invoiceHeader.sr_no) filterParams.sr_no = invoiceHeader.sr_no
           const freshResp = await getRolls(filterParams)
           const freshRolls = freshResp?.data?.data || []

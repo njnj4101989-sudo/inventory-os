@@ -320,7 +320,7 @@ export default function InvoicesPage() {
     setFormError(null)
     setIsDirty(false)
     try {
-      const [skuRes, custRes] = await Promise.all([getSKUs({ is_active: true, page_size: 500 }), getAllCustomers()])
+      const [skuRes, custRes] = await Promise.all([getSKUs({ is_active: true, page_size: 0 }), getAllCustomers()])
       setAllSKUs(skuRes.data.data || [])
       setCustomers(custRes.data.data || [])
     } catch { setAllSKUs([]); setCustomers([]) }

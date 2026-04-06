@@ -48,7 +48,8 @@ class OrderService:
             for f in filters:
                 count_stmt = count_stmt.where(f)
         total = (await self.db.execute(count_stmt)).scalar() or 0
-        pages = max(1, math.ceil(total / params.page_size))
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
 
         sort_col = getattr(Order, params.sort_by, Order.created_at)
         order = sort_col.desc() if params.sort_order == "desc" else sort_col.asc()
@@ -67,9 +68,9 @@ class OrderService:
                 selectinload(Order.sales_returns),
             )
             .order_by(order)
-            .offset((params.page - 1) * params.page_size)
-            .limit(params.page_size)
         )
+        if not no_limit:
+            stmt = stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
         if filters:
             for f in filters:
                 stmt = stmt.where(f)

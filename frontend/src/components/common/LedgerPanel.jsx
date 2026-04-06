@@ -52,7 +52,7 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
     setLoading(true)
     try {
       const [ledgerRes, balRes] = await Promise.all([
-        getLedger(partyType, partyId, { page_size: 200 }),
+        getLedger(partyType, partyId, { page_size: 0 }),
         getPartyBalance(partyType, partyId),
       ])
       setEntries(ledgerRes.data.data?.data || [])

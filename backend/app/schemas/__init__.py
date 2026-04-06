@@ -13,7 +13,7 @@ class PaginatedParams(BaseModel):
     """Query parameters for paginated list endpoints."""
 
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=500)
+    page_size: int = Field(default=20, ge=0, le=500)
     sort_by: str = "created_at"
     sort_order: str = "desc"
 

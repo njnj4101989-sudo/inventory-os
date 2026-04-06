@@ -334,7 +334,7 @@ export default function ReturnsPage() {
       const [supRes, transRes, skuRes] = await Promise.all([
         getSuppliers({ is_active: true }),
         getAllTransports(),
-        getSKUs({ page_size: 500 }),
+        getSKUs({ page_size: 0 }),
       ])
       setSuppliers(supRes.data?.data || [])
       setTransports(transRes.data?.data || [])
@@ -348,7 +348,7 @@ export default function ReturnsPage() {
     setSupplierRolls([])
     if (supplierId && form.return_type === 'roll_return') {
       try {
-        const res = await getRolls({ supplier_id: supplierId, page_size: 500, status: 'in_stock' })
+        const res = await getRolls({ supplier_id: supplierId, page_size: 0, status: 'in_stock' })
         const d = res.data?.data || res.data
         setSupplierRolls(Array.isArray(d) ? d : d?.data || [])
       } catch {}
@@ -360,7 +360,7 @@ export default function ReturnsPage() {
     setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
     if (type === 'roll_return' && form.supplier_id) {
       try {
-        const res = await getRolls({ supplier_id: form.supplier_id, page_size: 500, status: 'in_stock' })
+        const res = await getRolls({ supplier_id: form.supplier_id, page_size: 0, status: 'in_stock' })
         const d = res.data?.data || res.data
         setSupplierRolls(Array.isArray(d) ? d : d?.data || [])
       } catch {}
@@ -522,7 +522,7 @@ export default function ReturnsPage() {
       const [custRes, transRes, skuRes] = await Promise.all([
         getAllCustomers(),
         getAllTransports(),
-        getSKUs({ page_size: 500 }),
+        getSKUs({ page_size: 0 }),
       ])
       setCustomers(custRes.data?.data || [])
       setTransports(transRes.data?.data || [])
@@ -531,7 +531,7 @@ export default function ReturnsPage() {
 
       // If pre-filling, load customer's orders
       if (prefillCustomerId) {
-        const ordRes = await getOrders({ page_size: 200 })
+        const ordRes = await getOrders({ page_size: 0 })
         const ordData = ordRes.data?.data || ordRes.data
         const ordList = Array.isArray(ordData) ? ordData : ordData?.data || []
         const custOrds = ordList.filter(o =>
@@ -569,7 +569,7 @@ export default function ReturnsPage() {
     setCustomerOrders([])
     if (!custId) return
     try {
-      const ordRes = await getOrders({ page_size: 200 })
+      const ordRes = await getOrders({ page_size: 0 })
       const ordData = ordRes.data?.data || ordRes.data
       const ordList = Array.isArray(ordData) ? ordData : ordData?.data || []
       const custOrds = ordList.filter(o =>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getOrders, getOrder, createOrder, updateOrder, shipOrder, cancelOrder, updateShipping, updateShipment, getNextOrderNumber } from '../api/orders'
-import { getSKUs, getSKU, getSKUByCode } from '../api/skus'
+import { getSKUs, getSKUByCode, stockCheck } from '../api/skus'
 import { getAllCustomers, createCustomer } from '../api/customers'
 import { getAllBrokers } from '../api/brokers'
 import { getAllTransports } from '../api/transports'
@@ -456,15 +456,12 @@ export default function OrdersPage() {
       setUpdateShipMode(false)
       setUpdateShipmentId(null)
 
-      // Fetch current stock levels for this order's SKUs only
+      // Fetch current stock levels — single bulk query
       let stockMap = {}
       const skuIds = (detailOrder.items || []).map(i => i.sku?.id).filter(Boolean)
       try {
-        const results = await Promise.all(skuIds.map(id => getSKU(id).catch(() => null)))
-        for (const res of results) {
-          const sku = res?.data?.data || res?.data
-          if (sku?.id) stockMap[sku.id] = sku.stock?.available_qty || 0
-        }
+        const res = await stockCheck(skuIds)
+        stockMap = res.data?.data || res.data || {}
       } catch { /* proceed with 0 stock fallback */ }
 
       // Build ship items — cap qty at available stock
@@ -597,7 +594,7 @@ export default function OrdersPage() {
     setFormError(null)
     try {
       const [skuRes, custRes, numRes, brokersRes, transportsRes] = await Promise.all([
-        getSKUs({ is_active: true, page_size: 500 }),
+        getSKUs({ is_active: true, page_size: 0 }),
         getAllCustomers(),
         getNextOrderNumber().catch(() => ({ data: { data: { next_number: '' } } })),
         getAllBrokers().catch(() => ({ data: { data: [] } })),
@@ -636,7 +633,7 @@ export default function OrdersPage() {
     setFormError(null)
     try {
       const [skuRes, custRes, brokersRes, transportsRes] = await Promise.all([
-        getSKUs({ is_active: true, page_size: 500 }),
+        getSKUs({ is_active: true, page_size: 0 }),
         getAllCustomers(),
         getAllBrokers().catch(() => ({ data: { data: [] } })),
         getAllTransports().catch(() => ({ data: { data: [] } })),
@@ -1229,6 +1226,7 @@ export default function OrdersPage() {
             )}
           </div>
         )}
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }

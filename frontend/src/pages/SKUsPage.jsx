@@ -301,7 +301,7 @@ export default function SKUsPage() {
       const [skuRes, costRes, evtRes] = await Promise.all([
         getSKU(row.id),
         getSKUCostHistory(row.id).catch(() => null),
-        getEvents(row.id, { page_size: 100 }).catch(() => null),
+        getEvents(row.id, { page_size: 0 }).catch(() => null),
       ])
       const sku = skuRes.data.data || skuRes.data
       setDetailSKU(sku)
@@ -436,7 +436,7 @@ export default function SKUsPage() {
     setOpeningOpen(true)
     // Fetch all SKUs for live badge matching
     try {
-      const res = await getSKUs({ page_size: 9999 })
+      const res = await getSKUs({ page_size: 0 })
       const list = res.data.data || []
       const map = new Map()
       list.forEach(s => map.set(s.sku_code, { id: s.id, total_qty: s.stock?.total_qty || 0 }))
