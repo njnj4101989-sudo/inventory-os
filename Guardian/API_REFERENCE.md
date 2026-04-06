@@ -1865,9 +1865,11 @@ When `sku` is present:
 ```json
 {
   "id": "uuid",
-  "code": "BLS",
-  "name": "Blouse",
-  "description": "Traditional and modern blouse designs",
+  "code": "FBL",
+  "name": "Fancy Blouse",
+  "description": "Fancy blouse designs (meter rolls)",
+  "palla_mode": "meter",
+  "hsn_code": "6206",
   "is_active": true
 }
 ```
@@ -1876,12 +1878,14 @@ When `sku` is present:
 **Response:** Array (active only, for dropdowns)
 
 #### POST `/masters/product-types`
-**Request:** `{ code: "BLS", name: "Blouse", description? }`
+**Request:** `{ code: "FBL", name: "Fancy Blouse", description?, palla_mode?, hsn_code? }`
 **Response:** Created product type
 
 #### PATCH `/masters/product-types/{id}`
-**Request:** `{ name?, description?, is_active? }`
+**Request:** `{ name?, description?, palla_mode?, hsn_code?, is_active? }`
 **Response:** Updated product type
+
+**HSN propagation (S107):** `hsn_code` on ProductType auto-flows to new SKUs at creation time (`sku_service.find_or_create()` looks up ProductType by code), then to InvoiceItem at invoice generation time (already snapshotted from `sku.hsn_code`). Existing SKUs and invoice items are NOT modified when ProductType.hsn_code is changed — historical records preserve their original HSN. Default seed HSN: FBL/SBL=`6206`, LHG=`6204`, SAR=`5407`.
 
 ### Colors
 
