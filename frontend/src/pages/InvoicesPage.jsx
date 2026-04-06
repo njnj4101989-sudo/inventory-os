@@ -799,14 +799,14 @@ export default function InvoicesPage() {
             </div>
 
             {/* ═══ SIGNATURES ═══ */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '20px', gap: '20px' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ borderBottom: '1px solid #000', height: '24px', marginBottom: '4px' }}></div>
+                <div style={{ borderBottom: '1px solid #000', height: '30px', marginBottom: '4px' }}></div>
                 <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Customer Signature</p>
               </div>
               <div style={{ flex: 1, textAlign: 'right' }}>
-                <p style={{ fontSize: '10px', fontWeight: 700, margin: '0 0 14px' }}>For {co.name || 'Company'}</p>
-                <div style={{ borderBottom: '1px solid #000', height: '10px', marginBottom: '4px' }}></div>
+                <p style={{ fontSize: '10px', fontWeight: 700, margin: '0 0 20px' }}>For {co.name || 'Company'}</p>
+                <div style={{ borderBottom: '1px solid #000', height: '0', marginBottom: '4px' }}></div>
                 <p style={{ fontSize: '9px', fontWeight: 600, margin: 0 }}>Authorized Signatory</p>
               </div>
             </div>
