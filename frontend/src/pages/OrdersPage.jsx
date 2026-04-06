@@ -459,8 +459,8 @@ export default function OrdersPage() {
       // Fetch current stock levels for order SKUs
       let stockMap = {}
       try {
-        const res = await getSKUs({ is_active: true, page_size: 500 })
-        const skuList = res.data?.data?.data || res.data?.data || []
+        const res = await getSKUs({ is_active: true, page_size: 5000 })
+        const skuList = res.data?.data || []
         for (const sku of Array.isArray(skuList) ? skuList : []) {
           stockMap[sku.id] = sku.stock?.available_qty || 0
         }
