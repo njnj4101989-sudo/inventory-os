@@ -28,6 +28,7 @@ export default function buildRollLabel(roll, appBaseUrl) {
     qrValue,
     rows: [
       { hero: fmtWeight(weight), heroUnit: unit },
+      { k: 'SR',  v: roll?.sr_no || '—' },
       { k: 'INV', v: roll?.supplier_invoice_no || '—' },
       { k: 'DT',  v: dateStr },
     ],
