@@ -1099,6 +1099,22 @@ export default function RollsPage() {
     return () => window.removeEventListener('keydown', h)
   }, [detailRoll, showLabelSheet, showThermalSheet])
 
+  // ── Purchase invoice detail shortcut: Ctrl/Cmd+P opens thermal label for all rolls in the invoice ──
+  useEffect(() => {
+    if (!selectedInvoice || showLabelSheet || showThermalSheet) return
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        if (selectedInvoice.rolls?.length > 0) {
+          setLastSavedRolls(selectedInvoice.rolls)
+          setShowThermalSheet(true)
+        }
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [selectedInvoice, showLabelSheet, showThermalSheet])
+
   // ── Auto-focus supplier field when stock-in overlay opens ──
   useEffect(() => {
     if (stockInOpen) {
