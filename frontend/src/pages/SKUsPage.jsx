@@ -227,6 +227,19 @@ export default function SKUsPage() {
   useEffect(() => { fetchSKUs() }, [fetchSKUs])
   useEffect(() => { if (activeTab === 'purchases') fetchPurchaseInvoices() }, [activeTab, fetchPurchaseInvoices])
 
+  // Detail overlay shortcut: Ctrl/Cmd+P opens thermal label print (default) — A4 remains a manual click
+  useEffect(() => {
+    if (!detailSKU || printSkus || thermalSkus) return
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setThermalSkus([detailSKU])
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [detailSKU, printSkus, thermalSkus])
+
   // Load masters for purchase form
   useEffect(() => {
     async function loadMasters() {
@@ -872,14 +885,14 @@ export default function SKUsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { setPrintSkus([detailSKU]); setDetailSKU(null) }}
+            <button onClick={() => setPrintSkus([detailSKU])}
               title="Print SKU label (A4)"
               className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/30 transition-colors flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
               A4
             </button>
-            <button onClick={() => { setThermalSkus([detailSKU]); setDetailSKU(null) }}
-              title="Print SKU label (54×40mm thermal)"
+            <button onClick={() => setThermalSkus([detailSKU])}
+              title="Print SKU label (54×40mm thermal — Ctrl+P)"
               className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/30 transition-colors flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" /></svg>
               Thermal
@@ -1176,6 +1189,17 @@ export default function SKUsPage() {
             )}
           </div>
         </div>
+        {/* Print overlays nested inside detail so ESC/Close returns here, not the list */}
+        {printSkus && (
+          <SKULabelSheet skus={printSkus} onClose={() => setPrintSkus(null)} />
+        )}
+        {thermalSkus && (
+          <ThermalLabelSheet
+            type="sku"
+            items={thermalSkus}
+            onClose={() => setThermalSkus(null)}
+          />
+        )}
       </div>
     )
   }

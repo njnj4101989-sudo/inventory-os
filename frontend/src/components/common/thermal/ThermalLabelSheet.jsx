@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import ThermalRollLabel from './ThermalRollLabel'
 import ThermalBatchLabel from './ThermalBatchLabel'
@@ -120,6 +120,16 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
     `,
   })
 
+  // Keyboard shortcuts: ESC closes, Ctrl/Cmd+P triggers print
+  useEffect(() => {
+    const h = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose?.() }
+      else if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); handlePrint?.() }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose, handlePrint])
+
   if (!items || items.length === 0) return null
   const render = RENDERERS[type]
   if (!render) return null
@@ -131,7 +141,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center justify-start overflow-y-auto py-6">
+    <div className="fixed inset-0 z-[55] bg-black/60 flex flex-col items-center justify-start overflow-y-auto py-6">
       {/* Toolbar */}
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 mb-4 px-6 py-4 flex items-center justify-between">
         <div>

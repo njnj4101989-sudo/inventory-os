@@ -1085,6 +1085,20 @@ export default function RollsPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [stockInOpen, saving, designGroups, invoiceHeader, editingInvoice, openingRollOpen, openingRollSaving, openingGroups])
 
+  // ── Roll detail shortcut: Ctrl/Cmd+P opens thermal label (default) ──
+  useEffect(() => {
+    if (!detailRoll || showLabelSheet || showThermalSheet) return
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setLastSavedRolls([detailRoll])
+        setShowThermalSheet(true)
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [detailRoll, showLabelSheet, showThermalSheet])
+
   // ── Auto-focus supplier field when stock-in overlay opens ──
   useEffect(() => {
     if (stockInOpen) {
@@ -3067,16 +3081,17 @@ export default function RollsPage() {
                 </>
               ) : (
                 <>
-                  <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowLabelSheet(true) }}
+                  <button onClick={() => { setLastSavedRolls([detailRoll]); setShowLabelSheet(true) }}
+                    title="Print roll label (A4)"
                     className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                     A4
                   </button>
-                  <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowThermalSheet(true) }}
+                  <button onClick={() => { setLastSavedRolls([detailRoll]); setShowThermalSheet(true) }}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors"
-                    title="Print 54×40mm thermal label">
+                    title="Print 54×40mm thermal label — Ctrl+P">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>

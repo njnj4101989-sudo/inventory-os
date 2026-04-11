@@ -87,6 +87,19 @@ export default function BatchDetailPage() {
 
   useEffect(() => { fetchBatch() }, [fetchBatch])
 
+  // Ctrl/Cmd+P opens thermal batch label (default) — A4 still a manual click
+  useEffect(() => {
+    if (!batch || labelBatches || thermalBatches) return
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setThermalBatches([batch])
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [batch, labelBatches, thermalBatches])
+
   const handleReadyForPacking = async () => {
     setActionLoading(true)
     try {
