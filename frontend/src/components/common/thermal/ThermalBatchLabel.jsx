@@ -1,39 +1,27 @@
-import { QRCodeSVG } from 'qrcode.react'
-
 /**
- * Thermal batch label content (inner only — wrapper div is ThermalLabelSheet).
- * Target size: 54x40mm, QR 20x20mm, text 32x40mm.
- * Size field rendered large (dominant). Scan -> /scan/batch/{batch_code}
+ * Thermal batch label — Option A "Boarding Pass" (S109).
+ * Returns { hero, qrValue, rows } — wrapper composes chrome.
+ * Scan → /scan/batch/{batch_code}
  */
-export default function ThermalBatchLabel({ batch, lotCode, designNo, lotDate, appBaseUrl }) {
+export default function buildBatchLabel(batch, meta, appBaseUrl) {
   const batchCode = batch?.batch_code || ''
-  const scanUrl = `${appBaseUrl || window.location.origin}/scan/batch/${encodeURIComponent(batchCode)}`
+  const qrValue = `${appBaseUrl || window.location.origin}/scan/batch/${encodeURIComponent(batchCode)}`
 
+  const { lotCode, designNo, lotDate } = meta || {}
   const dateStr = lotDate
     ? new Date(lotDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
     : '—'
 
-  return (
-    <>
-      <div className="thermal-label__qr">
-        <QRCodeSVG value={scanUrl} size={200} level="H" includeMargin={false} />
-      </div>
-      <div className="thermal-label__info">
-        <div className="thermal-label__code">{batchCode}</div>
-        <div className="thermal-label__big">{batch?.size || '—'}</div>
-        <div className="thermal-label__row">
-          <span className="thermal-label__key">Lot</span>
-          <span className="thermal-label__val">{lotCode || '—'}</span>
-        </div>
-        <div className="thermal-label__row">
-          <span className="thermal-label__key">Des</span>
-          <span className="thermal-label__val">{designNo || '—'}</span>
-        </div>
-        <div className="thermal-label__row">
-          <span className="thermal-label__key">Date</span>
-          <span className="thermal-label__val">{dateStr}</span>
-        </div>
-      </div>
-    </>
-  )
+  return {
+    hero: batchCode || '—',
+    qrValue,
+    rows: [
+      { k: 'LOT',  v: lotCode || '—' },
+      { k: 'DES',  v: designNo || batch?.design_no || '—' },
+      { k: 'COL',  v: batch?.color?.name || batch?.color_name || '—' },
+      { k: 'SIZE', v: batch?.size || '—', emph: true },
+      { k: 'QTY',  v: batch?.total_qty || batch?.quantity || '—' },
+      { k: 'DT',   v: dateStr },
+    ],
+  }
 }

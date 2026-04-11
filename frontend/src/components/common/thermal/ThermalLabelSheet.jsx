@@ -1,22 +1,28 @@
 import { useRef, useEffect } from 'react'
 import { useReactToPrint } from 'react-to-print'
-import ThermalRollLabel from './ThermalRollLabel'
-import ThermalBatchLabel from './ThermalBatchLabel'
-import ThermalSKULabel from './ThermalSKULabel'
+import { QRCodeSVG } from 'qrcode.react'
+import buildRollLabel from './ThermalRollLabel'
+import buildBatchLabel from './ThermalBatchLabel'
+import buildSkuLabel from './ThermalSKULabel'
 
 // Physical label dimensions (mm) — TSC TTP-345 thermal printer.
-// Current: single-up 54x40mm. Future 2-up: set LABELS_PER_ROW=2, HORIZONTAL_GAP_MM
-// to the measured gap, and ensure driver paper stock matches PAGE_W_MM × LABEL_H_MM.
+// Single-up 54×40mm landscape. To go 2-up later: set LABELS_PER_ROW=2,
+// HORIZONTAL_GAP_MM to the measured gap, and register new stock in the driver.
 const LABEL_W_MM = 54
 const LABEL_H_MM = 40
 const LABELS_PER_ROW = 1
 const HORIZONTAL_GAP_MM = 0
 const PAGE_W_MM = LABEL_W_MM * LABELS_PER_ROW + HORIZONTAL_GAP_MM * (LABELS_PER_ROW - 1)
 
-const RENDERERS = {
-  roll: (item) => <ThermalRollLabel roll={item} />,
-  batch: (item, meta) => <ThermalBatchLabel batch={item} {...(meta || {})} />,
-  sku: (item) => <ThermalSKULabel sku={item} />,
+// Vertical brand text — change here, applies to every label type.
+const VLEFT_TEXT = 'DRS BLOUSE'
+const VRIGHT_TEXT = 'SCAN TO VIEW'
+const BOT_TEXT = 'drsblouse.com'
+
+const BUILDERS = {
+  roll: (item) => buildRollLabel(item),
+  batch: (item, meta) => buildBatchLabel(item, meta),
+  sku: (item) => buildSkuLabel(item),
 }
 
 const TITLES = {
@@ -26,14 +32,26 @@ const TITLES = {
 }
 
 /**
- * Shared thermal label print overlay. Renders one page per physical label row.
- * Future 2-up: change LABELS_PER_ROW at the top of this file + driver paper stock;
- * no page changes required.
+ * Shared thermal label print overlay (Option A "Boarding Pass" layout).
+ *
+ * Layout (54×40mm):
+ *   ┌──────────────────────────────────────────┐
+ *   │         HERO CODE (top strip, 4mm)       │
+ *   ├──────────────────────────────────────────┤
+ *   │ D  ┌────────┐  WT  24.8 kg            S  │
+ *   │ R  │        │  SR  2                  C  │
+ *   │ S  │   QR   │  INV 12                 A  │
+ *   │    │  32mm  │  DT  04 Apr 26          N  │
+ *   │ ↕  │        │  FAB Cotton             ↕  │
+ *   │    └────────┘  COL Black                 │
+ *   ├──────────────────────────────────────────┤
+ *   │       drsblouse.com  (bot strip, 4mm)    │
+ *   └──────────────────────────────────────────┘
  *
  * Props:
  *   type:  'roll' | 'batch' | 'sku'
- *   items: array of records (rolls / batches / skus)
- *   meta:  optional extra props passed to the label renderer (batch needs lotCode/designNo/lotDate)
+ *   items: array of records
+ *   meta:  optional — batch needs {lotCode, designNo, lotDate}
  *   onClose: close callback
  */
 export default function ThermalLabelSheet({ type, items, meta, onClose }) {
@@ -70,53 +88,136 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
       .thermal-label {
         width: ${LABEL_W_MM}mm;
         height: ${LABEL_H_MM}mm;
-        padding: 1.5mm;
         margin: 0;
+        padding: 0;
         display: flex;
-        flex-direction: row;
-        gap: 1.5mm;
-        align-items: flex-start;
+        flex-direction: column;
         color: #000;
         background: #fff;
         font-family: 'Arial', 'Helvetica', sans-serif;
         overflow: hidden;
       }
-      .thermal-label__qr { flex-shrink: 0; width: 20mm; height: 20mm; }
-      .thermal-label__qr svg { width: 20mm !important; height: 20mm !important; display: block; }
-      .thermal-label__info {
-        flex: 1;
-        min-width: 0;
+      .thermal-label__top {
+        width: 100%;
+        height: 4mm;
+        padding: 0 1.5mm;
         display: flex;
-        flex-direction: column;
-        gap: 0.4mm;
-        overflow: hidden;
-      }
-      .thermal-label__code {
-        font-size: 8.5pt;
-        font-weight: 900;
-        line-height: 1.1;
-        word-break: break-all;
-        color: #000;
-      }
-      .thermal-label__big {
-        font-size: 14pt;
+        align-items: center;
+        justify-content: center;
+        font-size: 8pt;
         font-weight: 900;
         line-height: 1;
         color: #000;
-      }
-      .thermal-label__row {
-        display: flex;
-        gap: 1mm;
-        font-size: 7pt;
-        font-weight: 600;
-        line-height: 1.2;
-        color: #000;
+        border-bottom: 0.25mm solid #000;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        letter-spacing: 0.1mm;
       }
-      .thermal-label__key { font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
-      .thermal-label__val { word-break: break-word; overflow: hidden; text-overflow: ellipsis; }
+      .thermal-label__middle {
+        width: 100%;
+        height: 32mm;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+      }
+      .thermal-label__vleft,
+      .thermal-label__vright {
+        width: 2.5mm;
+        height: 32mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 5.5pt;
+        font-weight: 900;
+        letter-spacing: 0.3mm;
+        text-transform: uppercase;
+        color: #000;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .thermal-label__vleft {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        border-right: 0.2mm solid #000;
+      }
+      .thermal-label__vright {
+        writing-mode: vertical-rl;
+        border-left: 0.2mm solid #000;
+      }
+      .thermal-label__qr {
+        flex-shrink: 0;
+        width: 32mm;
+        height: 32mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .thermal-label__qr svg {
+        width: 32mm !important;
+        height: 32mm !important;
+        display: block;
+      }
+      .thermal-label__data {
+        flex: 1;
+        min-width: 0;
+        padding: 1mm 0.6mm 1mm 0.8mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.4mm;
+        overflow: hidden;
+      }
+      .thermal-label__row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.8mm;
+        font-size: 6.2pt;
+        font-weight: 700;
+        line-height: 1.1;
+        color: #000;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .thermal-label__row--emph {
+        font-size: 7.5pt;
+        font-weight: 900;
+      }
+      .thermal-label__key {
+        font-weight: 700;
+        flex-shrink: 0;
+        color: #000;
+        text-transform: uppercase;
+        min-width: 5mm;
+      }
+      .thermal-label__val {
+        font-weight: 900;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #000;
+      }
+      .thermal-label__val--full {
+        min-width: 0;
+        text-align: left;
+      }
+      .thermal-label__bot {
+        width: 100%;
+        height: 4mm;
+        padding: 0 1.5mm;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 5.5pt;
+        font-weight: 700;
+        letter-spacing: 0.3mm;
+        color: #000;
+        border-top: 0.25mm solid #000;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+      }
     `,
   })
 
@@ -131,13 +232,41 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
   }, [onClose, handlePrint])
 
   if (!items || items.length === 0) return null
-  const render = RENDERERS[type]
-  if (!render) return null
+  const builder = BUILDERS[type]
+  if (!builder) return null
 
   // Chunk items into pages of LABELS_PER_ROW for page-break control
   const pages = []
   for (let i = 0; i < items.length; i += LABELS_PER_ROW) {
     pages.push(items.slice(i, i + LABELS_PER_ROW))
+  }
+
+  const renderLabel = (item) => {
+    const data = builder(item, meta || {})
+    return (
+      <>
+        <div className="thermal-label__top">{data.hero}</div>
+        <div className="thermal-label__middle">
+          <div className="thermal-label__vleft">{VLEFT_TEXT}</div>
+          <div className="thermal-label__qr">
+            <QRCodeSVG value={data.qrValue} size={256} level="H" includeMargin={false} />
+          </div>
+          <div className="thermal-label__data">
+            {data.rows.map((r, idx) => (
+              <div
+                key={idx}
+                className={`thermal-label__row${r.emph ? ' thermal-label__row--emph' : ''}`}
+              >
+                {r.k != null && <span className="thermal-label__key">{r.k}</span>}
+                <span className={`thermal-label__val${r.k == null ? ' thermal-label__val--full' : ''}`}>{r.v}</span>
+              </div>
+            ))}
+          </div>
+          <div className="thermal-label__vright">{VRIGHT_TEXT}</div>
+        </div>
+        <div className="thermal-label__bot">{BOT_TEXT}</div>
+      </>
+    )
   }
 
   return (
@@ -180,7 +309,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           <div key={pageIdx} className="thermal-page shadow-lg">
             {row.map((item, i) => (
               <div key={item?.id || item?.roll_code || item?.batch_code || item?.sku_code || i} className="thermal-label">
-                {render(item, meta || {})}
+                {renderLabel(item)}
               </div>
             ))}
           </div>
@@ -202,25 +331,140 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         .thermal-label {
           width: ${LABEL_W_MM}mm;
           height: ${LABEL_H_MM}mm;
-          padding: 1.5mm;
+          margin: 0;
+          padding: 0;
           box-sizing: border-box;
           display: flex;
-          flex-direction: row;
-          gap: 1.5mm;
-          align-items: flex-start;
+          flex-direction: column;
           color: #000;
           background: #fff;
           font-family: 'Arial', 'Helvetica', sans-serif;
           overflow: hidden;
         }
-        .thermal-label__qr { flex-shrink: 0; width: 20mm; height: 20mm; }
-        .thermal-label__qr svg { width: 20mm !important; height: 20mm !important; display: block; }
-        .thermal-label__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.4mm; overflow: hidden; }
-        .thermal-label__code { font-size: 8.5pt; font-weight: 900; line-height: 1.1; word-break: break-all; color: #000; }
-        .thermal-label__big { font-size: 14pt; font-weight: 900; line-height: 1; color: #000; }
-        .thermal-label__row { display: flex; gap: 1mm; font-size: 7pt; font-weight: 600; line-height: 1.2; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .thermal-label__key { font-weight: 700; text-transform: uppercase; flex-shrink: 0; }
-        .thermal-label__val { word-break: break-word; overflow: hidden; text-overflow: ellipsis; }
+        .thermal-label__top {
+          width: 100%;
+          height: 4mm;
+          padding: 0 1.5mm;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 8pt;
+          font-weight: 900;
+          line-height: 1;
+          color: #000;
+          border-bottom: 0.25mm solid #000;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          letter-spacing: 0.1mm;
+          box-sizing: border-box;
+        }
+        .thermal-label__middle {
+          width: 100%;
+          height: 32mm;
+          display: flex;
+          flex-direction: row;
+          align-items: stretch;
+        }
+        .thermal-label__vleft,
+        .thermal-label__vright {
+          width: 2.5mm;
+          height: 32mm;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 5.5pt;
+          font-weight: 900;
+          letter-spacing: 0.3mm;
+          text-transform: uppercase;
+          color: #000;
+          white-space: nowrap;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+        .thermal-label__vleft {
+          writing-mode: vertical-rl;
+          transform: rotate(180deg);
+          border-right: 0.2mm solid #000;
+        }
+        .thermal-label__vright {
+          writing-mode: vertical-rl;
+          border-left: 0.2mm solid #000;
+        }
+        .thermal-label__qr {
+          flex-shrink: 0;
+          width: 32mm;
+          height: 32mm;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+        }
+        .thermal-label__qr svg {
+          width: 32mm !important;
+          height: 32mm !important;
+          display: block;
+        }
+        .thermal-label__data {
+          flex: 1;
+          min-width: 0;
+          padding: 1mm 0.6mm 1mm 0.8mm;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 0.4mm;
+          overflow: hidden;
+        }
+        .thermal-label__row {
+          display: flex;
+          align-items: baseline;
+          gap: 0.8mm;
+          font-size: 6.2pt;
+          font-weight: 700;
+          line-height: 1.1;
+          color: #000;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .thermal-label__row--emph {
+          font-size: 7.5pt;
+          font-weight: 900;
+        }
+        .thermal-label__key {
+          font-weight: 700;
+          flex-shrink: 0;
+          color: #000;
+          text-transform: uppercase;
+          min-width: 5mm;
+        }
+        .thermal-label__val {
+          font-weight: 900;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          color: #000;
+        }
+        .thermal-label__val--full {
+          min-width: 0;
+          text-align: left;
+        }
+        .thermal-label__bot {
+          width: 100%;
+          height: 4mm;
+          padding: 0 1.5mm;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 5.5pt;
+          font-weight: 700;
+          letter-spacing: 0.3mm;
+          color: #000;
+          border-top: 0.25mm solid #000;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          text-transform: uppercase;
+          box-sizing: border-box;
+        }
       `}</style>
     </div>
   )
