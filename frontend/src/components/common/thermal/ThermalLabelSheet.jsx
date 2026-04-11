@@ -191,7 +191,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
       .thermal-label__row {
         display: flex;
         align-items: baseline;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 0.8mm;
         font-size: 6.8pt;
         font-weight: 700;
