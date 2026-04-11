@@ -33,7 +33,54 @@
 
 ---
 
-## Current State (Session 107 — 2026-04-07)
+## Current State (Session 109 — 2026-04-11)
+
+### S109 — Thermal Label Redesign "Boarding Pass" — DEPLOYED
+
+**Context:** S108 thermal labels shipped but first physical print exposed issues — driver had wrong paper stock, labels printed sideways/upside-down, layout wasted space, fields were empty due to wrong API field names.
+
+**A. TSC TTP-345 driver calibration (one-time, client laptop)**
+- Driver shipped with `USER (101.6 × 152.4 mm)` = 4×6" shipping label stock — completely wrong
+- Created new stock `DRS-54*40` (54 × 40 mm, Die-Cut Labels, liner 0)
+- Orientation: `Landscape 180°` (Landscape matches our `@page 54mm 40mm`; 180° flip fixes ulta print)
+- Feed calibration: hold FEED 3s to auto-detect gap
+
+**B. Layout redesign — "Boarding Pass" (Option A) + Smart Minimal**
+- 4-sided layout matching client's existing CHAT-GPT garment label aesthetic
+- Hero code top strip · Vertical `DRS BLOUSE` (left, rotated 180°) · 30mm QR · Data column · Vertical `SCAN TO VIEW` (right) · `drsblouse.com` bottom strip
+- QR: 20mm → 30mm (+125% scan area, reads from 1m+)
+- 1mm safe margin all 4 sides — survives TSC ~0.5mm feed variance
+- Smart Minimal principle: **don't repeat what's already in the code**
+  - SKU label: dropped DES/COL/SIZE/TYPE rows (all in `SBL-3054-WHITE-XL`). Kept huge 18pt SIZE hero + MRP/RATE.
+  - Roll label: dropped SR/FAB/COL rows (all in `2-FBC-BLACK/04-01`). Stacked hero = big weight/length number + small unit (kg/m), auto-flips on `roll.unit`. Kept INV + DT.
+  - Batch label: batch_code `BAT-001` encodes nothing → kept all 6 rows (LOT/DES/COL/SIZE/QTY/DT).
+- Renderers refactored: return `{hero, qrValue, rows}` data, wrapper composes all chrome. One-place edit for brand text/layout.
+
+**C. Field name bug fixes (discovered during physical test)**
+- Roll: `fabric_type` + `color` (flat strings) — NOT `fabric.name` / `color.name`
+- Batch: no `color` column — use `color_breakdown` JSON (`{Red:10, Blue:20}` → joined keys or `MIX (n)`)
+- SKU: no `design_no` field — parse from `sku_code` splits
+- Date format: dropped year (`04 Apr 26` → `04 Apr`) — was truncating
+
+**D. CSS knobs (one-place tweaks)**
+- `ThermalLabelSheet.jsx:10-22` — `LABEL_W_MM`, `LABEL_H_MM`, `LABELS_PER_ROW`, `VLEFT_TEXT`, `VRIGHT_TEXT`, `BOT_TEXT`
+- Font sizes + QR 30mm + 1mm padding inside the same file's `pageStyle` + `<style>` blocks
+- New classes: `.thermal-label__hero` (18pt centered), `.thermal-label__hero-unit` (8pt stacked below), `.thermal-label__top/__bot` (4mm strips), `.thermal-label__vleft/__vright` (2.5mm vertical text bars)
+
+**Commits this session:** `9371fb3 c3a0249 c539302`
+
+**S109 NEXT (carried over):**
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | Print verification across roll/batch/SKU on client thermal printer | ⬜ (user testing) |
+| 2 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
+| 3 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
+| 4 | ChallansPage 4d: scan-to-receive flow refinement | ⬜ |
+
+---
+
+## Previous State (Session 107 — 2026-04-07)
 
 ### S107: HSN Propagation + Invoice QR + UPI Payment + Print Polish — COMPLETE
 
@@ -335,6 +382,8 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S109 | Thermal Label Boarding Pass | TSC TTP-345 stock calibration (54×40mm, Landscape 180°). 4-sided layout: hero top strip + 30mm QR + vertical DRS BLOUSE/SCAN TO VIEW bars + bottom brand strip. 1mm safe margin all sides. Smart Minimal: SKU drops 4 redundant rows (in sku_code) → 18pt SIZE hero + MRP. Roll drops 3 rows (in roll_code) → stacked weight/unit hero (kg/m auto) + INV/DT. Batch keeps 6 rows (batch_code encodes nothing), color_breakdown JSON parsing. Field fixes: roll.fabric_type/color flat strings, batch.quantity, date DD Mon. Renderers refactored to return `{hero, qrValue, rows}` data. Commits `9371fb3 c3a0249 c539302` |
+| S108 | UPI QR Fix + Thermal Labels + Print UX | UPI QR @encoding fix (`encodeURIComponent` mangled `@`). Thermal label system (TSC TTP-345, 54×40mm): shared `ThermalLabelSheet.jsx` wrapper + 3 type renderers, 5 pages wired (Rolls/Batches/BatchDetail/Lots/SKUs). "A4" vs "Thermal" button labels. Print UX cleanup: ESC/Ctrl+P detail-overlay guards, `z-[55]` for label sheets over detail overlays. RollsPage headers emerald theme |
 | S107 | HSN + Invoice QR + UPI | LotsPage scan + CuttingSheet QR. OrderPrint Pick Sheet pivot. Invoice B&W redesign + amount-in-words. HSN on ProductType (Option A) + backfill script (796 SKUs + 164 inv items). Invoice QR: lookup + UPI pay. Company.upi_id. Migrations `c3d4e5f6g7h8` + `d4e5f6g7h8i9` |
 | S106 | Scan Pairing + Challans + OrderPrint | useScanPair on Returns+Challans+SendForVAModal, QR on challan prints, challan create from ChallansPage, by-no endpoints, OrderPrint B&W wholesale redesign, dead SSE scan removed |
 | S105 | Stock-Check + Pagination + Ship Fix | POST /skus/stock-check, page_size:0 all services, reservation-aware ship, QuickMasterModal z-index |
