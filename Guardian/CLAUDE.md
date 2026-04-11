@@ -56,7 +56,9 @@
 
 **Backfill:** `backend/scripts/backfill_hsn.py` — idempotent, ran on prod (796 SKUs + 164 invoice items, 100% coverage)
 
-### S108 — UPI QR Fix + Thermal Label System (2026-04-11)
+### S108 — UPI QR Fix + Thermal Label System (2026-04-11) — CODE DEPLOYED, PENDING CLIENT TEST
+
+**Handoff state:** Both fixes deployed to prod (Vercel auto-deploy). Nit heading to client office to test thermal prints on the TSC TTP-345. Discussion resumes after on-site test.
 
 **A. UPI QR Fix — commit `2e3bd32`** — Prod UPI QR failed with "Could not load bank name". Root cause: `encodeURIComponent(co.upi_id)` encoded `@` → `%40` in `pa` param. Fixed in `InvoicesPage.jsx:775-789` (literal `@`, trimmed VPA) + `SettingsPage.jsx:128-136` (trim + regex validate). Verified with different UPI ID end-to-end. `foryouvrj@axl` is VPA-side issue, not code — admin to swap prod VPA to `@okhdfcbank`.
 
@@ -75,14 +77,28 @@
 - **Build verified:** `ThermalLabelSheet-*.js 10.20 kB` gzip 2.54 kB, all 5 pages compile clean
 - **Printer setup on client laptop:** TSC driver already installed. Needs 54×40mm paper stock registered in driver (user action, one-time)
 
-**S109 NEXT:**
+**S109 NEXT (resume after client-office test):**
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
-| 2 | Verify thermal print on client TSC TTP-345 (register 54×40 stock in driver, test all 3 label types) | ⬜ |
+| 1 | **Debrief thermal test results** — alignment, QR scan, any driver tweaks needed | 🔴 BLOCKING (Nit on-site now) |
+| 2 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
 | 3 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
 | 4 | ChallansPage 4d: scan-to-receive flow refinement | ⬜ |
+
+**Thermal test checklist given to Nit (to bring results back):**
+- [ ] TSC driver: 54×40mm paper stock registered, 2mm gap, default
+- [ ] Roll label prints aligned (any H/V offset needed?)
+- [ ] Batch label prints aligned
+- [ ] SKU label prints aligned
+- [ ] QR scans from phone → each of `/scan/roll/`, `/scan/batch/`, `/scan/sku/` opens correctly
+- [ ] Darkness setting OK (not too faded, not smeared)
+- [ ] Is the single-up roll feeding correctly (no skipped/doubled labels)?
+
+**Known code tuning knobs (if alignment is off):**
+- `ThermalLabelSheet.jsx:10-15` — `LABEL_W_MM`, `LABEL_H_MM`, padding
+- `ThermalLabelSheet.jsx` CSS — QR size (20mm), font sizes (8.5pt code, 7pt rows, 14pt batch size)
+- If content overflows: reduce padding from `1.5mm` or shrink QR to `18mm`
 
 ---
 
