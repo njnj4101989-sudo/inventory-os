@@ -1,4 +1,4 @@
-import { useRef, useMemo, Fragment } from 'react'
+import { useRef, useMemo, useEffect, Fragment } from 'react'
 import { useReactToPrint } from 'react-to-print'
 
 /**
@@ -28,6 +28,21 @@ export default function OrderPrint({ order, companyName, company, onClose, mode 
       thead { display: table-header-group; }
     `,
   })
+
+  // Keyboard shortcuts: ESC closes, Ctrl/Cmd+P triggers print (prevents Chrome's native dialog)
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose?.()
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        handlePrint?.()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, handlePrint])
 
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 

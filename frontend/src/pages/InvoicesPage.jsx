@@ -385,6 +385,35 @@ export default function InvoicesPage() {
   /* ── Open print overlay ── keep detailInvoice set so Close returns to detail, not list */
   const openPrint = () => { setPrintInvoice(detailInvoice) }
 
+  /* ── Detail overlay shortcut: Ctrl+P → open print overlay ── */
+  useEffect(() => {
+    if (!detailInvoice || printInvoice) return
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setPrintInvoice(detailInvoice)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [detailInvoice, printInvoice])
+
+  /* ── Print overlay shortcuts: ESC closes, Ctrl+P triggers print ── */
+  useEffect(() => {
+    if (!printInvoice) return
+    const h = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setPrintInvoice(null)
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        handlePrint?.()
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [printInvoice, handlePrint])
+
   const co = companyFull || company || {}
 
   /* ═══════════════════════ DEBIT NOTE PRINT ═══════════════════════ */

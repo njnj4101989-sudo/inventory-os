@@ -351,6 +351,19 @@ export default function OrdersPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [createMode, saving, confirmDiscard, requestClose, cancelDiscard, quickMasterOpen, shipModalOpen, scanMode])
 
+  /* ── Detail overlay shortcuts: Ctrl+P → Print Order (confirmation) ── */
+  useEffect(() => {
+    if (!detailOrder || printOrder) return
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setPrintOrder({ order: detailOrder, mode: 'confirmation' })
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [detailOrder, printOrder])
+
   /* ── POS mode: handle SKU input submit ── */
   const handlePOSSubmit = useCallback((code) => {
     if (!code.trim()) return
