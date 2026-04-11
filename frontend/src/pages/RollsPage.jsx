@@ -2218,16 +2218,17 @@ export default function RollsPage() {
               )}
               {selectedInvoice?.rolls?.length > 0 && (
                 <>
-                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowLabelSheet(true) }}
+                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setShowLabelSheet(true) }}
+                    title="Print roll labels (A4)"
                     className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
                     A4 ({selectedInvoice.rolls.length})
                   </button>
-                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowThermalSheet(true) }}
+                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setShowThermalSheet(true) }}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors"
-                    title="Print 54×40mm thermal labels">
+                    title="Print 54×40mm thermal labels — Ctrl+P">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
