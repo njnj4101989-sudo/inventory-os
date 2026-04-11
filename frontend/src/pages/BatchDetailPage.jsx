@@ -8,6 +8,7 @@ import StatusBadge from '../components/common/StatusBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
 import PackingSlip from '../components/common/PackingSlip'
 import { useNotifications } from '../context/NotificationContext'
 
@@ -53,6 +54,7 @@ export default function BatchDetailPage() {
   const [error, setError] = useState(null)
   const { lastEvent } = useNotifications()
   const [labelBatches, setLabelBatches] = useState(null)
+  const [thermalBatches, setThermalBatches] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [packRef, setPackRef] = useState('')
   const [packCostInfo, setPackCostInfo] = useState(null) // {total_batches, current_stitching_cost, current_other_cost}
@@ -231,11 +233,20 @@ export default function BatchDetailPage() {
         {lot?.product_type && <span className="text-xs text-gray-400">{lot.product_type}</span>}
         <div className="flex-1" />
         <button onClick={() => setLabelBatches([batch])}
+          title="Print batch label (A4)"
           className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
           </svg>
-          Print
+          A4
+        </button>
+        <button onClick={() => setThermalBatches([batch])}
+          title="Print batch label (54×40mm thermal)"
+          className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-100">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+          Thermal
         </button>
       </div>
 
@@ -704,7 +715,7 @@ export default function BatchDetailPage() {
         </div>
       </div>
 
-      {/* Batch Label Sheet (reprint) */}
+      {/* Batch Label Sheet (A4 reprint) */}
       {labelBatches && (
         <BatchLabelSheet
           batches={labelBatches}
@@ -712,6 +723,19 @@ export default function BatchDetailPage() {
           designNo={batch?.design_no || '—'}
           lotDate={lot?.lot_date || batch.created_at || ''}
           onClose={() => setLabelBatches(null)}
+        />
+      )}
+      {/* Batch Label Sheet (thermal 54x40mm) */}
+      {thermalBatches && (
+        <ThermalLabelSheet
+          type="batch"
+          items={thermalBatches}
+          meta={{
+            lotCode: lot?.lot_code || '—',
+            designNo: batch?.design_no || '—',
+            lotDate: lot?.lot_date || batch.created_at || '',
+          }}
+          onClose={() => setThermalBatches(null)}
         />
       )}
 

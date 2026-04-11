@@ -7,6 +7,7 @@ import { useNotifications } from '../context/NotificationContext'
 import SearchInput from '../components/common/SearchInput'
 import FilterSelect from '../components/common/FilterSelect'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
 import BatchChallan from '../components/common/BatchChallan'
 import SendForVAModal from '../components/batches/SendForVAModal'
 import ReceiveFromVAModal from '../components/batches/ReceiveFromVAModal'
@@ -203,7 +204,7 @@ function BatchDetailTable({ batches, onRowClick, highlightBatch }) {
   )
 }
 
-function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, highlightBatch }) {
+function LotCard({ lotId, batches, expanded, onToggle, onPrint, onPrintThermal, onBatchClick, highlightBatch }) {
   const firstBatch = batches[0]
   const lot = firstBatch?.lot
   const lotCode = lot?.lot_code || '—'
@@ -234,12 +235,22 @@ function LotCard({ lotId, batches, expanded, onToggle, onPrint, onBatchClick, hi
           <div className="flex items-center gap-1.5">
             <button
               onClick={(e) => { e.stopPropagation(); onPrint() }}
-              title="Print batch labels"
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+              title="Print batch labels (A4)"
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onPrintThermal() }}
+              title="Print batch labels (54×40mm thermal)"
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 7h16M4 12h16M4 17h16" />
               </svg>
             </button>
             <button
@@ -346,6 +357,7 @@ export default function BatchesPage() {
 
   // Label sheet
   const [labelBatches, setLabelBatches] = useState(null)
+  const [thermalBatches, setThermalBatches] = useState(null)
   const [labelLotCode, setLabelLotCode] = useState('')
   const [labelDesignNo, setLabelDesignNo] = useState('')
   const [labelLotDate, setLabelLotDate] = useState('')
@@ -547,6 +559,16 @@ export default function BatchesPage() {
     if (batches.length === 0) return
     const lot = batches[0]?.lot
     setLabelBatches(batches)
+    setLabelLotCode(lot?.lot_code || '—')
+    setLabelDesignNo(batches[0]?.design_no || '—')
+    setLabelLotDate(batches[0]?.created_at || '')
+  }
+
+  const handlePrintThermal = (lotId) => {
+    const batches = lotGroups[lotId] || []
+    if (batches.length === 0) return
+    const lot = batches[0]?.lot
+    setThermalBatches(batches)
     setLabelLotCode(lot?.lot_code || '—')
     setLabelDesignNo(batches[0]?.design_no || '—')
     setLabelLotDate(batches[0]?.created_at || '')
@@ -820,6 +842,7 @@ export default function BatchesPage() {
                 expanded={expandedLots.has(lotId)}
                 onToggle={() => toggleExpand(lotId)}
                 onPrint={() => handlePrint(lotId)}
+                onPrintThermal={() => handlePrintThermal(lotId)}
                 onBatchClick={handleBatchClick}
                 highlightBatch={highlightBatch}
               />
@@ -828,7 +851,7 @@ export default function BatchesPage() {
         </div>
       )}
 
-      {/* Batch Label Sheet (reprint) */}
+      {/* Batch Label Sheet (A4 reprint) */}
       {labelBatches && (
         <BatchLabelSheet
           batches={labelBatches}
@@ -836,6 +859,15 @@ export default function BatchesPage() {
           designNo={labelDesignNo}
           lotDate={labelLotDate}
           onClose={() => setLabelBatches(null)}
+        />
+      )}
+      {/* Batch Label Sheet (thermal 54x40mm) */}
+      {thermalBatches && (
+        <ThermalLabelSheet
+          type="batch"
+          items={thermalBatches}
+          meta={{ lotCode: labelLotCode, designNo: labelDesignNo, lotDate: labelLotDate }}
+          onClose={() => setThermalBatches(null)}
         />
       )}
 

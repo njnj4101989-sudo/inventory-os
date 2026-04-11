@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
+import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
 import JobChallan from '../components/common/JobChallan'
 import { getSuppliers } from '../api/suppliers'
 import { getAllFabrics, getAllColors, getAllValueAdditions, getAllVAParties } from '../api/masters'
@@ -500,10 +501,12 @@ export default function RollsPage() {
   const [formError, setFormError] = useState(null)
   const [lastSavedRolls, setLastSavedRolls] = useState([])   // for Print Labels
   const [showLabelSheet, setShowLabelSheet] = useState(false)
+  const [showThermalSheet, setShowThermalSheet] = useState(false)
 
   // Roll selection + bulk actions
   const [selectedRolls, setSelectedRolls] = useState(new Set())
   const [showBulkLabels, setShowBulkLabels] = useState(false)
+  const [showBulkThermal, setShowBulkThermal] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
   const [bulkSendRolls, setBulkSendRolls] = useState([])
   const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '' })
@@ -1637,7 +1640,7 @@ export default function RollsPage() {
 
   return (
     <div>
-      {/* ── Print Labels Sheet overlay ── */}
+      {/* ── Print Labels Sheet overlay (A4) ── */}
       {showLabelSheet && (
         <LabelSheet
           rolls={lastSavedRolls}
@@ -1648,6 +1651,21 @@ export default function RollsPage() {
         <LabelSheet
           rolls={getSelectedRollObjects()}
           onClose={() => setShowBulkLabels(false)}
+        />
+      )}
+      {/* ── Print Labels Sheet overlay (Thermal 54x40mm) ── */}
+      {showThermalSheet && (
+        <ThermalLabelSheet
+          type="roll"
+          items={lastSavedRolls}
+          onClose={() => setShowThermalSheet(false)}
+        />
+      )}
+      {showBulkThermal && (
+        <ThermalLabelSheet
+          type="roll"
+          items={getSelectedRollObjects()}
+          onClose={() => setShowBulkThermal(false)}
         />
       )}
       {showJobChallan && jobChallanData && (
@@ -1665,16 +1683,29 @@ export default function RollsPage() {
         </div>
         <div className="flex items-center gap-2">
           {lastSavedRolls.length > 0 && (
-            <button
-              onClick={() => setShowLabelSheet(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-              </svg>
-              Print Labels ({lastSavedRolls.length})
-            </button>
+            <>
+              <button
+                onClick={() => setShowLabelSheet(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                A4 ({lastSavedRolls.length})
+              </button>
+              <button
+                onClick={() => setShowThermalSheet(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                title="Print 54×40mm thermal labels (TSC TTP-345)"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Thermal ({lastSavedRolls.length})
+              </button>
+            </>
           )}
           <button onClick={() => { setOpeningRollError(null); setOpeningGroups([{ ...EMPTY_OPENING_GROUP, colorRows: [{ color: '', weights: [''] }] }]); setOpeningRollOpen(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
@@ -1863,7 +1894,15 @@ export default function RollsPage() {
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                           </svg>
-                          Print Labels ({selectedRolls.size})
+                          A4 ({selectedRolls.size})
+                        </button>
+                        <button onClick={() => setShowBulkThermal(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+                          title="Print 54×40mm thermal labels">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                          Thermal ({selectedRolls.size})
                         </button>
                         <button onClick={() => {
                             navigate('/lots', { state: { preselectedRolls: getSelectedRollObjects().map(r => r.id) } })
@@ -2164,13 +2203,23 @@ export default function RollsPage() {
                 </button>
               )}
               {selectedInvoice?.rolls?.length > 0 && (
-                <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowLabelSheet(true) }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print Labels ({selectedInvoice.rolls.length})
-                </button>
+                <>
+                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowLabelSheet(true) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    A4 ({selectedInvoice.rolls.length})
+                  </button>
+                  <button onClick={() => { setLastSavedRolls(selectedInvoice.rolls); setSelectedInvoice(null); setSelectedInvRolls(new Set()); setShowThermalSheet(true) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors"
+                    title="Print 54×40mm thermal labels">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Thermal ({selectedInvoice.rolls.length})
+                  </button>
+                </>
               )}
               {(() => {
                 const selectable = selectedInvoice?.rolls?.filter(r => (r.status === 'in_stock' || r.status === 'remnant') && parseFloat(r.remaining_weight) > 0) || []
@@ -3023,7 +3072,15 @@ export default function RollsPage() {
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
-                    Print
+                    A4
+                  </button>
+                  <button onClick={() => { setLastSavedRolls([detailRoll]); setDetailRoll(null); setCameFromInvoice(null); setShowThermalSheet(true) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium hover:bg-white/30 transition-colors"
+                    title="Print 54×40mm thermal label">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Thermal
                   </button>
                   {detailRoll?.status === 'in_stock' && (
                     <button onClick={() => {

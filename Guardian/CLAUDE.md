@@ -56,13 +56,33 @@
 
 **Backfill:** `backend/scripts/backfill_hsn.py` — idempotent, ran on prod (796 SKUs + 164 invoice items, 100% coverage)
 
-**S108 NEXT — Candidates:**
+### S108 — UPI QR Fix + Thermal Label System (2026-04-11)
+
+**A. UPI QR Fix — commit `2e3bd32`** — Prod UPI QR failed with "Could not load bank name". Root cause: `encodeURIComponent(co.upi_id)` encoded `@` → `%40` in `pa` param. Fixed in `InvoicesPage.jsx:775-789` (literal `@`, trimmed VPA) + `SettingsPage.jsx:128-136` (trim + regex validate). Verified with different UPI ID end-to-end. `foryouvrj@axl` is VPA-side issue, not code — admin to swap prod VPA to `@okhdfcbank`.
+
+**B. Thermal Label System (TSC TTP-345, 54×40mm)** — client added thermal printer. Built shared wrapper so all label types use one place.
+
+- **New:** `frontend/src/components/common/thermal/` — `ThermalLabelSheet.jsx` (shared wrapper, `@page 54mm 40mm margin:0`, page chunking, 0 borders, 20mm QR, pure black, dispatches to type-specific renderer) + `ThermalRollLabel.jsx` + `ThermalBatchLabel.jsx` + `ThermalSKULabel.jsx`
+- **Wrapper API:** `<ThermalLabelSheet type="roll|batch|sku" items={[...]} meta={{lotCode,designNo,lotDate}} onClose />` — Protocol 6 table updated
+- **Future 2-up:** change `LABELS_PER_ROW` const at top of `ThermalLabelSheet.jsx` — ONE edit flips all 3 label types simultaneously
+- **5 pages wired** (A4 flow untouched — thermal is a second button next to each existing "Print Labels"):
+  - `RollsPage.jsx` — 4 entry points: page header, bulk-selection toolbar, invoice modal, roll detail (`showThermalSheet`, `showBulkThermal` state)
+  - `BatchesPage.jsx` — LotCard icon (added `onPrintThermal` prop + `thermalBatches` state)
+  - `BatchDetailPage.jsx` — header button (`thermalBatches` state)
+  - `LotsPage.jsx` — detail lot header, shows only when `status='distributed' && batches.length > 0` (`showThermalBatchLabels` state)
+  - `SKUsPage.jsx` — SKU detail header (`thermalSkus` state)
+- **Labels relabeled:** existing "Print Labels" buttons now say "A4", new ones say "Thermal" — clear user intent per button
+- **Build verified:** `ThermalLabelSheet-*.js 10.20 kB` gzip 2.54 kB, all 5 pages compile clean
+- **Printer setup on client laptop:** TSC driver already installed. Needs 54×40mm paper stock registered in driver (user action, one-time)
+
+**S109 NEXT:**
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Set DRS Blouse UPI ID via SettingsPage UI | ⬜ |
-| 2 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
-| 3 | ChallansPage 4d discussion: scan-to-receive flow refinement | ⬜ |
+| 1 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
+| 2 | Verify thermal print on client TSC TTP-345 (register 54×40 stock in driver, test all 3 label types) | ⬜ |
+| 3 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
+| 4 | ChallansPage 4d: scan-to-receive flow refinement | ⬜ |
 
 ---
 

@@ -146,6 +146,7 @@ mock.js (ground truth) → API_REFERENCE.md (documented) → backend services (m
 | `StatusBadge` | `status`, `label` | |
 | `ErrorAlert` | `message`, `onDismiss` | |
 | `LoadingSpinner` | `size` (`sm`/`md`/`lg`), `text` | |
+| `ThermalLabelSheet` | `type` (`'roll'`/`'batch'`/`'sku'`), `items`, `meta` (batch only: `{lotCode,designNo,lotDate}`), `onClose` | One shared wrapper for all thermal label types. A4 sheets (`LabelSheet`/`BatchLabelSheet`/`SKULabelSheet`) are unchanged. |
 
 **FilterSelect usage:**
 ```jsx
@@ -666,24 +667,30 @@ def upgrade():
 
 
 
+
+
+
+
+
+
 ## 📊 Latest Project Snapshot
-_Last sync: 2026-04-06 23:29:12_
+_Last sync: 2026-04-11 11:32:07_
 ```
 {
-  "summary": "Project has 21 tracked code files (~11013 lines total).",
+  "summary": "Project has 21 tracked code files (~11040 lines total).",
   "recent_files": [
-    "CLAUDE.md (328 lines)",
-    ".claude\\settings.local.json (155 lines)",
-    "guardian.md (687 lines)",
+    "guardian.md (693 lines)",
     "project-context.json (17 lines)",
-    "MOBILE_AND_QR_PLAN.md (101 lines)"
+    "CLAUDE.md (335 lines)",
+    "API_REFERENCE.md (3114 lines)",
+    ".claude\\settings.local.json (155 lines)"
   ],
   "language_breakdown": {
     ".md": 18,
     ".py": 1,
     ".json": 2
   },
-  "total_lines": 11013,
-  "last_updated": "2026-04-06 23:29:12"
+  "total_lines": 11040,
+  "last_updated": "2026-04-11 11:32:07"
 }
 ```

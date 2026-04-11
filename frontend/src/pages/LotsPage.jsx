@@ -13,6 +13,7 @@ import FilterSelect from '../components/common/FilterSelect'
 import ErrorAlert from '../components/common/ErrorAlert'
 import CuttingSheet from '../components/common/CuttingSheet'
 import BatchLabelSheet from '../components/common/BatchLabelSheet'
+import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
 import useQuickMaster from '../hooks/useQuickMaster'
 import { useScanPair } from '../hooks/useScanPair'
 import QuickMasterModal from '../components/common/QuickMasterModal'
@@ -110,7 +111,8 @@ export default function LotsPage() {
   const [editError, setEditError] = useState(null)
   const [showCuttingSheet, setShowCuttingSheet] = useState(false)
   const [distributing, setDistributing] = useState(false)
-  const [showBatchLabels, setShowBatchLabels] = useState(null) // { batches, lotCode, designNo, lotDate }
+  const [showBatchLabels, setShowBatchLabels] = useState(null) // { batches, lotCode, designNo, lotDate } — A4
+  const [showThermalBatchLabels, setShowThermalBatchLabels] = useState(null) // same shape — thermal 54x40mm
 
   // ── Create overlay state ──
   const [showCreate, setShowCreate] = useState(false)
@@ -491,7 +493,7 @@ export default function LotsPage() {
 
   const closeDetail = () => {
     setDetailLot(null); setEditing(false); setEditError(null)
-    setShowCuttingSheet(false); setShowBatchLabels(null)
+    setShowCuttingSheet(false); setShowBatchLabels(null); setShowThermalBatchLabels(null)
   }
 
   const startEditing = () => {
@@ -1129,13 +1131,31 @@ export default function LotsPage() {
                 Move to {LOT_STATUS_COLORS[s].label}
               </button>
             ))}
-            {/* Print */}
+            {/* Print cutting sheet */}
             <button onClick={() => setShowCuttingSheet(true)} className="rounded-lg border border-white/30 px-3 py-1.5 typo-btn-sm hover:bg-white/20 transition-colors flex items-center gap-1.5">
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
               Print
             </button>
+            {/* Print thermal batch labels — works after distribute when batches exist */}
+            {detailLot.status === 'distributed' && detailLot.batches && detailLot.batches.length > 0 && (
+              <button
+                onClick={() => setShowThermalBatchLabels({
+                  batches: detailLot.batches,
+                  lotCode: detailLot.lot_code,
+                  designNo: detailLot.batches[0]?.design_no || detailLot.designs?.[0]?.design_no || '—',
+                  lotDate: detailLot.lot_date || detailLot.created_at || '',
+                })}
+                title="Print 54×40mm thermal batch labels"
+                className="rounded-lg border border-white/30 px-3 py-1.5 typo-btn-sm hover:bg-white/20 transition-colors flex items-center gap-1.5"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+                Thermal
+              </button>
+            )}
             {/* Distribute — auto-create batches from size pattern */}
             {detailLot.status === 'cutting' && (
               <button onClick={handleDistribute} disabled={distributing}
@@ -1361,7 +1381,7 @@ export default function LotsPage() {
         {/* ── CuttingSheet print overlay ── */}
         {showCuttingSheet && <CuttingSheet lot={detailLot} onClose={() => setShowCuttingSheet(false)} />}
 
-        {/* ── Batch Label Sheet (after distribute) ── */}
+        {/* ── Batch Label Sheet (A4 — after distribute) ── */}
         {showBatchLabels && (
           <BatchLabelSheet
             batches={showBatchLabels.batches}
@@ -1369,6 +1389,19 @@ export default function LotsPage() {
             designNo={showBatchLabels.designNo}
             lotDate={showBatchLabels.lotDate}
             onClose={() => setShowBatchLabels(null)}
+          />
+        )}
+        {/* ── Batch Label Sheet (thermal 54x40mm) ── */}
+        {showThermalBatchLabels && (
+          <ThermalLabelSheet
+            type="batch"
+            items={showThermalBatchLabels.batches}
+            meta={{
+              lotCode: showThermalBatchLabels.lotCode,
+              designNo: showThermalBatchLabels.designNo,
+              lotDate: showThermalBatchLabels.lotDate,
+            }}
+            onClose={() => setShowThermalBatchLabels(null)}
           />
         )}
       </div>
