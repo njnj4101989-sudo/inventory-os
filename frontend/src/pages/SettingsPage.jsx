@@ -125,6 +125,15 @@ export default function SettingsPage() {
       const payload = {}
       Object.entries(company).forEach(([k, v]) => { payload[k] = v || null })
       payload.name = company.name || 'My Company'
+      if (payload.upi_id) {
+        const vpa = String(payload.upi_id).trim()
+        if (!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.]+$/.test(vpa)) {
+          setError('UPI ID format looks invalid. Expected format: name@handle (e.g. foryou@axl)')
+          setCompanySaving(false)
+          return
+        }
+        payload.upi_id = vpa
+      }
       await updateCompany(payload)
       setCompanyMsg('Company profile saved')
       setTimeout(() => setCompanyMsg(null), 3000)

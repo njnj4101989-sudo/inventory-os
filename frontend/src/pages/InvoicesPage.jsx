@@ -772,18 +772,22 @@ export default function InvoicesPage() {
                   <strong>Terms:</strong> 1. Goods once sold will not be taken back. 2. Subject to Surat jurisdiction. 3. E.&O.E.
                 </div>
               </div>
-              {co.upi_id && (
-                <div style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', flexShrink: 0 }}>
-                  <QRCodeSVG
-                    value={`upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.name || 'Merchant')}&am=${(inv.total_amount || 0).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + inv.invoice_number)}`}
-                    size={70}
-                    level="M"
-                    includeMargin={false}
-                  />
-                  <p style={{ fontSize: '7px', fontWeight: 700, margin: '2px 0 0', lineHeight: 1.1 }}>Scan to Pay</p>
-                  <p style={{ fontSize: '6px', margin: 0, color: '#555' }}>{co.upi_id}</p>
-                </div>
-              )}
+              {co.upi_id && (() => {
+                const vpa = String(co.upi_id).trim()
+                const pn = encodeURIComponent((co.name || 'Merchant').trim())
+                const am = (inv.total_amount || 0).toFixed(2)
+                const tn = encodeURIComponent('Invoice ' + inv.invoice_number)
+                // NOTE: pa must use literal '@' (not %40) — many UPI apps fail VPA
+                // resolution when the handle separator is percent-encoded.
+                const upiUrl = `upi://pay?pa=${vpa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`
+                return (
+                  <div style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', flexShrink: 0 }}>
+                    <QRCodeSVG value={upiUrl} size={70} level="M" includeMargin={false} />
+                    <p style={{ fontSize: '7px', fontWeight: 700, margin: '2px 0 0', lineHeight: 1.1 }}>Scan to Pay</p>
+                    <p style={{ fontSize: '6px', margin: 0, color: '#555' }}>{vpa}</p>
+                  </div>
+                )
+              })()}
             </div>
             {/* Right: Tax totals */}
             <table style={{ borderCollapse: 'collapse', border: '1px solid #000', width: '210px', flexShrink: 0 }}>
