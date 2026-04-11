@@ -2207,7 +2207,7 @@ export default function RollsPage() {
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
           {/* ── Gradient header ── */}
-          <div className="flex items-center justify-between border-b bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-700 to-emerald-600 px-6 py-3 text-white shadow-sm">
             <div className="flex items-center gap-3">
               <button onClick={() => { setSelectedInvoice(null); setSelectedInvRolls(new Set()) }}
                 className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
@@ -2275,7 +2275,7 @@ export default function RollsPage() {
                         setLotDesignPicker({ designs, allSelectableIds: selectable.map(r => r.id) })
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 transition-colors">
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
@@ -3072,7 +3072,7 @@ export default function RollsPage() {
       {detailRoll && (
         <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
           {/* ── Gradient header ── */}
-          <div className="flex items-center justify-between border-b bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-white shadow-sm">
+          <div className="flex items-center justify-between border-b bg-gradient-to-r from-emerald-700 to-emerald-600 px-6 py-3 text-white shadow-sm">
             <div className="flex items-center gap-3">
               <button onClick={() => { if (cameFromInvoice) { goBackToInvoice() } else { setDetailRoll(null); setEditing(false); setCameFromInvoice(null) } }}
                 className="rounded-lg p-1.5 hover:bg-white/20 transition-colors">
@@ -3092,7 +3092,7 @@ export default function RollsPage() {
                 <>
                   <button onClick={() => setEditing(false)} className="rounded-lg border border-white/30 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors">Cancel</button>
                   <button onClick={handleUpdate} disabled={editSaving}
-                    className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50 transition-colors">
+                    className="rounded-lg bg-white px-4 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
                     {editSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </>
@@ -3197,7 +3197,7 @@ export default function RollsPage() {
                   })()}
                   {isEditable && (
                     <button onClick={startEditing}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 transition-colors">
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition-colors">
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
