@@ -89,7 +89,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         width: ${LABEL_W_MM}mm;
         height: ${LABEL_H_MM}mm;
         margin: 0;
-        padding: 0;
+        padding: 1mm;
         display: flex;
         flex-direction: column;
         color: #000;
@@ -116,7 +116,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
       }
       .thermal-label__middle {
         width: 100%;
-        height: 32mm;
+        height: 30mm;
         display: flex;
         flex-direction: row;
         align-items: stretch;
@@ -124,7 +124,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
       .thermal-label__vleft,
       .thermal-label__vright {
         width: 2.5mm;
-        height: 32mm;
+        height: 30mm;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -147,33 +147,44 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
       }
       .thermal-label__qr {
         flex-shrink: 0;
-        width: 32mm;
-        height: 32mm;
+        width: 30mm;
+        height: 30mm;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 0;
       }
       .thermal-label__qr svg {
-        width: 32mm !important;
-        height: 32mm !important;
+        width: 30mm !important;
+        height: 30mm !important;
         display: block;
       }
       .thermal-label__data {
         flex: 1;
         min-width: 0;
-        padding: 1mm 0.6mm 1mm 0.8mm;
+        padding: 0.5mm 0.6mm 0.5mm 0.8mm;
         display: flex;
         flex-direction: column;
         justify-content: center;
-        gap: 0.4mm;
+        align-items: stretch;
+        gap: 0.6mm;
         overflow: hidden;
+      }
+      .thermal-label__hero {
+        font-size: 18pt;
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+        color: #000;
+        padding: 0;
+        letter-spacing: 0.2mm;
       }
       .thermal-label__row {
         display: flex;
         align-items: baseline;
+        justify-content: center;
         gap: 0.8mm;
-        font-size: 6.2pt;
+        font-size: 6.8pt;
         font-weight: 700;
         line-height: 1.1;
         color: #000;
@@ -181,7 +192,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         overflow: hidden;
       }
       .thermal-label__row--emph {
-        font-size: 7.5pt;
+        font-size: 8pt;
         font-weight: 900;
       }
       .thermal-label__key {
@@ -189,7 +200,6 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         flex-shrink: 0;
         color: #000;
         text-transform: uppercase;
-        min-width: 5mm;
       }
       .thermal-label__val {
         font-weight: 900;
@@ -252,15 +262,20 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
             <QRCodeSVG value={data.qrValue} size={256} level="H" includeMargin={false} />
           </div>
           <div className="thermal-label__data">
-            {data.rows.map((r, idx) => (
-              <div
-                key={idx}
-                className={`thermal-label__row${r.emph ? ' thermal-label__row--emph' : ''}`}
-              >
-                {r.k != null && <span className="thermal-label__key">{r.k}</span>}
-                <span className={`thermal-label__val${r.k == null ? ' thermal-label__val--full' : ''}`}>{r.v}</span>
-              </div>
-            ))}
+            {data.rows.map((r, idx) => {
+              if (r.hero != null) {
+                return <div key={idx} className="thermal-label__hero">{r.hero}</div>
+              }
+              return (
+                <div
+                  key={idx}
+                  className={`thermal-label__row${r.emph ? ' thermal-label__row--emph' : ''}`}
+                >
+                  {r.k != null && <span className="thermal-label__key">{r.k}</span>}
+                  <span className={`thermal-label__val${r.k == null ? ' thermal-label__val--full' : ''}`}>{r.v}</span>
+                </div>
+              )
+            })}
           </div>
           <div className="thermal-label__vright">{VRIGHT_TEXT}</div>
         </div>
@@ -332,7 +347,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           width: ${LABEL_W_MM}mm;
           height: ${LABEL_H_MM}mm;
           margin: 0;
-          padding: 0;
+          padding: 1mm;
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
@@ -361,7 +376,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         }
         .thermal-label__middle {
           width: 100%;
-          height: 32mm;
+          height: 30mm;
           display: flex;
           flex-direction: row;
           align-items: stretch;
@@ -369,7 +384,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         .thermal-label__vleft,
         .thermal-label__vright {
           width: 2.5mm;
-          height: 32mm;
+          height: 30mm;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -393,33 +408,44 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         }
         .thermal-label__qr {
           flex-shrink: 0;
-          width: 32mm;
-          height: 32mm;
+          width: 30mm;
+          height: 30mm;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 0;
         }
         .thermal-label__qr svg {
-          width: 32mm !important;
-          height: 32mm !important;
+          width: 30mm !important;
+          height: 30mm !important;
           display: block;
         }
         .thermal-label__data {
           flex: 1;
           min-width: 0;
-          padding: 1mm 0.6mm 1mm 0.8mm;
+          padding: 0.5mm 0.6mm 0.5mm 0.8mm;
           display: flex;
           flex-direction: column;
           justify-content: center;
-          gap: 0.4mm;
+          align-items: stretch;
+          gap: 0.6mm;
           overflow: hidden;
+        }
+        .thermal-label__hero {
+          font-size: 18pt;
+          font-weight: 900;
+          line-height: 1;
+          text-align: center;
+          color: #000;
+          padding: 0;
+          letter-spacing: 0.2mm;
         }
         .thermal-label__row {
           display: flex;
           align-items: baseline;
+          justify-content: center;
           gap: 0.8mm;
-          font-size: 6.2pt;
+          font-size: 6.8pt;
           font-weight: 700;
           line-height: 1.1;
           color: #000;
@@ -427,7 +453,7 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           overflow: hidden;
         }
         .thermal-label__row--emph {
-          font-size: 7.5pt;
+          font-size: 8pt;
           font-weight: 900;
         }
         .thermal-label__key {
@@ -435,7 +461,6 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           flex-shrink: 0;
           color: #000;
           text-transform: uppercase;
-          min-width: 5mm;
         }
         .thermal-label__val {
           font-weight: 900;
