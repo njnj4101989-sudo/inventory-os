@@ -179,6 +179,15 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         padding: 0;
         letter-spacing: 0.2mm;
       }
+      .thermal-label__hero-unit {
+        font-size: 8pt;
+        font-weight: 700;
+        line-height: 1;
+        text-align: center;
+        color: #000;
+        margin-top: 0.4mm;
+        letter-spacing: 0.2mm;
+      }
       .thermal-label__row {
         display: flex;
         align-items: baseline;
@@ -264,7 +273,12 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           <div className="thermal-label__data">
             {data.rows.map((r, idx) => {
               if (r.hero != null) {
-                return <div key={idx} className="thermal-label__hero">{r.hero}</div>
+                return (
+                  <div key={idx}>
+                    <div className="thermal-label__hero">{r.hero}</div>
+                    {r.heroUnit && <div className="thermal-label__hero-unit">{r.heroUnit}</div>}
+                  </div>
+                )
               }
               return (
                 <div
@@ -438,6 +452,15 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
           text-align: center;
           color: #000;
           padding: 0;
+          letter-spacing: 0.2mm;
+        }
+        .thermal-label__hero-unit {
+          font-size: 8pt;
+          font-weight: 700;
+          line-height: 1;
+          text-align: center;
+          color: #000;
+          margin-top: 0.4mm;
           letter-spacing: 0.2mm;
         }
         .thermal-label__row {
