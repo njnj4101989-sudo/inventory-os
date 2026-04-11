@@ -382,8 +382,8 @@ export default function InvoicesPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [createMode, isDirty, invForm, invItems, quickMasterOpen])
 
-  /* ── Open print overlay ── */
-  const openPrint = () => { const inv = detailInvoice; setDetailInvoice(null); setPrintInvoice(inv) }
+  /* ── Open print overlay ── keep detailInvoice set so Close returns to detail, not list */
+  const openPrint = () => { setPrintInvoice(detailInvoice) }
 
   const co = companyFull || company || {}
 
