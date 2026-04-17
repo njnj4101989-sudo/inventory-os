@@ -33,7 +33,34 @@
 
 ---
 
-## Current State (Session 109 — 2026-04-11)
+## Current State (Session 110 — 2026-04-17) — CLOSED
+
+**SKU thermal label + Orders UX + pricing data cleanup**
+
+**Thermal SKU label (commits `9fdf1df → a8d6049`):** V3 layout — full `sku_code` top strip, body `D.NO {design_no}` (2-line wrap) + `MRP` + bordered `SIZE {size}` chip. `ThermalLabelSheet.jsx` gained `wrap` + `chip` row types. CSS must be added to BOTH print `pageStyle` (6-space indent) + screen `<style>` (8-space indent) blocks — a single `replace_all` won't cover both. Renderers return `{hero, qrValue, rows}`.
+
+**Orders page KPIs + filter (`d8037ce`, `82757ec`, `390d2d8`):** KPIs were computing on the 20-row paginated slice — fixed by fetching `page_size:0` into `allOrders` state for aggregation (refreshed on every mutation). Added clickable "With Shortage" KPI (active ring, filters client-side from `allOrders`, pagination hidden when active) + clickable "Total Orders" (one-click reset of all filters).
+
+**Order dupe-SKU + shortage semantics (`7259850`):** Manual color/size dropdowns now detect duplicate `sku_id` across rows — mirrors scan-path UX (toast + flash existing row). Backend `has_shortage` narrowed to require `fulfilled_qty < quantity` (ignores stale `short_qty` from fully-shipped orders). Ship flow now auto-zeros `short_qty` when an item reaches full fulfilment. One-time SQL zeroed ORD-0004's stale short row.
+
+**SKU Inventory History WOW (`5ca07ad`):** Added `Reference` column resolving `reference_id` → human code (e.g. `SHP-0004 / ORD-0004`, `BAT-0033 / LOT-…`). Backend `_resolve_event_references` batch-loads per type (1 query/table, no N+1). Shipment + batch rows are clickable `?open={id}` deep-links. Covers `shipment`, `batch`, `purchase_item`, `supplier_invoice`, `manual_adjustment`, `opening_stock`. Also fixed latent bug: `create_event` was passing `metadata=` but model maps to `metadata_` — all past events had NULL metadata. Forward-fixed; historical metadata stays NULL but resolved via FK lookup anyway.
+
+**Pricing data model (`25e3b1e`, `95aa654`):** Order form default flipped to `sale_rate → mrp → base_price → 0` in all 4 entry paths. Opening stock form gained Sale Rate + MRP columns; final column order: Qty → Sale Rate → MRP → Unit Cost (cost last, rarely filled). Enter-key chain rewired.
+
+**Prod data migration (one-time SQL, all on 2026-04-17):**
+- Copied `base_price → sale_rate` on 1696 SKUs where sale_rate was null (user had been entering sale price into the only available "Unit Cost" field since opening stock form had no sale_rate input — form-driven misuse, not user mistake).
+- Then zeroed `base_price` on those 1696 (now honestly "cost unknown").
+- 1 SKU (`FBL-Vip-RANI-XL`) preserved → user manually cleaned up base_price on it.
+- Final state: 1697 SKUs with sale_rate, 0 with base_price > 0, 1 with MRP.
+- ORD-0004 stale `short_qty=10` zeroed (single row).
+
+**9 commits pushed this session:** `9fdf1df 9bd9afa a8d6049 d8037ce 82757ec 390d2d8 7259850 5ca07ad 25e3b1e 95aa654`.
+
+**S111 NEXT:** MRP coverage is still 1 SKU — client needs to backfill over time (no tooling for bulk fill yet, could be a future WOW). ChallansPage scan-to-receive refinement still open from S109. Prod UPI VPA swap still pending.
+
+---
+
+## Previous State (Session 109 — 2026-04-11)
 
 ### S109 — Thermal Label Redesign "Boarding Pass" — DEPLOYED
 
@@ -80,7 +107,7 @@
 
 ---
 
-## Previous State (Session 107 — 2026-04-07)
+## Earlier State (Session 107 — 2026-04-07)
 
 ### S107: HSN Propagation + Invoice QR + UPI Payment + Print Polish — COMPLETE
 
@@ -382,6 +409,7 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S110 | SKU Thermal V3 + Orders UX + Pricing | Thermal SKU body rebuilt (D.NO wrap + MRP + SIZE chip); Orders KPIs fetch full list via `page_size:0` + clickable Total/With-Shortage cards; manual-dropdown dupe-SKU check mirrors scan path; `has_shortage` narrowed + short_qty auto-zero on ship; SKU Inventory History gains clickable Reference column (resolve shipment/batch/purchase refs); `create_event` metadata bug fixed (`metadata=`→`metadata_=`); order form default flipped to sale_rate; opening stock form gains Sale Rate + MRP columns (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price→sale_rate` + base_price zeroed; ORD-0004 stale short_qty zeroed. Commits `9fdf1df`..`95aa654` |
 | S109 | Thermal Label Boarding Pass | TSC TTP-345 stock calibration (54×40mm, Landscape 180°). 4-sided layout: hero top strip + 30mm QR + vertical DRS BLOUSE/SCAN TO VIEW bars + bottom brand strip. 1mm safe margin all sides. Smart Minimal: SKU drops 4 redundant rows (in sku_code) → 18pt SIZE hero + MRP. Roll drops 3 rows (in roll_code) → stacked weight/unit hero (kg/m auto) + INV/DT. Batch keeps 6 rows (batch_code encodes nothing), color_breakdown JSON parsing. Field fixes: roll.fabric_type/color flat strings, batch.quantity, date DD Mon. Renderers refactored to return `{hero, qrValue, rows}` data. Commits `9371fb3 c3a0249 c539302` |
 | S108 | UPI QR Fix + Thermal Labels + Print UX | UPI QR @encoding fix (`encodeURIComponent` mangled `@`). Thermal label system (TSC TTP-345, 54×40mm): shared `ThermalLabelSheet.jsx` wrapper + 3 type renderers, 5 pages wired (Rolls/Batches/BatchDetail/Lots/SKUs). "A4" vs "Thermal" button labels. Print UX cleanup: ESC/Ctrl+P detail-overlay guards, `z-[55]` for label sheets over detail overlays. RollsPage headers emerald theme |
 | S107 | HSN + Invoice QR + UPI | LotsPage scan + CuttingSheet QR. OrderPrint Pick Sheet pivot. Invoice B&W redesign + amount-in-words. HSN on ProductType (Option A) + backfill script (796 SKUs + 164 inv items). Invoice QR: lookup + UPI pay. Company.upi_id. Migrations `c3d4e5f6g7h8` + `d4e5f6g7h8i9` |
