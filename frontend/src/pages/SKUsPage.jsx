@@ -77,7 +77,10 @@ const SKU_COLUMNS = [
   ) : '—' },
   { key: 'size', label: 'Size', render: (val) => <span className="typo-data">{val || '—'}</span> },
   { key: 'product_type', label: 'Type', render: (val) => <span className="typo-td-secondary">{val}</span> },
-  { key: 'base_price', label: 'Price', render: (val) => val && val > 0 ? <span className="typo-td">₹{parseFloat(val).toLocaleString('en-IN')}</span> : <span className="typo-caption">Set price</span> },
+  { key: 'sale_rate', label: 'Sale Rate', render: (_, row) => {
+    const p = parseFloat(row?.sale_rate || row?.mrp || row?.base_price || 0)
+    return p > 0 ? <span className="typo-td">₹{p.toLocaleString('en-IN')}</span> : <span className="typo-caption">Set rate</span>
+  } },
   { key: 'stock', label: 'Stock', render: (val) => <StockIndicator stock={val} /> },
   { key: 'is_active', label: 'Status', render: (val) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${val ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{val ? 'Active' : 'Inactive'}</span> },
 ]
@@ -1407,7 +1410,7 @@ export default function SKUsPage() {
                       <th className="px-3 py-2.5 font-semibold w-[18%]">Colors</th>
                       <th className="px-3 py-2.5 font-semibold w-[14%]">Sizes</th>
                       <th className="px-3 py-2.5 font-semibold w-[8%]">Type</th>
-                      <th className="px-3 py-2.5 font-semibold w-[12%]">Price</th>
+                      <th className="px-3 py-2.5 font-semibold w-[12%]">Sale Rate</th>
                       <th className="px-3 py-2.5 font-semibold w-[15%]">Stock</th>
                       <th className="px-3 py-2.5 font-semibold w-[8%] text-right">SKUs</th>
                     </tr>
@@ -1463,7 +1466,10 @@ export default function SKUsPage() {
                               </td>
                               <td className="px-3 py-2 typo-data">{sku.size}</td>
                               <td className="px-3 py-2 typo-td-secondary">{sku.product_type}</td>
-                              <td className="px-3 py-2 typo-td">{sku.base_price && sku.base_price > 0 ? `₹${parseFloat(sku.base_price).toLocaleString('en-IN')}` : <span className="typo-caption">Set price</span>}</td>
+                              <td className="px-3 py-2 typo-td">{(() => {
+                                const p = parseFloat(sku.sale_rate || sku.mrp || sku.base_price || 0)
+                                return p > 0 ? `₹${p.toLocaleString('en-IN')}` : <span className="typo-caption">Set rate</span>
+                              })()}</td>
                               <td className="px-3 py-2"><StockIndicator stock={sku.stock} /></td>
                               <td className="px-3 py-2 text-right">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${sku.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{sku.is_active ? 'Active' : 'Inactive'}</span>

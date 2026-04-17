@@ -153,7 +153,13 @@ class SKUService:
             ]
             colors = list(dict.fromkeys(s.color for s in grp_skus if s.color))
             sizes = list(dict.fromkeys(s.size for s in grp_skus if s.size))
-            prices = [float(s.base_price) for s in grp_skus if s.base_price and s.base_price > 0]
+            # Price column = selling price, not cost. Same fallback as order form (S110).
+            def _sku_price(x):
+                for p in (x.sale_rate, x.mrp, x.base_price):
+                    if p and p > 0:
+                        return float(p)
+                return 0.0
+            prices = [p for p in (_sku_price(s) for s in grp_skus) if p > 0]
             total_qty = sum(x["stock"]["total_qty"] for x in sku_responses)
             available_qty = sum(x["stock"]["available_qty"] for x in sku_responses)
             reserved_qty = sum(x["stock"]["reserved_qty"] for x in sku_responses)
