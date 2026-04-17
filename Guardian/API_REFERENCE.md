@@ -1023,7 +1023,7 @@ When `sku` is present:
 **IMPORTANT:** Response is flat with nested `sku` object (NOT `sku_id`). `sku.base_price` is required for inventory value calculations.
 
 ### GET `/inventory/{skuId}/events`
-**Query:** `page`, `page_size`
+**Query:** `page`, `page_size` (`page_size=0` = no limit)
 **Response:** Paginated array of:
 ```json
 {
@@ -1033,17 +1033,24 @@ When `sku` is present:
   "item_type": "finished_goods",
   "reference_type": "batch",
   "reference_id": "uuid",
-  "quantity": 196,
-  "performed_by": {
-    "id": "uuid",
-    "full_name": "Suresh Checker"
+  "reference": {
+    "kind": "shipment",
+    "code": "SHP-0004",
+    "extra": "ORD-0004",
+    "order_id": "uuid"
   },
+  "quantity": 196,
+  "performed_by": { "id": "uuid", "full_name": "Suresh Checker" },
   "performed_at": "2026-02-07T17:00:00Z",
-  "metadata": {
-    "batch_code": "BATCH-0001"
-  }
+  "metadata": { "batch_code": "BATCH-0001" }
 }
 ```
+**`reference` field (S110 — enrichment of `reference_id`):**
+- `kind` mirrors `reference_type` (`shipment`, `batch`, `purchase_item`, `supplier_invoice`, `manual_adjustment`, `opening_stock`)
+- `code` is the human-readable code (`SHP-0004`, `BAT-0033`, supplier invoice no, `"Manual"`, `"Opening Stock"`)
+- `extra` is a secondary label (`ORD-0004`, lot code, supplier name, adjustment reason) — nullable
+- Extra FK ids are included for deep-linking: `order_id` (shipment), `batch_id` (batch), `supplier_invoice_id` (purchase_item / supplier_invoice)
+- `reference` is `null` for events whose `reference_type` isn't resolved (future-safe fallback)
 
 ### POST `/inventory/adjust`
 **Request:** `{ sku_id, event_type, quantity }`

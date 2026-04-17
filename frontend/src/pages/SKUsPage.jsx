@@ -1134,6 +1134,7 @@ export default function SKUsPage() {
                       <th className="px-3 py-2 typo-th">Date</th>
                       <th className="px-3 py-2 typo-th">Event</th>
                       <th className="px-3 py-2 typo-th">Source</th>
+                      <th className="px-3 py-2 typo-th">Reference</th>
                       <th className="px-3 py-2 typo-th text-right">Qty</th>
                       <th className="px-3 py-2 typo-th text-right">Cost/pc</th>
                       <th className="px-3 py-2 typo-th">By</th>
@@ -1168,6 +1169,12 @@ export default function SKUsPage() {
                         batch_pack: 'Batch Pack',
                       }[evt.reference_type] || evt.reference_type || '—'
                       const unitCost = evt.metadata?.unit_cost
+                      const ref = evt.reference
+                      const refDeepLink = ref?.kind === 'shipment' && ref?.order_id
+                        ? `/orders?open=${ref.order_id}`
+                        : ref?.kind === 'batch' && ref?.batch_id
+                        ? `/batches?open=${ref.batch_id}`
+                        : null
                       return (
                         <tr key={evt.id} className="border-b last:border-0 hover:bg-gray-50">
                           <td className="px-3 py-2 typo-td-secondary">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
@@ -1175,6 +1182,18 @@ export default function SKUsPage() {
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${evtColor}`}>{evtLabel}</span>
                           </td>
                           <td className="px-3 py-2 typo-td">{sourceLabel}</td>
+                          <td className="px-3 py-2 typo-td">
+                            {ref ? (
+                              <div className="flex flex-col">
+                                {refDeepLink ? (
+                                  <a href={refDeepLink} className="font-medium text-emerald-700 hover:text-emerald-900 hover:underline">{ref.code}</a>
+                                ) : (
+                                  <span className="font-medium text-gray-800">{ref.code}</span>
+                                )}
+                                {ref.extra && <span className="text-[11px] text-gray-500">{ref.extra}</span>}
+                              </div>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className={`px-3 py-2 text-right font-semibold ${isIn ? 'text-green-600' : 'text-red-600'}`}>
                             {isIn ? '+' : '−'}{Math.abs(evt.quantity)}
                           </td>

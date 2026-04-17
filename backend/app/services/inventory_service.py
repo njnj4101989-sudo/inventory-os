@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.models.inventory_event import InventoryEvent
 from app.models.inventory_state import InventoryState
 from app.models.sku import SKU
+from app.models.supplier_invoice import SupplierInvoice
 from app.schemas.inventory import AdjustRequest, InventoryFilterParams, InventoryResponse, EventResponse, ReconcileResponse
 from app.schemas import PaginatedParams
 from app.core.exceptions import AppException, NotFoundError, ValidationError
@@ -118,12 +119,102 @@ class InventoryService:
         result = await self.db.execute(stmt)
         events = result.scalars().all()
 
+        ref_map = await self._resolve_event_references(events)
+
         return {
-            "data": [self._event_to_response(e) for e in events],
+            "data": [self._event_to_response(e, ref_map.get(e.id)) for e in events],
             "total": total,
             "page": params.page,
             "pages": pages,
         }
+
+    async def _resolve_event_references(self, events) -> dict:
+        """Batch-resolve event.reference_id into human-readable {kind, code, extra, deep_link}.
+
+        Returns {event.id: info_dict}. One query per referenced table — no N+1.
+        """
+        by_type: dict[str, set] = {}
+        for e in events:
+            if e.reference_type and e.reference_id:
+                by_type.setdefault(e.reference_type, set()).add(e.reference_id)
+
+        ref_info: dict = {}  # reference_id UUID -> info
+
+        if "shipment" in by_type:
+            from app.models.shipment import Shipment
+            shipments = (await self.db.execute(
+                select(Shipment)
+                .where(Shipment.id.in_(by_type["shipment"]))
+                .options(selectinload(Shipment.order))
+            )).scalars().all()
+            for s in shipments:
+                ref_info[s.id] = {
+                    "kind": "shipment",
+                    "code": s.shipment_no,
+                    "extra": s.order.order_number if s.order else None,
+                    "order_id": str(s.order.id) if s.order else None,
+                }
+
+        batch_ids = by_type.get("batch", set()) | by_type.get("batch_pack", set())
+        if batch_ids:
+            from app.models.batch import Batch
+            batches = (await self.db.execute(
+                select(Batch)
+                .where(Batch.id.in_(batch_ids))
+                .options(selectinload(Batch.lot))
+            )).scalars().all()
+            for b in batches:
+                ref_info[b.id] = {
+                    "kind": "batch",
+                    "code": b.batch_code,
+                    "extra": b.lot.lot_code if b.lot else None,
+                    "batch_id": str(b.id),
+                }
+
+        if "purchase_item" in by_type:
+            from app.models.purchase_item import PurchaseItem
+            pis = (await self.db.execute(
+                select(PurchaseItem)
+                .where(PurchaseItem.id.in_(by_type["purchase_item"]))
+                .options(selectinload(PurchaseItem.supplier_invoice).selectinload(SupplierInvoice.supplier))
+            )).scalars().all()
+            for pi in pis:
+                inv = pi.supplier_invoice
+                ref_info[pi.id] = {
+                    "kind": "purchase_item",
+                    "code": inv.invoice_no if inv and inv.invoice_no else "Purchase",
+                    "extra": inv.supplier.name if inv and inv.supplier else None,
+                    "supplier_invoice_id": str(inv.id) if inv else None,
+                }
+
+        if "supplier_invoice" in by_type:
+            sis = (await self.db.execute(
+                select(SupplierInvoice)
+                .where(SupplierInvoice.id.in_(by_type["supplier_invoice"]))
+                .options(selectinload(SupplierInvoice.supplier))
+            )).scalars().all()
+            for si in sis:
+                ref_info[si.id] = {
+                    "kind": "supplier_invoice",
+                    "code": si.invoice_no or "Purchase",
+                    "extra": si.supplier.name if si.supplier else None,
+                    "supplier_invoice_id": str(si.id),
+                }
+
+        # Build per-event map (static labels for types without FK lookup)
+        out: dict = {}
+        for e in events:
+            if e.reference_type == "manual_adjustment":
+                out[e.id] = {
+                    "kind": "manual_adjustment",
+                    "code": "Manual",
+                    "extra": (e.metadata_ or {}).get("reason"),
+                }
+            elif e.reference_type == "opening_stock":
+                out[e.id] = {"kind": "opening_stock", "code": "Opening Stock", "extra": None}
+            elif e.reference_id in ref_info:
+                out[e.id] = ref_info[e.reference_id]
+        return out
 
     async def create_event(
         self,
@@ -146,7 +237,7 @@ class InventoryService:
             quantity=quantity,
             performed_by=performed_by,
             performed_at=datetime.now(timezone.utc),
-            metadata=metadata or {},
+            metadata_=metadata or {},
         )
         self.db.add(event)
         await self.db.flush()
@@ -374,7 +465,7 @@ class InventoryService:
             "last_updated": s.last_updated.isoformat() if s.last_updated else None,
         }
 
-    def _event_to_response(self, e: InventoryEvent) -> dict:
+    def _event_to_response(self, e: InventoryEvent, reference: dict | None = None) -> dict:
         return {
             "id": str(e.id),
             "event_id": e.event_id,
@@ -382,6 +473,7 @@ class InventoryService:
             "item_type": e.item_type,
             "reference_type": e.reference_type,
             "reference_id": str(e.reference_id) if e.reference_id else None,
+            "reference": reference,
             "sku_id": str(e.sku_id) if e.sku_id else None,
             "quantity": e.quantity,
             "performed_by": {
