@@ -1080,7 +1080,7 @@ export default function SKUsPage() {
                       onChange={v => setEditFields(p => ({ ...p, design_id: v }))}
                       options={[{ value: '', label: 'Select design...' }, ...designs.map(d => ({ value: d.id, label: d.design_no }))]} />
                   ) : (
-                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.design}</div>
+                    <div className="typo-input-sm bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.design}</div>
                   )}
                 </div>
                 <div>
@@ -1093,7 +1093,7 @@ export default function SKUsPage() {
                       }}
                       options={[{ value: '', label: 'Select color...' }, ...colors.map(c => ({ value: c.id, label: c.name }))]} />
                   ) : (
-                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.color}</div>
+                    <div className="typo-input-sm bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.color}</div>
                   )}
                 </div>
                 <div>
@@ -1103,12 +1103,12 @@ export default function SKUsPage() {
                       onChange={v => setEditFields(p => ({ ...p, size: v }))}
                       options={[{ value: '', label: 'Select size...' }, ...['XS','S','M','L','XL','XXL','3XL','4XL','Free'].map(s => ({ value: s, label: s }))]} />
                   ) : (
-                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
+                    <div className="typo-input-sm bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
                   )}
                 </div>
                 <div>
                   <label className="typo-label-sm">SKU Code</label>
-                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
+                  <div className="typo-input-sm bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
                   {(() => {
                     const newDesign = editFields.design_id !== detailSKU.design_id ? designs.find(d => d.id === editFields.design_id)?.design_no : null
                     const changed = editFields.color !== detailSKU.color || editFields.size !== detailSKU.size || newDesign
@@ -1132,17 +1132,17 @@ export default function SKUsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="typo-label-sm" title="Latest stock-in cost — pricing reference (valuation uses WAC shown in the hero)">Last Cost (₹)</label>
-                  <input type="number" className="typo-input" value={editFields.base_price}
+                  <input type="number" className="typo-input-sm" value={editFields.base_price}
                     onChange={e => setEditFields(p => ({ ...p, base_price: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div>
                   <label className="typo-label-sm">Stitching Cost/pc (₹)</label>
-                  <input type="number" className="typo-input" value={editFields.stitching_cost}
+                  <input type="number" className="typo-input-sm" value={editFields.stitching_cost}
                     onChange={e => setEditFields(p => ({ ...p, stitching_cost: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div>
                   <label className="typo-label-sm">Other Cost/pc (₹)</label>
-                  <input type="number" className="typo-input" value={editFields.other_cost}
+                  <input type="number" className="typo-input-sm" value={editFields.other_cost}
                     onChange={e => setEditFields(p => ({ ...p, other_cost: e.target.value }))} placeholder="0.00" />
                 </div>
               </div>
@@ -1154,12 +1154,12 @@ export default function SKUsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="typo-label-sm">Sale Rate (₹)</label>
-                  <input type="number" className="typo-input" value={editFields.sale_rate}
+                  <input type="number" className="typo-input-sm" value={editFields.sale_rate}
                     onChange={e => setEditFields(p => ({ ...p, sale_rate: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div>
                   <label className="typo-label-sm">MRP (₹)</label>
-                  <input type="number" className="typo-input" value={editFields.mrp}
+                  <input type="number" className="typo-input-sm" value={editFields.mrp}
                     onChange={e => setEditFields(p => ({ ...p, mrp: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div>
@@ -1176,7 +1176,7 @@ export default function SKUsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
                   <label className="typo-label-sm">HSN Code</label>
-                  <input type="text" className="typo-input" value={editFields.hsn_code}
+                  <input type="text" className="typo-input-sm" value={editFields.hsn_code}
                     onChange={e => setEditFields(p => ({ ...p, hsn_code: e.target.value }))} placeholder="e.g. 6206" />
                 </div>
                 <div>
@@ -1186,7 +1186,7 @@ export default function SKUsPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <label className="typo-label-sm">Description</label>
-                  <input className="typo-input" value={editFields.description}
+                  <input className="typo-input-sm" value={editFields.description}
                     onChange={e => setEditFields(p => ({ ...p, description: e.target.value }))} placeholder="Product description..." />
                 </div>
               </div>
