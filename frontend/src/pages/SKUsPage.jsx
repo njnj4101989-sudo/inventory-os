@@ -1059,7 +1059,7 @@ export default function SKUsPage() {
                       <th className="px-3 py-2 font-medium text-right">Stitching</th>
                       <th className="px-3 py-2 font-medium text-right">Batch VA</th>
                       <th className="px-3 py-2 font-medium text-right">Other</th>
-                      <th className="px-3 py-2 font-medium text-right">Total/pc</th>
+                      <th className="px-3 py-2 font-medium text-right">Cost/pc</th>
                       <th className="px-3 py-2 font-medium text-right">Line Total</th>
                     </tr>
                   </thead>
