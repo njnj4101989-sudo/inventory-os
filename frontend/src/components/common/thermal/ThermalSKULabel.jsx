@@ -19,13 +19,12 @@ export default function buildSkuLabel(sku, appBaseUrl) {
   const designNo = sku?.product_name || ''
   const size = sku?.size || ''
 
-  const priceValue = sku?.mrp || sku?.sale_rate || sku?.base_price
-  const priceLabel = sku?.mrp ? 'MRP' : 'RATE'
+  const mrp = sku?.mrp
   const fmtPrice = (v) => (v ? `₹${parseFloat(v).toLocaleString('en-IN')}` : '—')
 
   const rows = []
   if (designNo) rows.push({ k: 'D.NO', v: designNo, wrap: true })
-  if (priceValue) rows.push({ k: priceLabel, v: fmtPrice(priceValue) })
+  if (mrp) rows.push({ k: 'MRP', v: fmtPrice(mrp) })
   if (size) rows.push({ chip: `SIZE ${size}` })
 
   return {
