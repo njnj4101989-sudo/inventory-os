@@ -1535,26 +1535,40 @@ export default function OrdersPage() {
                           <td className="px-2 py-1.5">
                             <FilterSelect full value={line.color}
                               onChange={v => {
-                                setOrderLines(prev => prev.map((l, i) => {
-                                  if (i !== idx) return l
-                                  const group = designGroups.find(g => g.key === l.design_key)
-                                  // If size already picked, resolve SKU immediately
-                                  const foundSku = l.size && group ? group.skus.find(s => s._parsed.color === v && s._parsed.size === l.size) : null
-                                  return { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price }
-                                }))
+                                const cur = orderLinesRef.current
+                                const group = designGroups.find(g => g.key === cur[idx].design_key)
+                                const foundSku = cur[idx].size && group ? group.skus.find(s => s._parsed.color === v && s._parsed.size === cur[idx].size) : null
+                                if (foundSku) {
+                                  const dupeIdx = cur.findIndex((l, i) => i !== idx && l.sku_id === foundSku.id)
+                                  if (dupeIdx !== -1) {
+                                    setScanStatus({ type: 'duplicate', message: `${foundSku.sku_code} already in order — row ${dupeIdx + 1}` })
+                                    flashRow(dupeIdx)
+                                    setTimeout(() => setScanStatus(null), 3000)
+                                    setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, color: v, sku_id: null } : l))
+                                    return
+                                  }
+                                }
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price } : l))
                               }}
                               options={getColorsForDesign(line.design_key, line.size)} />
                           </td>
                           <td className="px-2 py-1.5">
                             <FilterSelect full value={line.size}
                               onChange={v => {
-                                setOrderLines(prev => prev.map((l, i) => {
-                                  if (i !== idx) return l
-                                  const group = designGroups.find(g => g.key === l.design_key)
-                                  // If color already picked, resolve SKU immediately
-                                  const foundSku = l.color && group ? group.skus.find(s => s._parsed.color === l.color && s._parsed.size === v) : null
-                                  return { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price }
-                                }))
+                                const cur = orderLinesRef.current
+                                const group = designGroups.find(g => g.key === cur[idx].design_key)
+                                const foundSku = cur[idx].color && group ? group.skus.find(s => s._parsed.color === cur[idx].color && s._parsed.size === v) : null
+                                if (foundSku) {
+                                  const dupeIdx = cur.findIndex((l, i) => i !== idx && l.sku_id === foundSku.id)
+                                  if (dupeIdx !== -1) {
+                                    setScanStatus({ type: 'duplicate', message: `${foundSku.sku_code} already in order — row ${dupeIdx + 1}` })
+                                    flashRow(dupeIdx)
+                                    setTimeout(() => setScanStatus(null), 3000)
+                                    setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, size: v, sku_id: null } : l))
+                                    return
+                                  }
+                                }
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price } : l))
                               }}
                               options={getSizesForDesign(line.design_key, line.color)} />
                           </td>

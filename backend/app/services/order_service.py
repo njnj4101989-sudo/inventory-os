@@ -318,6 +318,8 @@ class OrderService:
             )
 
             oi.fulfilled_qty = (oi.fulfilled_qty or 0) + qty
+            if oi.fulfilled_qty >= oi.quantity:
+                oi.short_qty = 0
             shipment_subtotal += float(oi.unit_price) * qty
 
         await self.db.flush()
@@ -712,7 +714,10 @@ class OrderService:
                 }
                 for item in (o.items or [])
             ],
-            "has_shortage": any((item.short_qty or 0) > 0 for item in (o.items or [])),
+            "has_shortage": any(
+                (item.short_qty or 0) > 0 and (item.fulfilled_qty or 0) < item.quantity
+                for item in (o.items or [])
+            ),
             "invoices": [
                 {
                     "id": str(inv.id),
