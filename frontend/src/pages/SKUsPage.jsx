@@ -152,9 +152,11 @@ export default function SKUsPage() {
   const [filterType, setFilterType] = useState('')
   const [filterStock, setFilterStock] = useState('')
   const [expandedGroups, setExpandedGroups] = useState(new Set())
-  // Map<design_key, {sku_count, skus: [...]}> — stores the SKU array so we can print
-  // a selection that spans multiple pages without refetching.
-  const [selectedDesigns, setSelectedDesigns] = useState(new Map())
+  // SKU-level selection — user can mix individual SKUs from different designs.
+  // selectedSkuIds is the source of truth; skuIndex caches SKU objects as the
+  // user paginates so we can print cross-page selections without refetching.
+  const [selectedSkuIds, setSelectedSkuIds] = useState(new Set())
+  const [skuIndex, setSkuIndex] = useState(new Map())
   // Global KPIs — fetched separately so they reflect the whole dataset, not just current page
   const [summary, setSummary] = useState({ total_skus: 0, in_stock_skus: 0, total_pieces: 0, auto_generated: 0 })
 
@@ -247,6 +249,16 @@ export default function SKUsPage() {
   useEffect(() => { loadColorMap() }, [])
   useEffect(() => { fetchSKUs() }, [fetchSKUs])
   useEffect(() => { fetchSummary() }, [fetchSummary])
+
+  // Cache every SKU we've seen so cross-page selections survive page changes.
+  useEffect(() => {
+    if (!skuGroups || skuGroups.length === 0) return
+    setSkuIndex(prev => {
+      const next = new Map(prev)
+      for (const g of skuGroups) for (const sku of (g.skus || [])) next.set(sku.id, sku)
+      return next
+    })
+  }, [skuGroups])
   useEffect(() => { if (activeTab === 'purchases') fetchPurchaseInvoices() }, [activeTab, fetchPurchaseInvoices])
   // Reset to page 1 when filters change — avoids landing on an empty page
   useEffect(() => { setPage(1) }, [search, filterType, filterStock])
@@ -294,35 +306,51 @@ export default function SKUsPage() {
     })
   }, [])
 
-  const toggleSelectDesign = useCallback((group) => {
-    setSelectedDesigns(prev => {
-      const next = new Map(prev)
-      if (next.has(group.design_key)) next.delete(group.design_key)
-      else next.set(group.design_key, { sku_count: group.sku_count || group.skus?.length || 0, skus: group.skus || [] })
+  // Toggle a single SKU (used on expanded child rows)
+  const toggleSelectSku = useCallback((sku) => {
+    setSelectedSkuIds(prev => {
+      const next = new Set(prev)
+      next.has(sku.id) ? next.delete(sku.id) : next.add(sku.id)
       return next
     })
   }, [])
 
+  // Toggle the whole design — adds/removes every SKU under it.
+  const toggleSelectDesign = useCallback((group) => {
+    const ids = (group.skus || []).map(s => s.id)
+    if (ids.length === 0) return
+    setSelectedSkuIds(prev => {
+      const next = new Set(prev)
+      const allSelected = ids.every(id => next.has(id))
+      if (allSelected) ids.forEach(id => next.delete(id))
+      else ids.forEach(id => next.add(id))
+      return next
+    })
+  }, [])
+
+  // Header checkbox — toggles all SKUs on the current page.
   const togglePageSelection = useCallback(() => {
-    setSelectedDesigns(prev => {
-      const next = new Map(prev)
-      const allSelected = skuGroups.length > 0 && skuGroups.every(g => next.has(g.design_key))
-      if (allSelected) skuGroups.forEach(g => next.delete(g.design_key))
-      else skuGroups.forEach(g => next.set(g.design_key, { sku_count: g.sku_count || 0, skus: g.skus || [] }))
+    const pageIds = skuGroups.flatMap(g => (g.skus || []).map(s => s.id))
+    if (pageIds.length === 0) return
+    setSelectedSkuIds(prev => {
+      const next = new Set(prev)
+      const allSelected = pageIds.every(id => next.has(id))
+      if (allSelected) pageIds.forEach(id => next.delete(id))
+      else pageIds.forEach(id => next.add(id))
       return next
     })
   }, [skuGroups])
 
-  const clearSelection = useCallback(() => setSelectedDesigns(new Map()), [])
+  const clearSelection = useCallback(() => setSelectedSkuIds(new Set()), [])
 
-  // Print selected designs' SKUs (in-memory map, cross-page safe).
+  // Build SKU array from selected ids using the cumulative cache.
   const printSelected = useCallback((kind) => {
-    const items = [...selectedDesigns.values()].flatMap(v => v.skus || [])
+    const items = [...selectedSkuIds].map(id => skuIndex.get(id)).filter(Boolean)
     if (items.length === 0) return
     if (items.length > 200 && !window.confirm(`About to open ${items.length} SKU labels. Continue?`)) return
     if (kind === 'thermal') setThermalSkus(items)
     else setPrintSkus(items)
-  }, [selectedDesigns])
+  }, [selectedSkuIds, skuIndex])
 
   const [costHistory, setCostHistory] = useState(null)
   const [skuEvents, setSkuEvents] = useState([])
@@ -1584,13 +1612,22 @@ export default function SKUsPage() {
             {/* Selection-aware print controls — inline with filters so the row
                 never grows in height. Outer wrapper has no vertical padding;
                 A4/Thermal buttons use py-1 to match FilterSelect exactly. */}
-            {selectedDesigns.size > 0 && (() => {
-              const totalSkus = [...selectedDesigns.values()].reduce((s, v) => s + (v.sku_count || 0), 0)
+            {selectedSkuIds.size > 0 && (() => {
+              const skuCount = selectedSkuIds.size
+              // How many distinct designs are represented? Look up each sku in the cache.
+              const designSet = new Set()
+              for (const id of selectedSkuIds) {
+                const s = skuIndex.get(id)
+                if (!s) continue
+                const parts = (s.sku_code || '').split('-')
+                designSet.add(parts.length >= 2 ? `${parts[0]}-${parts[1]}` : s.sku_code)
+              }
+              const designCount = designSet.size
               return (
                 <div className="ml-auto flex items-center gap-2 rounded-lg bg-emerald-50 px-2">
                   <span className="typo-data text-emerald-800 text-xs whitespace-nowrap">
-                    {selectedDesigns.size} design{selectedDesigns.size !== 1 ? 's' : ''}
-                    <span className="typo-data-label ml-1.5">· {totalSkus} SKU{totalSkus !== 1 ? 's' : ''}</span>
+                    {skuCount} SKU{skuCount !== 1 ? 's' : ''}
+                    {designCount > 0 && <span className="typo-data-label ml-1.5">· across {designCount} design{designCount !== 1 ? 's' : ''}</span>}
                   </span>
                   <button onClick={clearSelection}
                     className="typo-caption text-emerald-700 hover:text-emerald-900 underline">
@@ -1630,8 +1667,9 @@ export default function SKUsPage() {
                     <tr className="bg-emerald-600 text-white text-left">
                       <th className="px-2 py-2.5 font-semibold w-8 text-center">
                         {(() => {
-                          const allOnPage = skuGroups.length > 0 && skuGroups.every(g => selectedDesigns.has(g.design_key))
-                          const someOnPage = skuGroups.some(g => selectedDesigns.has(g.design_key))
+                          const pageIds = skuGroups.flatMap(g => (g.skus || []).map(s => s.id))
+                          const allOnPage = pageIds.length > 0 && pageIds.every(id => selectedSkuIds.has(id))
+                          const someOnPage = pageIds.some(id => selectedSkuIds.has(id))
                           return (
                             <input
                               type="checkbox"
@@ -1639,7 +1677,7 @@ export default function SKUsPage() {
                               checked={allOnPage}
                               onChange={togglePageSelection}
                               className="h-3.5 w-3.5 rounded border-white/60 text-emerald-700 focus:ring-emerald-300 cursor-pointer accent-emerald-700"
-                              title={allOnPage ? 'Deselect all on this page' : 'Select all on this page'}
+                              title={allOnPage ? 'Deselect every SKU on this page' : 'Select every SKU on this page'}
                             />
                           )
                         })()}
@@ -1657,18 +1695,22 @@ export default function SKUsPage() {
                   <tbody>
                     {groupedSKUs.map((group) => {
                       const isExpanded = expandedGroups.has(group.design_key)
-                      const isSelected = selectedDesigns.has(group.design_key)
+                      const groupIds = (group.skus || []).map(s => s.id)
+                      const allSelected = groupIds.length > 0 && groupIds.every(id => selectedSkuIds.has(id))
+                      const someSelected = groupIds.some(id => selectedSkuIds.has(id))
+                      const isHighlighted = allSelected || someSelected
                       return (
                         <Fragment key={group.design_key}>
                           <tr onClick={() => toggleGroup(group.design_key)}
-                            className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-emerald-50/70' : isExpanded ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                            className={`border-b border-gray-100 cursor-pointer transition-colors ${isHighlighted ? 'bg-emerald-50/70' : isExpanded ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                             <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
-                                checked={isSelected}
+                                ref={el => { if (el) el.indeterminate = !allSelected && someSelected }}
+                                checked={allSelected}
                                 onChange={() => toggleSelectDesign(group)}
                                 className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
-                                aria-label={`Select ${group.design_key}`}
+                                aria-label={`Select all SKUs in ${group.design_key}`}
                               />
                             </td>
                             <td className="px-3 py-2.5 text-center">
@@ -1718,10 +1760,20 @@ export default function SKUsPage() {
                               </div>
                             </td>
                           </tr>
-                          {isExpanded && group.skus.map((sku, sIdx) => (
+                          {isExpanded && group.skus.map((sku, sIdx) => {
+                            const skuSelected = selectedSkuIds.has(sku.id)
+                            return (
                             <tr key={sku.id} onClick={() => openDetail(sku)}
-                              className={`border-b border-gray-50 cursor-pointer transition-colors hover:bg-emerald-50/40 ${sIdx % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}>
-                              <td className="px-2 py-2"></td>
+                              className={`border-b border-gray-50 cursor-pointer transition-colors hover:bg-emerald-50/40 ${skuSelected ? 'bg-emerald-50/60' : sIdx % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}>
+                              <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={skuSelected}
+                                  onChange={() => toggleSelectSku(sku)}
+                                  className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                                  aria-label={`Select ${sku.sku_code}`}
+                                />
+                              </td>
                               <td className="px-3 py-2"></td>
                               <td className="px-3 py-2 pl-8 typo-td">{sku.sku_code}</td>
                               <td className="px-3 py-2">
@@ -1741,7 +1793,7 @@ export default function SKUsPage() {
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${sku.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{sku.is_active ? 'Active' : 'Inactive'}</span>
                               </td>
                             </tr>
-                          ))}
+                          )})}
                         </Fragment>
                       )
                     })}
