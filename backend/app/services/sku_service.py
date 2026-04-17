@@ -199,6 +199,34 @@ class SKUService:
 
         return {"data": data, "total": total, "page": params.page, "pages": pages}
 
+    async def compute_wac_map(self, sku_ids: list) -> dict:
+        """Return {sku_id: wac_per_piece} for given SKUs. WAC = Σ(unit_cost × qty) / Σ(qty)
+        across cost-bearing stock-in events (ready_stock_in, opening_stock, stock_in).
+
+        Used for inventory valuation (FY closing, dashboard) — NOT pricing. Pricing uses
+        sku.base_price (Last Cost). SKUs with no cost-bearing events return 0.0 — caller
+        can fall back to base_price if needed.
+        """
+        if not sku_ids:
+            return {}
+        rows = (await self.db.execute(
+            select(InventoryEvent.sku_id, InventoryEvent.quantity, InventoryEvent.metadata_)
+            .where(
+                InventoryEvent.sku_id.in_(sku_ids),
+                InventoryEvent.event_type.in_(("ready_stock_in", "opening_stock", "stock_in")),
+            )
+        )).all()
+        from collections import defaultdict
+        acc = defaultdict(lambda: {"cost": 0.0, "qty": 0})
+        for r in rows:
+            meta = r.metadata_ or {}
+            uc = meta.get("unit_cost") or meta.get("cost_per_piece")
+            if uc is None or not r.quantity:
+                continue
+            acc[r.sku_id]["cost"] += float(uc) * r.quantity
+            acc[r.sku_id]["qty"] += r.quantity
+        return {sid: (a["cost"] / a["qty"]) for sid, a in acc.items() if a["qty"] > 0}
+
     async def get_sku_summary(self) -> dict:
         """Global SKU KPIs — scoped per company/FY via tenant middleware."""
         total_skus = await self.db.scalar(select(func.count(SKU.id))) or 0
@@ -585,9 +613,10 @@ class SKUService:
                 design_id=item.design_id,
             )
 
-            # Set pricing/tax if not already set
-            if sku.base_price is None:
-                sku.base_price = item.unit_price
+            # Last Cost semantic (Option D): base_price = latest stock-in cost.
+            # Pricing signal only — inventory valuation uses event WAC, not this.
+            # Always overwrite so the 1696 S110-migrated SKUs (base_price=0) get updated too.
+            sku.base_price = item.unit_price
             if item.hsn_code and not sku.hsn_code:
                 sku.hsn_code = item.hsn_code
             if item.gst_percent is not None and sku.gst_percent is None:
@@ -710,8 +739,9 @@ class SKUService:
                 })
                 continue
 
-            # Set base_price / sale_rate / mrp if not already set
-            if sku.base_price is None and item.unit_cost is not None:
+            # Last Cost semantic (Option D): overwrite base_price with latest stock-in cost.
+            # sale_rate + mrp stay first-writer-wins — those are user-set selling prices, not cost signals.
+            if item.unit_cost is not None:
                 sku.base_price = item.unit_cost
             if sku.sale_rate is None and item.sale_rate is not None:
                 sku.sale_rate = item.sale_rate

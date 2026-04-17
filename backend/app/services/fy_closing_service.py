@@ -264,15 +264,23 @@ class FYClosingService:
                 .where(SKU.id.in_(sku_ids_with_stock))
             )).all()
 
+            # AS-2 valuation: weighted average cost from stock-in events, not base_price
+            # (which is now Last Cost — pricing signal, not valuation signal).
+            from app.services.sku_service import SKUService
+            wac_map = await SKUService(self.db).compute_wac_map(sku_ids_with_stock)
+
             for s in sku_details:
                 qty = max(0, sku_totals[s.id])
                 if qty <= 0:
                     continue
-                price = float(s.base_price) if s.base_price else 0
-                value = round(price * qty, 2)
+                # WAC first (AS-2 compliant). Fall back to base_price only if no cost events exist.
+                rate = wac_map.get(s.id)
+                if rate is None:
+                    rate = float(s.base_price) if s.base_price else 0
+                value = round(rate * qty, 2)
                 fg_total += value
                 fg_total_pieces += qty
-                fg_items.append({"sku_code": s.sku_code, "qty": qty, "rate": price, "value": value})
+                fg_items.append({"sku_code": s.sku_code, "qty": qty, "rate": round(rate, 2), "value": value})
 
         grand_total = round(rm_total + wip_total + fg_total, 2)
 

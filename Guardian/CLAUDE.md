@@ -55,7 +55,18 @@
 
 **Not yet committed** — will group with doc updates into one S112 commit.
 
-**S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`.
+**S112 part 2 — Last Cost vs WAC split (Option D):**
+Answered user's cost-accounting concern: WAC pricing breaks competition when a new cheaper batch comes in (competitor prices at new cost; blended WAC makes us uncompetitive). Industry-standard split (Tally/Busy/Marg):
+- `sku.base_price` = **Last Cost** (latest stock-in cost — pricing signal). Now unconditionally overwritten on every stock-in event: purchase, opening, batch pack.
+- **WAC** = computed on demand from `InventoryEvent.metadata_.unit_cost`. New helper `SKUService.compute_wac_map(sku_ids) → {sku_id: wac}`. Used by FY closing (AS-2 compliant) and dashboard closing-stock report.
+- **UI (SKU detail):** "Base Price" field relabeled "Last Cost (₹)". When cost history exists, a caption under the input shows "Avg Cost (WAC): ₹X · used for valuation". Side-by-side clarity.
+- **Purchase form:** honest caption under Line Items — "Unit Price = cost per piece. Updates this SKU's Last Cost (pricing reference). Valuation uses the weighted average across all purchases — history is preserved."
+- **Backfill:** `backend/scripts/backfill_last_cost.py --dry-run` tested locally, writes `base_price = unit_cost of latest ready_stock_in/opening_stock/stock_in event` per SKU. Run on prod after deploy + RDS snapshot.
+- **JSON vs JSONB gotcha:** `inventory_events.metadata` column is `JSON`, not `JSONB` — can't use `?` operator. Use `NULLIF(metadata->>'key','')::numeric` pattern.
+
+**Files:** `backend/app/services/{sku_service,batch_service,fy_closing_service}.py`, `frontend/src/pages/SKUsPage.jsx`, `backend/scripts/backfill_last_cost.py`.
+
+**S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
 
 ---
 

@@ -479,6 +479,12 @@ class BatchService:
                     },
                 )
 
+                # Last Cost (Option D): overwrite sku.base_price with this batch's total cost/pc.
+                # Pricing signal; WAC for valuation comes from events.
+                pack_cost = sku_cost.get("total_cost_per_piece", 0) or 0
+                if pack_cost > 0:
+                    sku.base_price = pack_cost
+
             await self.db.flush()
 
         elif batch.sku_id and batch.approved_qty and batch.approved_qty > 0:
@@ -506,6 +512,11 @@ class BatchService:
                     "unit_cost": sku_cost.get("total_cost_per_piece", 0),
                 },
             )
+            # Last Cost (Option D): overwrite sku.base_price with this batch's total cost/pc.
+            if sku:
+                pack_cost = sku_cost.get("total_cost_per_piece", 0) or 0
+                if pack_cost > 0:
+                    sku.base_price = pack_cost
             await self.db.flush()
 
         from app.core.event_bus import event_bus

@@ -764,13 +764,16 @@ export default function SKUsPage() {
 
           {/* Line Items */}
           <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-1">
               <h3 className="typo-card-title">Line Items</h3>
               <button onClick={addLine} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 Add Row
               </button>
             </div>
+            <p className="typo-caption mb-3">
+              Unit Price = cost per piece. Updates this SKU's <span className="font-semibold text-gray-600">Last Cost</span> (pricing reference). Valuation uses the weighted average across all purchases — history is preserved, nothing overwritten.
+            </p>
 
             <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full">
@@ -995,7 +998,7 @@ export default function SKUsPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { key: 'base_price', label: 'Base Price (₹)', type: 'number', placeholder: '0.00' },
+                { key: 'base_price', label: 'Last Cost (₹)', type: 'number', placeholder: '0.00', hint: 'Latest stock-in cost — pricing reference' },
                 { key: 'mrp', label: 'MRP (₹)', type: 'number', placeholder: '0.00' },
                 { key: 'sale_rate', label: 'Sale Rate (₹)', type: 'number', placeholder: '0.00' },
                 { key: 'stitching_cost', label: 'Stitching Cost/pc (₹)', type: 'number', placeholder: '0.00' },
@@ -1005,6 +1008,15 @@ export default function SKUsPage() {
                 <div key={f.key}>
                   <label className="typo-label-sm">{f.label}</label>
                   <input type={f.type} className="typo-input" value={editFields[f.key]} onChange={e => setEditFields(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} />
+                  {f.key === 'base_price' && costHistory && costHistory.wac_per_piece > 0 && (
+                    <div className="typo-caption mt-1">
+                      Avg Cost (WAC): <span className="font-semibold text-emerald-700">₹{costHistory.wac_per_piece.toFixed(2)}</span>
+                      <span className="text-gray-400"> · used for valuation</span>
+                    </div>
+                  )}
+                  {f.key === 'base_price' && f.hint && (!costHistory || !(costHistory.wac_per_piece > 0)) && (
+                    <div className="typo-caption mt-1 text-gray-400">{f.hint}</div>
+                  )}
                 </div>
               ))}
               <div>
