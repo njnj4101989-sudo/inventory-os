@@ -29,6 +29,19 @@ from app.schemas import PaginatedParams
 from app.core.exceptions import AppException, DuplicateError, NotFoundError
 
 
+# Canonical garment size ordering — small → large. Used for group row size
+# chips and for ordering expanded SKU rows. Mirrors frontend SIZES constant.
+SIZE_ORDER = ["S", "M", "L", "XL", "XXL", "3XL", "4XL", "Free"]
+_SIZE_RANK = {s: i for i, s in enumerate(SIZE_ORDER)}
+
+
+def _size_rank(size: str | None) -> tuple[int, str]:
+    """Sort key: known sizes by canonical order, unknown sizes after them alphabetically."""
+    if size and size in _SIZE_RANK:
+        return (_SIZE_RANK[size], "")
+    return (len(SIZE_ORDER), size or "")
+
+
 class SKUService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -117,12 +130,14 @@ class SKUService:
         if not group_rows:
             return {"data": [], "total": total, "page": params.page, "pages": pages}
 
-        # Batch-fetch SKUs in those groups — same filters applied
+        # Batch-fetch SKUs in those groups — same filters applied. DB can't sort
+        # sizes logically (alphabetical would give 3XL,4XL,L,XL,XXL), so we sort
+        # in Python using SIZE_ORDER below.
         group_keys = [(r.product_type, r.design_no) for r in group_rows]
         sku_stmt = (
             select(SKU)
             .where(*conditions, tuple_(pt_col, design_col).in_(group_keys))
-            .order_by(SKU.size, SKU.color)
+            .order_by(SKU.color)
         )
         skus = (await self.db.execute(sku_stmt)).scalars().all()
 
@@ -147,11 +162,14 @@ class SKUService:
         data = []
         for r in group_rows:
             grp_skus = by_key.get((r.product_type, r.design_no), [])
+            # Sort by canonical size order (small → large), then color for stability
+            grp_skus = sorted(grp_skus, key=lambda x: (_size_rank(x.size), x.color or ""))
             sku_responses = [
                 self._to_response(s, inv_map.get(s.id), pipeline_map.get(s.sku_code, 0))
                 for s in grp_skus
             ]
             colors = list(dict.fromkeys(s.color for s in grp_skus if s.color))
+            # Unique sizes in canonical order (grp_skus is already sorted)
             sizes = list(dict.fromkeys(s.size for s in grp_skus if s.size))
             # Price column = selling price, not cost. Same fallback as order form (S110).
             def _sku_price(x):
