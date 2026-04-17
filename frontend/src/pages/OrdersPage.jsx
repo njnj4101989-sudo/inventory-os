@@ -145,6 +145,7 @@ export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { company } = useAuth()
   const [ordersList, setOrdersList] = useState([])
+  const [allOrders, setAllOrders] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
@@ -418,6 +419,17 @@ export default function OrdersPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Full (unfiltered) list for KPI aggregates — server-total accurate, pagination-independent.
+  const fetchAllForKpis = useCallback(async () => {
+    try {
+      const res = await getOrders({ page_size: 0 })
+      setAllOrders(res.data.data || [])
+    } catch {
+      setAllOrders([])
+    }
+  }, [])
+  useEffect(() => { fetchAllForKpis() }, [fetchAllForKpis])
+
   /* ── Deep-link: ?open=<orderId> → auto-open detail ── */
   useEffect(() => {
     const openId = searchParams.get('open')
@@ -434,9 +446,9 @@ export default function OrdersPage() {
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── KPIs ── */
+  /* ── KPIs (derived from full unfiltered list, not paginated page) ── */
   const kpis = useMemo(() => {
-    const all = ordersList
+    const all = allOrders
     const pending = all.filter(o => o.status === 'pending').length
     const processing = all.filter(o => o.status === 'processing').length
     const today = new Date().toDateString()
@@ -444,7 +456,7 @@ export default function OrdersPage() {
     const revenue = all.reduce((s, o) => s + (o.total_amount || 0), 0)
     const withShortage = all.filter(o => o.has_shortage).length
     return { total: all.length, pending, processing, shippedToday, revenue, withShortage }
-  }, [ordersList])
+  }, [allOrders])
 
   /* ── Row click → detail overlay ── */
   const handleRowClick = async (row) => {
@@ -532,6 +544,7 @@ export default function OrdersPage() {
       if (type === 'cancel') await cancelOrder(detailOrder.id)
       setDetailOrder(null)
       fetchData()
+      fetchAllForKpis()
     } catch (err) {
       setError(err.response?.data?.detail || `Failed to ${type} order`)
     } finally {
@@ -582,6 +595,7 @@ export default function OrdersPage() {
       }
       setShipModalOpen(false)
       fetchData()
+      fetchAllForKpis()
     } catch (err) {
       setShipError(err.response?.data?.detail || (updateShipMode ? 'Failed to update shipment' : 'Failed to ship order'))
     } finally {
@@ -792,6 +806,7 @@ export default function OrdersPage() {
       setEditMode(false)
       setEditingOrderId(null)
       fetchData()
+      fetchAllForKpis()
     } catch (err) {
       setFormError(err.response?.data?.detail || (editMode ? 'Failed to update order' : 'Failed to create order'))
     } finally {
