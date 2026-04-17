@@ -66,6 +66,15 @@ Answered user's cost-accounting concern: WAC pricing breaks competition when a n
 
 **Files:** `backend/app/services/{sku_service,batch_service,fy_closing_service}.py`, `frontend/src/pages/SKUsPage.jsx`, `backend/scripts/backfill_last_cost.py`.
 
+**S112 part 3 — Orders/Invoices price-source consistency + Last Cost warning:**
+- **"Price" → "Rate"** on OrdersPage headers (detail `:965`, create form `:1505`) — aligns with InvoicesPage + OrderPrint (all say "Rate"). Indian wholesale convention.
+- **InvoicesPage fallback fix** (`:1277`): was `sale_rate || selling_price || base_price` with dead `selling_price` field and missing `mrp`. Now matches Orders: `sale_rate || mrp || base_price`.
+- **`pickDefaultRate(sku)` helper** at module scope in both pages. Returns `{rate, source}` — source is one of `sale_rate | mrp | base_price | null`. Single source of truth for price defaulting.
+- **`price_source` tracked in line state** on both Orders (4 defaulting paths: scan + design + color + size picks) and Invoices (SKU pick). Manual edit flips source to `'manual'` → warning clears.
+- **Last Cost warning UX:** when `price_source === 'base_price'`, the rate input gets amber border + amber-50 background + inline caption ("⚠ Last Cost" on Orders with hover tooltip, "⚠ Using Last Cost — no sale rate / MRP on SKU" on Invoices). Non-blocking — user can still submit; they've been warned. If user edits the rate manually, warning clears.
+
+**Files:** `frontend/src/pages/{OrdersPage,InvoicesPage}.jsx`.
+
 **S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
 
 ---

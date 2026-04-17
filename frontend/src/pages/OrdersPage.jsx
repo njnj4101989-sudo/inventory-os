@@ -21,6 +21,20 @@ import { useAuth } from '../hooks/useAuth'
 
 /* ── Module-level helpers (re-declared, not imported cross-page) ── */
 
+// Default Rate fallback: sale_rate → mrp → base_price (Last Cost). Returns the
+// source so the form can warn when it falls back to cost (user should usually
+// set a sale rate on the SKU before ordering).
+function pickDefaultRate(sku) {
+  if (!sku) return { rate: 0, source: null }
+  const sr = parseFloat(sku.sale_rate || 0)
+  if (sr > 0) return { rate: sr, source: 'sale_rate' }
+  const mrp = parseFloat(sku.mrp || 0)
+  if (mrp > 0) return { rate: mrp, source: 'mrp' }
+  const bp = parseFloat(sku.base_price || 0)
+  if (bp > 0) return { rate: bp, source: 'base_price' }
+  return { rate: 0, source: null }
+}
+
 const VA_COLORS = {
   EMB: { bg: 'bg-purple-100', text: 'text-purple-700' },
   DYE: { bg: 'bg-amber-100', text: 'text-amber-700' },
@@ -277,13 +291,15 @@ export default function OrdersPage() {
       setTimeout(() => setScanStatus(null), 3000)
       return
     }
+    const { rate: scanRate, source: scanSource } = pickDefaultRate(sku)
     const newLine = {
       design_key: `${parsed.type}-${parsed.design}`,
       color: parsed.color,
       size: parsed.size,
       sku_id: sku.id,
       qty: 1,
-      price: sku.sale_rate || sku.mrp || sku.base_price || 0,
+      price: scanRate,
+      price_source: scanSource,
       item_id: null,
     }
     setOrderLines(prev => {
@@ -962,7 +978,7 @@ export default function OrdersPage() {
                     <th className="px-2 py-1.5 typo-th">Color</th>
                     <th className="px-2 py-1.5 typo-th">Size</th>
                     <th className="px-2 py-1.5 typo-th text-right">Qty</th>
-                    <th className="px-2 py-1.5 typo-th text-right">Price</th>
+                    <th className="px-2 py-1.5 typo-th text-right">Rate</th>
                     <th className="px-2 py-1.5 typo-th text-right">Total</th>
                     <th className="px-2 py-1.5 typo-th text-right">Fulfilled</th>
                     <th className="px-2 py-1.5 typo-th text-right">Returned</th>
@@ -1502,7 +1518,7 @@ export default function OrdersPage() {
                       <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[8%] border-r border-emerald-500">Stock</th>
                       <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[8%] border-r border-emerald-500">Pipeline</th>
                       <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Qty</th>
-                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Price (₹)</th>
+                      <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider w-[10%] border-r border-emerald-500">Rate (₹)</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider w-[12%] border-r border-emerald-500">Total</th>
                       <th className="px-1 py-2 w-[4%]"></th>
                     </tr>
@@ -1522,14 +1538,9 @@ export default function OrdersPage() {
                               onChange={v => {
                                 const group = designGroups.find(g => g.key === v)
                                 const firstSku = group?.skus[0]
-                                const defaultPrice = firstSku ? (firstSku.sale_rate || firstSku.mrp || firstSku.base_price || 0) : 0
-                                updateOrderLine(idx, 'design_key', v)
-                                updateOrderLine(idx, 'color', '')
-                                updateOrderLine(idx, 'size', '')
-                                updateOrderLine(idx, 'sku_id', null)
-                                updateOrderLine(idx, 'price', defaultPrice)
+                                const { rate: defaultPrice, source: defaultSource } = pickDefaultRate(firstSku)
                                 // Reset color/size so user picks fresh
-                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, design_key: v, color: '', size: '', sku_id: null, price: defaultPrice } : l))
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, design_key: v, color: '', size: '', sku_id: null, price: defaultPrice, price_source: defaultSource } : l))
                               }}
                               options={designOptions} />
                           </td>
@@ -1549,7 +1560,14 @@ export default function OrdersPage() {
                                     return
                                   }
                                 }
-                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.sale_rate || foundSku.mrp || foundSku.base_price || 0) : l.price } : l))
+                                setOrderLines(prev => prev.map((l, i) => {
+                                  if (i !== idx) return l
+                                  if (!foundSku) return { ...l, color: v, sku_id: null }
+                                  // Only default rate if line has no rate yet; preserve user edits
+                                  if (l.price) return { ...l, color: v, sku_id: foundSku.id }
+                                  const { rate, source } = pickDefaultRate(foundSku)
+                                  return { ...l, color: v, sku_id: foundSku.id, price: rate, price_source: source }
+                                }))
                               }}
                               options={getColorsForDesign(line.design_key, line.size)} />
                           </td>
@@ -1569,7 +1587,13 @@ export default function OrdersPage() {
                                     return
                                   }
                                 }
-                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.sale_rate || foundSku.mrp || foundSku.base_price || 0) : l.price } : l))
+                                setOrderLines(prev => prev.map((l, i) => {
+                                  if (i !== idx) return l
+                                  if (!foundSku) return { ...l, size: v, sku_id: null }
+                                  if (l.price) return { ...l, size: v, sku_id: foundSku.id }
+                                  const { rate, source } = pickDefaultRate(foundSku)
+                                  return { ...l, size: v, sku_id: foundSku.id, price: rate, price_source: source }
+                                }))
                               }}
                               options={getSizesForDesign(line.design_key, line.color)} />
                           </td>
@@ -1593,11 +1617,24 @@ export default function OrdersPage() {
                             </div>
                           </td>
                           <td className="px-2 py-1.5 text-center">
-                            <input type="number" min="0" step="0.01"
-                              value={line.price || ''}
-                              onChange={(e) => updateOrderLine(idx, 'price', parseFloat(e.target.value) || 0)}
-                              className="w-20 rounded border border-gray-200 text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                              placeholder="₹" disabled={!sku} />
+                            <div className="inline-flex flex-col items-center">
+                              <input type="number" min="0" step="0.01"
+                                value={line.price || ''}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value) || 0
+                                  setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, price: v, price_source: 'manual' } : l))
+                                }}
+                                className={`w-20 rounded border text-center text-xs px-2 py-1 focus:outline-none focus:ring-1 ${
+                                  line.price_source === 'base_price'
+                                    ? 'border-amber-400 focus:ring-amber-400 bg-amber-50'
+                                    : 'border-gray-200 focus:ring-emerald-400'
+                                }`}
+                                placeholder="₹" disabled={!sku} />
+                              {line.price_source === 'base_price' && (
+                                <span className="text-[10px] text-amber-600 font-semibold mt-0.5 leading-tight cursor-help"
+                                  title="Using SKU's Last Cost (no Sale Rate or MRP set). Open the SKU and add a Sale Rate to avoid billing at cost.">⚠ Last Cost</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-2 py-1.5 text-right text-xs font-semibold">
                             {lineTotal > 0 ? `₹${lineTotal.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}

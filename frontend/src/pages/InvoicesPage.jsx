@@ -23,6 +23,20 @@ import QuickMasterModal from '../components/common/QuickMasterModal'
 
 /* ── Module-level helpers ── */
 
+// Default Rate fallback: sale_rate → mrp → base_price (Last Cost). Returns the
+// source so the form can warn when it falls back to cost (user should probably
+// set a sale rate on the SKU before invoicing).
+function pickDefaultRate(sku) {
+  if (!sku) return { rate: 0, source: null }
+  const sr = parseFloat(sku.sale_rate || 0)
+  if (sr > 0) return { rate: sr, source: 'sale_rate' }
+  const mrp = parseFloat(sku.mrp || 0)
+  if (mrp > 0) return { rate: mrp, source: 'mrp' }
+  const bp = parseFloat(sku.base_price || 0)
+  if (bp > 0) return { rate: bp, source: 'base_price' }
+  return { rate: 0, source: null }
+}
+
 const VA_COLORS = {
   EMB: { bg: 'bg-purple-100', text: 'text-purple-700' },
   DYE: { bg: 'bg-amber-100', text: 'text-amber-700' },
@@ -1273,8 +1287,9 @@ export default function InvoicesPage() {
                             <FilterSelect searchable full value={item.sku_id}
                               onChange={v => {
                                 const sku = allSKUs.find(s => s.id === v)
-                                updateInvItem(i, 'sku_id', v)
-                                if (sku?.selling_price || sku?.base_price || sku?.sale_rate) updateInvItem(i, 'unit_price', sku.sale_rate || sku.selling_price || sku.base_price)
+                                const { rate, source } = pickDefaultRate(sku)
+                                setInvItems(prev => prev.map((it, idx) => idx === i ? { ...it, sku_id: v, unit_price: rate, price_source: source } : it))
+                                setIsDirty(true)
                               }}
                               options={[{ value: '', label: 'Select SKU...' }, ...allSKUs.map(s => ({
                                 value: s.id,
@@ -1287,7 +1302,15 @@ export default function InvoicesPage() {
                           </td>
                           <td className="px-2 py-1.5">
                             <input type="number" min="0" step="0.01" className="typo-input-sm w-full text-right"
-                              value={item.unit_price} onChange={e => updateInvItem(i, 'unit_price', parseFloat(e.target.value) || 0)} />
+                              value={item.unit_price}
+                              onChange={e => {
+                                const v = parseFloat(e.target.value) || 0
+                                setInvItems(prev => prev.map((it, idx) => idx === i ? { ...it, unit_price: v, price_source: 'manual' } : it))
+                                setIsDirty(true)
+                              }} />
+                            {item.price_source === 'base_price' && (
+                              <div className="text-[10px] text-amber-600 font-medium mt-0.5 leading-tight">⚠ Using Last Cost — no sale rate / MRP on SKU</div>
+                            )}
                           </td>
                           <td className="px-2 py-1.5 text-right font-semibold">{fmtCurrency(item.quantity * item.unit_price)}</td>
                           <td className="px-2 py-1.5 text-center">
