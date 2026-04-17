@@ -83,6 +83,15 @@ Answered user's cost-accounting concern: WAC pricing breaks competition when a n
 
 **Files:** `frontend/src/pages/SKUsPage.jsx`.
 
+**S112 part 5 — Bulk SKU label print (3 new trigger points):**
+- **Design-level (SKUs page group row):** tiny A4 + Thermal icons next to the SKU count pill. Click (with stopPropagation) prints all SKUs under that design — uses the existing `group.skus[]` array from the grouped endpoint, zero extra fetch. Column header "SKUs" renamed to "Labels", width bumped 8% → 12% (pulled 4% from Design).
+- **Filter-level (SKUs page toolbar):** `Print all N designs: A4 | Thermal` at the right of the filter bar. Fetches `GET /skus/grouped?page_size=0` with current filters (search, product_type, stock_status), flattens to single SKU array, confirm prompt if >200 SKUs (prevents print storms). Loading state guards against double-clicks.
+- **Order-level (Orders detail):** `SKU Labels` button in detail toolbar → opens Modal with 2 radio groups: **Format** (A4 / Thermal) × **Mode** (One per piece / One per SKU). Live label-count preview in each option. Per-piece expands each order_item by `quantity` (qty=10 → 10 hangtags); per-SKU dedupes by `sku_id` (1 per unique SKU). Uses in-memory `allSKUs` for full shape, falls back to `item.sku` brief if SKU not found.
+
+All three reuse the existing `SKULabelSheet` (A4) + `ThermalLabelSheet` (type=sku) components — no label component changes. User workflow pains solved: "print every size/color of design X", "print hangtags for order Y", "print all in-stock FBL SKUs for audit".
+
+**Files:** `frontend/src/pages/{SKUsPage,OrdersPage}.jsx`.
+
 **S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
 
 ---

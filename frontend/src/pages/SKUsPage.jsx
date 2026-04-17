@@ -198,6 +198,36 @@ export default function SKUsPage() {
   // SKU label print
   const [printSkus, setPrintSkus] = useState(null)
   const [thermalSkus, setThermalSkus] = useState(null)
+  const [bulkPrintLoading, setBulkPrintLoading] = useState(false)
+
+  // Fetch every SKU matching current filters (respects search/type/stock), then open label sheet.
+  // Confirm if >200 to prevent accidental print storms.
+  const printAllFiltered = useCallback(async (kind) => {
+    if (bulkPrintLoading) return
+    setBulkPrintLoading(true)
+    try {
+      const res = await getSKUsGrouped({
+        page_size: 0,
+        search: search || undefined,
+        product_type: filterType || undefined,
+        stock_status: filterStock || undefined,
+      })
+      const flat = (res.data.data || []).flatMap(g => g.skus || [])
+      if (flat.length === 0) {
+        alert('No SKUs match the current filter — nothing to print.')
+        return
+      }
+      if (flat.length > 200) {
+        if (!window.confirm(`About to open ${flat.length} SKU labels. This can take a moment to render. Continue?`)) return
+      }
+      if (kind === 'thermal') setThermalSkus(flat)
+      else setPrintSkus(flat)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to load SKUs for printing')
+    } finally {
+      setBulkPrintLoading(false)
+    }
+  }, [bulkPrintLoading, search, filterType, filterStock])
 
   // Purchase invoice detail
   const [piDetail, setPiDetail] = useState(null)
@@ -1549,6 +1579,25 @@ export default function SKUsPage() {
             {(filterType || filterStock) && (
               <button onClick={() => { setFilterType(''); setFilterStock('') }} className="typo-caption hover:text-gray-700 underline">Clear</button>
             )}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="typo-caption mr-1">Print {total > 0 ? `${total} design${total !== 1 ? 's' : ''}` : 'all'}:</span>
+              <button
+                onClick={() => printAllFiltered('a4')}
+                disabled={bulkPrintLoading}
+                title="Print every SKU matching the current filter on A4 sticker paper"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 typo-btn-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                A4
+              </button>
+              <button
+                onClick={() => printAllFiltered('thermal')}
+                disabled={bulkPrintLoading}
+                title="Print every SKU matching the current filter on 54×40mm thermal labels"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 typo-btn-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" /></svg>
+                Thermal
+              </button>
+            </div>
           </div>
 
           {error && <div className="mt-3"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
@@ -1564,13 +1613,13 @@ export default function SKUsPage() {
                   <thead>
                     <tr className="bg-emerald-600 text-white text-left">
                       <th className="px-3 py-2.5 font-semibold w-10"></th>
-                      <th className="px-3 py-2.5 font-semibold w-[25%]">Design</th>
+                      <th className="px-3 py-2.5 font-semibold w-[21%]">Design</th>
                       <th className="px-3 py-2.5 font-semibold w-[18%]">Colors</th>
                       <th className="px-3 py-2.5 font-semibold w-[14%]">Sizes</th>
                       <th className="px-3 py-2.5 font-semibold w-[8%]">Type</th>
                       <th className="px-3 py-2.5 font-semibold w-[12%]">Sale Rate</th>
                       <th className="px-3 py-2.5 font-semibold w-[15%]">Stock</th>
-                      <th className="px-3 py-2.5 font-semibold w-[8%] text-right">SKUs</th>
+                      <th className="px-3 py-2.5 font-semibold w-[12%] text-right">Labels</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1607,8 +1656,24 @@ export default function SKUsPage() {
                             <td className="px-3 py-2.5">
                               <StockIndicator stock={{ total_qty: group.total_qty, available_qty: group.available_qty, reserved_qty: group.reserved_qty }} />
                             </td>
-                            <td className="px-3 py-2.5 text-right">
-                              <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{group.sku_count}</span>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setPrintSkus(group.skus) }}
+                                  title={`Print all ${group.sku_count} SKU labels (A4) for ${group.design_key}`}
+                                  className="rounded p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                  aria-label="Print A4 labels">
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setThermalSkus(group.skus) }}
+                                  title={`Print all ${group.sku_count} SKU labels (Thermal) for ${group.design_key}`}
+                                  className="rounded p-1 text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                  aria-label="Print thermal labels">
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" /></svg>
+                                </button>
+                                <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{group.sku_count}</span>
+                              </div>
                             </td>
                           </tr>
                           {isExpanded && group.skus.map((sku, sIdx) => (

@@ -16,6 +16,8 @@ import { useScanPair } from '../hooks/useScanPair'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
+import SKULabelSheet from '../components/common/SKULabelSheet'
+import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
 import useQuickMaster from '../hooks/useQuickMaster'
 import { useAuth } from '../hooks/useAuth'
 
@@ -180,6 +182,9 @@ export default function OrdersPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
   const [printOrder, setPrintOrder] = useState(null)
+  // SKU labels modal (toggle per-piece vs per-SKU + A4/Thermal)
+  const [skuLabelConfig, setSkuLabelConfig] = useState(null) // { kind: 'a4'|'thermal', mode: 'piece'|'sku' }
+  const [skuLabelPrint, setSkuLabelPrint] = useState(null) // { kind: 'a4'|'thermal', items: [...] }
 
   // Create overlay
   const [createMode, setCreateMode] = useState(false)
@@ -876,6 +881,10 @@ export default function OrdersPage() {
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
               Pick Sheet
             </button>
+            <button onClick={() => setSkuLabelConfig({ kind: 'thermal', mode: 'piece' })} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors flex items-center gap-1" title="Print SKU QR labels for this order">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16M9 3v18" /></svg>
+              SKU Labels
+            </button>
             <button onClick={() => setDetailOrder(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
         </div>
@@ -1295,6 +1304,90 @@ export default function OrdersPage() {
           </div>
         )}
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+
+        {/* SKU label config modal — A4/Thermal + per-piece/per-SKU toggle */}
+        {skuLabelConfig && (() => {
+          const items = o.items || []
+          const uniqueCount = new Set(items.map(it => it.sku?.id).filter(Boolean)).size
+          const pieceCount = items.reduce((s, it) => s + (it.sku?.id ? (it.quantity || 0) : 0), 0)
+          const labelCount = skuLabelConfig.mode === 'piece' ? pieceCount : uniqueCount
+          const doPrint = () => {
+            const out = []
+            if (skuLabelConfig.mode === 'piece') {
+              for (const it of items) {
+                if (!it.sku?.id) continue
+                const fullSku = allSKUs.find(s => s.id === it.sku.id) || it.sku
+                for (let i = 0; i < (it.quantity || 0); i++) out.push(fullSku)
+              }
+            } else {
+              const seen = new Set()
+              for (const it of items) {
+                if (!it.sku?.id || seen.has(it.sku.id)) continue
+                seen.add(it.sku.id)
+                out.push(allSKUs.find(s => s.id === it.sku.id) || it.sku)
+              }
+            }
+            if (out.length === 0) return
+            setSkuLabelPrint({ kind: skuLabelConfig.kind, items: out })
+            setSkuLabelConfig(null)
+          }
+          return (
+            <Modal open={true} onClose={() => setSkuLabelConfig(null)} title={`Print SKU Labels — ${o.order_number}`}
+              actions={<>
+                <button onClick={() => setSkuLabelConfig(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={doPrint} disabled={labelCount === 0}
+                  className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
+                  Print {labelCount} label{labelCount !== 1 ? 's' : ''}
+                </button>
+              </>}>
+              <div className="space-y-4">
+                <div>
+                  <div className="typo-label-sm mb-1.5">Label format</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { v: 'a4', label: 'A4 sticker paper', hint: '3 labels per row, big QR' },
+                      { v: 'thermal', label: 'Thermal 54×40mm', hint: 'TSC label printer' },
+                    ].map(opt => (
+                      <button key={opt.v} type="button"
+                        onClick={() => setSkuLabelConfig(c => ({ ...c, kind: opt.v }))}
+                        className={`text-left rounded-lg border p-2.5 transition-colors ${skuLabelConfig.kind === opt.v ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="typo-data">{opt.label}</div>
+                        <div className="typo-caption mt-0.5">{opt.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="typo-label-sm mb-1.5">How many labels per SKU?</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { v: 'piece', label: 'One per piece', hint: `Hangtag for every garment · ${pieceCount} label${pieceCount !== 1 ? 's' : ''}` },
+                      { v: 'sku', label: 'One per SKU line', hint: `For inventory marking · ${uniqueCount} label${uniqueCount !== 1 ? 's' : ''}` },
+                    ].map(opt => (
+                      <button key={opt.v} type="button"
+                        onClick={() => setSkuLabelConfig(c => ({ ...c, mode: opt.v }))}
+                        className={`text-left rounded-lg border p-2.5 transition-colors ${skuLabelConfig.mode === opt.v ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                        <div className="typo-data">{opt.label}</div>
+                        <div className="typo-caption mt-0.5">{opt.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Modal>
+          )
+        })()}
+
+        {/* SKU label print sheets — overlay on top of detail */}
+        {skuLabelPrint?.kind === 'a4' && (
+          <SKULabelSheet skus={skuLabelPrint.items} onClose={() => setSkuLabelPrint(null)} />
+        )}
+        {skuLabelPrint?.kind === 'thermal' && (
+          <ThermalLabelSheet type="sku" items={skuLabelPrint.items} onClose={() => setSkuLabelPrint(null)} />
+        )}
       </div>
     )
   }
