@@ -75,6 +75,14 @@ Answered user's cost-accounting concern: WAC pricing breaks competition when a n
 
 **Files:** `frontend/src/pages/{OrdersPage,InvoicesPage}.jsx`.
 
+**S112 part 4 — SKU detail WOW redesign (ERP SaaS density):**
+- **Hero band (replaces 6 redundant KPI chips):** 3 balanced blocks — Stock gauge (big total + bi-colour progress bar + available/reserved legend + % caption), Money card (big Sale Rate + Last Cost + MRP chips + WAC caption), Identity rail (Design · Color swatch · Size · Type + Active/Inactive pill with status dot).
+- **Merged "SKU Details" card** (was 2 separate cards with duplicate "Save Changes" buttons). 4 sections with subtle top-border dividers: Identity → Cost → Selling → Tax & Meta. Single sticky Save button at top-right. Identity-locked badge shows only when shipped. WAC avg chip appears next to "Cost" heading.
+- **Table polish:** zebra striping on Inventory History + Open Demand, entire Open Demand row now clickable (cursor-pointer + emerald hover + deep-link to `/orders?open={id}`), Source Batches empty state upgraded from italic grey text to a dashed-border info panel with an icon and full explanation (what fills it, when).
+- **Spacing tightened:** card padding `p-5 → p-4`, between-card spacing `space-y-5 → space-y-4`, grid gaps `gap-3 → gap-2.5`. ~15–20% more info per viewport.
+
+**Files:** `frontend/src/pages/SKUsPage.jsx`.
+
 **S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
 
 ---

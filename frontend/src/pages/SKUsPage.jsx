@@ -906,139 +906,257 @@ export default function SKUsPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {detailError && <ErrorAlert message={detailError} onDismiss={() => setDetailError(null)} />}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            {[
-              { label: 'Total Stock', value: stock.total_qty, color: 'emerald' },
-              { label: 'Available', value: stock.available_qty, color: 'green' },
-              { label: 'Reserved', value: stock.reserved_qty, color: 'amber' },
-              { label: 'Color', value: parsed.color, color: 'purple' },
-              { label: 'Size', value: parsed.size || '—', color: 'gray' },
-              { label: 'Type', value: parsed.type, color: 'gray' },
-            ].map(k => (
-              <div key={k.label} className="rounded-lg border bg-white px-3 py-2.5">
-                <div className="typo-kpi-sm">{k.value}</div>
-                <div className="typo-kpi-label mt-0.5">{k.label}</div>
-              </div>
-            ))}
-          </div>
+          {/* Hero band — Stock gauge · Money · Identity */}
+          {(() => {
+            const total = stock.total_qty || 0
+            const availPct = total > 0 ? Math.round((stock.available_qty / total) * 100) : 0
+            const resPct = total > 0 ? Math.round((stock.reserved_qty / total) * 100) : 0
+            const saleRate = parseFloat(detailSKU.sale_rate || 0)
+            const mrpVal = parseFloat(detailSKU.mrp || 0)
+            const lastCost = parseFloat(detailSKU.base_price || 0)
+            const wac = costHistory?.wac_per_piece || 0
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                {/* Stock gauge */}
+                <div className="lg:col-span-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="typo-kpi-label">Stock</span>
+                    <span className={`text-[11px] font-semibold ${total === 0 ? 'text-gray-400' : stock.available_qty === 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {total === 0 ? 'No stock' : stock.available_qty === 0 ? 'Fully reserved' : `${availPct}% available`}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold text-gray-900 leading-none">{total}</span>
+                    <span className="typo-caption">total pcs</span>
+                  </div>
+                  <div className="mt-2.5 h-2 rounded-full bg-gray-100 overflow-hidden flex">
+                    {availPct > 0 && <div className="bg-emerald-500" style={{ width: `${availPct}%` }} />}
+                    {resPct > 0 && <div className="bg-amber-400" style={{ width: `${resPct}%` }} />}
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="font-bold text-gray-800">{stock.available_qty}</span>
+                      <span className="text-gray-400">available</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                      <span className="font-bold text-gray-800">{stock.reserved_qty}</span>
+                      <span className="text-gray-400">reserved</span>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Identity editor — color, size (guarded by shipped status) */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="typo-card-title">SKU Identity</h3>
-              {!detailSKU.is_identity_editable ? (
-                <span className="typo-badge bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg">
-                  Locked — shipped orders exist
-                </span>
-              ) : (
+                {/* Money */}
+                <div className="lg:col-span-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="typo-kpi-label">Pricing</span>
+                    {saleRate === 0 && lastCost > 0 && (
+                      <span className="text-[11px] font-semibold text-amber-600" title="No Sale Rate set — orders default to Last Cost">⚠ No sale rate</span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold text-emerald-700 leading-none">
+                      {saleRate > 0 ? `₹${saleRate.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}
+                    </span>
+                    <span className="typo-caption">sale rate</span>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <div><span className="text-gray-400">Last Cost</span> <span className="font-semibold text-gray-800 ml-1">{lastCost > 0 ? `₹${lastCost.toLocaleString('en-IN')}` : '—'}</span></div>
+                    <div><span className="text-gray-400">MRP</span> <span className="font-semibold text-gray-800 ml-1">{mrpVal > 0 ? `₹${mrpVal.toLocaleString('en-IN')}` : '—'}</span></div>
+                  </div>
+                  {wac > 0 && (
+                    <div className="mt-1.5 text-[11px]">
+                      <span className="text-gray-400">Avg Cost (WAC)</span> <span className="font-semibold text-emerald-700 ml-1">₹{wac.toFixed(2)}</span>
+                      <span className="text-gray-400"> · valuation</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Identity rail */}
+                <div className="lg:col-span-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="typo-kpi-label">Identity</span>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${detailSKU.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${detailSKU.is_active ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                      {detailSKU.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    <div>
+                      <div className="typo-caption leading-tight">Design</div>
+                      <div className="font-semibold text-gray-800 truncate">{parsed.design}</div>
+                    </div>
+                    <div>
+                      <div className="typo-caption leading-tight">Type</div>
+                      <div className="font-semibold text-gray-800">{parsed.type}</div>
+                    </div>
+                    <div>
+                      <div className="typo-caption leading-tight">Color</div>
+                      <div className="inline-flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(parsed.color) }} />
+                        <span className="font-semibold text-gray-800 truncate">{parsed.color}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="typo-caption leading-tight">Size</div>
+                      <div className="font-semibold text-gray-800">{parsed.size || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Merged Details card — Identity · Cost · Selling · Tax & Meta — one Save */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="typo-card-title">SKU Details</h3>
+              <div className="flex items-center gap-2">
+                {!detailSKU.is_identity_editable && (
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 text-[11px] font-semibold">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    Identity locked — shipped orders exist
+                  </span>
+                )}
                 <button onClick={handleSaveDetail} disabled={savingDetail}
                   className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
                   {savingDetail ? 'Saving...' : 'Save Changes'}
                 </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="typo-label-sm">Design</label>
-                {detailSKU.is_identity_editable ? (
-                  <FilterSelect full searchable value={editFields.design_id}
-                    onChange={v => setEditFields(p => ({ ...p, design_id: v }))}
-                    options={[{ value: '', label: 'Select design...' }, ...designs.map(d => ({ value: d.id, label: d.design_no }))]} />
-                ) : (
-                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.design}</div>
-                )}
-              </div>
-              <div>
-                <label className="typo-label-sm">Color</label>
-                {detailSKU.is_identity_editable ? (
-                  <FilterSelect full searchable value={editFields.color_id}
-                    onChange={v => {
-                      const sel = colors.find(c => c.id === v)
-                      setEditFields(p => ({ ...p, color_id: v, color: sel?.name || p.color }))
-                    }}
-                    options={[{ value: '', label: 'Select color...' }, ...colors.map(c => ({ value: c.id, label: c.name }))]} />
-                ) : (
-                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.color}</div>
-                )}
-              </div>
-              <div>
-                <label className="typo-label-sm">Size</label>
-                {detailSKU.is_identity_editable ? (
-                  <FilterSelect full value={editFields.size}
-                    onChange={v => setEditFields(p => ({ ...p, size: v }))}
-                    options={[{ value: '', label: 'Select size...' }, ...['XS','S','M','L','XL','XXL','3XL','4XL','Free'].map(s => ({ value: s, label: s }))]} />
-                ) : (
-                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
-                )}
-              </div>
-              <div>
-                <label className="typo-label-sm">SKU Code</label>
-                <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
-                {(() => {
-                  const newDesign = editFields.design_id !== detailSKU.design_id ? designs.find(d => d.id === editFields.design_id)?.design_no : null
-                  const changed = editFields.color !== detailSKU.color || editFields.size !== detailSKU.size || newDesign
-                  if (!detailSKU.is_identity_editable || !changed) return null
-                  return <p className="text-xs text-emerald-600 mt-1">→ {parsed.type}-{newDesign || parsed.design}-{editFields.color}-{editFields.size}</p>
-                })()}
               </div>
             </div>
-          </div>
 
-          {/* Pricing editor */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="typo-card-title">Pricing, Tax & Details</h3>
-              <button onClick={handleSaveDetail} disabled={savingDetail}
-                className="rounded-lg bg-emerald-600 px-4 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors">
-                {savingDetail ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { key: 'base_price', label: 'Last Cost (₹)', type: 'number', placeholder: '0.00', hint: 'Latest stock-in cost — pricing reference' },
-                { key: 'mrp', label: 'MRP (₹)', type: 'number', placeholder: '0.00' },
-                { key: 'sale_rate', label: 'Sale Rate (₹)', type: 'number', placeholder: '0.00' },
-                { key: 'stitching_cost', label: 'Stitching Cost/pc (₹)', type: 'number', placeholder: '0.00' },
-                { key: 'other_cost', label: 'Other Cost/pc (₹)', type: 'number', placeholder: '0.00' },
-                { key: 'hsn_code', label: 'HSN Code', type: 'text', placeholder: 'e.g. 6206' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="typo-label-sm">{f.label}</label>
-                  <input type={f.type} className="typo-input" value={editFields[f.key]} onChange={e => setEditFields(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} />
-                  {f.key === 'base_price' && costHistory && costHistory.wac_per_piece > 0 && (
-                    <div className="typo-caption mt-1">
-                      Avg Cost (WAC): <span className="font-semibold text-emerald-700">₹{costHistory.wac_per_piece.toFixed(2)}</span>
-                      <span className="text-gray-400"> · used for valuation</span>
-                    </div>
-                  )}
-                  {f.key === 'base_price' && f.hint && (!costHistory || !(costHistory.wac_per_piece > 0)) && (
-                    <div className="typo-caption mt-1 text-gray-400">{f.hint}</div>
+            {/* Identity section */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="typo-caption font-bold uppercase tracking-wide text-gray-500 mb-2">Identity</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="typo-label-sm">Design</label>
+                  {detailSKU.is_identity_editable ? (
+                    <FilterSelect full searchable value={editFields.design_id}
+                      onChange={v => setEditFields(p => ({ ...p, design_id: v }))}
+                      options={[{ value: '', label: 'Select design...' }, ...designs.map(d => ({ value: d.id, label: d.design_no }))]} />
+                  ) : (
+                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.design}</div>
                   )}
                 </div>
-              ))}
-              <div>
-                <label className="typo-label-sm">GST %</label>
-                <FilterSelect full value={String(editFields.gst_percent)} onChange={v => setEditFields(p => ({ ...p, gst_percent: v }))}
-                  options={[{ value: '', label: 'Select' }, { value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+                <div>
+                  <label className="typo-label-sm">Color</label>
+                  {detailSKU.is_identity_editable ? (
+                    <FilterSelect full searchable value={editFields.color_id}
+                      onChange={v => {
+                        const sel = colors.find(c => c.id === v)
+                        setEditFields(p => ({ ...p, color_id: v, color: sel?.name || p.color }))
+                      }}
+                      options={[{ value: '', label: 'Select color...' }, ...colors.map(c => ({ value: c.id, label: c.name }))]} />
+                  ) : (
+                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.color}</div>
+                  )}
+                </div>
+                <div>
+                  <label className="typo-label-sm">Size</label>
+                  {detailSKU.is_identity_editable ? (
+                    <FilterSelect full value={editFields.size}
+                      onChange={v => setEditFields(p => ({ ...p, size: v }))}
+                      options={[{ value: '', label: 'Select size...' }, ...['XS','S','M','L','XL','XXL','3XL','4XL','Free'].map(s => ({ value: s, label: s }))]} />
+                  ) : (
+                    <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{parsed.size}</div>
+                  )}
+                </div>
+                <div>
+                  <label className="typo-label-sm">SKU Code</label>
+                  <div className="typo-input bg-gray-50 text-gray-500 cursor-not-allowed">{detailSKU.sku_code}</div>
+                  {(() => {
+                    const newDesign = editFields.design_id !== detailSKU.design_id ? designs.find(d => d.id === editFields.design_id)?.design_no : null
+                    const changed = editFields.color !== detailSKU.color || editFields.size !== detailSKU.size || newDesign
+                    if (!detailSKU.is_identity_editable || !changed) return null
+                    return <p className="text-xs text-emerald-600 mt-1">→ {parsed.type}-{newDesign || parsed.design}-{editFields.color}-{editFields.size}</p>
+                  })()}
+                </div>
               </div>
-              <div>
-                <label className="typo-label-sm">Unit</label>
-                <FilterSelect full value={editFields.unit} onChange={v => setEditFields(p => ({ ...p, unit: v }))}
-                  options={[{ value: '', label: 'Select' }, { value: 'pcs', label: 'Pieces' }, { value: 'meters', label: 'Meters' }, { value: 'kg', label: 'Kg' }]} />
+            </div>
+
+            {/* Cost section */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="typo-caption font-bold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-2">
+                <span>Cost</span>
+                {costHistory?.wac_per_piece > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold">
+                    Avg ₹{costHistory.wac_per_piece.toFixed(2)}
+                  </span>
+                )}
               </div>
-              <div className="sm:col-span-2">
-                <label className="typo-label-sm">Description</label>
-                <input className="typo-input" value={editFields.description} onChange={e => setEditFields(p => ({ ...p, description: e.target.value }))} placeholder="Product description..." />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="typo-label-sm">Last Cost (₹)</label>
+                  <input type="number" className="typo-input" value={editFields.base_price}
+                    onChange={e => setEditFields(p => ({ ...p, base_price: e.target.value }))} placeholder="0.00" />
+                  <div className="typo-caption mt-1 text-gray-400 leading-tight">Latest stock-in cost · pricing reference</div>
+                </div>
+                <div>
+                  <label className="typo-label-sm">Stitching Cost/pc (₹)</label>
+                  <input type="number" className="typo-input" value={editFields.stitching_cost}
+                    onChange={e => setEditFields(p => ({ ...p, stitching_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="typo-label-sm">Other Cost/pc (₹)</label>
+                  <input type="number" className="typo-input" value={editFields.other_cost}
+                    onChange={e => setEditFields(p => ({ ...p, other_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+              </div>
+            </div>
+
+            {/* Selling section */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="typo-caption font-bold uppercase tracking-wide text-gray-500 mb-2">Selling</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="typo-label-sm">Sale Rate (₹)</label>
+                  <input type="number" className="typo-input" value={editFields.sale_rate}
+                    onChange={e => setEditFields(p => ({ ...p, sale_rate: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="typo-label-sm">MRP (₹)</label>
+                  <input type="number" className="typo-input" value={editFields.mrp}
+                    onChange={e => setEditFields(p => ({ ...p, mrp: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="typo-label-sm">Unit</label>
+                  <FilterSelect full value={editFields.unit} onChange={v => setEditFields(p => ({ ...p, unit: v }))}
+                    options={[{ value: '', label: 'Select' }, { value: 'pcs', label: 'Pieces' }, { value: 'meters', label: 'Meters' }, { value: 'kg', label: 'Kg' }]} />
+                </div>
+              </div>
+            </div>
+
+            {/* Tax & Meta section */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="typo-caption font-bold uppercase tracking-wide text-gray-500 mb-2">Tax & Meta</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="typo-label-sm">HSN Code</label>
+                  <input type="text" className="typo-input" value={editFields.hsn_code}
+                    onChange={e => setEditFields(p => ({ ...p, hsn_code: e.target.value }))} placeholder="e.g. 6206" />
+                </div>
+                <div>
+                  <label className="typo-label-sm">GST %</label>
+                  <FilterSelect full value={String(editFields.gst_percent)} onChange={v => setEditFields(p => ({ ...p, gst_percent: v }))}
+                    options={[{ value: '', label: 'Select' }, { value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="typo-label-sm">Description</label>
+                  <input className="typo-input" value={editFields.description}
+                    onChange={e => setEditFields(p => ({ ...p, description: e.target.value }))} placeholder="Product description..." />
+                </div>
               </div>
             </div>
           </div>
 
           {/* Batch-wise Cost History */}
           {costHistory && costHistory.batches && costHistory.batches.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="typo-card-title">Cost History <span className="text-gray-400 font-normal">({costHistory.total_batches} batch{costHistory.total_batches !== 1 ? 'es' : ''}, {costHistory.total_pieces} pcs)</span></h3>
                 {costHistory.wac_per_piece > 0 && (
@@ -1109,10 +1227,20 @@ export default function SKUsPage() {
           )}
 
           {/* Source Batches */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="typo-card-title mb-3">Source Batches <span className="text-gray-400 font-normal">({batches.length})</span></h3>
             {batches.length === 0 ? (
-              <p className="typo-empty italic">No linked batches — this SKU was created manually or via purchase.</p>
+              <div className="flex items-start gap-3 rounded-lg bg-gray-50 border border-dashed border-gray-200 px-4 py-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold text-gray-700">No linked batches yet</div>
+                  <div className="typo-caption mt-0.5 leading-tight">Source batches will appear here once a batch is packed for this SKU. This SKU was likely created manually or via a purchase / opening-stock entry.</div>
+                </div>
+              </div>
             ) : (
               <div className="space-y-2">
                 {batches.map(b => (
@@ -1135,7 +1263,7 @@ export default function SKUsPage() {
 
           {/* Open Demand */}
           {openDemand && openDemand.orders && openDemand.orders.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h3 className="typo-card-title mb-3">
                 Open Demand <span className="text-gray-400 font-normal">({openDemand.total_orders} order{openDemand.total_orders !== 1 ? 's' : ''} · {openDemand.total_outstanding} pc{openDemand.total_outstanding !== 1 ? 's' : ''} outstanding)</span>
               </h3>
@@ -1154,10 +1282,13 @@ export default function SKUsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {openDemand.orders.map((d) => (
-                      <tr key={d.order_id} className="border-b last:border-0 hover:bg-gray-50">
+                    {openDemand.orders.map((d, i) => (
+                      <tr key={d.order_id}
+                        onClick={() => { window.location.href = `/orders?open=${d.order_id}` }}
+                        className={`border-b last:border-0 cursor-pointer transition-colors hover:bg-emerald-50/50 ${i % 2 === 1 ? 'bg-gray-50/40' : ''}`}
+                        title="Open order">
                         <td className="px-3 py-2">
-                          <a href={`/orders?open=${d.order_id}`} className="font-medium text-emerald-700 hover:text-emerald-900 hover:underline">{d.order_number}</a>
+                          <span className="font-medium text-emerald-700 hover:text-emerald-900 hover:underline">{d.order_number}</span>
                         </td>
                         <td className="px-3 py-2 typo-td-secondary">{d.order_date ? new Date(d.order_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
                         <td className="px-3 py-2 typo-td">{d.customer_name}</td>
@@ -1175,10 +1306,18 @@ export default function SKUsPage() {
           )}
 
           {/* Inventory History */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="typo-card-title mb-3">Inventory History <span className="text-gray-400 font-normal">({skuEvents.length})</span></h3>
             {skuEvents.length === 0 ? (
-              <p className="typo-empty italic">No inventory events recorded yet.</p>
+              <div className="flex items-start gap-3 rounded-lg bg-gray-50 border border-dashed border-gray-200 px-4 py-3">
+                <svg className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm">
+                  <div className="font-semibold text-gray-700">No events yet</div>
+                  <div className="typo-caption mt-0.5 leading-tight">Every stock-in, stock-out, and adjustment is logged here — opening stock, batch packs, shipments, purchases, returns.</div>
+                </div>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1194,7 +1333,7 @@ export default function SKUsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {skuEvents.map((evt) => {
+                    {skuEvents.map((evt, idx) => {
                       const isIn = evt.event_type === 'adjustment' ? evt.quantity > 0 : ['stock_in', 'return', 'ready_stock_in', 'opening_stock'].includes(evt.event_type)
                       const evtLabel = {
                         opening_stock: 'Opening Stock',
@@ -1229,8 +1368,8 @@ export default function SKUsPage() {
                         ? `/batches?open=${ref.batch_id}`
                         : null
                       return (
-                        <tr key={evt.id} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="px-3 py-2 typo-td-secondary">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
+                        <tr key={evt.id} className={`border-b last:border-0 hover:bg-emerald-50/40 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                          <td className="px-3 py-2 typo-td-secondary whitespace-nowrap">{evt.performed_at ? new Date(evt.performed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${evtColor}`}>{evtLabel}</span>
                           </td>
