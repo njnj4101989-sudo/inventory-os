@@ -622,9 +622,9 @@ export default function SKUsPage() {
                       <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Color</th>
                       <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Size</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Qty</th>
-                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Unit Cost</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Sale Rate</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">MRP</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Unit Cost</th>
                       <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Status</th>
                       <th className="px-1 py-2 w-8"></th>
                     </tr>
@@ -667,10 +667,6 @@ export default function SKUsPage() {
                           </td>
                           <td className="px-2 py-1.5">
                             <input data-field="qty" type="number" className="typo-input-sm text-right" value={line.qty} onChange={e => updateOpeningLine(idx, 'qty', e.target.value)} placeholder="0" min="1"
-                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="unit_cost"]'); if (next) next.focus() } }} />
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <input data-field="unit_cost" type="number" className="typo-input-sm text-right" value={line.unit_cost} onChange={e => updateOpeningLine(idx, 'unit_cost', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="sale_rate"]'); if (next) next.focus() } }} />
                           </td>
                           <td className="px-2 py-1.5">
@@ -679,6 +675,10 @@ export default function SKUsPage() {
                           </td>
                           <td className="px-2 py-1.5">
                             <input data-field="mrp" type="number" className="typo-input-sm text-right" value={line.mrp} onChange={e => updateOpeningLine(idx, 'mrp', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="unit_cost"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="unit_cost" type="number" className="typo-input-sm text-right" value={line.unit_cost} onChange={e => updateOpeningLine(idx, 'unit_cost', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (idx === openingLines.length - 1) addOpeningLine(); else { const nextRow = e.target.closest('tr').nextElementSibling; if (nextRow) { const next = nextRow.querySelector('[data-field="design_no"]'); if (next) next.focus() } } } }} />
                           </td>
                           <td className="px-2 py-1.5 text-center">
