@@ -204,6 +204,38 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         font-size: 8pt;
         font-weight: 900;
       }
+      .thermal-label__row--wrap {
+        align-items: flex-start;
+        white-space: normal;
+        line-height: 1.15;
+      }
+      .thermal-label__row--wrap .thermal-label__val {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+        text-overflow: ellipsis;
+        text-align: left;
+      }
+      .thermal-label__chip-wrap {
+        display: flex;
+        justify-content: center;
+        margin-top: 0.4mm;
+      }
+      .thermal-label__chip {
+        border: 0.25mm solid #000;
+        padding: 0.5mm 1.5mm;
+        font-size: 7pt;
+        font-weight: 900;
+        letter-spacing: 0.3mm;
+        color: #000;
+        line-height: 1;
+        border-radius: 0.5mm;
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
       .thermal-label__key {
         font-weight: 700;
         flex-shrink: 0;
@@ -280,11 +312,16 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
                   </div>
                 )
               }
+              if (r.chip != null) {
+                return (
+                  <div key={idx} className="thermal-label__chip-wrap">
+                    <span className="thermal-label__chip">{r.chip}</span>
+                  </div>
+                )
+              }
+              const extra = `${r.emph ? ' thermal-label__row--emph' : ''}${r.wrap ? ' thermal-label__row--wrap' : ''}`
               return (
-                <div
-                  key={idx}
-                  className={`thermal-label__row${r.emph ? ' thermal-label__row--emph' : ''}`}
-                >
+                <div key={idx} className={`thermal-label__row${extra}`}>
                   {r.k != null && <span className="thermal-label__key">{r.k}</span>}
                   <span className={`thermal-label__val${r.k == null ? ' thermal-label__val--full' : ''}`}>{r.v}</span>
                 </div>
@@ -478,6 +515,38 @@ export default function ThermalLabelSheet({ type, items, meta, onClose }) {
         .thermal-label__row--emph {
           font-size: 8pt;
           font-weight: 900;
+        }
+        .thermal-label__row--wrap {
+          align-items: flex-start;
+          white-space: normal;
+          line-height: 1.15;
+        }
+        .thermal-label__row--wrap .thermal-label__val {
+          white-space: normal;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          word-break: break-word;
+          text-overflow: ellipsis;
+          text-align: left;
+        }
+        .thermal-label__chip-wrap {
+          display: flex;
+          justify-content: center;
+          margin-top: 0.4mm;
+        }
+        .thermal-label__chip {
+          border: 0.25mm solid #000;
+          padding: 0.5mm 1.5mm;
+          font-size: 7pt;
+          font-weight: 900;
+          letter-spacing: 0.3mm;
+          color: #000;
+          line-height: 1;
+          border-radius: 0.5mm;
+          white-space: nowrap;
+          text-transform: uppercase;
         }
         .thermal-label__key {
           font-weight: 700;

@@ -1,28 +1,32 @@
 /**
- * Thermal SKU label — Option A "Boarding Pass" + Option 2 "Smart Minimal" (S109).
+ * Thermal SKU label — V3 Hybrid + SIZE chip (S110).
  * Returns { hero, qrValue, rows } — wrapper composes chrome.
  * Scan → /scan/sku/{sku_code}
  *
- * Design philosophy: SKU code already encodes {type}-{design}-{color}-{size},
- * so we don't repeat those as rows. Instead: huge SIZE as visual hero (warehouse
- * picking) + MRP/RATE (billing). Parses size from sku_code, mirroring SKUsPage.
+ * Layout:
+ *   Top strip:  full sku_code (unchanged)
+ *   Data col:   D.NO  {design_no}      ← wraps 2 lines if long
+ *               MRP   ₹price           ← emph (8pt 900)
+ *               [ SIZE XL ]            ← bordered chip
+ *
+ * design_no === product_name in DB (stored string, can be "3054" or
+ * "Rang De Basanti"). Size/price are explicit SKU fields.
  */
 export default function buildSkuLabel(sku, appBaseUrl) {
   const skuCode = sku?.sku_code || ''
   const qrValue = `${appBaseUrl || window.location.origin}/scan/sku/${encodeURIComponent(skuCode)}`
 
-  // Parse size from sku_code — same pattern as SKUsPage parseSKU()
-  const basePart = skuCode.indexOf('+') > -1 ? skuCode.slice(0, skuCode.indexOf('+')) : skuCode
-  const parts = basePart.split('-')
-  const parsedSize = sku?.size || parts[3] || ''
+  const designNo = sku?.product_name || ''
+  const size = sku?.size || ''
 
   const priceValue = sku?.mrp || sku?.sale_rate || sku?.base_price
   const priceLabel = sku?.mrp ? 'MRP' : 'RATE'
   const fmtPrice = (v) => (v ? `₹${parseFloat(v).toLocaleString('en-IN')}` : '—')
 
   const rows = []
-  if (parsedSize) rows.push({ hero: parsedSize })
-  if (priceValue) rows.push({ k: priceLabel, v: fmtPrice(priceValue) })
+  if (designNo) rows.push({ k: 'D.NO', v: designNo, wrap: true })
+  if (priceValue) rows.push({ k: priceLabel, v: fmtPrice(priceValue), emph: true })
+  if (size) rows.push({ chip: `SIZE ${size}` })
 
   return {
     hero: skuCode || '—',
