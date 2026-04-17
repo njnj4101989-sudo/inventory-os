@@ -90,6 +90,8 @@ Answered user's cost-accounting concern: WAC pricing breaks competition when a n
 
 All three reuse the existing `SKULabelSheet` (A4) + `ThermalLabelSheet` (type=sku) components — no label component changes. User workflow pains solved: "print every size/color of design X", "print hangtags for order Y", "print all in-stock FBL SKUs for audit".
 
+**S112 part 5b — replaced "Print all filtered" with checkbox selection:** Original filter-level Print-all button auto-fired for every SKU matching filter (click with no filter → 1784 labels). User pushed back — needed explicit selection. Replaced with: (a) per-row checkbox column on SKUs table, (b) master checkbox in header (toggle all on current page, with indeterminate state), (c) emerald selection-aware action bar above table with Print A4/Thermal buttons — visible only when ≥1 design selected. Selection is a `Map<design_key, {skus[]}>` so it **persists across pages**; user can page through, tick designs on each page, print all at once with zero refetch. Print still confirms if >200 SKUs. Per-design group row icons stay (quick-print one design). Old `printAllFiltered` callback + `bulkPrintLoading` state removed as dead code.
+
 **Files:** `frontend/src/pages/{SKUsPage,OrdersPage}.jsx`.
 
 **S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
