@@ -133,7 +133,7 @@ function SkippedRow({ skipped, onAdjust }) {
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'Free']
 const EMPTY_LINE = { product_type: 'FBL', design_no: '', design_id: null, color: '', color_id: null, size: 'S', qty: '', unit_price: '' }
-const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, color: '', color_id: null, size: 'S', qty: '', unit_cost: '' }
+const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, color: '', color_id: null, size: 'S', qty: '', unit_cost: '', sale_rate: '', mrp: '' }
 
 export default function SKUsPage() {
   const [activeTab, setActiveTab] = useState('skus')
@@ -498,6 +498,8 @@ export default function SKUsPage() {
           size: l.size,
           qty: parseInt(l.qty),
           unit_cost: l.unit_cost ? parseFloat(l.unit_cost) : null,
+          sale_rate: l.sale_rate ? parseFloat(l.sale_rate) : null,
+          mrp: l.mrp ? parseFloat(l.mrp) : null,
         })),
       })
       const data = res.data.data || res.data
@@ -621,6 +623,8 @@ export default function SKUsPage() {
                       <th className="px-2 py-2 text-left text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Size</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Qty</th>
                       <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Unit Cost</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Sale Rate</th>
+                      <th className="px-2 py-2 text-right text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">MRP</th>
                       <th className="px-2 py-2 text-center text-xs font-semibold text-white uppercase tracking-wider border-r border-amber-500">Status</th>
                       <th className="px-1 py-2 w-8"></th>
                     </tr>
@@ -667,6 +671,14 @@ export default function SKUsPage() {
                           </td>
                           <td className="px-2 py-1.5">
                             <input data-field="unit_cost" type="number" className="typo-input-sm text-right" value={line.unit_cost} onChange={e => updateOpeningLine(idx, 'unit_cost', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="sale_rate"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="sale_rate" type="number" className="typo-input-sm text-right" value={line.sale_rate} onChange={e => updateOpeningLine(idx, 'sale_rate', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const next = e.target.closest('tr').querySelector('[data-field="mrp"]'); if (next) next.focus() } }} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input data-field="mrp" type="number" className="typo-input-sm text-right" value={line.mrp} onChange={e => updateOpeningLine(idx, 'mrp', e.target.value)} placeholder="₹/pc" min="0" step="0.01"
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (idx === openingLines.length - 1) addOpeningLine(); else { const nextRow = e.target.closest('tr').nextElementSibling; if (nextRow) { const next = nextRow.querySelector('[data-field="design_no"]'); if (next) next.focus() } } } }} />
                           </td>
                           <td className="px-2 py-1.5 text-center">

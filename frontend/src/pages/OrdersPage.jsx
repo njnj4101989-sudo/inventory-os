@@ -283,7 +283,7 @@ export default function OrdersPage() {
       size: parsed.size,
       sku_id: sku.id,
       qty: 1,
-      price: sku.base_price || sku.sale_rate || 0,
+      price: sku.sale_rate || sku.mrp || sku.base_price || 0,
       item_id: null,
     }
     setOrderLines(prev => {
@@ -1521,7 +1521,8 @@ export default function OrdersPage() {
                             <FilterSelect full searchable value={line.design_key}
                               onChange={v => {
                                 const group = designGroups.find(g => g.key === v)
-                                const defaultPrice = group?.skus[0]?.base_price || 0
+                                const firstSku = group?.skus[0]
+                                const defaultPrice = firstSku ? (firstSku.sale_rate || firstSku.mrp || firstSku.base_price || 0) : 0
                                 updateOrderLine(idx, 'design_key', v)
                                 updateOrderLine(idx, 'color', '')
                                 updateOrderLine(idx, 'size', '')
@@ -1548,7 +1549,7 @@ export default function OrdersPage() {
                                     return
                                   }
                                 }
-                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price } : l))
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, color: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.sale_rate || foundSku.mrp || foundSku.base_price || 0) : l.price } : l))
                               }}
                               options={getColorsForDesign(line.design_key, line.size)} />
                           </td>
@@ -1568,7 +1569,7 @@ export default function OrdersPage() {
                                     return
                                   }
                                 }
-                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.base_price || 0) : l.price } : l))
+                                setOrderLines(prev => prev.map((l, i) => i === idx ? { ...l, size: v, sku_id: foundSku?.id || null, price: foundSku ? (l.price || foundSku.sale_rate || foundSku.mrp || foundSku.base_price || 0) : l.price } : l))
                               }}
                               options={getSizesForDesign(line.design_key, line.color)} />
                           </td>

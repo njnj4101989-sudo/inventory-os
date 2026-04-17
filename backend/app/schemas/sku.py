@@ -196,6 +196,8 @@ class OpeningStockLineItem(BaseModel):
     size: str
     qty: int
     unit_cost: Decimal | None = None
+    sale_rate: Decimal | None = None
+    mrp: Decimal | None = None
 
     @field_validator("qty")
     @classmethod

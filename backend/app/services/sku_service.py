@@ -508,9 +508,13 @@ class SKUService:
                 })
                 continue
 
-            # Set base_price if not already set
+            # Set base_price / sale_rate / mrp if not already set
             if sku.base_price is None and item.unit_cost is not None:
                 sku.base_price = item.unit_cost
+            if sku.sale_rate is None and item.sale_rate is not None:
+                sku.sale_rate = item.sale_rate
+            if sku.mrp is None and item.mrp is not None:
+                sku.mrp = item.mrp
 
             metadata = {"is_opening_stock": True}
             if item.unit_cost is not None:
