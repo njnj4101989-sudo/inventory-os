@@ -25,7 +25,7 @@ export default function buildSkuLabel(sku, appBaseUrl) {
 
   const rows = []
   if (designNo) rows.push({ k: 'D.NO', v: designNo, wrap: true })
-  if (priceValue) rows.push({ k: priceLabel, v: fmtPrice(priceValue), emph: true })
+  if (priceValue) rows.push({ k: priceLabel, v: fmtPrice(priceValue) })
   if (size) rows.push({ chip: `SIZE ${size}` })
 
   return {
