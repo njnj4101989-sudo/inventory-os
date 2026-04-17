@@ -924,28 +924,28 @@ export default function SKUsPage() {
                 <div className="lg:col-span-4 rounded-xl border border-gray-200 bg-white p-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="typo-kpi-label">Stock</span>
-                    <span className={`text-[11px] font-semibold ${total === 0 ? 'text-gray-400' : stock.available_qty === 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                    <span className={`typo-badge uppercase tracking-wider ${total === 0 ? 'text-gray-400' : stock.available_qty === 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                       {total === 0 ? 'No stock' : stock.available_qty === 0 ? 'Fully reserved' : `${availPct}% available`}
                     </span>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold text-gray-900 leading-none">{total}</span>
-                    <span className="typo-caption">total pcs</span>
+                    <span className="text-3xl font-bold text-gray-900 leading-none tabular-nums">{total}</span>
+                    <span className="typo-data-label">total pcs</span>
                   </div>
                   <div className="mt-2.5 h-2 rounded-full bg-gray-100 overflow-hidden flex">
                     {availPct > 0 && <div className="bg-emerald-500" style={{ width: `${availPct}%` }} />}
                     {resPct > 0 && <div className="bg-amber-400" style={{ width: `${resPct}%` }} />}
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-                      <span className="font-bold text-gray-800">{stock.available_qty}</span>
-                      <span className="text-gray-400">available</span>
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                      <span className="typo-data">{stock.available_qty}</span>
+                      <span className="typo-data-label">available</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
-                      <span className="font-bold text-gray-800">{stock.reserved_qty}</span>
-                      <span className="text-gray-400">reserved</span>
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span className="typo-data">{stock.reserved_qty}</span>
+                      <span className="typo-data-label">reserved</span>
                     </div>
                   </div>
                 </div>
@@ -955,23 +955,30 @@ export default function SKUsPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="typo-kpi-label">Pricing</span>
                     {saleRate === 0 && lastCost > 0 && (
-                      <span className="text-[11px] font-semibold text-amber-600" title="No Sale Rate set — orders default to Last Cost">⚠ No sale rate</span>
+                      <span className="typo-badge text-amber-600" title="No Sale Rate set — orders default to Last Cost">⚠ No sale rate</span>
                     )}
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold text-emerald-700 leading-none">
+                    <span className="text-3xl font-bold text-emerald-700 leading-none tabular-nums">
                       {saleRate > 0 ? `₹${saleRate.toLocaleString('en-IN')}` : <span className="text-gray-300">—</span>}
                     </span>
-                    <span className="typo-caption">sale rate</span>
+                    <span className="typo-data-label">sale rate</span>
                   </div>
-                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    <div><span className="text-gray-400">Last Cost</span> <span className="font-semibold text-gray-800 ml-1">{lastCost > 0 ? `₹${lastCost.toLocaleString('en-IN')}` : '—'}</span></div>
-                    <div><span className="text-gray-400">MRP</span> <span className="font-semibold text-gray-800 ml-1">{mrpVal > 0 ? `₹${mrpVal.toLocaleString('en-IN')}` : '—'}</span></div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="typo-data-label">Last Cost</span>
+                      <span className="typo-data tabular-nums">{lastCost > 0 ? `₹${lastCost.toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="typo-data-label">MRP</span>
+                      <span className="typo-data tabular-nums">{mrpVal > 0 ? `₹${mrpVal.toLocaleString('en-IN')}` : '—'}</span>
+                    </div>
                   </div>
                   {wac > 0 && (
-                    <div className="mt-1.5 text-[11px]">
-                      <span className="text-gray-400">Avg Cost (WAC)</span> <span className="font-semibold text-emerald-700 ml-1">₹{wac.toFixed(2)}</span>
-                      <span className="text-gray-400"> · valuation</span>
+                    <div className="mt-1.5 flex items-baseline gap-1.5">
+                      <span className="typo-data-label">Avg Cost (WAC)</span>
+                      <span className="typo-data text-emerald-700 tabular-nums">₹{wac.toFixed(2)}</span>
+                      <span className="typo-data-label">· valuation</span>
                     </div>
                   )}
                 </div>
@@ -980,30 +987,30 @@ export default function SKUsPage() {
                 <div className="lg:col-span-4 rounded-xl border border-gray-200 bg-white p-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="typo-kpi-label">Identity</span>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${detailSKU.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 typo-badge ${detailSKU.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${detailSKU.is_active ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                       {detailSKU.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                     <div>
-                      <div className="typo-caption leading-tight">Design</div>
-                      <div className="font-semibold text-gray-800 truncate">{parsed.design}</div>
+                      <div className="typo-data-label leading-tight">Design</div>
+                      <div className="typo-data truncate mt-0.5">{parsed.design}</div>
                     </div>
                     <div>
-                      <div className="typo-caption leading-tight">Type</div>
-                      <div className="font-semibold text-gray-800">{parsed.type}</div>
+                      <div className="typo-data-label leading-tight">Type</div>
+                      <div className="typo-data mt-0.5">{parsed.type}</div>
                     </div>
                     <div>
-                      <div className="typo-caption leading-tight">Color</div>
-                      <div className="inline-flex items-center gap-1.5">
+                      <div className="typo-data-label leading-tight">Color</div>
+                      <div className="inline-flex items-center gap-1.5 mt-0.5">
                         <span className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0" style={{ backgroundColor: colorHex(parsed.color) }} />
-                        <span className="font-semibold text-gray-800 truncate">{parsed.color}</span>
+                        <span className="typo-data truncate">{parsed.color}</span>
                       </div>
                     </div>
                     <div>
-                      <div className="typo-caption leading-tight">Size</div>
-                      <div className="font-semibold text-gray-800">{parsed.size || '—'}</div>
+                      <div className="typo-data-label leading-tight">Size</div>
+                      <div className="typo-data mt-0.5">{parsed.size || '—'}</div>
                     </div>
                   </div>
                 </div>
