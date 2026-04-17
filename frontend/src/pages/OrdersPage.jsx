@@ -71,9 +71,14 @@ const KPI_COLORS = {
   emerald: 'from-emerald-500 to-emerald-600',
 }
 
-function KPICard({ label, value, sub, color = 'slate' }) {
+function KPICard({ label, value, sub, color = 'slate', onClick, active = false }) {
+  const base = `rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`
+  const interactive = onClick ? 'cursor-pointer transition-all hover:shadow-md hover:brightness-105' : ''
+  const ring = active ? 'ring-2 ring-white ring-offset-2 ring-offset-gray-50' : ''
+  const cls = `${base} ${interactive} ${ring}`.trim().replace(/\s+/g, ' ')
+  const props = onClick ? { role: 'button', tabIndex: 0, onClick, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } } : {}
   return (
-    <div className={`rounded-lg bg-gradient-to-br ${KPI_COLORS[color] || KPI_COLORS.slate} p-2.5 text-white shadow-sm`}>
+    <div className={cls} {...props}>
       <p className="typo-kpi-label text-white/85">{label}</p>
       <p className="mt-0.5 text-xl font-bold leading-tight">{value}</p>
       {sub && <p className="typo-caption text-white/75">{sub}</p>}
@@ -152,6 +157,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [shortageOnly, setShortageOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -1672,7 +1678,13 @@ export default function OrdersPage() {
         <KPICard label="Pending" value={kpis.pending} color="amber" />
         <KPICard label="Processing" value={kpis.processing} color="blue" />
         <KPICard label="Shipped Today" value={kpis.shippedToday} color="green" />
-        <KPICard label="With Shortage" value={kpis.withShortage} color="amber" />
+        <KPICard label="With Shortage" value={kpis.withShortage} color="amber"
+          active={shortageOnly}
+          onClick={() => {
+            const next = !shortageOnly
+            setShortageOnly(next)
+            if (next) { setStatusFilter(''); setSourceFilter(''); setSearch(''); setPage(1) }
+          }} />
         <KPICard label="Revenue" value={`₹${kpis.revenue.toLocaleString('en-IN')}`} color="emerald" />
       </div>
 
@@ -1680,26 +1692,32 @@ export default function OrdersPage() {
       <div className="mt-3 flex items-center gap-3 flex-wrap">
         <div className="flex gap-1.5 flex-wrap">
           {TABS.map(t => (
-            <button key={t.key} onClick={() => { setStatusFilter(t.key); setPage(1) }}
+            <button key={t.key} onClick={() => { setStatusFilter(t.key); setShortageOnly(false); setPage(1) }}
               className={`rounded-full px-3 py-1 typo-btn-sm transition-colors ${
-                statusFilter === t.key ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                statusFilter === t.key && !shortageOnly ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
               {t.label}
             </button>
           ))}
         </div>
-        <FilterSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v); setPage(1) }}
+        <FilterSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v); setShortageOnly(false); setPage(1) }}
           options={SOURCE_OPTIONS} />
         <div className="ml-auto w-64">
-          <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Search orders..." />
+          <SearchInput value={search} onChange={(v) => { setSearch(v); setShortageOnly(false); setPage(1) }} placeholder="Search orders..." />
         </div>
       </div>
 
       {error && <div className="mt-4"><ErrorAlert message={error} onDismiss={() => setError(null)} /></div>}
 
       <div className="mt-4">
-        <DataTable columns={COLUMNS} data={ordersList} loading={loading} onRowClick={handleRowClick} emptyText="No orders found." />
-        <Pagination page={page} pages={pages} total={total} onChange={setPage} />
+        <DataTable
+          columns={COLUMNS}
+          data={shortageOnly ? allOrders.filter(o => o.has_shortage) : ordersList}
+          loading={loading}
+          onRowClick={handleRowClick}
+          emptyText={shortageOnly ? 'No orders with shortage.' : 'No orders found.'}
+        />
+        {!shortageOnly && <Pagination page={page} pages={pages} total={total} onChange={setPage} />}
       </div>
 
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
