@@ -1131,10 +1131,9 @@ export default function SKUsPage() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
-                  <label className="typo-label-sm">Last Cost (₹)</label>
+                  <label className="typo-label-sm" title="Latest stock-in cost — pricing reference (valuation uses WAC shown in the hero)">Last Cost (₹)</label>
                   <input type="number" className="typo-input" value={editFields.base_price}
                     onChange={e => setEditFields(p => ({ ...p, base_price: e.target.value }))} placeholder="0.00" />
-                  <div className="typo-caption mt-1 text-gray-400 leading-tight">Latest stock-in cost · pricing reference</div>
                 </div>
                 <div>
                   <label className="typo-label-sm">Stitching Cost/pc (₹)</label>
