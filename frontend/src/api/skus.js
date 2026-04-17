@@ -132,3 +132,46 @@ export async function getSKUCostHistory(skuId) {
 export async function getSKUOpenDemand(skuId) {
   return client.get(`/skus/${skuId}/open-demand`)
 }
+
+export async function getSKUsGrouped(params = {}) {
+  if (USE_MOCK) {
+    // Bucket mock SKUs by (product_type, design_no) parsed from sku_code
+    const byKey = new Map()
+    for (const s of skus) {
+      const parts = (s.sku_code || '').split('-')
+      const d = parts[1] || ''
+      const key = `${s.product_type}-${d}`
+      if (!byKey.has(key)) byKey.set(key, { design_key: key, product_type: s.product_type, design_no: d, skus: [] })
+      byKey.get(key).skus.push(s)
+    }
+    const groups = [...byKey.values()].map((g) => {
+      const colors = [...new Set(g.skus.map((s) => s.color))]
+      const sizes = [...new Set(g.skus.map((s) => s.size))]
+      const prices = g.skus.map((s) => parseFloat(s.base_price || 0)).filter((p) => p > 0)
+      return {
+        ...g,
+        sku_count: g.skus.length,
+        colors,
+        sizes,
+        price_min: prices.length ? Math.min(...prices) : 0,
+        price_max: prices.length ? Math.max(...prices) : 0,
+        total_qty: g.skus.reduce((s, x) => s + (x.stock?.total_qty || 0), 0),
+        available_qty: g.skus.reduce((s, x) => s + (x.stock?.available_qty || 0), 0),
+        reserved_qty: g.skus.reduce((s, x) => s + (x.stock?.reserved_qty || 0), 0),
+      }
+    })
+    return mockPaginated(groups, params.page, params.page_size)
+  }
+  return client.get('/skus/grouped', { params })
+}
+
+export async function getSKUSummary() {
+  if (USE_MOCK) {
+    const total = skus.length
+    const inStock = skus.filter((s) => s.stock && s.stock.available_qty > 0).length
+    const pieces = skus.reduce((sum, s) => sum + (s.stock?.total_qty || 0), 0)
+    const auto = skus.filter((s) => (s.sku_code || '').includes('+')).length
+    return mockResponse({ total_skus: total, in_stock_skus: inStock, total_pieces: pieces, auto_generated: auto })
+  }
+  return client.get('/skus/summary')
+}

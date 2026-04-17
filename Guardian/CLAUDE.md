@@ -33,142 +33,43 @@
 
 ---
 
-## Current State (Session 110 — 2026-04-17) — CLOSED
+## Current State (Session 112 — 2026-04-17)
 
-**SKU thermal label + Orders UX + pricing data cleanup**
+**SKUs page — group-aware server pagination + global KPI endpoint:** Fixes two bugs at once:
+- **Uneven row count across pages** — old frontend fetched 50 flat SKUs/page then grouped client-side by design → page 1 had 10 design rows, page 4 had 6 (designs with 19 SKUs ate the 50-SKU budget). New backend `GET /skus/grouped?page=1&page_size=25` returns 25 design groups per page. Consistent table height every page.
+- **Stale KPIs** — old frontend computed KPIs from the 50 visible SKUs (screenshot showed "50 TOTAL SKUs" when real total was 1784). New `GET /skus/summary` returns global aggregates via 4 pure-SQL queries (no row fetch). Same bug class as S110 Orders fix — this time solved with a dedicated endpoint instead of `page_size:0`.
 
-**Thermal SKU label (commits `9fdf1df → a8d6049`):** V3 layout — full `sku_code` top strip, body `D.NO {design_no}` (2-line wrap) + `MRP` + bordered `SIZE {size}` chip. `ThermalLabelSheet.jsx` gained `wrap` + `chip` row types. CSS must be added to BOTH print `pageStyle` (6-space indent) + screen `<style>` (8-space indent) blocks — a single `replace_all` won't cover both. Renderers return `{hero, qrValue, rows}`.
+**Backend (`sku_service.py`, `api/skus.py`, `schemas/sku.py`):**
+- `list_skus_grouped(params)` — 2-query pattern: (1) GROUP BY `(product_type, SPLIT_PART(sku_code, '-', 2))` with `MAX(created_at) DESC` sort + `LIMIT/OFFSET`, (2) batch-fetch all SKUs for returned group keys via `tuple_().in_()`. No N+1.
+- `get_sku_summary()` — 4 aggregates: `COUNT(skus)`, `COUNT(DISTINCT inventory_state.sku_id WHERE available_qty > 0)`, `SUM(total_qty)`, `COUNT WHERE sku_code LIKE '%+%'`.
+- `_sku_filter_conditions(params)` — shared helper, also used by flat `get_skus()` now → filter semantics stay identical across endpoints forever. `stock_status` applied as subquery (`id IN / NOT IN SELECT sku_id FROM inventory_state WHERE …`) so the GROUP BY doesn't need a JOIN.
+- New filter param: `stock_status: 'in_stock' | 'out_of_stock'` on `SKUFilterParams`.
+- Routes declared BEFORE `/{sku_id}` (right after `/stock-check`) — no UUID parse collision.
 
-**Orders page KPIs + filter (`d8037ce`, `82757ec`, `390d2d8`):** KPIs were computing on the 20-row paginated slice — fixed by fetching `page_size:0` into `allOrders` state for aggregation (refreshed on every mutation). Added clickable "With Shortage" KPI (active ring, filters client-side from `allOrders`, pagination hidden when active) + clickable "Total Orders" (one-click reset of all filters).
+**Frontend (`SKUsPage.jsx`, `api/skus.js`):**
+- Added `getSKUsGrouped`, `getSKUSummary` to `api/skus.js` (mock-aware, like siblings).
+- `SKUsPage.jsx`: dropped `filteredSKUs` + `groupedSKUs` + `kpis` `useMemo`s. Server returns pre-grouped rows; KPIs come from `summary` state. Filters (`search`, `product_type`, `stock_status`) now server-side — any change resets to page 1. Field renames across both tabs: `designKey` → `design_key`, `group.type` → `group.product_type`, `priceMin/Max` → `price_min/max`, `totalStock/availableStock/reservedStock` → `total_qty/available_qty/reserved_qty`.
+- Bundle size: 71.39 kB (marginally smaller — dropped two useMemos).
 
-**Order dupe-SKU + shortage semantics (`7259850`):** Manual color/size dropdowns now detect duplicate `sku_id` across rows — mirrors scan-path UX (toast + flash existing row). Backend `has_shortage` narrowed to require `fulfilled_qty < quantity` (ignores stale `short_qty` from fully-shipped orders). Ship flow now auto-zeros `short_qty` when an item reaches full fulfilment. One-time SQL zeroed ORD-0004's stale short row.
+**Verified locally:** seeded 5 SKUs across 2 test designs + dev-data residue; summary returned `{total_skus:8, in_stock_skus:4, total_pieces:330, auto_generated:1}`; grouped returned 4 design rows; `stock_status`, `product_type` filters, `page=2 page_size=1` pagination all correct.
 
-**SKU Inventory History WOW (`5ca07ad`):** Added `Reference` column resolving `reference_id` → human code (e.g. `SHP-0004 / ORD-0004`, `BAT-0033 / LOT-…`). Backend `_resolve_event_references` batch-loads per type (1 query/table, no N+1). Shipment + batch rows are clickable `?open={id}` deep-links. Covers `shipment`, `batch`, `purchase_item`, `supplier_invoice`, `manual_adjustment`, `opening_stock`. Also fixed latent bug: `create_event` was passing `metadata=` but model maps to `metadata_` — all past events had NULL metadata. Forward-fixed; historical metadata stays NULL but resolved via FK lookup anyway.
+**Not yet committed** — will group with doc updates into one S112 commit.
 
-**Pricing data model (`25e3b1e`, `95aa654`):** Order form default flipped to `sale_rate → mrp → base_price → 0` in all 4 entry paths. Opening stock form gained Sale Rate + MRP columns; final column order: Qty → Sale Rate → MRP → Unit Cost (cost last, rarely filled). Enter-key chain rewired.
-
-**Prod data migration (one-time SQL, all on 2026-04-17):**
-- Copied `base_price → sale_rate` on 1696 SKUs where sale_rate was null (user had been entering sale price into the only available "Unit Cost" field since opening stock form had no sale_rate input — form-driven misuse, not user mistake).
-- Then zeroed `base_price` on those 1696 (now honestly "cost unknown").
-- 1 SKU (`FBL-Vip-RANI-XL`) preserved → user manually cleaned up base_price on it.
-- Final state: 1697 SKUs with sale_rate, 0 with base_price > 0, 1 with MRP.
-- ORD-0004 stale `short_qty=10` zeroed (single row).
-
-**9 commits pushed this session:** `9fdf1df 9bd9afa a8d6049 d8037ce 82757ec 390d2d8 7259850 5ca07ad 25e3b1e 95aa654`.
-
-**S111 NEXT:** MRP coverage is still 1 SKU — client needs to backfill over time (no tooling for bulk fill yet, could be a future WOW). ChallansPage scan-to-receive refinement still open from S109. Prod UPI VPA swap still pending.
-
----
-
-## Previous State (Session 109 — 2026-04-11)
-
-### S109 — Thermal Label Redesign "Boarding Pass" — DEPLOYED
-
-**Context:** S108 thermal labels shipped but first physical print exposed issues — driver had wrong paper stock, labels printed sideways/upside-down, layout wasted space, fields were empty due to wrong API field names.
-
-**A. TSC TTP-345 driver calibration (one-time, client laptop)**
-- Driver shipped with `USER (101.6 × 152.4 mm)` = 4×6" shipping label stock — completely wrong
-- Created new stock `DRS-54*40` (54 × 40 mm, Die-Cut Labels, liner 0)
-- Orientation: `Landscape 180°` (Landscape matches our `@page 54mm 40mm`; 180° flip fixes ulta print)
-- Feed calibration: hold FEED 3s to auto-detect gap
-
-**B. Layout redesign — "Boarding Pass" (Option A) + Smart Minimal**
-- 4-sided layout matching client's existing CHAT-GPT garment label aesthetic
-- Hero code top strip · Vertical `DRS BLOUSE` (left, rotated 180°) · 30mm QR · Data column · Vertical `SCAN TO VIEW` (right) · `drsblouse.com` bottom strip
-- QR: 20mm → 30mm (+125% scan area, reads from 1m+)
-- 1mm safe margin all 4 sides — survives TSC ~0.5mm feed variance
-- Smart Minimal principle: **don't repeat what's already in the code**
-  - SKU label: dropped DES/COL/SIZE/TYPE rows (all in `SBL-3054-WHITE-XL`). Kept huge 18pt SIZE hero + MRP/RATE.
-  - Roll label: dropped SR/FAB/COL rows (all in `2-FBC-BLACK/04-01`). Stacked hero = big weight/length number + small unit (kg/m), auto-flips on `roll.unit`. Kept INV + DT.
-  - Batch label: batch_code `BAT-001` encodes nothing → kept all 6 rows (LOT/DES/COL/SIZE/QTY/DT).
-- Renderers refactored: return `{hero, qrValue, rows}` data, wrapper composes all chrome. One-place edit for brand text/layout.
-
-**C. Field name bug fixes (discovered during physical test)**
-- Roll: `fabric_type` + `color` (flat strings) — NOT `fabric.name` / `color.name`
-- Batch: no `color` column — use `color_breakdown` JSON (`{Red:10, Blue:20}` → joined keys or `MIX (n)`)
-- SKU: no `design_no` field — parse from `sku_code` splits
-- Date format: dropped year (`04 Apr 26` → `04 Apr`) — was truncating
-
-**D. CSS knobs (one-place tweaks)**
-- `ThermalLabelSheet.jsx:10-22` — `LABEL_W_MM`, `LABEL_H_MM`, `LABELS_PER_ROW`, `VLEFT_TEXT`, `VRIGHT_TEXT`, `BOT_TEXT`
-- Font sizes + QR 30mm + 1mm padding inside the same file's `pageStyle` + `<style>` blocks
-- New classes: `.thermal-label__hero` (18pt centered), `.thermal-label__hero-unit` (8pt stacked below), `.thermal-label__top/__bot` (4mm strips), `.thermal-label__vleft/__vright` (2.5mm vertical text bars)
-
-**Commits this session:** `9371fb3 c3a0249 c539302`
-
-**S109 NEXT (carried over):**
-
-| # | Task | Status |
-|---|------|--------|
-| 1 | Print verification across roll/batch/SKU on client thermal printer | ⬜ (user testing) |
-| 2 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
-| 3 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
-| 4 | ChallansPage 4d: scan-to-receive flow refinement | ⬜ |
+**S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`.
 
 ---
 
-## Earlier State (Session 107 — 2026-04-07)
+## Previous State (Session 111 — 2026-04-17) — CLOSED
 
-### S107: HSN Propagation + Invoice QR + UPI Payment + Print Polish — COMPLETE
-
-**S107 done. 0 new models. 2 migrations. 45 models total. Multiple commits pushed+deployed.**
-
-**What was built:**
-- **LotsPage scan pairing + CuttingSheet QR** — `useScanPair` on lot create overlay (roll scan), QR code on cutting sheet print
-- **OrderPrint pivot Pick Sheet** — second print mode for warehouse picking (rows=sizes, cols=colors, ☐+qty cells, chunked into 8-col bands when overflow). Two print buttons on order detail: "Print Order" (confirmation) + "Pick Sheet"
-- **Invoice print B&W redesign** — wholesale GST-compliant layout: solid borders, light gray headers, tight padding, amount in words, T&C, E&OE, 20-row table padding, page-break handling, footer side-by-side
-- **HSN propagation (Option A)** — `hsn_code` on ProductType → auto-flows to SKU at creation → snapshot to InvoiceItem at invoice time. Backfill script ran on prod: 796 SKUs + 164 invoice items updated. FBL/SBL=6206, LHG=6204, SAR=5407.
-- **Invoice QR codes** — 2 QRs on invoice print:
-  - Lookup QR (header, 64px) → `/scan/invoice/{no}` → opens invoice in app
-  - UPI payment QR (footer, 70px) → `upi://pay?...` → customer scans and pays directly. Renders only when `co.upi_id` is set.
-- **New backend endpoints:** `GET /invoices/by-no/{no}` (route ordering: before `/{id}`)
-- **Company.upi_id** field added (public schema), SettingsPage Bank section UI
-
-**Migrations:**
-- `c3d4e5f6g7h8` — ProductType.hsn_code (tenant)
-- `d4e5f6g7h8i9` — Company.upi_id (public)
-
-**Backfill:** `backend/scripts/backfill_hsn.py` — idempotent, ran on prod (796 SKUs + 164 invoice items, 100% coverage)
-
-### S108 — UPI QR + Thermal Labels + Print UX Cleanup (2026-04-11) — DEPLOYED
-
-**A. UPI QR Fix — commit `2e3bd32`** — Prod UPI QR failed with "Could not load bank name". Root cause: `encodeURIComponent(co.upi_id)` encoded `@` → `%40` in `pa` param. Fixed in `InvoicesPage.jsx:775-789` (literal `@`, trimmed VPA) + `SettingsPage.jsx:128-136` (trim + regex validate). Verified with different UPI ID end-to-end. `foryouvrj@axl` is VPA-side issue, not code — admin to swap prod VPA to `@okhdfcbank`.
-
-**B. Thermal Label System (TSC TTP-345, 54×40mm)** — client added thermal printer. Built shared wrapper so all label types use one place.
-
-- **New:** `frontend/src/components/common/thermal/` — `ThermalLabelSheet.jsx` (shared wrapper, `@page 54mm 40mm margin:0`, page chunking, 0 borders, 20mm QR, pure black, dispatches to type-specific renderer) + `ThermalRollLabel.jsx` + `ThermalBatchLabel.jsx` + `ThermalSKULabel.jsx`
-- **Wrapper API:** `<ThermalLabelSheet type="roll|batch|sku" items={[...]} meta={{lotCode,designNo,lotDate}} onClose />` — Protocol 6 table updated
-- **Future 2-up:** change `LABELS_PER_ROW` const at top of `ThermalLabelSheet.jsx` — ONE edit flips all 3 label types simultaneously
-- **5 pages wired** (A4 flow untouched — thermal is a second button next to each existing "Print Labels"):
-  - `RollsPage.jsx` — 4 entry points: page header, bulk-selection toolbar, invoice modal, roll detail (`showThermalSheet`, `showBulkThermal` state)
-  - `BatchesPage.jsx` — LotCard icon (added `onPrintThermal` prop + `thermalBatches` state)
-  - `BatchDetailPage.jsx` — header button (`thermalBatches` state)
-  - `LotsPage.jsx` — detail lot header, shows only when `status='distributed' && batches.length > 0` (`showThermalBatchLabels` state)
-  - `SKUsPage.jsx` — SKU detail header (`thermalSkus` state)
-- **Labels relabeled:** existing "Print Labels" buttons now say "A4", new ones say "Thermal" — clear user intent per button
-- **Build verified:** `ThermalLabelSheet-*.js 10.20 kB` gzip 2.54 kB, all 5 pages compile clean
-- **Printer setup on client laptop:** TSC driver already installed. Needs 54×40mm paper stock registered in driver (user action, one-time)
-
-**C. Print UX cleanup** — fixed "print closes to list instead of detail" across Orders, Invoices, Rolls (roll detail + purchase-invoice detail), Batches, SKUs. Button handlers no longer clear parent detail state. Label sheet overlays bumped to `z-[55]` so print layers above detail overlays (`z-50`). All 4 label sheet components (`LabelSheet`, `BatchLabelSheet`, `SKULabelSheet`, `ThermalLabelSheet`) + `OrderPrint` now own ESC→close and Ctrl/Cmd+P→print. Detail overlays (roll, batch, SKU, invoice) intercept Ctrl/Cmd+P → thermal (default); A4 stays a manual click. Order detail Ctrl+P → "Print Order" confirmation.
-
-**D. Theme cleanup** — RollsPage purchase-invoice + roll-detail headers migrated from blue/purple gradients to `from-emerald-700 to-emerald-600` (Protocol 10). Internal white CTAs recoloured to `text-emerald-700 hover:bg-emerald-50`.
-
-**Commits this session:** `2e3bd32 7381ed7 35c313d 5cbf3eb 7cc7d34 612fa5f 0c62e6a bb47aea 1b2ca58`
-
-**S109 NEXT:**
-
-| # | Task | Status |
-|---|------|--------|
-| 1 | Debrief thermal print test (alignment, QR scan, TSC driver settings) | 🔴 BLOCKING (pending client-office result) |
-| 2 | Swap prod UPI ID to `@okhdfcbank` (admin, no code) | ⬜ |
-| 3 | E2E test: phone Gun → all 5 desktop forms | ⬜ |
-| 4 | ChallansPage 4d: scan-to-receive flow refinement | ⬜ |
-
-**Thermal tuning knobs (if needed):** `ThermalLabelSheet.jsx:10-15` — `LABEL_W_MM`, `LABEL_H_MM`, `LABELS_PER_ROW` (future 2-up). Font sizes + QR 20mm inside the same file's CSS.
+**SKU Open Demand card (`9c65254`):** Added "Open Demand" card on SKU detail between Source Batches and Inventory History. Shows unfulfilled orders holding/short the SKU (answers "why is available_qty=0 when total_qty=15?"). Backend `GET /skus/{id}/open-demand` — filters `order_items.fulfilled_qty < quantity AND order.status != 'cancelled'`. Frontend fetches in parallel with cost/events on detail open, refreshes on reopen only (no SSE). Deep-links to `/orders?open={id}` (S110 pattern). Trigger: user saw `FBL-Nanda-RED-XL` with 15 reserved but Inventory History showed only `+15` opening — no hint of the 2 orders holding the stock.
 
 ---
 
-## Previous Sessions (S87-S102) — Invoice, Shipping, Returns, FY, Reports, SKU Overhaul
+## Previous Sessions (S87-S110) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels
+
+- **S110:** SKU thermal V3 + Orders UX + pricing cleanup. Thermal SKU body rebuilt: full `sku_code` top strip + `D.NO {design_no}` (2-line wrap) + MRP + bordered SIZE chip. `ThermalLabelSheet.jsx` gained `wrap` + `chip` row types (CSS lives in BOTH print `pageStyle` AND screen `<style>` blocks — one `replace_all` won't hit both). Orders KPIs fetch full list via `page_size:0` into `allOrders` (was computing on 20-row slice); clickable "Total Orders" resets filters, "With Shortage" client-filters. Dupe-SKU check on manual color/size dropdowns mirrors scan path. `has_shortage` narrowed to `fulfilled_qty < quantity`; ship auto-zeros `short_qty` on full fulfilment. SKU Inventory History clickable Reference column (resolves shipment/batch/purchase refs, batch-loaded no N+1). Latent `create_event` bug fixed: `metadata=` → `metadata_=` (historical rows NULL). Order form default flipped to `sale_rate → mrp → base_price → 0`. Opening stock form gained Sale Rate + MRP cols (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price → sale_rate` + zeroed base_price; ORD-0004 stale short_qty zeroed. 10 commits `9fdf1df..95aa654`.
+- **S109:** Thermal Label Boarding Pass redesign. TSC TTP-345 driver calibrated to new stock `DRS-54*40` (54×40mm Die-Cut, Landscape 180°). 4-sided layout: hero code top strip + vertical `DRS BLOUSE`/`SCAN TO VIEW` bars + 30mm QR (+125% scan area) + `drsblouse.com` bottom strip. 1mm safe margin survives TSC ~0.5mm feed variance. Smart Minimal: SKU drops DES/COL/SIZE/TYPE (all in sku_code) → 18pt SIZE hero + MRP/RATE; Roll drops SR/FAB/COL → stacked big weight + small unit (kg/m auto) + INV/DT; Batch keeps 6 rows (batch_code encodes nothing), parses `color_breakdown` JSON. Field fixes: roll uses flat `fabric_type`/`color`, batch has no `color` column, SKU has no `design_no` field (parse from code), date DD Mon. Renderers return `{hero, qrValue, rows}` — wrapper composes chrome. Commits `9371fb3 c3a0249 c539302`.
+- **S108:** UPI QR fix + Thermal label system + Print UX cleanup. UPI QR `encodeURIComponent` mangled `@` → `%40` ("Could not load bank name") — fixed with literal `@` in `pa` param + VPA regex validate in Settings. Thermal label system (TSC TTP-345, 54×40mm): shared `ThermalLabelSheet.jsx` wrapper + 3 type renderers (`ThermalRollLabel/BatchLabel/SKULabel`), 5 pages wired (Rolls/Batches/BatchDetail/Lots/SKUs), "A4" vs "Thermal" button labels. Print UX: ESC/Ctrl+P detail-overlay guards (print was closing to list), `z-[55]` for label sheets above detail overlays (`z-50`). RollsPage headers migrated to emerald theme. Commits `2e3bd32 7381ed7 35c313d 5cbf3eb 7cc7d34 612fa5f 0c62e6a bb47aea 1b2ca58`.
 
 - **S107:** LotsPage scan pairing + CuttingSheet QR. OrderPrint pivot Pick Sheet (chunked column bands). Invoice print B&W redesign (amount in words, T&C, padded rows, page-break handling). HSN propagation (Option A): ProductType.hsn_code → SKU → InvoiceItem snapshot. Backfill script ran on prod (796 SKUs + 164 invoice items). Invoice QR codes: lookup (header) + UPI payment (footer). Company.upi_id field. New endpoint `GET /invoices/by-no/{no}`. Migrations `c3d4e5f6g7h8` (tenant) + `d4e5f6g7h8i9` (public).
 - **S106:** Scan pairing on ReturnsPage (supplier roll + sales SKU) + ChallansPage (QR prints, deep-link, job/batch create with phone scan) + SendForVAModal scan. OrderPrint wholesale B&W redesign (grouped by design, checkbox, size summary). Dead SSE scan code removed. 2 new backend endpoints (`by-no`).
@@ -409,6 +310,7 @@
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S111 | SKU Open Demand Card | New card on SKU detail (between Source Batches + Inventory History) showing unfulfilled orders holding the SKU. Backend `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Clickable deep-link to `/orders?open={id}`. Refreshes on SKU reopen only (no SSE). Commit `9c65254` |
 | S110 | SKU Thermal V3 + Orders UX + Pricing | Thermal SKU body rebuilt (D.NO wrap + MRP + SIZE chip); Orders KPIs fetch full list via `page_size:0` + clickable Total/With-Shortage cards; manual-dropdown dupe-SKU check mirrors scan path; `has_shortage` narrowed + short_qty auto-zero on ship; SKU Inventory History gains clickable Reference column (resolve shipment/batch/purchase refs); `create_event` metadata bug fixed (`metadata=`→`metadata_=`); order form default flipped to sale_rate; opening stock form gains Sale Rate + MRP columns (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price→sale_rate` + base_price zeroed; ORD-0004 stale short_qty zeroed. Commits `9fdf1df`..`95aa654` |
 | S109 | Thermal Label Boarding Pass | TSC TTP-345 stock calibration (54×40mm, Landscape 180°). 4-sided layout: hero top strip + 30mm QR + vertical DRS BLOUSE/SCAN TO VIEW bars + bottom brand strip. 1mm safe margin all sides. Smart Minimal: SKU drops 4 redundant rows (in sku_code) → 18pt SIZE hero + MRP. Roll drops 3 rows (in roll_code) → stacked weight/unit hero (kg/m auto) + INV/DT. Batch keeps 6 rows (batch_code encodes nothing), color_breakdown JSON parsing. Field fixes: roll.fabric_type/color flat strings, batch.quantity, date DD Mon. Renderers refactored to return `{hero, qrValue, rows}` data. Commits `9371fb3 c3a0249 c539302` |
 | S108 | UPI QR Fix + Thermal Labels + Print UX | UPI QR @encoding fix (`encodeURIComponent` mangled `@`). Thermal label system (TSC TTP-345, 54×40mm): shared `ThermalLabelSheet.jsx` wrapper + 3 type renderers, 5 pages wired (Rolls/Batches/BatchDetail/Lots/SKUs). "A4" vs "Thermal" button labels. Print UX cleanup: ESC/Ctrl+P detail-overlay guards, `z-[55]` for label sheets over detail overlays. RollsPage headers emerald theme |

@@ -34,28 +34,7 @@ class SKUService:
         self.db = db
 
     async def get_skus(self, params: SKUFilterParams) -> dict:
-        from sqlalchemy import or_
-
-        conditions = []
-        if params.search:
-            # Normalize: collapse whitespace, treat dots as wildcards
-            # so "b.green" matches "B. GREEN" and "sbl-1072-b.green" matches "SBL-1072-B. GREEN"
-            normalized = ' '.join(params.search.strip().split())
-            normalized = normalized.replace('.', '%')
-            s = f"%{normalized}%"
-            conditions.append(
-                or_(
-                    SKU.sku_code.ilike(s),
-                    SKU.product_name.ilike(s),
-                    SKU.color.ilike(s),
-                    SKU.size.ilike(s),
-                )
-            )
-        if params.product_type:
-            conditions.append(SKU.product_type == params.product_type)
-        if params.is_active is not None:
-            conditions.append(SKU.is_active == params.is_active)
-
+        conditions = self._sku_filter_conditions(params)
         where_clause = conditions if conditions else []
 
         count_stmt = select(func.count()).select_from(SKU)
@@ -95,6 +74,161 @@ class SKUService:
             "page": params.page,
             "pages": pages,
         }
+
+    async def list_skus_grouped(self, params: SKUFilterParams) -> dict:
+        """Paginate SKUs by design group — each page returns N design rows with
+        nested SKUs. Group key = (product_type, SPLIT_PART(sku_code, '-', 2)).
+        Preserves all filters from list_skus + stock_status. Sort: newest design first.
+        """
+        from sqlalchemy import or_, tuple_, desc
+        from collections import defaultdict
+
+        conditions = self._sku_filter_conditions(params)
+
+        pt_col = SKU.product_type
+        design_col = func.split_part(SKU.sku_code, "-", 2)
+
+        # Count distinct design groups
+        count_subq = (
+            select(pt_col, design_col.label("design_no"))
+            .where(*conditions)
+            .group_by(pt_col, design_col)
+            .subquery()
+        )
+        total = (await self.db.execute(select(func.count()).select_from(count_subq))).scalar() or 0
+        no_limit = params.page_size == 0
+        pages = 1 if no_limit else max(1, math.ceil(total / params.page_size))
+
+        # Page of design groups, newest first
+        group_stmt = (
+            select(
+                pt_col.label("product_type"),
+                design_col.label("design_no"),
+                func.max(SKU.created_at).label("latest_created"),
+            )
+            .where(*conditions)
+            .group_by(pt_col, design_col)
+            .order_by(desc(func.max(SKU.created_at)))
+        )
+        if not no_limit:
+            group_stmt = group_stmt.offset((params.page - 1) * params.page_size).limit(params.page_size)
+        group_rows = (await self.db.execute(group_stmt)).all()
+
+        if not group_rows:
+            return {"data": [], "total": total, "page": params.page, "pages": pages}
+
+        # Batch-fetch SKUs in those groups — same filters applied
+        group_keys = [(r.product_type, r.design_no) for r in group_rows]
+        sku_stmt = (
+            select(SKU)
+            .where(*conditions, tuple_(pt_col, design_col).in_(group_keys))
+            .order_by(SKU.size, SKU.color)
+        )
+        skus = (await self.db.execute(sku_stmt)).scalars().all()
+
+        # Batch-fetch inventory states
+        sku_ids = [s.id for s in skus]
+        inv_map: dict = {}
+        if sku_ids:
+            inv_rows = (await self.db.execute(
+                select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
+            )).scalars().all()
+            inv_map = {inv.sku_id: inv for inv in inv_rows}
+
+        pipeline_map = await self._compute_pipeline_map()
+
+        # Bucket SKUs by (product_type, design_no)
+        by_key: dict[tuple[str, str], list] = defaultdict(list)
+        for s in skus:
+            parts = (s.sku_code or "").split("-", 2)
+            d_no = parts[1] if len(parts) >= 2 else ""
+            by_key[(s.product_type, d_no)].append(s)
+
+        data = []
+        for r in group_rows:
+            grp_skus = by_key.get((r.product_type, r.design_no), [])
+            sku_responses = [
+                self._to_response(s, inv_map.get(s.id), pipeline_map.get(s.sku_code, 0))
+                for s in grp_skus
+            ]
+            colors = list(dict.fromkeys(s.color for s in grp_skus if s.color))
+            sizes = list(dict.fromkeys(s.size for s in grp_skus if s.size))
+            prices = [float(s.base_price) for s in grp_skus if s.base_price and s.base_price > 0]
+            total_qty = sum(x["stock"]["total_qty"] for x in sku_responses)
+            available_qty = sum(x["stock"]["available_qty"] for x in sku_responses)
+            reserved_qty = sum(x["stock"]["reserved_qty"] for x in sku_responses)
+
+            data.append({
+                "design_key": f"{r.product_type}-{r.design_no}",
+                "product_type": r.product_type,
+                "design_no": r.design_no,
+                "sku_count": len(grp_skus),
+                "colors": colors,
+                "sizes": sizes,
+                "price_min": min(prices) if prices else 0,
+                "price_max": max(prices) if prices else 0,
+                "total_qty": total_qty,
+                "available_qty": available_qty,
+                "reserved_qty": reserved_qty,
+                "skus": sku_responses,
+            })
+
+        return {"data": data, "total": total, "page": params.page, "pages": pages}
+
+    async def get_sku_summary(self) -> dict:
+        """Global SKU KPIs — scoped per company/FY via tenant middleware."""
+        total_skus = await self.db.scalar(select(func.count(SKU.id))) or 0
+        in_stock_skus = await self.db.scalar(
+            select(func.count(func.distinct(InventoryState.sku_id)))
+            .where(InventoryState.available_qty > 0)
+        ) or 0
+        total_pieces = await self.db.scalar(
+            select(func.coalesce(func.sum(InventoryState.total_qty), 0))
+        ) or 0
+        auto_generated = await self.db.scalar(
+            select(func.count(SKU.id)).where(SKU.sku_code.like("%+%"))
+        ) or 0
+        return {
+            "total_skus": int(total_skus),
+            "in_stock_skus": int(in_stock_skus),
+            "total_pieces": int(total_pieces),
+            "auto_generated": int(auto_generated),
+        }
+
+    def _sku_filter_conditions(self, params: SKUFilterParams) -> list:
+        """Shared WHERE conditions for flat + grouped list. Uses subquery for
+        stock_status so grouping SQL stays clean (no JOIN needed)."""
+        from sqlalchemy import or_
+
+        conditions = []
+        if params.search:
+            normalized = " ".join(params.search.strip().split()).replace(".", "%")
+            s = f"%{normalized}%"
+            conditions.append(
+                or_(
+                    SKU.sku_code.ilike(s),
+                    SKU.product_name.ilike(s),
+                    SKU.color.ilike(s),
+                    SKU.size.ilike(s),
+                )
+            )
+        if params.product_type:
+            conditions.append(SKU.product_type == params.product_type)
+        if params.is_active is not None:
+            conditions.append(SKU.is_active == params.is_active)
+        if params.stock_status == "in_stock":
+            conditions.append(
+                SKU.id.in_(
+                    select(InventoryState.sku_id).where(InventoryState.available_qty > 0)
+                )
+            )
+        elif params.stock_status == "out_of_stock":
+            conditions.append(
+                SKU.id.not_in(
+                    select(InventoryState.sku_id).where(InventoryState.available_qty > 0)
+                )
+            )
+        return conditions
 
     async def get_sku(self, sku_id: UUID) -> dict:
         sku = await self._get_or_404(sku_id)

@@ -17,6 +17,7 @@ class SKUFilterParams(PaginatedParams):
     search: str | None = None
     product_type: str | None = None
     is_active: bool | None = None
+    stock_status: str | None = None  # 'in_stock' | 'out_of_stock'
 
 
 # --- Brief ---

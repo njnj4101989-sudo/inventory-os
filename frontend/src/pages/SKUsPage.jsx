@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
-import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, getSKUOpenDemand, createSKUOpeningStock } from '../api/skus'
+import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, getSKUOpenDemand, createSKUOpeningStock, getSKUsGrouped, getSKUSummary } from '../api/skus'
 import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
 import { getAllProductTypes, getAllColors, getAllDesigns } from '../api/masters'
@@ -138,8 +138,8 @@ const EMPTY_OPENING = { product_type: 'FBL', design_no: '', design_id: null, col
 export default function SKUsPage() {
   const [activeTab, setActiveTab] = useState('skus')
 
-  // SKU list state
-  const [skus, setSKUs] = useState([])
+  // SKU list state — server returns design groups (one row per design, nested SKUs inside)
+  const [skuGroups, setSkuGroups] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
@@ -149,6 +149,8 @@ export default function SKUsPage() {
   const [filterType, setFilterType] = useState('')
   const [filterStock, setFilterStock] = useState('')
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+  // Global KPIs — fetched separately so they reflect the whole dataset, not just current page
+  const [summary, setSummary] = useState({ total_skus: 0, in_stock_skus: 0, total_pieces: 0, auto_generated: 0 })
 
   // Purchase invoices state
   const [purchaseInvoices, setPurchaseInvoices] = useState([])
@@ -208,11 +210,24 @@ export default function SKUsPage() {
   const fetchSKUs = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const res = await getSKUs({ page, page_size: 50, search: search || undefined })
-      setSKUs(res.data.data); setTotal(res.data.total); setPages(res.data.pages)
+      const res = await getSKUsGrouped({
+        page,
+        page_size: 25,
+        search: search || undefined,
+        product_type: filterType || undefined,
+        stock_status: filterStock || undefined,
+      })
+      setSkuGroups(res.data.data); setTotal(res.data.total); setPages(res.data.pages)
     } catch (err) { setError(err.response?.data?.detail || 'Failed to load SKUs') }
     finally { setLoading(false) }
-  }, [page, search])
+  }, [page, search, filterType, filterStock])
+
+  const fetchSummary = useCallback(async () => {
+    try {
+      const res = await getSKUSummary()
+      setSummary(res.data.data)
+    } catch { /* KPIs are non-critical; keep defaults on failure */ }
+  }, [])
 
   const fetchPurchaseInvoices = useCallback(async () => {
     setPiLoading(true)
@@ -225,7 +240,10 @@ export default function SKUsPage() {
 
   useEffect(() => { loadColorMap() }, [])
   useEffect(() => { fetchSKUs() }, [fetchSKUs])
+  useEffect(() => { fetchSummary() }, [fetchSummary])
   useEffect(() => { if (activeTab === 'purchases') fetchPurchaseInvoices() }, [activeTab, fetchPurchaseInvoices])
+  // Reset to page 1 when filters change — avoids landing on an empty page
+  useEffect(() => { setPage(1) }, [search, filterType, filterStock])
 
   // Detail overlay shortcut: Ctrl/Cmd+P opens thermal label print (default) — A4 remains a manual click
   useEffect(() => {
@@ -259,36 +277,8 @@ export default function SKUsPage() {
     loadMasters()
   }, [])
 
-  const filteredSKUs = useMemo(() => {
-    let list = skus
-    if (filterType) list = list.filter(s => s.product_type === filterType)
-    if (filterStock === 'in_stock') list = list.filter(s => s.stock && s.stock.available_qty > 0)
-    if (filterStock === 'out_of_stock') list = list.filter(s => !s.stock || s.stock.available_qty <= 0)
-    return list
-  }, [skus, filterType, filterStock])
-
-  const groupedSKUs = useMemo(() => {
-    const groups = new Map()
-    filteredSKUs.forEach(sku => {
-      const parts = (sku.sku_code || '').split('-')
-      const designKey = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : sku.sku_code
-      if (!groups.has(designKey)) {
-        groups.set(designKey, { designKey, type: parts[0] || '', design: parts[1] || '', skus: [] })
-      }
-      groups.get(designKey).skus.push(sku)
-    })
-    return Array.from(groups.values()).map(g => {
-      const colors = new Set(g.skus.map(s => s.color))
-      const sizes = new Set(g.skus.map(s => s.size))
-      const totalStock = g.skus.reduce((sum, s) => sum + (s.stock?.total_qty || 0), 0)
-      const availableStock = g.skus.reduce((sum, s) => sum + (s.stock?.available_qty || 0), 0)
-      const reservedStock = g.skus.reduce((sum, s) => sum + (s.stock?.reserved_qty || 0), 0)
-      const prices = g.skus.map(s => parseFloat(s.base_price || 0)).filter(p => p > 0)
-      const priceMin = prices.length ? Math.min(...prices) : 0
-      const priceMax = prices.length ? Math.max(...prices) : 0
-      return { ...g, colors: [...colors], sizes: [...sizes], totalStock, availableStock, reservedStock, priceMin, priceMax }
-    })
-  }, [filteredSKUs])
+  // Server returns pre-grouped rows — no client-side filtering/grouping needed
+  const groupedSKUs = skuGroups
 
   const toggleGroup = useCallback((designKey) => {
     setExpandedGroups(prev => {
@@ -297,14 +287,6 @@ export default function SKUsPage() {
       return next
     })
   }, [])
-
-  const kpis = useMemo(() => {
-    const totalSKUs = skus.length
-    const inStock = skus.filter(s => s.stock && s.stock.available_qty > 0).length
-    const totalPieces = skus.reduce((s, sku) => s + (sku.stock?.total_qty || 0), 0)
-    const autoGenerated = skus.filter(s => (s.sku_code || '').includes('+')).length
-    return { totalSKUs, inStock, totalPieces, autoGenerated }
-  }, [skus])
 
   const [costHistory, setCostHistory] = useState(null)
   const [skuEvents, setSkuEvents] = useState([])
@@ -1370,10 +1352,10 @@ export default function SKUsPage() {
       {/* KPIs */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total SKUs', value: kpis.totalSKUs, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-          { label: 'In Stock', value: kpis.inStock, cls: 'bg-green-50 border-green-200 text-green-700' },
-          { label: 'Total Pieces', value: kpis.totalPieces.toLocaleString('en-IN'), cls: 'bg-purple-50 border-purple-200 text-purple-700' },
-          { label: 'Auto-Generated', value: kpis.autoGenerated, cls: 'bg-teal-50 border-teal-200 text-teal-700' },
+          { label: 'Total SKUs', value: summary.total_skus.toLocaleString('en-IN'), cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+          { label: 'In Stock', value: summary.in_stock_skus.toLocaleString('en-IN'), cls: 'bg-green-50 border-green-200 text-green-700' },
+          { label: 'Total Pieces', value: summary.total_pieces.toLocaleString('en-IN'), cls: 'bg-purple-50 border-purple-200 text-purple-700' },
+          { label: 'Auto-Generated', value: summary.auto_generated.toLocaleString('en-IN'), cls: 'bg-teal-50 border-teal-200 text-teal-700' },
         ].map(k => (
           <div key={k.label} className={`rounded-lg border px-4 py-3 ${k.cls}`}>
             <div className="typo-kpi-sm">{k.value}</div>
@@ -1432,17 +1414,17 @@ export default function SKUsPage() {
                   </thead>
                   <tbody>
                     {groupedSKUs.map((group) => {
-                      const isExpanded = expandedGroups.has(group.designKey)
+                      const isExpanded = expandedGroups.has(group.design_key)
                       return (
-                        <Fragment key={group.designKey}>
-                          <tr onClick={() => toggleGroup(group.designKey)}
+                        <Fragment key={group.design_key}>
+                          <tr onClick={() => toggleGroup(group.design_key)}
                             className={`border-b border-gray-100 cursor-pointer transition-colors ${isExpanded ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                             <td className="px-3 py-2.5 text-center">
                               <svg className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                               </svg>
                             </td>
-                            <td className="px-3 py-2.5 typo-data font-bold text-emerald-700">{group.designKey}</td>
+                            <td className="px-3 py-2.5 typo-data font-bold text-emerald-700">{group.design_key}</td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-1 flex-wrap">
                                 {group.colors.slice(0, 6).map(c => (
@@ -1453,19 +1435,19 @@ export default function SKUsPage() {
                               </div>
                             </td>
                             <td className="px-3 py-2.5 typo-td">{group.sizes.join(', ')}</td>
-                            <td className="px-3 py-2.5 typo-td-secondary">{group.type}</td>
+                            <td className="px-3 py-2.5 typo-td-secondary">{group.product_type}</td>
                             <td className="px-3 py-2.5 typo-td">
-                              {group.priceMin > 0
-                                ? group.priceMin === group.priceMax
-                                  ? `₹${group.priceMin.toLocaleString('en-IN')}`
-                                  : `₹${group.priceMin.toLocaleString('en-IN')} – ₹${group.priceMax.toLocaleString('en-IN')}`
+                              {group.price_min > 0
+                                ? group.price_min === group.price_max
+                                  ? `₹${group.price_min.toLocaleString('en-IN')}`
+                                  : `₹${group.price_min.toLocaleString('en-IN')} – ₹${group.price_max.toLocaleString('en-IN')}`
                                 : <span className="typo-caption">Not set</span>}
                             </td>
                             <td className="px-3 py-2.5">
-                              <StockIndicator stock={{ total_qty: group.totalStock, available_qty: group.availableStock, reserved_qty: group.reservedStock }} />
+                              <StockIndicator stock={{ total_qty: group.total_qty, available_qty: group.available_qty, reserved_qty: group.reserved_qty }} />
                             </td>
                             <td className="px-3 py-2.5 text-right">
-                              <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{group.skus.length}</span>
+                              <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">{group.sku_count}</span>
                             </td>
                           </tr>
                           {isExpanded && group.skus.map((sku, sIdx) => (
@@ -1527,19 +1509,19 @@ export default function SKUsPage() {
                 </thead>
                 <tbody>
                   {groupedSKUs.map((group) => {
-                    const isExp = expandedGroups.has(group.designKey)
-                    const avgCost = group.skus.reduce((s, sk) => s + parseFloat(sk.base_price || 0), 0) / group.skus.length
+                    const isExp = expandedGroups.has(group.design_key)
+                    const avgCost = group.skus.length ? group.skus.reduce((s, sk) => s + parseFloat(sk.base_price || 0), 0) / group.skus.length : 0
                     return (
-                      <Fragment key={group.designKey}>
-                        <tr onClick={() => toggleGroup(group.designKey)}
+                      <Fragment key={group.design_key}>
+                        <tr onClick={() => toggleGroup(group.design_key)}
                           className={`border-b border-gray-100 cursor-pointer transition-colors ${isExp ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
                           <td className="px-3 py-2.5 text-center">
                             <svg className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isExp ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                             </svg>
                           </td>
-                          <td className="px-3 py-2.5 typo-data font-bold text-emerald-700 truncate">{group.designKey} <span className="text-gray-400 font-normal text-xs">({group.skus.length} SKUs)</span></td>
-                          <td className="px-3 py-2.5 typo-td-secondary">{group.type}</td>
+                          <td className="px-3 py-2.5 typo-data font-bold text-emerald-700 truncate">{group.design_key} <span className="text-gray-400 font-normal text-xs">({group.sku_count} SKUs)</span></td>
+                          <td className="px-3 py-2.5 typo-td-secondary">{group.product_type}</td>
                           <td className="px-3 py-2.5"></td>
                           <td className="px-3 py-2.5"></td>
                           <td className="px-3 py-2.5 text-right typo-caption" title={`${group.colors.length} colors × ${group.sizes.length} sizes`}>{group.colors.length}c × {group.sizes.length}s</td>

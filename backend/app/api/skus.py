@@ -105,6 +105,30 @@ async def stock_check(
     return {"success": True, "data": result}
 
 
+@router.get("/grouped", response_model=None)
+async def list_skus_grouped(
+    params: SKUFilterParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """List SKUs grouped by design — N design rows per page, nested SKUs inside each group.
+    Filters: search, product_type, is_active, stock_status (in_stock/out_of_stock)."""
+    svc = SKUService(db)
+    result = await svc.list_skus_grouped(params)
+    return {"success": True, **result}
+
+
+@router.get("/summary", response_model=None)
+async def get_sku_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Global SKU KPIs: total_skus, in_stock_skus, total_pieces, auto_generated."""
+    svc = SKUService(db)
+    result = await svc.get_sku_summary()
+    return {"success": True, "data": result}
+
+
 @router.get("/{sku_id}/cost-history", response_model=None)
 async def get_cost_history(
     sku_id: UUID,

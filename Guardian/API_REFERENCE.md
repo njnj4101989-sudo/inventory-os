@@ -616,6 +616,58 @@ Same as `GET /rolls` with status filter pre-applied.
 
 **S46 — Auto-generation:** SKUs with VA suffixes (e.g. `BLS-702-Red-XL+EMB+BTN`) are auto-created by `sku_service.find_or_create()` at pack time. `pack_batch()` reads `color_qc`, loops each color with `approved > 0`, generates SKU code as `{product_type}-{batch.design_no}-{color}-{size}+{VA1}+{VA2}...` (design_no now comes from batch, not lot), and fires `ready_stock_in` inventory event per color.
 
+### GET `/skus/grouped` (S112)
+**Query:** `page` (default 1), `page_size` (default 25, `0` = no limit), `search`, `product_type`, `is_active`, `stock_status` (`in_stock` | `out_of_stock`)
+**Response:** Paginated array of design groups — each row is one design, with its SKUs nested inside:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "design_key": "FBL-Anarkali",
+      "product_type": "FBL",
+      "design_no": "Anarkali",
+      "sku_count": 2,
+      "colors": ["Green", "Teal"],
+      "sizes": ["XL"],
+      "price_min": 450.0,
+      "price_max": 650.0,
+      "total_qty": 12,
+      "available_qty": 0,
+      "reserved_qty": 12,
+      "skus": [ /* full SKU objects — same shape as GET /skus, see below */ ]
+    }
+  ],
+  "total": 487,
+  "page": 1,
+  "pages": 20
+}
+```
+**Notes:**
+- `total` = design group count (NOT SKU count) — pagination math is over groups, so every page shows exactly `page_size` rows (consistent table height).
+- Group key derived via SQL `SPLIT_PART(sku_code, '-', 1) || '-' || SPLIT_PART(sku_code, '-', 2)` — handles legacy SKUs with NULL `design_id`.
+- Sort: groups ordered by `MAX(sku.created_at) DESC` — newest designs first.
+- `stock_status` filters individual SKUs; a group appears if ANY of its SKUs match. Aggregates (`total_qty`, `colors`, etc.) reflect matching SKUs only.
+- **Use this endpoint instead of `GET /skus` when rendering the SKUs accordion page.** Flat `GET /skus` remains for picker dropdowns, stock-check, bulk operations.
+
+### GET `/skus/summary` (S112)
+**Response:** Global SKU KPI aggregates — scoped per company/FY via tenant middleware:
+```json
+{
+  "success": true,
+  "data": {
+    "total_skus": 1784,
+    "in_stock_skus": 20,
+    "total_pieces": 1151,
+    "auto_generated": 0
+  }
+}
+```
+**Notes:**
+- 4 aggregate SQL queries, no row fetch — fast.
+- `auto_generated` = count of SKUs whose `sku_code` contains `+` (VA suffix like `+EMB`), i.e. pack-time auto-generated.
+- Used by `SKUsPage.jsx` KPI bar to show global totals — **never compute KPIs from the paginated/grouped list**, they'd only reflect the current page.
+
 ### GET `/skus/{id}`
 **Response:** Single SKU object (same fields as list) + `source_batches` array:
 ```json
