@@ -1581,13 +1581,14 @@ export default function SKUsPage() {
             {(filterType || filterStock) && (
               <button onClick={() => { setFilterType(''); setFilterStock('') }} className="typo-caption hover:text-gray-700 underline">Clear filters</button>
             )}
-            {/* Selection-aware print controls — lives INSIDE the filter row so layout
-                never shifts. Hidden when no selection. */}
+            {/* Selection-aware print controls — inline with filters so the row
+                never grows in height. Outer wrapper has no vertical padding;
+                A4/Thermal buttons use py-1 to match FilterSelect exactly. */}
             {selectedDesigns.size > 0 && (() => {
               const totalSkus = [...selectedDesigns.values()].reduce((s, v) => s + (v.sku_count || 0), 0)
               return (
-                <div className="ml-auto flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1">
-                  <span className="typo-data text-emerald-800 text-xs">
+                <div className="ml-auto flex items-center gap-2 rounded-lg bg-emerald-50 px-2">
+                  <span className="typo-data text-emerald-800 text-xs whitespace-nowrap">
                     {selectedDesigns.size} design{selectedDesigns.size !== 1 ? 's' : ''}
                     <span className="typo-data-label ml-1.5">· {totalSkus} SKU{totalSkus !== 1 ? 's' : ''}</span>
                   </span>
@@ -1595,19 +1596,18 @@ export default function SKUsPage() {
                     className="typo-caption text-emerald-700 hover:text-emerald-900 underline">
                     Clear
                   </button>
-                  <span className="text-emerald-200">|</span>
-                  <span className="typo-caption">Print:</span>
+                  <span className="text-emerald-300">|</span>
                   <button
                     onClick={() => printSelected('a4')}
                     title="Print every selected SKU on A4 sticker paper"
-                    className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-0.5 typo-btn-sm text-emerald-700 hover:bg-emerald-100 transition-colors">
+                    className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-1 typo-btn-sm text-emerald-700 hover:bg-emerald-100 transition-colors">
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
                     A4
                   </button>
                   <button
                     onClick={() => printSelected('thermal')}
                     title="Print every selected SKU on 54×40mm thermal labels"
-                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h16M4 17h16" /></svg>
                     Thermal
                   </button>
