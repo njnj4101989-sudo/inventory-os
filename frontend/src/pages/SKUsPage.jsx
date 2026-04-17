@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
-import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, createSKUOpeningStock } from '../api/skus'
+import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, getSKUOpenDemand, createSKUOpeningStock } from '../api/skus'
 import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
 import { getAllProductTypes, getAllColors, getAllDesigns } from '../api/masters'
@@ -308,15 +308,17 @@ export default function SKUsPage() {
 
   const [costHistory, setCostHistory] = useState(null)
   const [skuEvents, setSkuEvents] = useState([])
+  const [openDemand, setOpenDemand] = useState(null)
 
   // SKU detail
   const openDetail = async (row) => {
-    setDetailLoading(true); setDetailError(null); setCostHistory(null); setSkuEvents([])
+    setDetailLoading(true); setDetailError(null); setCostHistory(null); setSkuEvents([]); setOpenDemand(null)
     try {
-      const [skuRes, costRes, evtRes] = await Promise.all([
+      const [skuRes, costRes, evtRes, demandRes] = await Promise.all([
         getSKU(row.id),
         getSKUCostHistory(row.id).catch(() => null),
         getEvents(row.id, { page_size: 0 }).catch(() => null),
+        getSKUOpenDemand(row.id).catch(() => null),
       ])
       const sku = skuRes.data.data || skuRes.data
       setDetailSKU(sku)
@@ -330,6 +332,7 @@ export default function SKUsPage() {
       })
       if (costRes) setCostHistory(costRes.data.data)
       if (evtRes) setSkuEvents(evtRes.data.data || [])
+      if (demandRes) setOpenDemand(demandRes.data.data)
     } catch (err) { setError(err.response?.data?.detail || 'Failed to load SKU') }
     finally { setDetailLoading(false) }
   }
@@ -1132,6 +1135,47 @@ export default function SKUsPage() {
               </div>
             )}
           </div>
+
+          {/* Open Demand */}
+          {openDemand && openDemand.orders && openDemand.orders.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="typo-card-title mb-3">
+                Open Demand <span className="text-gray-400 font-normal">({openDemand.total_orders} order{openDemand.total_orders !== 1 ? 's' : ''} · {openDemand.total_outstanding} pc{openDemand.total_outstanding !== 1 ? 's' : ''} outstanding)</span>
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left border-b">
+                      <th className="px-3 py-2 typo-th">Order</th>
+                      <th className="px-3 py-2 typo-th">Date</th>
+                      <th className="px-3 py-2 typo-th">Customer</th>
+                      <th className="px-3 py-2 typo-th">Status</th>
+                      <th className="px-3 py-2 typo-th text-right">Ordered</th>
+                      <th className="px-3 py-2 typo-th text-right">Shipped</th>
+                      <th className="px-3 py-2 typo-th text-right">Short</th>
+                      <th className="px-3 py-2 typo-th text-right">Outstanding</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {openDemand.orders.map((d) => (
+                      <tr key={d.order_id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <a href={`/orders?open=${d.order_id}`} className="font-medium text-emerald-700 hover:text-emerald-900 hover:underline">{d.order_number}</a>
+                        </td>
+                        <td className="px-3 py-2 typo-td-secondary">{d.order_date ? new Date(d.order_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}</td>
+                        <td className="px-3 py-2 typo-td">{d.customer_name}</td>
+                        <td className="px-3 py-2"><StatusBadge status={d.status} /></td>
+                        <td className="px-3 py-2 text-right typo-td">{d.ordered_qty}</td>
+                        <td className="px-3 py-2 text-right typo-td-secondary">{d.fulfilled_qty}</td>
+                        <td className={`px-3 py-2 text-right ${d.short_qty > 0 ? 'text-red-600 font-semibold' : 'typo-td-secondary'}`}>{d.short_qty}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-amber-600">{d.outstanding_qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Inventory History */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">

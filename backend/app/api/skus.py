@@ -117,6 +117,18 @@ async def get_cost_history(
     return {"success": True, "data": result}
 
 
+@router.get("/{sku_id}/open-demand", response_model=None)
+async def get_open_demand(
+    sku_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("inventory_view"),
+):
+    """Open (unfulfilled, non-cancelled) orders demanding this SKU."""
+    svc = SKUService(db)
+    result = await svc.get_open_demand(sku_id)
+    return {"success": True, "data": result}
+
+
 @router.get("/{sku_id}", response_model=None)
 async def get_sku(
     sku_id: UUID,

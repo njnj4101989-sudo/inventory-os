@@ -128,3 +128,7 @@ export async function getSKUByCode(skuCode) {
 export async function getSKUCostHistory(skuId) {
   return client.get(`/skus/${skuId}/cost-history`)
 }
+
+export async function getSKUOpenDemand(skuId) {
+  return client.get(`/skus/${skuId}/open-demand`)
+}

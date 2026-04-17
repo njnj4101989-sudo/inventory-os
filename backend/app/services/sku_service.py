@@ -21,6 +21,9 @@ from app.models.inventory_event import InventoryEvent
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.purchase_item import PurchaseItem
 from app.models.shipment_item import ShipmentItem
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.customer import Customer
 from app.schemas.sku import SKUCreate, SKUUpdate, SKUResponse, PurchaseStockRequest, SKUOpeningStockRequest, SKUFilterParams
 from app.schemas import PaginatedParams
 from app.core.exceptions import AppException, DuplicateError, NotFoundError
@@ -181,6 +184,47 @@ class SKUService:
             "total_cost": round(total_cost, 2),
             "wac_per_piece": wac,
             "batches": batches,
+        }
+
+    async def get_open_demand(self, sku_id: UUID) -> dict:
+        """Unfulfilled order items demanding this SKU (not cancelled)."""
+        await self._get_or_404(sku_id)
+
+        rows = (await self.db.execute(
+            select(OrderItem, Order, Customer)
+            .join(Order, Order.id == OrderItem.order_id)
+            .outerjoin(Customer, Customer.id == Order.customer_id)
+            .where(
+                OrderItem.sku_id == sku_id,
+                OrderItem.fulfilled_qty < OrderItem.quantity,
+                Order.status != "cancelled",
+            )
+            .order_by(Order.order_date.desc(), Order.order_number)
+        )).all()
+
+        orders = []
+        total_outstanding = 0
+        for oi, o, c in rows:
+            outstanding = (oi.quantity or 0) - (oi.fulfilled_qty or 0)
+            total_outstanding += outstanding
+            orders.append({
+                "order_id": str(o.id),
+                "order_number": o.order_number,
+                "order_date": o.order_date.isoformat() if o.order_date else None,
+                "customer_name": (c.name if c else None) or o.customer_name or "—",
+                "status": o.status,
+                "ordered_qty": oi.quantity,
+                "fulfilled_qty": oi.fulfilled_qty,
+                "short_qty": oi.short_qty,
+                "outstanding_qty": outstanding,
+                "unit_price": float(oi.unit_price) if oi.unit_price else 0,
+            })
+
+        return {
+            "sku_id": str(sku_id),
+            "total_orders": len(orders),
+            "total_outstanding": total_outstanding,
+            "orders": orders,
         }
 
     async def create_sku(self, req: SKUCreate) -> dict:
