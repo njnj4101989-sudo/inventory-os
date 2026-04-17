@@ -33,79 +33,24 @@
 
 ---
 
-## Current State (Session 112 — 2026-04-17)
+## Current State (Session 112 — 2026-04-17) — CLOSED
 
-**SKUs page — group-aware server pagination + global KPI endpoint:** Fixes two bugs at once:
-- **Uneven row count across pages** — old frontend fetched 50 flat SKUs/page then grouped client-side by design → page 1 had 10 design rows, page 4 had 6 (designs with 19 SKUs ate the 50-SKU budget). New backend `GET /skus/grouped?page=1&page_size=25` returns 25 design groups per page. Consistent table height every page.
-- **Stale KPIs** — old frontend computed KPIs from the 50 visible SKUs (screenshot showed "50 TOTAL SKUs" when real total was 1784). New `GET /skus/summary` returns global aggregates via 4 pure-SQL queries (no row fetch). Same bug class as S110 Orders fix — this time solved with a dedicated endpoint instead of `page_size:0`.
+Major SKU infrastructure pass. New endpoints `GET /skus/grouped` (paginate by design, consistent rows) + `GET /skus/summary` (global KPIs). **Last Cost vs WAC split** — `sku.base_price` = latest stock-in cost (pricing signal, overwritten every stock-in); WAC computed on demand via `SKUService.compute_wac_map()` for FY closing + dashboard valuation. `backend/scripts/backfill_last_cost.py` ready to run on prod. SKU detail redesigned (3-block hero: stock gauge / money / identity; merged Identity+Pricing into single sectioned card; compact `typo-input-sm` across form). Bulk SKU label print — 3 trigger points (per-design icons, SKU-level checkbox selection with 3-state design parent + mix-across-designs via `skuIndex` cache, Orders detail modal with A4/Thermal × per-piece/per-SKU toggle). Orders/Invoices price-source tracking — defaults to `sale_rate → mrp → base_price`, amber "⚠ Last Cost" warning when fallback hits `base_price`. "Price" column relabeled "Sale Rate" + "Rate" on Orders detail for consistency. Sizes sort canonically S→4XL.
 
-**Backend (`sku_service.py`, `api/skus.py`, `schemas/sku.py`):**
-- `list_skus_grouped(params)` — 2-query pattern: (1) GROUP BY `(product_type, SPLIT_PART(sku_code, '-', 2))` with `MAX(created_at) DESC` sort + `LIMIT/OFFSET`, (2) batch-fetch all SKUs for returned group keys via `tuple_().in_()`. No N+1.
-- `get_sku_summary()` — 4 aggregates: `COUNT(skus)`, `COUNT(DISTINCT inventory_state.sku_id WHERE available_qty > 0)`, `SUM(total_qty)`, `COUNT WHERE sku_code LIKE '%+%'`.
-- `_sku_filter_conditions(params)` — shared helper, also used by flat `get_skus()` now → filter semantics stay identical across endpoints forever. `stock_status` applied as subquery (`id IN / NOT IN SELECT sku_id FROM inventory_state WHERE …`) so the GROUP BY doesn't need a JOIN.
-- New filter param: `stock_status: 'in_stock' | 'out_of_stock'` on `SKUFilterParams`.
-- Routes declared BEFORE `/{sku_id}` (right after `/stock-check`) — no UUID parse collision.
+**Commits pushed this session:** `cd9d86e 111d370 8f08c8f 42ee3a7 ebe420a 40d137c b1dbc36 2f81ea4 a724025 8bbb0ea 82d55d8 56fd1e0 545b24a 671674e 798ed3f` (15 commits).
 
-**Frontend (`SKUsPage.jsx`, `api/skus.js`):**
-- Added `getSKUsGrouped`, `getSKUSummary` to `api/skus.js` (mock-aware, like siblings).
-- `SKUsPage.jsx`: dropped `filteredSKUs` + `groupedSKUs` + `kpis` `useMemo`s. Server returns pre-grouped rows; KPIs come from `summary` state. Filters (`search`, `product_type`, `stock_status`) now server-side — any change resets to page 1. Field renames across both tabs: `designKey` → `design_key`, `group.type` → `group.product_type`, `priceMin/Max` → `price_min/max`, `totalStock/availableStock/reservedStock` → `total_qty/available_qty/reserved_qty`.
-- Bundle size: 71.39 kB (marginally smaller — dropped two useMemos).
-
-**Verified locally:** seeded 5 SKUs across 2 test designs + dev-data residue; summary returned `{total_skus:8, in_stock_skus:4, total_pieces:330, auto_generated:1}`; grouped returned 4 design rows; `stock_status`, `product_type` filters, `page=2 page_size=1` pagination all correct.
-
-**Not yet committed** — will group with doc updates into one S112 commit.
-
-**S112 part 2 — Last Cost vs WAC split (Option D):**
-Answered user's cost-accounting concern: WAC pricing breaks competition when a new cheaper batch comes in (competitor prices at new cost; blended WAC makes us uncompetitive). Industry-standard split (Tally/Busy/Marg):
-- `sku.base_price` = **Last Cost** (latest stock-in cost — pricing signal). Now unconditionally overwritten on every stock-in event: purchase, opening, batch pack.
-- **WAC** = computed on demand from `InventoryEvent.metadata_.unit_cost`. New helper `SKUService.compute_wac_map(sku_ids) → {sku_id: wac}`. Used by FY closing (AS-2 compliant) and dashboard closing-stock report.
-- **UI (SKU detail):** "Base Price" field relabeled "Last Cost (₹)". When cost history exists, a caption under the input shows "Avg Cost (WAC): ₹X · used for valuation". Side-by-side clarity.
-- **Purchase form:** honest caption under Line Items — "Unit Price = cost per piece. Updates this SKU's Last Cost (pricing reference). Valuation uses the weighted average across all purchases — history is preserved."
-- **Backfill:** `backend/scripts/backfill_last_cost.py --dry-run` tested locally, writes `base_price = unit_cost of latest ready_stock_in/opening_stock/stock_in event` per SKU. Run on prod after deploy + RDS snapshot.
-- **JSON vs JSONB gotcha:** `inventory_events.metadata` column is `JSON`, not `JSONB` — can't use `?` operator. Use `NULLIF(metadata->>'key','')::numeric` pattern.
-
-**Files:** `backend/app/services/{sku_service,batch_service,fy_closing_service}.py`, `frontend/src/pages/SKUsPage.jsx`, `backend/scripts/backfill_last_cost.py`.
-
-**S112 part 3 — Orders/Invoices price-source consistency + Last Cost warning:**
-- **"Price" → "Rate"** on OrdersPage headers (detail `:965`, create form `:1505`) — aligns with InvoicesPage + OrderPrint (all say "Rate"). Indian wholesale convention.
-- **InvoicesPage fallback fix** (`:1277`): was `sale_rate || selling_price || base_price` with dead `selling_price` field and missing `mrp`. Now matches Orders: `sale_rate || mrp || base_price`.
-- **`pickDefaultRate(sku)` helper** at module scope in both pages. Returns `{rate, source}` — source is one of `sale_rate | mrp | base_price | null`. Single source of truth for price defaulting.
-- **`price_source` tracked in line state** on both Orders (4 defaulting paths: scan + design + color + size picks) and Invoices (SKU pick). Manual edit flips source to `'manual'` → warning clears.
-- **Last Cost warning UX:** when `price_source === 'base_price'`, the rate input gets amber border + amber-50 background + inline caption ("⚠ Last Cost" on Orders with hover tooltip, "⚠ Using Last Cost — no sale rate / MRP on SKU" on Invoices). Non-blocking — user can still submit; they've been warned. If user edits the rate manually, warning clears.
-
-**Files:** `frontend/src/pages/{OrdersPage,InvoicesPage}.jsx`.
-
-**S112 part 4 — SKU detail WOW redesign (ERP SaaS density):**
-- **Hero band (replaces 6 redundant KPI chips):** 3 balanced blocks — Stock gauge (big total + bi-colour progress bar + available/reserved legend + % caption), Money card (big Sale Rate + Last Cost + MRP chips + WAC caption), Identity rail (Design · Color swatch · Size · Type + Active/Inactive pill with status dot).
-- **Merged "SKU Details" card** (was 2 separate cards with duplicate "Save Changes" buttons). 4 sections with subtle top-border dividers: Identity → Cost → Selling → Tax & Meta. Single sticky Save button at top-right. Identity-locked badge shows only when shipped. WAC avg chip appears next to "Cost" heading.
-- **Table polish:** zebra striping on Inventory History + Open Demand, entire Open Demand row now clickable (cursor-pointer + emerald hover + deep-link to `/orders?open={id}`), Source Batches empty state upgraded from italic grey text to a dashed-border info panel with an icon and full explanation (what fills it, when).
-- **Spacing tightened:** card padding `p-5 → p-4`, between-card spacing `space-y-5 → space-y-4`, grid gaps `gap-3 → gap-2.5`. ~15–20% more info per viewport.
-
-**Files:** `frontend/src/pages/SKUsPage.jsx`.
-
-**S112 part 5 — Bulk SKU label print (3 new trigger points):**
-- **Design-level (SKUs page group row):** tiny A4 + Thermal icons next to the SKU count pill. Click (with stopPropagation) prints all SKUs under that design — uses the existing `group.skus[]` array from the grouped endpoint, zero extra fetch. Column header "SKUs" renamed to "Labels", width bumped 8% → 12% (pulled 4% from Design).
-- **Filter-level (SKUs page toolbar):** `Print all N designs: A4 | Thermal` at the right of the filter bar. Fetches `GET /skus/grouped?page_size=0` with current filters (search, product_type, stock_status), flattens to single SKU array, confirm prompt if >200 SKUs (prevents print storms). Loading state guards against double-clicks.
-- **Order-level (Orders detail):** `SKU Labels` button in detail toolbar → opens Modal with 2 radio groups: **Format** (A4 / Thermal) × **Mode** (One per piece / One per SKU). Live label-count preview in each option. Per-piece expands each order_item by `quantity` (qty=10 → 10 hangtags); per-SKU dedupes by `sku_id` (1 per unique SKU). Uses in-memory `allSKUs` for full shape, falls back to `item.sku` brief if SKU not found.
-
-All three reuse the existing `SKULabelSheet` (A4) + `ThermalLabelSheet` (type=sku) components — no label component changes. User workflow pains solved: "print every size/color of design X", "print hangtags for order Y", "print all in-stock FBL SKUs for audit".
-
-**S112 part 5b — replaced "Print all filtered" with checkbox selection:** Original filter-level Print-all button auto-fired for every SKU matching filter (click with no filter → 1784 labels). User pushed back — needed explicit selection. Replaced with: (a) per-row checkbox column on SKUs table, (b) master checkbox in header (toggle all on current page, with indeterminate state), (c) emerald selection-aware action bar above table with Print A4/Thermal buttons — visible only when ≥1 design selected. Selection is a `Map<design_key, {skus[]}>` so it **persists across pages**; user can page through, tick designs on each page, print all at once with zero refetch. Print still confirms if >200 SKUs. Per-design group row icons stay (quick-print one design). Old `printAllFiltered` callback + `bulkPrintLoading` state removed as dead code.
-
-**Files:** `frontend/src/pages/{SKUsPage,OrdersPage}.jsx`.
-
-**S112 NEXT (carry-over + new):** MRP bulk backfill tool (1/1697 SKUs have MRP), ChallansPage 4d scan-to-receive refinement, prod UPI VPA swap to `@okhdfcbank`, run `backfill_last_cost.py` on prod once this deploys.
+**S113 NEXT (carry-over + new):**
+1. Run `backend/scripts/backfill_last_cost.py` on prod after RDS snapshot
+2. MRP bulk backfill tool (1/1697 SKUs have MRP)
+3. ChallansPage 4d scan-to-receive refinement (open since S109)
+4. Prod UPI VPA swap to `@okhdfcbank`
 
 ---
 
-## Previous State (Session 111 — 2026-04-17) — CLOSED
+## Previous Sessions (S87-S112) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels, Cost Accounting
 
-**SKU Open Demand card (`9c65254`):** Added "Open Demand" card on SKU detail between Source Batches and Inventory History. Shows unfulfilled orders holding/short the SKU (answers "why is available_qty=0 when total_qty=15?"). Backend `GET /skus/{id}/open-demand` — filters `order_items.fulfilled_qty < quantity AND order.status != 'cancelled'`. Frontend fetches in parallel with cost/events on detail open, refreshes on reopen only (no SSE). Deep-links to `/orders?open={id}` (S110 pattern). Trigger: user saw `FBL-Nanda-RED-XL` with 15 reserved but Inventory History showed only `+15` opening — no hint of the 2 orders holding the stock.
-
----
-
-## Previous Sessions (S87-S110) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels
-
+- **S112:** SKU infra overhaul. `GET /skus/grouped` + `/skus/summary`. Last Cost vs WAC split (`base_price` = latest stock-in, overwritten always; WAC derived from events via `compute_wac_map`; FY closing + dashboard use WAC — AS-2 compliant). `backend/scripts/backfill_last_cost.py` ready for prod. SKU detail WOW: 3-block hero, merged sectioned card, `typo-input-sm` compact inputs. Bulk label print (per-design icons, SKU-level checkbox selection with 3-state parent + cross-design via `skuIndex`, Orders modal with A4/Thermal × per-piece/per-SKU toggle). Orders/Invoices `pickDefaultRate(sku)` helper + `price_source` tracking + amber "⚠ Last Cost" warning when fallback hits `base_price`. "Price" → "Sale Rate" everywhere; sizes sorted canonically. 15 commits `cd9d86e..798ed3f`.
+- **S111:** SKU Open Demand card (`9c65254`). `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Card between Source Batches + Inventory History on detail, clickable deep-link to `/orders?open={id}`.
 - **S110:** SKU thermal V3 + Orders UX + pricing cleanup. Thermal SKU body rebuilt: full `sku_code` top strip + `D.NO {design_no}` (2-line wrap) + MRP + bordered SIZE chip. `ThermalLabelSheet.jsx` gained `wrap` + `chip` row types (CSS lives in BOTH print `pageStyle` AND screen `<style>` blocks — one `replace_all` won't hit both). Orders KPIs fetch full list via `page_size:0` into `allOrders` (was computing on 20-row slice); clickable "Total Orders" resets filters, "With Shortage" client-filters. Dupe-SKU check on manual color/size dropdowns mirrors scan path. `has_shortage` narrowed to `fulfilled_qty < quantity`; ship auto-zeros `short_qty` on full fulfilment. SKU Inventory History clickable Reference column (resolves shipment/batch/purchase refs, batch-loaded no N+1). Latent `create_event` bug fixed: `metadata=` → `metadata_=` (historical rows NULL). Order form default flipped to `sale_rate → mrp → base_price → 0`. Opening stock form gained Sale Rate + MRP cols (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price → sale_rate` + zeroed base_price; ORD-0004 stale short_qty zeroed. 10 commits `9fdf1df..95aa654`.
 - **S109:** Thermal Label Boarding Pass redesign. TSC TTP-345 driver calibrated to new stock `DRS-54*40` (54×40mm Die-Cut, Landscape 180°). 4-sided layout: hero code top strip + vertical `DRS BLOUSE`/`SCAN TO VIEW` bars + 30mm QR (+125% scan area) + `drsblouse.com` bottom strip. 1mm safe margin survives TSC ~0.5mm feed variance. Smart Minimal: SKU drops DES/COL/SIZE/TYPE (all in sku_code) → 18pt SIZE hero + MRP/RATE; Roll drops SR/FAB/COL → stacked big weight + small unit (kg/m auto) + INV/DT; Batch keeps 6 rows (batch_code encodes nothing), parses `color_breakdown` JSON. Field fixes: roll uses flat `fabric_type`/`color`, batch has no `color` column, SKU has no `design_no` field (parse from code), date DD Mon. Renderers return `{hero, qrValue, rows}` — wrapper composes chrome. Commits `9371fb3 c3a0249 c539302`.
 - **S108:** UPI QR fix + Thermal label system + Print UX cleanup. UPI QR `encodeURIComponent` mangled `@` → `%40` ("Could not load bank name") — fixed with literal `@` in `pa` param + VPA regex validate in Settings. Thermal label system (TSC TTP-345, 54×40mm): shared `ThermalLabelSheet.jsx` wrapper + 3 type renderers (`ThermalRollLabel/BatchLabel/SKULabel`), 5 pages wired (Rolls/Batches/BatchDetail/Lots/SKUs), "A4" vs "Thermal" button labels. Print UX: ESC/Ctrl+P detail-overlay guards (print was closing to list), `z-[55]` for label sheets above detail overlays (`z-50`). RollsPage headers migrated to emerald theme. Commits `2e3bd32 7381ed7 35c313d 5cbf3eb 7cc7d34 612fa5f 0c62e6a bb47aea 1b2ca58`.
@@ -349,6 +294,7 @@ All three reuse the existing `SKULabelSheet` (A4) + `ThermalLabelSheet` (type=sk
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S112 | SKU infra + Last Cost/WAC split + Bulk Label Print | `GET /skus/grouped` + `/skus/summary` (consistent design-rows + global KPIs, fixes S110-class bug). `sku.base_price` redefined as Last Cost (overwritten every stock-in, pricing signal); WAC derived from events via `SKUService.compute_wac_map()` for FY closing + valuation (AS-2). `backend/scripts/backfill_last_cost.py` ready for prod. SKU detail WOW redesign (3-block hero + merged sectioned card + `typo-input-sm` compact). Bulk print — per-design icons + SKU-level checkbox with 3-state design parent + Orders modal with A4/Thermal × per-piece/per-SKU. Orders/Invoices `pickDefaultRate(sku)` + amber "⚠ Last Cost" warning. "Price" → "Sale Rate". Sizes sorted S→4XL. 15 commits `cd9d86e..798ed3f` |
 | S111 | SKU Open Demand Card | New card on SKU detail (between Source Batches + Inventory History) showing unfulfilled orders holding the SKU. Backend `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Clickable deep-link to `/orders?open={id}`. Refreshes on SKU reopen only (no SSE). Commit `9c65254` |
 | S110 | SKU Thermal V3 + Orders UX + Pricing | Thermal SKU body rebuilt (D.NO wrap + MRP + SIZE chip); Orders KPIs fetch full list via `page_size:0` + clickable Total/With-Shortage cards; manual-dropdown dupe-SKU check mirrors scan path; `has_shortage` narrowed + short_qty auto-zero on ship; SKU Inventory History gains clickable Reference column (resolve shipment/batch/purchase refs); `create_event` metadata bug fixed (`metadata=`→`metadata_=`); order form default flipped to sale_rate; opening stock form gains Sale Rate + MRP columns (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price→sale_rate` + base_price zeroed; ORD-0004 stale short_qty zeroed. Commits `9fdf1df`..`95aa654` |
 | S109 | Thermal Label Boarding Pass | TSC TTP-345 stock calibration (54×40mm, Landscape 180°). 4-sided layout: hero top strip + 30mm QR + vertical DRS BLOUSE/SCAN TO VIEW bars + bottom brand strip. 1mm safe margin all sides. Smart Minimal: SKU drops 4 redundant rows (in sku_code) → 18pt SIZE hero + MRP. Roll drops 3 rows (in roll_code) → stacked weight/unit hero (kg/m auto) + INV/DT. Batch keeps 6 rows (batch_code encodes nothing), color_breakdown JSON parsing. Field fixes: roll.fabric_type/color flat strings, batch.quantity, date DD Mon. Renderers refactored to return `{hero, qrValue, rows}` data. Commits `9371fb3 c3a0249 c539302` |
