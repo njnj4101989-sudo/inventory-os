@@ -1674,7 +1674,10 @@ export default function OrdersPage() {
 
       {/* KPI strip */}
       <div className="mt-4 grid grid-cols-2 md:grid-cols-6 gap-2">
-        <KPICard label="Total Orders" value={kpis.total} color="slate" />
+        <KPICard label="Total Orders" value={kpis.total} color="slate"
+          onClick={() => {
+            setStatusFilter(''); setSourceFilter(''); setSearch(''); setShortageOnly(false); setPage(1)
+          }} />
         <KPICard label="Pending" value={kpis.pending} color="amber" />
         <KPICard label="Processing" value={kpis.processing} color="blue" />
         <KPICard label="Shipped Today" value={kpis.shippedToday} color="green" />
