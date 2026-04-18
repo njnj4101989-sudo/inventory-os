@@ -11,6 +11,7 @@ import { getAllCustomers } from '../api/customers'
 import { getCompany } from '../api/company'
 import CreditNotePrint from '../components/common/CreditNotePrint'
 import FilterSelect from '../components/common/FilterSelect'
+import CreditNotePickerModal from '../components/common/CreditNotePickerModal'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
@@ -168,6 +169,8 @@ export default function InvoicesPage() {
   const [showCreditNote, setShowCreditNote] = useState(false)
   const [cnForm, setCnForm] = useState({ reason: '', reason_notes: '', items: [] })
   const [cnSaving, setCnSaving] = useState(false)
+  // Workflow picker — chooses between fast-track CN vs full-QC sales return.
+  const [showCNPicker, setShowCNPicker] = useState(false)
 
   // Credit Notes tab
   const [viewMode, setViewMode] = useState(searchParams.get('tab') || 'invoices') // invoices | credit_notes
@@ -256,11 +259,14 @@ export default function InvoicesPage() {
 
   useEffect(() => { if (viewMode === 'debit_notes') fetchDebitNotes() }, [viewMode, fetchDebitNotes])
 
-  /* ── Deep-link: ?open=<uuid|invoice_number> → auto-open detail ── */
+  /* ── Deep-link: ?open=<uuid|invoice_number> → auto-open detail.
+        Optional ?cn=1 → after detail loads, auto-open the fast-track CN form. ── */
   useEffect(() => {
     const openParam = searchParams.get('open')
     if (!openParam) return
+    const autoOpenCN = searchParams.get('cn') === '1'
     searchParams.delete('open')
+    searchParams.delete('cn')
     setSearchParams(searchParams, { replace: true })
     // UUID format: 8-4-4-4-12 hex chars; otherwise treat as invoice_number (e.g., INV-0005)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(openParam)
@@ -268,7 +274,27 @@ export default function InvoicesPage() {
       setDetailLoading(true)
       try {
         const res = isUuid ? await getInvoice(openParam) : await getInvoiceByNo(openParam)
-        setDetailInvoice(res.data.data || res.data)
+        const inv = res.data.data || res.data
+        setDetailInvoice(inv)
+        if (autoOpenCN && inv) {
+          // Prefill + open fast-track form once detail is rendered.
+          setTimeout(() => {
+            setCnForm({
+              reason: '',
+              reason_notes: '',
+              items: (inv.items || []).map(it => ({
+                invoice_item_id: it.id,
+                sku_id: it.sku?.id,
+                sku_code: it.sku?.sku_code || '',
+                max_qty: it.quantity || 0,
+                quantity: it.quantity || 0,
+                unit_price: Number(it.unit_price) || 0,
+                restore_stock: true,
+              })),
+            })
+            setShowCreditNote(true)
+          }, 100)
+        }
       } catch { /* ignore — invoice may not exist */ }
       finally { setDetailLoading(false) }
     })()
@@ -335,8 +361,14 @@ export default function InvoicesPage() {
     finally { setActioning(false) }
   }
 
-  /* ── Open credit-note modal: prefill line items from invoice ── */
+  /* ── Open the workflow picker first (unified entry) ── */
   const openCreditNote = () => {
+    if (!detailInvoice) return
+    setShowCNPicker(true)
+  }
+
+  /* ── Internal: open fast-track CN form (called by picker or cancel-chain) ── */
+  const openFastTrackCNForm = () => {
     if (!detailInvoice) return
     setCnForm({
       reason: '',
@@ -352,6 +384,23 @@ export default function InvoicesPage() {
       })),
     })
     setShowCreditNote(true)
+  }
+
+  /* ── Picker routes to fast-track or full-QC ── */
+  const handleCNPickerPick = (workflow) => {
+    setShowCNPicker(false)
+    if (workflow === 'fast_track') {
+      openFastTrackCNForm()
+    } else {
+      // Route to full Sales Return create flow on the Returns page, pre-filled from invoice.
+      const invId = detailInvoice.id
+      const orderId = detailInvoice.order?.id
+      setDetailInvoice(null)
+      const qs = orderId
+        ? `tab=sales&create=true&invoice_id=${invId}&order_id=${orderId}`
+        : `tab=sales&create=true&invoice_id=${invId}`
+      navigate(`/returns?${qs}`)
+    }
   }
 
   const handleCreateCreditNote = async () => {
@@ -407,6 +456,7 @@ export default function InvoicesPage() {
         } catch { /* fall back to stale detailInvoice — not critical */ }
 
         // Pre-fill CN form from the (now cancelled) invoice's line items.
+        // Cancel→CN chain always uses fast-track (user already signaled intent via the checkbox).
         setCnForm({
           reason: '',                          // user picks — cancel reason ≠ CN reason semantically
           reason_notes: carryOverNotes || '',  // carry over cancel notes as a helpful starting point
@@ -1180,6 +1230,15 @@ export default function InvoicesPage() {
                 </button>
               </div>
             )}
+
+            {/* Workflow picker — chooses fast-track vs full-QC */}
+            <CreditNotePickerModal
+              open={showCNPicker}
+              onClose={() => setShowCNPicker(false)}
+              onPick={handleCNPickerPick}
+              subtitle={`Against invoice ${inv.invoice_number}`}
+              fastTrackAvailable={true}
+            />
 
             {/* Credit Note modal — fast-track, skips the 5-step QC workflow */}
             {showCreditNote && (

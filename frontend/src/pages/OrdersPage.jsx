@@ -15,6 +15,7 @@ import QuickMasterModal from '../components/common/QuickMasterModal'
 import { useScanPair } from '../hooks/useScanPair'
 import OrderPrint from '../components/common/OrderPrint'
 import FilterSelect from '../components/common/FilterSelect'
+import CreditNotePickerModal from '../components/common/CreditNotePickerModal'
 import Modal from '../components/common/Modal'
 import SKULabelSheet from '../components/common/SKULabelSheet'
 import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
@@ -630,12 +631,30 @@ export default function OrdersPage() {
     }
   }
 
-  /* ── Return action ── */
+  /* ── Credit Note picker: open unified workflow chooser ── */
+  const [showCNPicker, setShowCNPicker] = useState(false)
   const handleReturnAction = () => {
-    // Navigate to ReturnsPage with customer + order pre-fill
+    setShowCNPicker(true)
+  }
+
+  const handleCNPickerPick = (workflow) => {
+    setShowCNPicker(false)
     const custId = detailOrder.customer_id || ''
     const ordId = detailOrder.id || ''
-    navigate(`/returns?tab=sales&create=1&customer=${custId}&order=${ordId}`)
+    // Pick the most recent non-cancelled invoice for the fast-track path.
+    const activeInvoices = (detailOrder.invoices || []).filter(i => i.status !== 'cancelled')
+    const primaryInvoice = activeInvoices[0] || (detailOrder.invoices || [])[0]
+
+    if (workflow === 'fast_track' && primaryInvoice) {
+      // Jump to invoice detail with fast-track flag so InvoicesPage auto-opens the CN form.
+      setDetailOrder(null)
+      navigate(`/invoices?open=${primaryInvoice.id}&cn=1`)
+    } else {
+      // Full-QC workflow — navigate to ReturnsPage pre-filled with customer + order (+ invoice if present).
+      const qs = new URLSearchParams({ tab: 'sales', create: '1', customer: custId, order: ordId })
+      if (primaryInvoice) qs.set('invoice', primaryInvoice.id)
+      navigate(`/returns?${qs.toString()}`)
+    }
   }
 
   /* ── Create overlay: load SKUs ── */
@@ -1127,8 +1146,9 @@ export default function OrdersPage() {
                 )}
                 {canReturn && (
                   <button onClick={handleReturnAction} disabled={actioning}
-                    className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors">
-                    Create Sales Return
+                    className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                    title="Fast-track Credit Note or full QC Sales Return">
+                    Create Credit Note
                   </button>
                 )}
                 {canAct && (
@@ -1355,6 +1375,16 @@ export default function OrdersPage() {
           </div>
         )}
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+
+        {/* Credit Note workflow picker — fast-track vs full-QC */}
+        <CreditNotePickerModal
+          open={showCNPicker}
+          onClose={() => setShowCNPicker(false)}
+          onPick={handleCNPickerPick}
+          subtitle={`Against order ${o.order_number}`}
+          fastTrackAvailable={(o.invoices || []).length > 0}
+          fastTrackDisabledReason={(o.invoices || []).length === 0 ? 'No invoice yet on this order — full QC workflow only' : null}
+        />
 
         {/* SKU label config modal — A4/Thermal + per-piece/per-SKU toggle */}
         {skuLabelConfig && (() => {

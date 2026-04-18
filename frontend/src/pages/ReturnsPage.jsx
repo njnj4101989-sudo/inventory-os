@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getReturnNotes, getReturnNote, createReturnNote, approveReturnNote, dispatchReturnNote, acknowledgeReturnNote, closeReturnNote, cancelReturnNote } from '../api/returns'
 import { getSalesReturns, getSalesReturn, createSalesReturn, receiveSalesReturn, inspectSalesReturn, restockSalesReturn, closeSalesReturn, cancelSalesReturn } from '../api/salesReturns'
 import { getSuppliers } from '../api/suppliers'
@@ -20,6 +20,7 @@ import SearchInput from '../components/common/SearchInput'
 import FilterSelect from '../components/common/FilterSelect'
 import Modal from '../components/common/Modal'
 import QuickMasterModal from '../components/common/QuickMasterModal'
+import CreditNotePickerModal from '../components/common/CreditNotePickerModal'
 import useQuickMaster from '../hooks/useQuickMaster'
 import ReturnNotePrint from '../components/common/ReturnNotePrint'
 import SalesReturnPrint from '../components/common/SalesReturnPrint'
@@ -123,6 +124,20 @@ const SUPPLIER_COLUMNS = [
 /* ── Sales Returns columns ── */
 const SALES_COLUMNS = [
   { key: 'srn_no', label: 'SRN #', render: (val) => <span className="font-semibold text-emerald-700">{val}</span> },
+  {
+    key: 'credit_note_no',
+    label: 'CN #',
+    render: (val) => val
+      ? <span className="font-semibold text-amber-700">{val}</span>
+      : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: 'workflow_type',
+    label: 'Type',
+    render: (val) => val === 'fast_track'
+      ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 typo-badge"><span>⚡</span>Fast-track</span>
+      : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 typo-badge"><span>🔍</span>With QC</span>,
+  },
   { key: 'customer', label: 'Customer', render: (val) => val?.name || '—' },
   { key: 'order', label: 'Order', render: (val) => val?.order_number || '—' },
   { key: 'items', label: 'Items', render: (val) => val?.length || 0 },
@@ -132,6 +147,7 @@ const SALES_COLUMNS = [
 ]
 
 export default function ReturnsPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [category, setCategory] = useState(searchParams.get('tab') || 'supplier')
   const { company } = useAuth()
@@ -180,6 +196,7 @@ export default function ReturnsPage() {
 
   // Sales return create mode
   const [salesCreateMode, setSalesCreateMode] = useState(false)
+  const [showCNPicker, setShowCNPicker] = useState(false)
   const [customers, setCustomers] = useState([])
   const [skus, setSkus] = useState([])
   const [orders, setOrders] = useState([])
@@ -2037,10 +2054,11 @@ export default function ReturnsPage() {
           <h1 className="typo-page-title">Returns</h1>
           <p className="typo-caption">{category === 'supplier' ? 'Supplier return notes — rolls & SKUs' : 'Customer sale returns'}</p>
         </div>
-        <button onClick={category === 'supplier' ? openSupplierCreate : openSalesCreate}
-          className="rounded bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm flex items-center gap-1.5">
+        <button onClick={() => category === 'supplier' ? openSupplierCreate() : setShowCNPicker(true)}
+          className="rounded bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
+          title={category === 'sales' ? 'Fast-track Credit Note or full QC Sales Return' : 'New purchase return'}>
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          {category === 'supplier' ? 'New Return' : 'New Sales Return'}
+          {category === 'supplier' ? 'New Return Note' : 'New Credit Note'}
         </button>
       </div>
 
@@ -2125,6 +2143,25 @@ export default function ReturnsPage() {
         />
         <Pagination page={page} pages={pages} total={total} onChange={setPage} />
       </div>
+
+      {/* Credit Note workflow picker — fast-track or full-QC.
+          Fast-track from Returns page requires the user to pick an invoice,
+          so we route them to /invoices with a hint banner. With-QC opens the
+          existing 5-step sales return form. */}
+      <CreditNotePickerModal
+        open={showCNPicker}
+        onClose={() => setShowCNPicker(false)}
+        onPick={(workflow) => {
+          setShowCNPicker(false)
+          if (workflow === 'fast_track') {
+            navigate('/invoices?pickCN=1')
+          } else {
+            openSalesCreate()
+          }
+        }}
+        subtitle="For fast-track, open an invoice and click 'Create Credit Note' there"
+        fastTrackAvailable={true}
+      />
     </div>
   )
 }
