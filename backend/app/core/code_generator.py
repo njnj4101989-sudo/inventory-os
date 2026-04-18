@@ -13,7 +13,7 @@ codes reset to -0001 at the start of each financial year.
 import re
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.roll import Roll
@@ -47,9 +47,11 @@ async def _max_code(
         pattern: Optional LIKE pattern for prefix filtering.
         extra_where: Optional SQLAlchemy where clause (e.g. Model.fy_id == uuid).
     """
-    stmt = select(col).order_by(col.desc()).limit(1).with_for_update()
+    # Sort by LENGTH first so 5-digit numbers (e.g. RES-10000) beat 4-digit (RES-9999).
+    # Plain string sort would pick 'RES-9999' over 'RES-10000' because '9' > '1'.
+    stmt = select(col).order_by(func.length(col).desc(), col.desc()).limit(1).with_for_update()
     if pattern:
-        stmt = select(col).where(col.like(pattern)).order_by(col.desc()).limit(1).with_for_update()
+        stmt = select(col).where(col.like(pattern)).order_by(func.length(col).desc(), col.desc()).limit(1).with_for_update()
     if extra_where is not None:
         stmt = stmt.where(extra_where)
 

@@ -451,67 +451,76 @@ class OrderService:
         if req.notes is not None:
             order.notes = req.notes
 
-        # --- Update items (if provided) ---
+        # --- Update items (if provided) — DIFF-based reservation handling ---
+        # Only touches reservations for rows that actually changed. Unchanged rows
+        # keep their existing reservation untouched. This prevents the reservation
+        # table from bloating (old release-all + recreate-all pattern created N new
+        # RES rows per edit, even for 1-line changes).
         if req.items is not None:
             from app.models.inventory_state import InventoryState
             from app.models.reservation import Reservation
             from app.services.reservation_service import ReservationService
             res_svc = ReservationService(self.db)
 
-            # Step 1: Release ALL active reservations for this order
+            # Load this order's active reservations, bucketed by sku_id.
+            # List-per-sku handles the rare dup-SKU row case deterministically.
             res_stmt = select(Reservation).where(
                 Reservation.order_id == order_id,
                 Reservation.status == "active",
             )
             res_result = await self.db.execute(res_stmt)
-            for res in res_result.scalars().all():
-                await res_svc.release_reservation(res.id)
+            res_by_sku: dict = {}
+            for r in res_result.scalars().all():
+                res_by_sku.setdefault(r.sku_id, []).append(r)
 
-            # Step 2: Build existing items map
             existing_map = {item.id: item for item in order.items}
             incoming_ids = {it.id for it in req.items if it.id is not None}
 
-            # Step 3: Delete removed items
-            for item_id, item in existing_map.items():
+            # Step 1: Released removed items + their reservations
+            for item_id, item in list(existing_map.items()):
                 if item_id not in incoming_ids:
+                    bucket = res_by_sku.get(item.sku_id, [])
+                    if bucket:
+                        await res_svc.release_reservation(bucket.pop(0).id)
                     await self.db.delete(item)
 
-            # Step 4: Update existing + create new items
-            # Batch-fetch SKUs and inventory states
-            sku_ids = [it.sku_id for it in req.items]
+            # Step 2: Batch-fetch SKUs referenced by the incoming payload
+            sku_ids = list({it.sku_id for it in req.items})
             sku_result = await self.db.execute(select(SKU).where(SKU.id.in_(sku_ids)))
             sku_map = {s.id: s for s in sku_result.scalars().all()}
 
-            inv_result = await self.db.execute(
-                select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
-            )
-            inv_map = {s.sku_id: s for s in inv_result.scalars().all()}
-
             total_amount = 0
             final_items = []
+            # Rows whose reservation needs a fresh create (new row, sku swap, or qty change)
+            needs_fresh_reservation: list = []
 
             for it in req.items:
-                sku = sku_map.get(it.sku_id)
-                if not sku:
+                if it.sku_id not in sku_map:
                     raise NotFoundError(f"SKU {it.sku_id} not found")
 
-                inv_state = inv_map.get(it.sku_id)
-                available = inv_state.available_qty if inv_state else 0
-                short = max(0, it.quantity - available)
                 total_price = it.quantity * it.unit_price
                 total_amount += total_price
 
                 if it.id and it.id in existing_map:
-                    # Update existing item
                     oi = existing_map[it.id]
+                    sku_changed = oi.sku_id != it.sku_id
+                    qty_changed = oi.quantity != it.quantity
+
+                    if sku_changed or qty_changed:
+                        # Release this row's current reservation (tied to its current sku)
+                        bucket = res_by_sku.get(oi.sku_id, [])
+                        if bucket:
+                            await res_svc.release_reservation(bucket.pop(0).id)
+                        needs_fresh_reservation.append((oi, it.quantity, it.sku_id))
+                    # else: nothing changed on this row → reservation stays
+
                     oi.sku_id = it.sku_id
                     oi.quantity = it.quantity
                     oi.unit_price = it.unit_price
                     oi.total_price = total_price
-                    oi.short_qty = short
+                    # short_qty is recomputed below only if we re-reserve; otherwise keep prior value
                     final_items.append(oi)
                 else:
-                    # New item
                     oi = OrderItem(
                         order_id=order_id,
                         sku_id=it.sku_id,
@@ -519,43 +528,33 @@ class OrderService:
                         unit_price=it.unit_price,
                         total_price=total_price,
                         fulfilled_qty=0,
-                        short_qty=short,
+                        short_qty=0,  # filled in below when reservation is attempted
                     )
                     self.db.add(oi)
+                    needs_fresh_reservation.append((oi, it.quantity, it.sku_id))
                     final_items.append(oi)
 
             order.total_amount = total_amount
             await self.db.flush()
 
-            # Step 5: Re-reserve stock for all current items
-            for oi in final_items:
-                reservable = oi.quantity - oi.short_qty
-                if reservable <= 0:
-                    continue
-                try:
+            # Step 3: Create reservations only for changed/new rows
+            for oi, qty, sku_id in needs_fresh_reservation:
+                inv_stmt = (
+                    select(InventoryState)
+                    .where(InventoryState.sku_id == sku_id)
+                    .with_for_update()
+                )
+                inv_state = (await self.db.execute(inv_stmt)).scalar_one_or_none()
+                available = inv_state.available_qty if inv_state else 0
+                reservable = min(qty, available)
+                oi.short_qty = max(0, qty - reservable)
+                if reservable > 0:
                     await res_svc.create_reservation(
-                        sku_id=oi.sku_id,
+                        sku_id=sku_id,
                         quantity=reservable,
                         order_id=order_id,
                         permanent=True,
                     )
-                except InsufficientStockError:
-                    fresh_inv = await self.db.execute(
-                        select(InventoryState).where(InventoryState.sku_id == oi.sku_id)
-                    )
-                    current = fresh_inv.scalar_one_or_none()
-                    current_available = current.available_qty if current else 0
-                    if current_available > 0:
-                        await res_svc.create_reservation(
-                            sku_id=oi.sku_id,
-                            quantity=current_available,
-                            order_id=order_id,
-                            permanent=True,
-                        )
-                        oi.short_qty = oi.quantity - current_available
-                    else:
-                        oi.short_qty = oi.quantity
-                    await self.db.flush()
 
         order.updated_at = datetime.now(timezone.utc)
         await self.db.flush()
