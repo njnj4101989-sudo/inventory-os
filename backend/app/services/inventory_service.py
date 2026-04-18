@@ -201,6 +201,32 @@ class InventoryService:
                     "supplier_invoice_id": str(si.id),
                 }
 
+        if "sales_return" in by_type:
+            from app.models.sales_return import SalesReturn
+            srs = (await self.db.execute(
+                select(SalesReturn)
+                .where(SalesReturn.id.in_(by_type["sales_return"]))
+                .options(selectinload(SalesReturn.invoice), selectinload(SalesReturn.order))
+            )).scalars().all()
+            for sr in srs:
+                # Prefer the CN number as the user-facing code — it's the GST
+                # document. Fall back to SRN if CN not yet assigned (should
+                # not happen for closed returns, but kept defensive).
+                code = sr.credit_note_no or sr.srn_no
+                # Extra context: invoice it reverses, falling back to the
+                # linked order so the row is always useful.
+                extra = None
+                if sr.invoice and sr.invoice.invoice_number:
+                    extra = sr.invoice.invoice_number
+                elif sr.order and sr.order.order_number:
+                    extra = sr.order.order_number
+                ref_info[sr.id] = {
+                    "kind": "sales_return",
+                    "code": code,
+                    "extra": extra,
+                    "sales_return_id": str(sr.id),
+                }
+
         # Build per-event map (static labels for types without FK lookup)
         out: dict = {}
         for e in events:

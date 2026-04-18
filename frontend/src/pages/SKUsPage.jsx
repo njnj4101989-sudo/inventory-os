@@ -1426,6 +1426,7 @@ export default function SKUsPage() {
                         shipment: 'Shipment',
                         manual_adjustment: 'Manual',
                         batch_pack: 'Batch Pack',
+                        sales_return: 'Credit Note',
                       }[evt.reference_type] || evt.reference_type || '—'
                       const unitCost = evt.metadata?.unit_cost
                       const ref = evt.reference
@@ -1433,6 +1434,8 @@ export default function SKUsPage() {
                         ? `/orders?open=${ref.order_id}`
                         : ref?.kind === 'batch' && ref?.batch_id
                         ? `/batches?open=${ref.batch_id}`
+                        : ref?.kind === 'sales_return' && ref?.sales_return_id
+                        ? `/returns?tab=sales&open=${ref.sales_return_id}`
                         : null
                       return (
                         <tr key={evt.id} className={`border-b last:border-0 hover:bg-emerald-50/40 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
