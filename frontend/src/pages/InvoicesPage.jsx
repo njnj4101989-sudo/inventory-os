@@ -1190,7 +1190,30 @@ export default function InvoicesPage() {
                               <th className="typo-th text-right px-3 py-2">Credit Qty</th>
                               <th className="typo-th text-right px-3 py-2">Rate</th>
                               <th className="typo-th text-right px-3 py-2">Amount</th>
-                              <th className="typo-th text-center px-3 py-2">Restore Stock</th>
+                              <th className="typo-th text-center px-3 py-2">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {(() => {
+                                    const total = cnForm.items.length
+                                    const checked = cnForm.items.filter(i => i.restore_stock).length
+                                    const allChecked = total > 0 && checked === total
+                                    const someChecked = checked > 0 && checked < total
+                                    return (
+                                      <input
+                                        type="checkbox"
+                                        ref={(el) => { if (el) el.indeterminate = someChecked }}
+                                        checked={allChecked}
+                                        onChange={(e) => {
+                                          const v = e.target.checked
+                                          setCnForm(f => ({ ...f, items: f.items.map(x => ({ ...x, restore_stock: v })) }))
+                                        }}
+                                        className="h-4 w-4 cursor-pointer"
+                                        title={allChecked ? 'Uncheck all' : 'Check all'}
+                                      />
+                                    )
+                                  })()}
+                                  <span>Restore Stock</span>
+                                </div>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
