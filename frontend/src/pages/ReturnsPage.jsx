@@ -1277,10 +1277,16 @@ export default function ReturnsPage() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setPrintNote(n); setDetail(null) }}
-              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors"
+              title="Full-page with roll/SKU list — for warehouse / dispatch">
+              Print Return Note
+            </button>
             {n.debit_note_no && (
               <button onClick={() => { setPrintDebitNote(n); setDetail(null) }}
-                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print DN</button>
+                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors"
+                title="Half-page GST summary — for accounts / supplier copy">
+                Print Debit Note
+              </button>
             )}
             <button onClick={() => setDetail(null)} className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
           </div>
