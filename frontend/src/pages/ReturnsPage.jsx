@@ -2071,7 +2071,7 @@ export default function ReturnsPage() {
           className="rounded bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
           title={category === 'sales' ? 'Fast-track Credit Note or full QC Sales Return' : 'New purchase return'}>
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          {category === 'supplier' ? 'New Return Note' : 'New Credit Note'}
+          {category === 'supplier' ? 'New Return Note' : 'New Sales Return'}
         </button>
       </div>
 
@@ -2172,6 +2172,7 @@ export default function ReturnsPage() {
             openSalesCreate()
           }
         }}
+        title="New Sales Return"
         subtitle="For fast-track, open an invoice and click 'Create Credit Note' there"
         fastTrackAvailable={true}
       />

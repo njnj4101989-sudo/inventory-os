@@ -1145,11 +1145,14 @@ export default function OrdersPage() {
                   </>
                 )}
                 {canReturn && (
-                  <button onClick={handleReturnAction} disabled={actioning}
-                    className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
-                    title="Fast-track Credit Note or full QC Sales Return">
-                    Create Credit Note
-                  </button>
+                  <div className="flex flex-col items-end">
+                    <button onClick={handleReturnAction} disabled={actioning}
+                      className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                      title="Fast-track Credit Note or full QC Sales Return">
+                      Create Credit Note
+                    </button>
+                    <span className="typo-caption text-orange-500 mt-0.5">or Create Sales Return</span>
+                  </div>
                 )}
                 {canAct && (
                   <button onClick={() => handleAction('ship')} disabled={actioning}
@@ -1376,11 +1379,12 @@ export default function OrdersPage() {
         )}
         <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
 
-        {/* Credit Note workflow picker — fast-track vs full-QC */}
+        {/* Credit Note / Sales Return workflow picker — fast-track vs full-QC */}
         <CreditNotePickerModal
           open={showCNPicker}
           onClose={() => setShowCNPicker(false)}
           onPick={handleCNPickerPick}
+          title="Create Sales Return"
           subtitle={`Against order ${o.order_number}`}
           fastTrackAvailable={(o.invoices || []).length > 0}
           fastTrackDisabledReason={(o.invoices || []).length === 0 ? 'No invoice yet on this order — full QC workflow only' : null}
