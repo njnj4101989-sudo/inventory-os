@@ -33,7 +33,33 @@
 
 ---
 
-## Current State (Session 113 — 2026-04-18) — CLOSED
+## Current State (Session 114 — 2026-04-18) — CLOSED
+
+**Unified Credit Note picker + full print-suite redesign (sales + purchase).**
+
+Two things shipped this session:
+
+**1. Unified CN workflow picker (NetSuite/Zoho pattern).** Two entry points for customer returns (Invoice page, Order page) + Returns page now all open the same `CreditNotePickerModal` — user picks `⚡ Fast-track` (1-click, financial adjustment, closes immediately) or `🔍 With QC` (5-step inspection workflow). Button labels stay contextual per page ("Create Credit Note" on Invoice, "Credit Note / Sales Return" with inline slash on Order, "New Sales Return" on Returns page — Tally-style: document name for accounting, event name for ops). SalesReturn gains `workflow_type` column (migration `h8i9j0k1l2m3`) so the Returns list badges each row `⚡ Fast-track` or `🔍 With QC`. CN-0001 retro-patched. Emojis swapped for Heroicons-style inline SVGs with emerald/amber gradient tiles (no new deps). Several polish iterations on the picker typography + icon sizing + button hint chips before settling on a single inline-slash button on Orders detail.
+
+**2. Full print suite redesign — sales + purchase symmetry.** Four print components rewritten:
+  - `CreditNotePrint` → A4 half-page GST summary. Cut line at A4 midpoint (148.5mm), top-half locked to 138.5mm. No SKU list (per GST Rule 53(1A), not required on the tax document itself). FROM/TO GSTINs, Original Invoice reference, Amount-in-Words, Tax breakup card (Taxable → Discount → CGST → SGST → TOTAL CREDIT), one-line pointer to SalesReturn for itemized goods. Fixed triple-padding bug (38mm wasted → 14mm). Fixed `overflow: hidden` clipping the signature block.
+  - `SalesReturnPrint` → Full-page warehouse/QC ops doc. Dropped redundant columns (Description, Reason). Added: 4-card summary bar (Items / Pieces / Restocked-Damaged / Value), condition chip (G/D/R circle), Rate + Amount columns, verify-box column, 3-way signature footer (Received By / Inspected By / Authorised Signatory). TOTALS moved out of `<tfoot>` (was duplicating on every printed page) into single post-table div. Page counter "Page X of Y" in @page bottom-center.
+  - `DebitNotePrint` → Purchase-side mirror of CreditNote. TOTAL DEBIT, FROM (Buyer) / TO (Supplier), points to Return Note.
+  - `ReturnNotePrint` → Purchase-side mirror of SalesReturn. Dynamic table (roll_return → Roll Code/Fabric/Color/Weight; sku_return → SKU Code/Size/Qty). 3-way signature (Dispatched By / Acknowledged By / Authorised Signatory).
+
+Button labels across the new print buttons:
+  - Sales: `Print Sales Return` (full-page) + `Print Credit Note` (half-page)
+  - Purchase: `Print Return Note` (full-page) + `Print Debit Note` (half-page)
+
+**Commits this session:** `114da8f 83d4973 7d965c9 2e43108 505f97d 8663de0 51755bd 4a830ea 31a6e6e 626ecf4 dac23ee da588e7 7e7da4b 815695b 6b96e9b` (15 commits).
+
+**S115 queue (carry-over + unchanged from S113-close):**
+1. MRP bulk backfill tool (1/1697 SKUs have MRP)
+2. ChallansPage 4d scan-to-receive refinement (open since S109)
+
+---
+
+## Previous State (Session 113 — 2026-04-18) — CLOSED
 
 **RES code collision hotfix + Order-edit bloat + Invoice cancel / Credit Note overhaul (Tally model).**
 
@@ -71,8 +97,9 @@ One-off prod SQL operations: patched CN-0001 amount mismatch (was ₹41,564.25 w
 
 ---
 
-## Previous Sessions (S87-S113) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels, Cost Accounting
+## Previous Sessions (S87-S114) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels, Cost Accounting
 
+- **S114:** Unified Credit Note picker + full print-suite redesign. `CreditNotePickerModal` shared across Invoice/Order/Returns pages (fast-track vs with-QC workflow). `SalesReturn.workflow_type` column (migration `h8i9j0k1l2m3`). Contextual button names (CN in accounting contexts, Sales Return in ops). All 4 return prints rewritten for symmetry: **CreditNote + DebitNote** = A4 half-page GST summary (cut line at midpoint, no SKU list per Rule 53); **SalesReturn + ReturnNote** = A4 full-page warehouse/ops doc (summary bar, condition chips, 3-way signature, page counter, TOTALS-out-of-tfoot to avoid multi-page duplication). Fixed CN padding stacking (38mm → 14mm), overflow clipping the signature. Emojis → inline SVG icons with emerald/amber gradient tiles. 15 commits `114da8f..6b96e9b`.
 - **S113:** Hotfix RES code collision (lex vs numeric sort in `_max_code` — `'RES-9999'>'RES-10000'` in strings) + diff-based `update_order` (was burning N+N RES rows per edit, now O(changed)). **Invoice cancel / CN overhaul — Tally model:** cancel = status flip + audit (reason/by/when), CN is sole ledger reversal. Fast-track `POST /invoices/{id}/credit-note` → closed SR in one call, SRN+CN generated, proportional discount inheritance, per-line restore_stock. Cancel→CN chain checkbox (Zoho pattern). `SalesReturn.invoice_id` + `SalesReturn.discount_amount` columns. 3 migrations `e5f6…` `f6g7…` `g7h8…`. Invoice detail shows linked CNs; order detail amber-banners cancelled invoices; SKU history resolves sales_return refs; ledger Particular column deep-links. Phase 4 (full shipment reversal) rejected — not industry-standard. Prod SQL cleanup: CN-0001 amount fix, duplicate cancel-ledger entry removed, INV-0009 reason backfilled. 14 commits `33b7cf1..c9d7c2c`.
 - **S112:** SKU infra overhaul. `GET /skus/grouped` + `/skus/summary`. Last Cost vs WAC split (`base_price` = latest stock-in, overwritten always; WAC derived from events via `compute_wac_map`; FY closing + dashboard use WAC — AS-2 compliant). No backfill — write-path handles all new events. SKU detail WOW: 3-block hero, merged sectioned card, `typo-input-sm` compact inputs. Bulk label print (per-design icons, SKU-level checkbox selection with 3-state parent + cross-design via `skuIndex`, Orders modal with A4/Thermal × per-piece/per-SKU toggle). Orders/Invoices `pickDefaultRate(sku)` helper + `price_source` tracking + amber "⚠ Last Cost" warning when fallback hits `base_price`. "Price" → "Sale Rate" everywhere; sizes sorted canonically. 15 commits `cd9d86e..798ed3f`.
 - **S111:** SKU Open Demand card (`9c65254`). `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Card between Source Batches + Inventory History on detail, clickable deep-link to `/orders?open={id}`.
@@ -319,6 +346,7 @@ One-off prod SQL operations: patched CN-0001 amount mismatch (was ₹41,564.25 w
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S114 | Unified CN picker + Print suite redesign (sales + purchase symmetry) | `CreditNotePickerModal` shared across Invoice/Order/Returns pages — ⚡ Fast-track vs 🔍 With QC cards, contextual button labels per page (CN vs Sales Return per Tally convention). `SalesReturn.workflow_type` column (migration `h8i9j0k1l2m3`) drives list badges. All 4 return print templates rewritten: **CreditNotePrint + DebitNotePrint** = A4 half-page GST summary (cut line at 148.5mm midpoint, top-half locked to 138.5mm, Amount-in-Words, emerald-tinted tax breakup card, NO SKU list per GST Rule 53(1A), single signature); **SalesReturnPrint + ReturnNotePrint** = A4 full-page warehouse/ops (4-card summary bar, condition chip G/D/R circle, verify-box column, 3-way signature — Received/Inspected/Authorised for sales, Dispatched/Acknowledged/Authorised for purchase, dynamic table columns for roll vs SKU returns, TOTALS as post-table div not `<tfoot>` to stop multi-page duplication, page counter `Page X of Y` via `@page @bottom-center`). Fixed CN print padding stacking (38mm → 14mm), `overflow: hidden` clipping the signature block, duplicate TOTALS on multi-page SR. Emojis → inline SVG icons (bolt/clipboard-check) with gradient tiles, zero new deps. Button labels: `Print Credit Note` / `Print Sales Return` / `Print Debit Note` / `Print Return Note`. 15 commits `114da8f..6b96e9b` |
 | S113 | RES hotfix + Order-edit diff + Cancel/CN overhaul (Tally model) | `_max_code` sort: `LENGTH DESC, col DESC` — fixes `RES-10000` collision + future-proofs all generators. `update_order` rewritten diff-based — only touches reservations for rows where `sku_id`/`qty` actually changed. **Invoice cancel overhaul**: audit fields (reason/by/when), red banner, reason enum + `other`+notes. **Fast-track CN**: `POST /invoices/{id}/credit-note` → closed SalesReturn in one call, SRN+CN assigned, proportional discount from invoice, per-line restore_stock with tri-state Select-All. **Tally model**: cancel = status flip only, CN = sole ledger reversal (was double-crediting). **Cancel→CN chain** checkbox (Zoho pattern). `SalesReturn.invoice_id` + `discount_amount` cols (migrations `e5f6g7h8i9j0`, `f6g7h8i9j0k1`, `g7h8i9j0k1l2`). Navigation: invoice↔CN card, order amber banner + strikethrough, SKU history resolves sales_return → CN+INV+deep-link, ledger Particular clickable. Phase 4 (un-ship) rejected — shipments don't reverse, CN handles it. Prod SQL: INV-0009 patched cancel_reason, duplicate cancel-ledger removed, CN-0001 amount corrected. 14 commits `33b7cf1..c9d7c2c` |
 | S112 | SKU infra + Last Cost/WAC split + Bulk Label Print | `GET /skus/grouped` + `/skus/summary` (consistent design-rows + global KPIs, fixes S110-class bug). `sku.base_price` redefined as Last Cost (overwritten every stock-in, pricing signal); WAC derived from events via `SKUService.compute_wac_map()` for FY closing + valuation (AS-2). No backfill needed — write-path sets `base_price` on purchase/opening/pack. SKU detail WOW redesign (3-block hero + merged sectioned card + `typo-input-sm` compact). Bulk print — per-design icons + SKU-level checkbox with 3-state design parent + Orders modal with A4/Thermal × per-piece/per-SKU. Orders/Invoices `pickDefaultRate(sku)` + amber "⚠ Last Cost" warning. "Price" → "Sale Rate". Sizes sorted S→4XL. 15 commits `cd9d86e..798ed3f` |
 | S111 | SKU Open Demand Card | New card on SKU detail (between Source Batches + Inventory History) showing unfulfilled orders holding the SKU. Backend `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Clickable deep-link to `/orders?open={id}`. Refreshes on SKU reopen only (no SSE). Commit `9c65254` |
