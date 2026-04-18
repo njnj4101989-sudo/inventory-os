@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models.invoice import Invoice
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.sales_return import SalesReturn
 from app.models.shipment import Shipment
 from app.models.shipment_item import ShipmentItem
 from app.models.sku import SKU
@@ -65,7 +66,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
-                selectinload(Order.sales_returns),
+                selectinload(Order.sales_returns).selectinload(SalesReturn.items),
             )
             .order_by(order)
         )
@@ -637,7 +638,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.items).selectinload(ShipmentItem.sku),
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
-                selectinload(Order.sales_returns),
+                selectinload(Order.sales_returns).selectinload(SalesReturn.items),
             )
         )
         result = await self.db.execute(stmt)
