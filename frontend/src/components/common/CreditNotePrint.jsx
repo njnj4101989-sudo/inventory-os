@@ -4,161 +4,214 @@ import { useReactToPrint } from 'react-to-print'
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const fmtCurrency = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+// Number-to-words (Indian system) for the "Amount in Words" line — matches invoice print convention.
+function numberToWordsIN(num) {
+  const n = Math.round(Number(num) || 0)
+  if (n === 0) return 'Zero Rupees Only'
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+  const two = (x) => x < 20 ? ones[x] : tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '')
+  const three = (x) => x >= 100 ? ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' + two(x % 100) : '') : two(x)
+  let r = n, parts = []
+  const crore = Math.floor(r / 10000000); r %= 10000000
+  const lakh = Math.floor(r / 100000); r %= 100000
+  const thousand = Math.floor(r / 1000); r %= 1000
+  const hundred = r
+  if (crore) parts.push(two(crore) + ' Crore')
+  if (lakh) parts.push(two(lakh) + ' Lakh')
+  if (thousand) parts.push(two(thousand) + ' Thousand')
+  if (hundred) parts.push(three(hundred))
+  return parts.join(' ') + ' Rupees Only'
+}
+
 /**
- * CreditNotePrint — A4 GST-compliant credit note document.
- * Generated from a closed SalesReturn with credit_note_no.
- * Props: salesReturn (SalesReturnResponse with credit_note_no), company (full company object), onClose
+ * CreditNotePrint — GST-compliant Credit Note summary.
+ *
+ * Industry-standard CN format: half-page summary with supplier/recipient
+ * GST details, original invoice reference, reason, tax breakup, and signature.
+ * NO itemized SKU list — that belongs on the Sales Return / Delivery Note
+ * (SalesReturnPrint.jsx). Per GST Rule 53(1A) the SKU breakdown is not
+ * required on the credit note itself.
+ *
+ * Layout: A4 portrait, content sits in the TOP HALF only. Print two CNs
+ * per A4 if needed (fold at middle). Zero paper waste, matches Tally's
+ * default CN voucher print.
+ *
+ * Props: salesReturn (SalesReturnResponse with credit_note_no),
+ *        company (full company object), onClose
  */
 export default function CreditNotePrint({ salesReturn, company, onClose }) {
   const printRef = useRef(null)
   const sr = salesReturn || {}
   const co = company || {}
 
-  const gstPct = sr.gst_percent || 0
-  const subtotal = sr.subtotal || 0
-  const discount = sr.discount_amount || 0
-  const taxAmt = sr.tax_amount || 0
-  const total = sr.total_amount || 0
+  const gstPct = Number(sr.gst_percent) || 0
+  const subtotal = Number(sr.subtotal) || 0
+  const discount = Number(sr.discount_amount) || 0
+  const taxAmt = Number(sr.tax_amount) || 0
+  const total = Number(sr.total_amount) || 0
+  const taxableValue = subtotal - discount
+
+  const originalInvNo = sr.invoice?.invoice_number || sr.order?.invoice_number || null
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `CreditNote-${sr.credit_note_no}`,
-    pageStyle: `@page { size: A4 portrait; margin: 15mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    pageStyle: `@page { size: A4 portrait; margin: 12mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
   })
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto">
       {/* Toolbar */}
       <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
-        <span className="font-semibold text-gray-800">Credit Note {sr.credit_note_no}</span>
+        <div>
+          <span className="font-semibold text-gray-800">Credit Note {sr.credit_note_no}</span>
+          <span className="ml-2 typo-caption">· half-page GST summary</span>
+        </div>
         <div className="flex gap-2">
           <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">Print</button>
           <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Close</button>
         </div>
       </div>
 
-      {/* A4 Document */}
-      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.5' }}>
+      {/* A4 Document — content sits in top half only (half-page layout) */}
+      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '12mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '11px', lineHeight: '1.45' }}>
 
-        {/* Header */}
-        <div style={{ borderBottom: '3px solid #059669', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px' }}>CREDIT NOTE</h1>
-            <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{co.name || 'Company'}</p>
-            {co.address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
-            {co.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: {co.gst_no}{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
-            {co.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {co.phone}{co.email ? ` | ${co.email}` : ''}</p>}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '13px', fontWeight: 600 }}>{sr.credit_note_no}</p>
-            <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(sr.restocked_date || sr.return_date || sr.created_at)}</p>
-            <p style={{ fontSize: '11px', color: '#6b7280' }}>Against: {sr.srn_no}</p>
-            {sr.order && <p style={{ fontSize: '11px', color: '#6b7280' }}>Order: {sr.order.order_number}</p>}
-          </div>
-        </div>
+        {/* Top-half container with tear-line at the bottom */}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '6px', padding: '14mm', position: 'relative' }}>
 
-        {/* Customer info */}
-        <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
-          <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Credit To</p>
-            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{sr.customer?.name || '—'}</p>
-            {sr.customer?.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {sr.customer.phone}</p>}
-            {sr.customer?.city && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{sr.customer.city}{sr.customer.state ? `, ${sr.customer.state}` : ''}</p>}
-            {sr.customer?.gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {sr.customer.gst_no}</p>}
+          {/* Header strip */}
+          <div style={{ borderBottom: '2px solid #059669', paddingBottom: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px' }}>CREDIT NOTE</h1>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: '2px 0 0', fontWeight: 600 }}>GST Rule 53 — Tax Document</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '16px', fontWeight: 800, color: '#1f2937', margin: 0 }}>{sr.credit_note_no}</p>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: '2px 0 0' }}>Date: {fmtDate(sr.restocked_date || sr.return_date || sr.created_at)}</p>
+            </div>
           </div>
-          <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Reference</p>
-            <p style={{ fontSize: '12px', margin: '2px 0' }}>Sales Return: <strong>{sr.srn_no}</strong></p>
-            {sr.order && <p style={{ fontSize: '12px', margin: '2px 0' }}>Order: <strong>{sr.order.order_number}</strong></p>}
-            {sr.reason_summary && <p style={{ fontSize: '12px', margin: '2px 0' }}>Reason: {sr.reason_summary}</p>}
-            <p style={{ fontSize: '12px', margin: '2px 0' }}>Return Date: {fmtDate(sr.return_date)}</p>
-          </div>
-        </div>
 
-        {/* Line items */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-              {['#', 'SKU Code', 'Description', 'Size', 'Qty', 'Rate', 'Amount'].map(h => (
-                <th key={h} style={{ padding: '8px 6px', textAlign: ['Qty', 'Rate', 'Amount'].includes(h) ? 'right' : 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sr.items?.map((item, i) => {
-              const qty = item.quantity_restocked || item.quantity_returned || 0
-              const price = item.unit_price || item.order_item?.unit_price || 0
-              const amt = qty * price
-              return (
-                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '8px 6px', color: '#9ca3af' }}>{i + 1}</td>
-                  <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
-                  <td style={{ padding: '8px 6px', color: '#6b7280' }}>{item.sku?.product_name || '—'}</td>
-                  <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.size || '—'}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{qty}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right' }}>{fmtCurrency(price)}</td>
-                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(amt)}</td>
+          {/* Supplier / Recipient blocks — side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+            <div style={{ background: '#f9fafb', borderRadius: '4px', padding: '8px 10px' }}>
+              <p style={{ fontSize: '9px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>From (Supplier)</p>
+              <p style={{ fontSize: '12px', fontWeight: 700, margin: 0 }}>{co.name || '—'}</p>
+              {co.address && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
+              {co.gst_no && <p style={{ fontSize: '10px', fontWeight: 600, margin: '1px 0 0' }}>GSTIN: {co.gst_no}{co.state_code ? ` | State: ${co.state_code}` : ''}</p>}
+              {co.phone && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0 0' }}>Phone: {co.phone}</p>}
+            </div>
+            <div style={{ background: '#f9fafb', borderRadius: '4px', padding: '8px 10px' }}>
+              <p style={{ fontSize: '9px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>To (Recipient)</p>
+              <p style={{ fontSize: '12px', fontWeight: 700, margin: 0 }}>{sr.customer?.name || '—'}</p>
+              {sr.customer?.city && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0 0' }}>{sr.customer.city}{sr.customer.state ? `, ${sr.customer.state}` : ''}</p>}
+              {sr.customer?.gst_no && <p style={{ fontSize: '10px', fontWeight: 600, margin: '1px 0 0' }}>GSTIN: {sr.customer.gst_no}</p>}
+              {sr.customer?.phone && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0 0' }}>Phone: {sr.customer.phone}</p>}
+            </div>
+          </div>
+
+          {/* Reference block — invoice + reason */}
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: '4px', padding: '8px 10px', marginBottom: '10px' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }}>Reference</p>
+            <table style={{ width: '100%', fontSize: '11px' }}>
+              <tbody>
+                {originalInvNo && (
+                  <tr>
+                    <td style={{ color: '#6b7280', padding: '1px 0', width: '38%' }}>Original Invoice:</td>
+                    <td style={{ fontWeight: 700, color: '#059669' }}>{originalInvNo}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td style={{ color: '#6b7280', padding: '1px 0' }}>Sales Return:</td>
+                  <td style={{ fontWeight: 600 }}>{sr.srn_no}</td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                {sr.order && (
+                  <tr>
+                    <td style={{ color: '#6b7280', padding: '1px 0' }}>Order:</td>
+                    <td style={{ fontWeight: 600 }}>{sr.order.order_number}</td>
+                  </tr>
+                )}
+                {sr.reason_summary && (
+                  <tr>
+                    <td style={{ color: '#6b7280', padding: '1px 0', verticalAlign: 'top' }}>Reason:</td>
+                    <td style={{ fontStyle: 'italic' }}>{sr.reason_summary}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Tax breakdown */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ width: '280px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-              <span style={{ color: '#6b7280' }}>Subtotal</span>
-              <span style={{ fontWeight: 600 }}>{fmtCurrency(subtotal)}</span>
+          {/* Tax breakup — main focus of the CN */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+            <div>
+              <p style={{ fontSize: '9px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }}>Amount in Words</p>
+              <p style={{ fontSize: '11px', fontWeight: 600, fontStyle: 'italic', padding: '6px 10px', background: '#f9fafb', borderRadius: '4px', margin: 0 }}>
+                {numberToWordsIN(total)}
+              </p>
             </div>
-            {discount > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#f59e0b' }}>Discount</span>
-                <span style={{ color: '#f59e0b' }}>-{fmtCurrency(discount)}</span>
-              </div>
-            )}
-            {gstPct > 0 && (<>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#6b7280' }}>CGST ({gstPct / 2}%)</span>
-                <span>{fmtCurrency(taxAmt / 2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
-                <span style={{ color: '#6b7280' }}>SGST ({gstPct / 2}%)</span>
-                <span>{fmtCurrency(taxAmt / 2)}</span>
-              </div>
-            </>)}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '4px', borderTop: '2px solid #059669', fontSize: '16px', fontWeight: 800 }}>
-              <span>Credit Amount</span>
-              <span>{fmtCurrency(total)}</span>
+            <div style={{ border: '2px solid #059669', borderRadius: '4px', padding: '8px 10px' }}>
+              <table style={{ width: '100%', fontSize: '11px' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ color: '#6b7280', padding: '1px 0' }}>Taxable Value</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(taxableValue)}</td>
+                  </tr>
+                  {discount > 0 && (
+                    <tr>
+                      <td style={{ color: '#f59e0b', padding: '1px 0' }}>(Discount applied)</td>
+                      <td style={{ textAlign: 'right', color: '#f59e0b' }}>-{fmtCurrency(discount)}</td>
+                    </tr>
+                  )}
+                  {gstPct > 0 && (
+                    <>
+                      <tr>
+                        <td style={{ color: '#6b7280', padding: '1px 0' }}>CGST ({gstPct / 2}%)</td>
+                        <td style={{ textAlign: 'right' }}>{fmtCurrency(taxAmt / 2)}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ color: '#6b7280', padding: '1px 0' }}>SGST ({gstPct / 2}%)</td>
+                        <td style={{ textAlign: 'right' }}>{fmtCurrency(taxAmt / 2)}</td>
+                      </tr>
+                    </>
+                  )}
+                  <tr style={{ borderTop: '1px solid #059669' }}>
+                    <td style={{ fontSize: '13px', fontWeight: 800, color: '#059669', padding: '4px 0 0' }}>TOTAL CREDIT</td>
+                    <td style={{ fontSize: '14px', fontWeight: 800, color: '#059669', textAlign: 'right', padding: '4px 0 0' }}>{fmtCurrency(total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Hint pointing to SalesReturn for itemized goods */}
+          <p style={{ fontSize: '10px', color: '#6b7280', margin: '0 0 10px', fontStyle: 'italic' }}>
+            For itemized goods received + condition notes, refer to Sales Return <strong>{sr.srn_no}</strong>.
+          </p>
+
+          {/* Bank details — short line */}
+          {co.bank_name && (
+            <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '10px' }}>
+              <strong style={{ color: '#1f2937' }}>Refund A/C:</strong> {co.bank_name} · A/C {co.bank_account || '—'} · IFSC {co.bank_ifsc || '—'}
+            </div>
+          )}
+
+          {/* Footer strip — signatures + note */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: '9px', color: '#9ca3af' }}>
+              Computer-generated document. Registered under GST Rule 53(1A).
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: '150px', borderBottom: '1px solid #9ca3af', marginBottom: '3px', height: '22px' }}>&nbsp;</div>
+              <p style={{ fontSize: '9px', color: '#6b7280', margin: 0, fontWeight: 600 }}>Authorised Signatory — {co.name || 'Supplier'}</p>
             </div>
           </div>
         </div>
 
-        {/* Bank Details */}
-        {co.bank_name && (
-          <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginTop: '24px' }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Bank Details (for refund)</p>
-            <p style={{ fontSize: '12px', margin: '2px 0' }}>Bank: <strong>{co.bank_name}</strong></p>
-            {co.bank_account && <p style={{ fontSize: '12px', margin: '2px 0' }}>A/C No: <strong>{co.bank_account}</strong></p>}
-            {co.bank_ifsc && <p style={{ fontSize: '12px', margin: '2px 0' }}>IFSC: <strong>{co.bank_ifsc}</strong>{co.bank_branch ? ` | Branch: ${co.bank_branch}` : ''}</p>}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <p style={{ fontSize: '10px', color: '#9ca3af', margin: 0 }}>This is a computer-generated credit note.</p>
-          </div>
-          <div style={{ display: 'flex', gap: '60px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Customer Signature</p>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Authorized Signatory</p>
-            </div>
-          </div>
+        {/* Tear line between top (content) and bottom (blank half) — printed */}
+        <div style={{ marginTop: '8mm', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '9px', color: '#9ca3af' }}>
+          <span style={{ flex: 1, borderTop: '1px dashed #d1d5db' }}></span>
+          <span style={{ fontStyle: 'italic' }}>cut here — second copy / customer counterfoil can be printed on bottom half</span>
+          <span style={{ flex: 1, borderTop: '1px dashed #d1d5db' }}></span>
         </div>
       </div>
     </div>

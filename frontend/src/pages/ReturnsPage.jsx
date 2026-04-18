@@ -967,10 +967,16 @@ export default function ReturnsPage() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setPrintSalesReturn(sr); setDetail(null) }}
-              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print</button>
+              className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors"
+              title="Full-page with SKU list — for warehouse / goods verification">
+              Print Sales Return
+            </button>
             {sr.credit_note_no && (
               <button onClick={() => { setPrintCreditNote(sr); setDetail(null) }}
-                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Print CN</button>
+                className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors"
+                title="Half-page GST summary — for accounts / customer copy">
+                Print Credit Note
+              </button>
             )}
             <button onClick={() => { setDetail(null); setInspectMode(false); setSearchParams(category === 'supplier' ? {} : { tab: category }) }}
               className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30 transition-colors">Close</button>
