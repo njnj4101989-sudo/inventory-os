@@ -400,8 +400,13 @@ class SalesReturnService:
             self._recalculate_order_status(invoice.order)
             await self.db.flush()
 
+        # Reload with eager relationships — `_emit` touches sr.customer.name
+        # and sr.order.order_number, neither of which are populated on the
+        # freshly-added object. Without this refetch we hit MissingGreenlet
+        # in the async session (S72 pattern).
+        sr = await self._get_or_404(sr.id)
         await self._emit("sales_return_closed", sr, user_id)
-        return await self.get_sales_return(sr.id)
+        return self._to_response(sr)
 
     # ── Update (draft only) ──
 
