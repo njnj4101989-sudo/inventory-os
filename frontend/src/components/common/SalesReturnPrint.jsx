@@ -76,8 +76,15 @@ export default function SalesReturnPrint({ salesReturn, company, onClose }) {
         </div>
       </div>
 
-      {/* A4 Document — full page for the SKU table */}
-      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '8mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.45' }}>
+      {/* A4 Document — full page for the SKU table.
+          No outer padding; @page's 10mm is the physical print margin.
+          Content sits directly inside that margin — no stacking. */}
+      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: 0, fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.45' }}>
+
+      {/* Inner content wrapper — small 4mm inner padding for on-screen breathing.
+          In print, @page margin is the real buffer; this 4mm is visual comfort
+          so content doesn't press against the modal backdrop edges on-screen. */}
+      <div style={{ padding: '4mm' }}>
 
         {/* Header strip — compact, emerald border */}
         <div style={{ borderBottom: '3px solid #059669', paddingBottom: '6px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -288,6 +295,8 @@ export default function SalesReturnPrint({ salesReturn, company, onClose }) {
         <p style={{ fontSize: '9px', color: '#9ca3af', margin: '8px 0 0', textAlign: 'center' }}>
           Computer-generated sales return document{sr.credit_note_no ? ` · For financial credit refer to ${sr.credit_note_no}` : ''}.
         </p>
+      </div>
+      {/* END inner content wrapper */}
       </div>
     </div>
   )
