@@ -114,6 +114,7 @@ class SalesReturnResponse(BaseSchema):
     qc_notes: str | None = None
     gst_percent: Decimal | None = None
     subtotal: Decimal | None = None
+    discount_amount: Decimal | None = None
     tax_amount: Decimal | None = None
     total_amount: Decimal | None = None
     credit_note_no: str | None = None

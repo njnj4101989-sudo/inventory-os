@@ -1247,31 +1247,50 @@ export default function InvoicesPage() {
                             ))}
                           </tbody>
                           <tfoot className="bg-gray-50 border-t">
-                            <tr>
-                              <td colSpan={4} className="typo-td px-3 py-2 text-right font-semibold">Subtotal</td>
-                              <td className="typo-td px-3 py-2 text-right font-semibold">
-                                ₹{cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td />
-                            </tr>
-                            {Number(inv.gst_percent) > 0 && (
-                              <>
-                                <tr>
-                                  <td colSpan={4} className="typo-td-secondary px-3 py-2 text-right">GST @ {Number(inv.gst_percent)}%</td>
-                                  <td className="typo-td-secondary px-3 py-2 text-right">
-                                    ₹{(cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) * Number(inv.gst_percent) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                  <td />
-                                </tr>
-                                <tr>
-                                  <td colSpan={4} className="typo-td px-3 py-2 text-right font-bold">Total Credit</td>
-                                  <td className="typo-td px-3 py-2 text-right font-bold text-amber-700">
-                                    ₹{(cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) * (1 + Number(inv.gst_percent) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                  <td />
-                                </tr>
-                              </>
-                            )}
+                            {(() => {
+                              const cnSubtotal = cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0)
+                              const invSubtotal = Number(inv.subtotal) || 0
+                              const invDiscount = Number(inv.discount_amount) || 0
+                              // Match backend: proportional discount based on credit share of invoice.
+                              const cnDiscount = (invSubtotal > 0 && invDiscount > 0 && cnSubtotal > 0)
+                                ? +(invDiscount * (cnSubtotal / invSubtotal)).toFixed(2)
+                                : 0
+                              const taxable = cnSubtotal - cnDiscount
+                              const gstPct = Number(inv.gst_percent) || 0
+                              const tax = +(taxable * gstPct / 100).toFixed(2)
+                              const total = taxable + tax
+                              const inr = (n) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              return (
+                                <>
+                                  <tr>
+                                    <td colSpan={4} className="typo-td px-3 py-2 text-right font-semibold">Subtotal</td>
+                                    <td className="typo-td px-3 py-2 text-right font-semibold">₹{inr(cnSubtotal)}</td>
+                                    <td />
+                                  </tr>
+                                  {cnDiscount > 0 && (
+                                    <tr>
+                                      <td colSpan={4} className="typo-td-secondary px-3 py-2 text-right text-amber-700">
+                                        Discount (proportional from invoice)
+                                      </td>
+                                      <td className="typo-td-secondary px-3 py-2 text-right text-amber-700">−₹{inr(cnDiscount)}</td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  {gstPct > 0 && (
+                                    <tr>
+                                      <td colSpan={4} className="typo-td-secondary px-3 py-2 text-right">GST @ {gstPct}%</td>
+                                      <td className="typo-td-secondary px-3 py-2 text-right">₹{inr(tax)}</td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  <tr>
+                                    <td colSpan={4} className="typo-td px-3 py-2 text-right font-bold">Total Credit</td>
+                                    <td className="typo-td px-3 py-2 text-right font-bold text-amber-700">₹{inr(total)}</td>
+                                    <td />
+                                  </tr>
+                                </>
+                              )
+                            })()}
                           </tfoot>
                         </table>
                       </div>

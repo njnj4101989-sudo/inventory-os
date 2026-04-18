@@ -16,6 +16,7 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
 
   const gstPct = sr.gst_percent || 0
   const subtotal = sr.subtotal || 0
+  const discount = sr.discount_amount || 0
   const taxAmt = sr.tax_amount || 0
   const total = sr.total_amount || 0
 
@@ -110,6 +111,12 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
               <span style={{ color: '#6b7280' }}>Subtotal</span>
               <span style={{ fontWeight: 600 }}>{fmtCurrency(subtotal)}</span>
             </div>
+            {discount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                <span style={{ color: '#f59e0b' }}>Discount</span>
+                <span style={{ color: '#f59e0b' }}>-{fmtCurrency(discount)}</span>
+              </div>
+            )}
             {gstPct > 0 && (<>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                 <span style={{ color: '#6b7280' }}>CGST ({gstPct / 2}%)</span>
