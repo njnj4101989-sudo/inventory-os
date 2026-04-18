@@ -57,6 +57,11 @@ class SalesReturn(Base):
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     credit_note_no: Mapped[str | None] = mapped_column(String(50))
+    # 'fast_track' (1-click CN from invoice, closed at creation) or 'with_qc'
+    # (5-step inspection workflow). Default with_qc for back-compat.
+    workflow_type: Mapped[str] = mapped_column(
+        String(20), default="with_qc", server_default="'with_qc'"
+    )
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )

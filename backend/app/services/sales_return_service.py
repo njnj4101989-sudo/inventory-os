@@ -290,6 +290,7 @@ class SalesReturnService:
             invoice_id=invoice.id,
             customer_id=customer_id,
             status="closed",
+            workflow_type="fast_track",
             return_date=now_date,
             received_date=now_date,
             inspected_date=now_date,
@@ -691,6 +692,7 @@ class SalesReturnService:
             "tax_amount": float(sr.tax_amount) if sr.tax_amount else 0,
             "total_amount": float(sr.total_amount) if sr.total_amount else 0,
             "credit_note_no": sr.credit_note_no,
+            "workflow_type": sr.workflow_type or "with_qc",
             "created_by_user": {
                 "id": str(sr.created_by_user.id),
                 "full_name": sr.created_by_user.full_name,

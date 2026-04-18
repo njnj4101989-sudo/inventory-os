@@ -115,6 +115,7 @@ class SalesReturnResponse(BaseSchema):
     gst_percent: Decimal | None = None
     subtotal: Decimal | None = None
     discount_amount: Decimal | None = None
+    workflow_type: str | None = None
     tax_amount: Decimal | None = None
     total_amount: Decimal | None = None
     credit_note_no: str | None = None
