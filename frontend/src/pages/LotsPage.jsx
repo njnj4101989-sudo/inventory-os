@@ -1085,6 +1085,9 @@ export default function LotsPage() {
             </div>
           </div>
         </div>
+        {/* Shift+M Quick Master — must render inside the overlay's stacking context
+            so its z-[60] layers above the z-50 cutting-sheet form. */}
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
@@ -1404,6 +1407,8 @@ export default function LotsPage() {
             onClose={() => setShowThermalBatchLabels(null)}
           />
         )}
+        {/* Shift+M Quick Master — inside detail overlay's stacking context. */}
+        <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
       </div>
     )
   }
