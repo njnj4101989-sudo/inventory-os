@@ -570,7 +570,9 @@ class InvoiceService:
         invoice.cancelled_by = user_id
         await self.db.flush()
 
-        # Reverse stock for standalone invoices (no order = direct sale)
+        # Reverse stock for standalone invoices (no order = direct sale).
+        # Order-linked invoices keep stock deducted — the shipment actually happened;
+        # restoring stock is the Credit Note's job (with per-item restore_stock flag).
         if not invoice.order_id:
             from app.services.inventory_service import InventoryService
             inv_svc = InventoryService(self.db)
@@ -586,25 +588,14 @@ class InvoiceService:
                     metadata={"invoice_number": invoice.invoice_number},
                 )
 
-        # Reverse ledger entry if one exists
-        cust_id = invoice.customer_id or (invoice.order.customer_id if invoice.order else None)
-        if cust_id and float(invoice.total_amount or 0) > 0:
-            from app.services.ledger_service import LedgerService
-            from app.schemas.ledger import LedgerEntryCreate
-            ledger = LedgerService(self.db)
-            await ledger.create_entry(LedgerEntryCreate(
-                entry_date=datetime.now(timezone.utc).date(),
-                party_type="customer",
-                party_id=cust_id,
-                entry_type="credit_note",
-                reference_type="invoice_cancel",
-                reference_id=invoice.id,
-                debit=0,
-                credit=float(invoice.total_amount),
-                description=f"Invoice {invoice.invoice_number} cancelled",
-                fy_id=invoice.fy_id,
-            ))
-            await self.db.flush()
+        # NOTE (industry-standard, Tally/Zoho/Busy model):
+        # Cancellation is a status flip only. It does NOT post a ledger reversal.
+        # If the user wants to formally reverse the A/R debit, they must issue a
+        # Credit Note — which is the single authoritative reversal document under
+        # GST. Keeping cancel's ledger write previously caused double-credits
+        # whenever a CN was later raised against the same invoice.
+        # See create_credit_note_from_invoice in sales_return_service for the
+        # sole place A/R credits are now posted.
 
         return await self.get_invoice(invoice_id)
 
