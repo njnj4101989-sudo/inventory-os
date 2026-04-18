@@ -895,6 +895,41 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+            {/* Cancelled-invoice banner — surface when any linked invoice was cancelled */}
+            {(() => {
+              const cancelledInvs = (o.invoices || []).filter(i => i.status === 'cancelled')
+              if (!cancelledInvs.length) return null
+              const reasonLabel = (r) => ({
+                wrong_amount: 'Wrong amount / rate / quantity',
+                wrong_customer: 'Wrong customer / party',
+                duplicate: 'Duplicate invoice',
+                customer_cancelled: 'Customer cancelled the order',
+                data_entry_error: 'Data entry error / typo',
+                other: 'Other',
+              }[r] || r || 'Reason not recorded')
+              return (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <svg className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="typo-data text-amber-800">
+                        {cancelledInvs.length === 1 ? 'Invoice cancelled — this order may need re-invoicing' : `${cancelledInvs.length} invoices cancelled — this order may need re-invoicing`}
+                      </p>
+                      {cancelledInvs.map(ci => (
+                        <div key={ci.id} className="text-xs text-amber-700 mt-1">
+                          <button onClick={() => navigate(`/invoices?open=${ci.id}`)} className="font-semibold underline hover:text-amber-900">{ci.invoice_number}</button>
+                          {' · '}{reasonLabel(ci.cancel_reason)}
+                          {ci.cancelled_at && <> · {new Date(ci.cancelled_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</>}
+                          {ci.cancel_notes && <span className="italic"> · "{ci.cancel_notes}"</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
             {/* Customer info */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="bg-gray-50 rounded p-2">
@@ -1288,17 +1323,33 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* Invoice summary for shipped orders */}
+            {/* Invoice summary — show each with its status, so cancelled invoices aren't hidden */}
             {o.invoices?.length > 0 && (
-              <div className="flex items-center justify-between pt-3 border-t">
+              <div className="pt-3 border-t space-y-1.5">
                 <div className="text-xs text-gray-500">
                   {o.invoices.length === 1 ? 'Invoice generated' : `${o.invoices.length} invoices generated`}
                 </div>
-                <button onClick={() => navigate(`/invoices?open=${o.invoices[0].id}`)}
-                  className="rounded bg-emerald-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-emerald-700 transition-colors flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
-                  {o.invoices[0].invoice_number}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  {o.invoices.map(inv => {
+                    const isCancelled = inv.status === 'cancelled'
+                    return (
+                      <button
+                        key={inv.id}
+                        onClick={() => navigate(`/invoices?open=${inv.id}`)}
+                        className={`rounded px-4 py-1.5 typo-btn-sm transition-colors flex items-center gap-1.5 ${
+                          isCancelled
+                            ? 'bg-gray-200 text-gray-500 line-through hover:bg-gray-300'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        }`}
+                        title={isCancelled ? 'This invoice was cancelled' : 'Open invoice'}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>
+                        {inv.invoice_number}
+                        {isCancelled && <span className="ml-1 text-[10px] font-semibold no-underline">CANCELLED</span>}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>

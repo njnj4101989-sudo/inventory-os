@@ -723,6 +723,9 @@ class OrderService:
                     "invoice_number": inv.invoice_number,
                     "total_amount": float(inv.total_amount) if inv.total_amount else 0,
                     "status": inv.status,
+                    "cancel_reason": inv.cancel_reason,
+                    "cancel_notes": inv.cancel_notes,
+                    "cancelled_at": inv.cancelled_at.isoformat() if inv.cancelled_at else None,
                 }
                 for inv in (o.invoices or [])
             ],
