@@ -76,28 +76,28 @@ export default function CreditNotePickerModal({
               ? 'border-emerald-500 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm ring-2 ring-emerald-100'
               : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 hover:shadow-sm'
           }`}>
-            <div className="flex items-start gap-4 p-4">
+            <div className="flex items-start gap-3 p-3.5">
               {/* Gradient icon tile */}
-              <div className={`flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-xl transition-all ${
+              <div className={`flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-lg transition-all ${
                 !fastTrackAvailable
                   ? 'bg-gray-200 text-gray-400'
                   : choice === 'fast_track'
                   ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-105'
                   : 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow group-hover:scale-105 group-hover:shadow-emerald-500/30'
               }`}>
-                <BoltIcon className="h-6 w-6" />
+                <BoltIcon className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="typo-data text-gray-900">Fast-track</span>
+                  <span className="typo-card-title text-gray-900">Fast-track</span>
                   <span className="typo-badge bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">1-click</span>
                 </div>
-                <p className="typo-caption mt-1 text-gray-600 leading-snug">
+                <p className="typo-body text-gray-700 mt-1.5 leading-relaxed">
                   Financial adjustment, or goods already handled. Closes immediately with
-                  a <strong>CN-XXXX</strong> number and credits the customer's ledger.
+                  a <strong className="text-emerald-700">CN-XXXX</strong> number and credits the customer's ledger.
                 </p>
                 {!fastTrackAvailable && fastTrackDisabledReason && (
-                  <p className="typo-caption mt-1 text-amber-700 font-medium">{fastTrackDisabledReason}</p>
+                  <p className="typo-body text-amber-700 mt-1.5">{fastTrackDisabledReason}</p>
                 )}
               </div>
               <input
@@ -118,26 +118,27 @@ export default function CreditNotePickerModal({
               ? 'border-amber-500 bg-gradient-to-br from-amber-50 to-orange-50 shadow-sm ring-2 ring-amber-100'
               : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/40 hover:shadow-sm'
           }`}>
-            <div className="flex items-start gap-4 p-4">
-              <div className={`flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-xl transition-all ${
+            <div className="flex items-start gap-3 p-3.5">
+              <div className={`flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-lg transition-all ${
                 choice === 'with_qc'
                   ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/30 scale-105'
                   : 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow group-hover:scale-105 group-hover:shadow-amber-500/30'
               }`}>
-                <ClipboardCheckIcon className="h-6 w-6" />
+                <ClipboardCheckIcon className="h-5 w-5" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="typo-data text-gray-900">With physical inspection</span>
+                  <span className="typo-card-title text-gray-900">With physical inspection</span>
                   <span className="typo-badge bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">5-step</span>
                 </div>
-                <p className="typo-caption mt-1 text-gray-600 leading-snug">
+                <p className="typo-body text-gray-700 mt-1.5 leading-relaxed">
                   Goods coming back over time. QC per item, damage tracking, partial restock.
-                  Ends with a <strong>CN-XXXX</strong> after inspection closes.
+                  Ends with a <strong className="text-amber-700">CN-XXXX</strong> after inspection closes.
                 </p>
-                <p className="typo-caption mt-1 text-gray-500">
-                  Flow: draft → received → inspected → restocked → closed
-                </p>
+                <div className="mt-2 inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 typo-caption text-amber-800">
+                  <span className="font-semibold">Flow:</span>
+                  <span>draft → received → inspected → restocked → closed</span>
+                </div>
               </div>
               <input
                 type="radio"
