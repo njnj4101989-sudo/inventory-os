@@ -1,5 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getLedger, getPartyBalance, recordPayment } from '../../api/ledger'
+
+// Map a ledger entry's reference_type + reference_id to a deep-link URL.
+// Returns null when the entry has no navigable source document.
+function deepLinkFor(entry) {
+  if (!entry?.reference_id || !entry?.reference_type) return null
+  const t = entry.reference_type
+  const id = entry.reference_id
+  if (t === 'invoice' || t === 'invoice_cancel') return `/invoices?open=${id}`
+  if (t === 'sales_return') return `/returns?tab=sales&open=${id}`
+  if (t === 'purchase_invoice' || t === 'supplier_invoice') return `/rolls?tab=purchases&open=${id}`
+  if (t === 'return_note') return `/returns?tab=purchase&open=${id}`
+  if (t === 'job_challan' || t === 'challan') return `/challans?open=${id}`
+  // payment / opening / adjustment — no dedicated detail view
+  return null
+}
 
 const ENTRY_COLORS = {
   opening: 'bg-blue-50 text-blue-700',
@@ -34,6 +50,7 @@ function fmt(n) {
 }
 
 export default function LedgerPanel({ open, onClose, partyType, partyId, partyName }) {
+  const navigate = useNavigate()
   const [entries, setEntries] = useState([])
   const [balance, setBalance] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -266,7 +283,20 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
                         <span className={`inline-block shrink-0 rounded px-1.5 py-0.5 typo-badge mt-0.5 ${ENTRY_COLORS[e.entry_type] || 'bg-gray-100 text-gray-600'}`}>
                           {e.entry_type.charAt(0).toUpperCase() + e.entry_type.slice(1)}
                         </span>
-                        <span className="typo-td text-gray-800">{e.description}</span>
+                        {(() => {
+                          const href = deepLinkFor(e)
+                          return href ? (
+                            <button
+                              onClick={() => { onClose?.(); navigate(href) }}
+                              className="typo-td text-emerald-700 hover:text-emerald-900 hover:underline text-left"
+                              title="Open source document"
+                            >
+                              {e.description}
+                            </button>
+                          ) : (
+                            <span className="typo-td text-gray-800">{e.description}</span>
+                          )
+                        })()}
                       </div>
                       {e.notes && <p className="typo-caption mt-0.5">{e.notes}</p>}
                     </td>
