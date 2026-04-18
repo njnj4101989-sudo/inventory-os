@@ -74,3 +74,11 @@ class Invoice(Base):
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
     cancelled_by_user: Mapped[User | None] = relationship(foreign_keys=[cancelled_by])
     items: Mapped[list[InvoiceItem]] = relationship(back_populates="invoice")
+    # Credit notes raised against this invoice (fast-track path). Many-side
+    # of the SalesReturn.invoice FK. Used to surface CNs on invoice detail.
+    credit_notes: Mapped[list["SalesReturn"]] = relationship(
+        "SalesReturn",
+        foreign_keys="[SalesReturn.invoice_id]",
+        order_by="SalesReturn.created_at",
+        viewonly=True,
+    )

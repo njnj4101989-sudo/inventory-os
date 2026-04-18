@@ -60,6 +60,7 @@ class InvoiceService:
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
                 selectinload(Invoice.cancelled_by_user),
+                selectinload(Invoice.credit_notes),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
             .order_by(Invoice.created_at.desc())
@@ -97,6 +98,7 @@ class InvoiceService:
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
                 selectinload(Invoice.cancelled_by_user),
+                selectinload(Invoice.credit_notes),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
         )
@@ -617,6 +619,7 @@ class InvoiceService:
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
                 selectinload(Invoice.cancelled_by_user),
+                selectinload(Invoice.credit_notes),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
         )
@@ -700,6 +703,17 @@ class InvoiceService:
                 if getattr(inv, "cancelled_by_user", None) and hasattr(inv.cancelled_by_user, "full_name")
                 else (inv.cancelled_by_user.username if getattr(inv, "cancelled_by_user", None) else None)
             ),
+            "credit_notes": [
+                {
+                    "id": str(cn.id),
+                    "srn_no": cn.srn_no,
+                    "credit_note_no": cn.credit_note_no,
+                    "status": cn.status,
+                    "total_amount": float(cn.total_amount) if cn.total_amount else 0,
+                    "created_at": cn.created_at.isoformat() if cn.created_at else None,
+                }
+                for cn in (getattr(inv, "credit_notes", None) or [])
+            ],
             "items": [
                 {
                     "id": str(item.id),

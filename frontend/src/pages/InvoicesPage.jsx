@@ -1072,6 +1072,23 @@ export default function InvoicesPage() {
                   </button>
                 </div>
               )}
+              {(inv.credit_notes?.length > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                  <p className="typo-label-sm">Credit Notes <span className="text-amber-700">({inv.credit_notes.length})</span></p>
+                  <div className="flex flex-col gap-0.5 mt-0.5">
+                    {inv.credit_notes.map(cn => (
+                      <button
+                        key={cn.id}
+                        onClick={() => { setDetailInvoice(null); navigate(`/returns?tab=sales&open=${cn.id}`) }}
+                        className="text-left text-amber-800 font-semibold text-sm hover:underline"
+                        title={`Issued ${cn.created_at ? new Date(cn.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} — ${fmtCurrency(cn.total_amount)}`}
+                      >
+                        {cn.credit_note_no || cn.srn_no} · {fmtCurrency(cn.total_amount)} →
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="bg-gray-50 rounded p-2">
                 <p className="typo-label-sm">Financial Summary</p>
                 <div className="text-xs mt-0.5 space-y-0.5">
