@@ -47,7 +47,19 @@ export default function SalesReturnPrint({ salesReturn, company, onClose }) {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `SalesReturn-${sr.srn_no}`,
-    pageStyle: `@page { size: A4 portrait; margin: 10mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; }`,
+    // CSS paged-media: page counter in bottom-center of EVERY page.
+    // The 'continued' hint + full TOTALS are positioned in the DOM so they
+    // only render ONCE at the real end of the table, not repeated per page.
+    pageStyle: `
+      @page { size: A4 portrait; margin: 10mm 10mm 15mm 10mm; }
+      @page { @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: 'Inter', Arial, sans-serif; font-size: 9pt; color: #9ca3af; } }
+      * { box-sizing: border-box; }
+      body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; }
+      .sr-continued { display: none; }
+      @media print { .sr-continued { display: block; } }
+    `,
   })
 
   return (
@@ -196,18 +208,21 @@ export default function SalesReturnPrint({ salesReturn, company, onClose }) {
               )
             })}
           </tbody>
-          <tfoot>
-            <tr style={{ borderTop: '2px solid #059669', background: '#f0fdf4' }}>
-              <td colSpan={3} style={{ padding: '6px 5px', fontWeight: 800, fontSize: '11px', color: '#059669' }}>TOTALS</td>
-              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtInt(totalRet)}</td>
-              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#166534' }}>{fmtInt(totalRest)}</td>
-              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: totalDmg > 0 ? '#dc2626' : '#9ca3af' }}>{fmtInt(totalDmg)}</td>
-              <td colSpan={2} />
-              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtCurrency(subtotal)}</td>
-              <td style={{ padding: '6px 5px', textAlign: 'center', fontSize: '10px', color: '#6b7280' }}>{items.length}</td>
-            </tr>
-          </tfoot>
         </table>
+
+        {/* TOTALS row — rendered ONCE after the table (as a div, not tfoot,
+            so it doesn't repeat on every printed page). Shows final totals
+            for all rows in the document. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '4% 32% 7% 7% 7% 7% 7% 10% 11% 5%', borderTop: '2px solid #059669', background: '#f0fdf4', marginBottom: '8px' }}>
+          <div style={{ gridColumn: 'span 3', padding: '6px 5px', fontWeight: 800, fontSize: '11px', color: '#059669' }}>TOTALS ({items.length} items)</div>
+          <div style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtInt(totalRet)}</div>
+          <div style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#166534' }}>{fmtInt(totalRest)}</div>
+          <div style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: totalDmg > 0 ? '#dc2626' : '#9ca3af' }}>{fmtInt(totalDmg)}</div>
+          <div />
+          <div />
+          <div style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtCurrency(subtotal)}</div>
+          <div />
+        </div>
 
         {/* Tax breakup & totals — right-aligned summary block */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '16px' }}>
