@@ -3,140 +3,276 @@ import { useReactToPrint } from 'react-to-print'
 
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const fmtCurrency = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const fmtInt = (v) => (v || 0).toLocaleString('en-IN')
 
-const CONDITION_LABEL = { pending: 'Pending', good: 'Good', damaged: 'Damaged', rejected: 'Rejected' }
+const CONDITION_STYLE = {
+  good:     { bg: '#dcfce7', fg: '#166534', letter: 'G' },
+  damaged:  { bg: '#fee2e2', fg: '#dc2626', letter: 'D' },
+  rejected: { bg: '#fce7f3', fg: '#be185d', letter: 'R' },
+  pending:  { bg: '#f3f4f6', fg: '#6b7280', letter: '·' },
+}
 
 /**
- * SalesReturnPrint — A4 customer sales return document.
- * Props: salesReturn (SalesReturnResponse), company (full company object), onClose
+ * SalesReturnPrint — warehouse/QC operational document.
+ *
+ * Focus: full SKU list for goods verification, receive/inspect/restock
+ * timeline, 3-way signature block. Differs from CreditNotePrint (which
+ * is the half-page GST finance summary).
+ *
+ * Layout: full A4. Summary bar at top, tight table, totals block, footer
+ * with three signatures (Received By · Inspected By · Authorized).
  */
 export default function SalesReturnPrint({ salesReturn, company, onClose }) {
   const printRef = useRef(null)
   const sr = salesReturn || {}
   const co = company || {}
 
+  const items = sr.items || []
+  const totalRet = items.reduce((s, i) => s + (Number(i.quantity_returned) || 0), 0)
+  const totalRest = items.reduce((s, i) => s + (Number(i.quantity_restocked) || 0), 0)
+  const totalDmg = items.reduce((s, i) => s + (Number(i.quantity_damaged) || 0), 0)
+
+  const subtotal = Number(sr.subtotal) || 0
+  const discount = Number(sr.discount_amount) || 0
+  const taxAmt = Number(sr.tax_amount) || 0
+  const total = Number(sr.total_amount) || 0
+  const gstPct = Number(sr.gst_percent) || 0
+
+  const statusStyle = sr.status === 'closed'
+    ? { bg: '#dcfce7', fg: '#166534' }
+    : sr.status === 'cancelled'
+    ? { bg: '#fee2e2', fg: '#991b1b' }
+    : { bg: '#fef3c7', fg: '#92400e' }
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `SalesReturn-${sr.srn_no}`,
-    pageStyle: `@page { size: A4 portrait; margin: 15mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    pageStyle: `@page { size: A4 portrait; margin: 10mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; }`,
   })
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center overflow-auto">
       {/* Toolbar */}
       <div className="w-full max-w-[220mm] mt-4 mb-3 flex items-center justify-between bg-white rounded-xl px-5 py-3 shadow-lg">
-        <span className="font-semibold text-gray-800">Sales Return {sr.srn_no}</span>
+        <div>
+          <span className="font-semibold text-gray-800">Sales Return {sr.srn_no}</span>
+          <span className="ml-2 typo-caption">· warehouse / QC operations copy</span>
+        </div>
         <div className="flex gap-2">
           <button onClick={handlePrint} className="rounded-lg bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 transition-colors">Print</button>
           <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors">Close</button>
         </div>
       </div>
 
-      {/* A4 Document */}
-      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '15mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.5' }}>
+      {/* A4 Document — full page for the SKU table */}
+      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '8mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '12px', lineHeight: '1.45' }}>
 
-        {/* Header */}
-        <div style={{ borderBottom: '3px solid #059669', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {/* Header strip — compact, emerald border */}
+        <div style={{ borderBottom: '3px solid #059669', paddingBottom: '6px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px' }}>SALES RETURN</h1>
-            <p style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: '4px 0 0' }}>{co.name || 'Company'}</p>
-            {co.address && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
-            {co.gst_no && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>GSTIN: {co.gst_no}</p>}
-            {co.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {co.phone}{co.email ? ` | ${co.email}` : ''}</p>}
+            <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#059669', margin: 0, letterSpacing: '-0.5px', lineHeight: 1 }}>SALES RETURN</h1>
+            <p style={{ fontSize: '10px', color: '#6b7280', margin: '3px 0 0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Warehouse / QC Operations Copy</p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '13px', fontWeight: 600 }}>{sr.srn_no}</p>
-            <p style={{ fontSize: '11px', color: '#6b7280' }}>Date: {fmtDate(sr.return_date || sr.created_at)}</p>
-            {sr.order && <p style={{ fontSize: '11px', color: '#6b7280' }}>Order: {sr.order.order_number}</p>}
-            {sr.credit_note_no && <p style={{ fontSize: '11px', fontWeight: 600, color: '#059669' }}>Credit Note: {sr.credit_note_no}</p>}
-            <p style={{ display: 'inline-block', marginTop: '4px', padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, background: sr.status === 'closed' ? '#dcfce7' : sr.status === 'cancelled' ? '#fee2e2' : '#fef3c7', color: sr.status === 'closed' ? '#166534' : sr.status === 'cancelled' ? '#991b1b' : '#92400e' }}>
+            <p style={{ fontSize: '20px', fontWeight: 800, margin: 0, lineHeight: 1 }}>{sr.srn_no}</p>
+            <p style={{ fontSize: '11px', color: '#6b7280', margin: '3px 0 0' }}>Date: {fmtDate(sr.return_date || sr.created_at)}</p>
+            <span style={{ display: 'inline-block', marginTop: '4px', padding: '2px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, letterSpacing: '0.5px', background: statusStyle.bg, color: statusStyle.fg }}>
               {(sr.status || 'draft').toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        {/* Top grid — Supplier + Customer + Return details + Timeline (4 columns) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ background: '#f9fafb', borderRadius: '4px', padding: '7px 10px' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Supplier</p>
+            <p style={{ fontSize: '13px', fontWeight: 800, margin: 0 }}>{co.name || '—'}</p>
+            {co.address && <p style={{ fontSize: '10px', color: '#374151', margin: '1px 0 0' }}>{co.address}{co.city ? `, ${co.city}` : ''}{co.state ? `, ${co.state}` : ''}{co.pin_code ? ` - ${co.pin_code}` : ''}</p>}
+            {co.gst_no && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>GSTIN: <strong style={{ color: '#059669' }}>{co.gst_no}</strong></p>}
+          </div>
+          <div style={{ background: '#f9fafb', borderRadius: '4px', padding: '7px 10px' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Customer</p>
+            <p style={{ fontSize: '13px', fontWeight: 800, margin: 0 }}>{sr.customer?.name || '—'}</p>
+            {sr.customer?.phone && <p style={{ fontSize: '10px', color: '#374151', margin: '1px 0 0' }}>Phone: {sr.customer.phone}</p>}
+            {sr.customer?.city && <p style={{ fontSize: '10px', color: '#374151', margin: '1px 0 0' }}>{sr.customer.city}{sr.customer.state ? `, ${sr.customer.state}` : ''}</p>}
+            {sr.customer?.gst_no && <p style={{ fontSize: '10px', margin: '1px 0 0' }}>GSTIN: <strong style={{ color: '#059669' }}>{sr.customer.gst_no}</strong></p>}
+          </div>
+        </div>
+
+        {/* Details + Timeline — 2 columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ border: '1px dashed #9ca3af', borderRadius: '4px', padding: '7px 10px' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Return Details</p>
+            <table style={{ width: '100%', fontSize: '11px' }}>
+              <tbody>
+                {sr.order && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0', width: '35%' }}>Order:</td><td style={{ fontWeight: 700 }}>{sr.order.order_number}</td></tr>}
+                {sr.credit_note_no && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>Credit Note:</td><td style={{ fontWeight: 800, color: '#059669' }}>{sr.credit_note_no}</td></tr>}
+                {sr.transport && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>Transport:</td><td>{sr.transport.name}</td></tr>}
+                {sr.lr_number && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>LR No.:</td><td>{sr.lr_number}{sr.lr_date ? ` · ${fmtDate(sr.lr_date)}` : ''}</td></tr>}
+                {sr.reason_summary && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0', verticalAlign: 'top' }}>Reason:</td><td style={{ fontStyle: 'italic' }}>{sr.reason_summary}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ border: '1px dashed #9ca3af', borderRadius: '4px', padding: '7px 10px' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Timeline</p>
+            <table style={{ width: '100%', fontSize: '11px' }}>
+              <tbody>
+                <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0', width: '35%' }}>Return Date:</td><td>{fmtDate(sr.return_date)}</td></tr>
+                {sr.received_date && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>Received:</td><td>{fmtDate(sr.received_date)}{sr.received_by_user ? ` — ${sr.received_by_user.full_name}` : ''}</td></tr>}
+                {sr.inspected_date && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>Inspected:</td><td>{fmtDate(sr.inspected_date)}{sr.inspected_by_user ? ` — ${sr.inspected_by_user.full_name}` : ''}</td></tr>}
+                {sr.restocked_date && <tr><td style={{ color: '#6b7280', padding: '1px 8px 1px 0' }}>Restocked:</td><td>{fmtDate(sr.restocked_date)}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Summary bar — at-a-glance totals */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '6px 10px', textAlign: 'center' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#166534', textTransform: 'uppercase', margin: 0 }}>Items (SKUs)</p>
+            <p style={{ fontSize: '18px', fontWeight: 800, color: '#059669', margin: 0, lineHeight: 1.1 }}>{items.length}</p>
+          </div>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '6px 10px', textAlign: 'center' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', margin: 0 }}>Pieces Returned</p>
+            <p style={{ fontSize: '18px', fontWeight: 800, color: '#1e40af', margin: 0, lineHeight: 1.1 }}>{fmtInt(totalRet)}</p>
+          </div>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px', padding: '6px 10px', textAlign: 'center' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#166534', textTransform: 'uppercase', margin: 0 }}>Restocked / Damaged</p>
+            <p style={{ fontSize: '16px', fontWeight: 800, margin: 0, lineHeight: 1.1 }}>
+              <span style={{ color: '#059669' }}>{fmtInt(totalRest)}</span>
+              <span style={{ color: '#9ca3af', fontSize: '12px', margin: '0 4px' }}>/</span>
+              <span style={{ color: totalDmg > 0 ? '#dc2626' : '#9ca3af' }}>{fmtInt(totalDmg)}</span>
             </p>
           </div>
-        </div>
-
-        {/* Customer + Return Info */}
-        <div style={{ display: 'flex', gap: '24px', marginBottom: '20px' }}>
-          <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Customer</p>
-            <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{sr.customer?.name || '—'}</p>
-            {sr.customer?.phone && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>Phone: {sr.customer.phone}</p>}
-            {sr.customer?.city && <p style={{ fontSize: '11px', color: '#6b7280', margin: '2px 0 0' }}>{sr.customer.city}{sr.customer.state ? `, ${sr.customer.state}` : ''}</p>}
-            {sr.customer?.gst_no && <p style={{ fontSize: '11px', fontWeight: 600, margin: '2px 0 0' }}>GSTIN: {sr.customer.gst_no}</p>}
-          </div>
-          <div style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 6px' }}>Return Details</p>
-            {sr.reason_summary && <p style={{ fontSize: '12px', margin: '2px 0' }}>Reason: <strong>{sr.reason_summary}</strong></p>}
-            {sr.transport && <p style={{ fontSize: '12px', margin: '2px 0' }}>Transport: <strong>{sr.transport.name}</strong></p>}
-            {sr.lr_number && <p style={{ fontSize: '12px', margin: '2px 0' }}>L.R. No.: <strong>{sr.lr_number}</strong>{sr.lr_date ? ` | Date: ${fmtDate(sr.lr_date)}` : ''}</p>}
-            {sr.received_date && <p style={{ fontSize: '12px', margin: '2px 0' }}>Received: {fmtDate(sr.received_date)}{sr.received_by_user ? ` by ${sr.received_by_user.full_name}` : ''}</p>}
-            {sr.inspected_date && <p style={{ fontSize: '12px', margin: '2px 0' }}>Inspected: {fmtDate(sr.inspected_date)}{sr.inspected_by_user ? ` by ${sr.inspected_by_user.full_name}` : ''}</p>}
+          <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '6px 10px', textAlign: 'center' }}>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', margin: 0 }}>Total Value</p>
+            <p style={{ fontSize: '16px', fontWeight: 800, color: '#92400e', margin: 0, lineHeight: 1.1 }}>{fmtCurrency(total)}</p>
           </div>
         </div>
 
-        {/* QC Notes */}
-        {sr.qc_notes && (
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '8px 12px', marginBottom: '16px', fontSize: '11px', color: '#1e40af' }}>
-            <strong>QC Notes:</strong> {sr.qc_notes}
-          </div>
-        )}
-
-        {/* Line items */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+        {/* Line items — tight, warehouse-focused */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
           <thead>
-            <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-              {['#', 'SKU Code', 'Description', 'Size', 'Returned', 'Restocked', 'Damaged', 'Condition', 'Reason'].map(h => (
-                <th key={h} style={{ padding: '8px 6px', textAlign: ['Returned', 'Restocked', 'Damaged'].includes(h) ? 'right' : 'left', fontSize: '10px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{h}</th>
+            <tr style={{ background: '#059669', color: '#fff' }}>
+              {[
+                { k: '#', w: '4%', align: 'left' },
+                { k: 'SKU Code', w: '32%', align: 'left' },
+                { k: 'Size', w: '7%', align: 'center' },
+                { k: 'Ret', w: '7%', align: 'right' },
+                { k: 'Rest', w: '7%', align: 'right' },
+                { k: 'Dmg', w: '7%', align: 'right' },
+                { k: 'Cond', w: '7%', align: 'center' },
+                { k: 'Rate', w: '10%', align: 'right' },
+                { k: 'Amount', w: '11%', align: 'right' },
+                { k: '✓', w: '5%', align: 'center' },
+              ].map(col => (
+                <th key={col.k} style={{ padding: '6px 5px', textAlign: col.align, fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', width: col.w }}>{col.k}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {sr.items?.map((item, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                <td style={{ padding: '8px 6px', color: '#9ca3af' }}>{i + 1}</td>
-                <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.sku_code || '—'}</td>
-                <td style={{ padding: '8px 6px', color: '#6b7280' }}>{item.sku?.product_name || '—'}</td>
-                <td style={{ padding: '8px 6px', fontWeight: 600 }}>{item.sku?.size || '—'}</td>
-                <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600 }}>{item.quantity_returned}</td>
-                <td style={{ padding: '8px 6px', textAlign: 'right', color: item.quantity_restocked > 0 ? '#166534' : '#6b7280' }}>{item.quantity_restocked}</td>
-                <td style={{ padding: '8px 6px', textAlign: 'right', color: item.quantity_damaged > 0 ? '#dc2626' : '#6b7280' }}>{item.quantity_damaged}</td>
-                <td style={{ padding: '8px 6px', fontSize: '11px' }}>
-                  <span style={{ padding: '1px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600, background: item.condition === 'good' ? '#dcfce7' : item.condition === 'damaged' ? '#fee2e2' : item.condition === 'rejected' ? '#fce7f3' : '#f3f4f6', color: item.condition === 'good' ? '#166534' : item.condition === 'damaged' ? '#dc2626' : item.condition === 'rejected' ? '#be185d' : '#6b7280' }}>
-                    {CONDITION_LABEL[item.condition] || item.condition || '—'}
-                  </span>
-                </td>
-                <td style={{ padding: '8px 6px', color: '#6b7280', fontSize: '11px' }}>{item.reason || '—'}</td>
-              </tr>
-            ))}
+            {items.map((item, i) => {
+              const qty = Number(item.quantity_returned) || 0
+              const price = Number(item.unit_price || item.order_item?.unit_price) || 0
+              const amt = qty * price
+              const cond = CONDITION_STYLE[item.condition] || CONDITION_STYLE.pending
+              return (
+                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 ? '#fafafa' : '#fff' }}>
+                  <td style={{ padding: '4px 5px', color: '#9ca3af', fontSize: '11px' }}>{i + 1}</td>
+                  <td style={{ padding: '4px 5px', fontWeight: 700, fontSize: '11px', fontFamily: 'monospace' }}>{item.sku?.sku_code || '—'}</td>
+                  <td style={{ padding: '4px 5px', fontWeight: 700, textAlign: 'center', fontSize: '11px' }}>{item.sku?.size || '—'}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'right', fontWeight: 700, fontSize: '11px' }}>{qty}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'right', color: item.quantity_restocked > 0 ? '#166534' : '#9ca3af', fontWeight: 600, fontSize: '11px' }}>{item.quantity_restocked || '—'}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'right', color: item.quantity_damaged > 0 ? '#dc2626' : '#9ca3af', fontWeight: 600, fontSize: '11px' }}>{item.quantity_damaged || '—'}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', borderRadius: '50%', fontSize: '10px', fontWeight: 800, background: cond.bg, color: cond.fg }}>{cond.letter}</span>
+                  </td>
+                  <td style={{ padding: '4px 5px', textAlign: 'right', fontSize: '11px' }}>{price > 0 ? fmtCurrency(price) : '—'}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'right', fontWeight: 700, fontSize: '11px' }}>{amt > 0 ? fmtCurrency(amt) : '—'}</td>
+                  <td style={{ padding: '4px 5px', textAlign: 'center' }}>
+                    <span style={{ display: 'inline-block', width: '14px', height: '14px', border: '1.5px solid #9ca3af', borderRadius: '2px' }}></span>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
+          <tfoot>
+            <tr style={{ borderTop: '2px solid #059669', background: '#f0fdf4' }}>
+              <td colSpan={3} style={{ padding: '6px 5px', fontWeight: 800, fontSize: '11px', color: '#059669' }}>TOTALS</td>
+              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtInt(totalRet)}</td>
+              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#166534' }}>{fmtInt(totalRest)}</td>
+              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: totalDmg > 0 ? '#dc2626' : '#9ca3af' }}>{fmtInt(totalDmg)}</td>
+              <td colSpan={2} />
+              <td style={{ padding: '6px 5px', textAlign: 'right', fontWeight: 800, fontSize: '12px', color: '#059669' }}>{fmtCurrency(subtotal)}</td>
+              <td style={{ padding: '6px 5px', textAlign: 'center', fontSize: '10px', color: '#6b7280' }}>{items.length}</td>
+            </tr>
+          </tfoot>
         </table>
 
-        {/* Total */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ width: '280px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '2px solid #059669', fontSize: '16px', fontWeight: 800 }}>
-              <span>Total Value</span>
-              <span>{fmtCurrency(sr.total_amount)}</span>
+        {/* Tax breakup & totals — right-aligned summary block */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '16px' }}>
+          {sr.qc_notes && (
+            <div style={{ flex: 1, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '8px 10px', fontSize: '11px', color: '#1e40af' }}>
+              <strong>QC Notes:</strong> {sr.qc_notes}
             </div>
+          )}
+          <div style={{ minWidth: '240px', marginLeft: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '12px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ color: '#6b7280', padding: '2px 0' }}>Subtotal</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(subtotal)}</td>
+                </tr>
+                {discount > 0 && (
+                  <tr>
+                    <td style={{ color: '#d97706', padding: '2px 0' }}>Discount</td>
+                    <td style={{ textAlign: 'right', color: '#d97706', fontWeight: 600 }}>-{fmtCurrency(discount)}</td>
+                  </tr>
+                )}
+                {gstPct > 0 && (
+                  <>
+                    <tr>
+                      <td style={{ color: '#6b7280', padding: '2px 0' }}>CGST ({gstPct / 2}%)</td>
+                      <td style={{ textAlign: 'right' }}>{fmtCurrency(taxAmt / 2)}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ color: '#6b7280', padding: '2px 0' }}>SGST ({gstPct / 2}%)</td>
+                      <td style={{ textAlign: 'right' }}>{fmtCurrency(taxAmt / 2)}</td>
+                    </tr>
+                  </>
+                )}
+                <tr style={{ borderTop: '2px solid #059669' }}>
+                  <td style={{ fontSize: '14px', fontWeight: 800, color: '#059669', padding: '5px 0 0' }}>TOTAL VALUE</td>
+                  <td style={{ fontSize: '15px', fontWeight: 800, color: '#059669', textAlign: 'right', padding: '5px 0 0' }}>{fmtCurrency(total)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <p style={{ fontSize: '10px', color: '#9ca3af', margin: 0 }}>This is a computer-generated sales return document.</p>
+        {/* 3-way signature footer — Received / Inspected / Authorized */}
+        <div style={{ paddingTop: '12px', borderTop: '1px solid #d1d5db', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderBottom: '1px solid #6b7280', height: '28px', marginBottom: '4px' }}>&nbsp;</div>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Received By</p>
+            <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>{sr.received_by_user?.full_name || 'Warehouse'}</p>
           </div>
-          <div style={{ display: 'flex', gap: '60px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Customer Signature</p>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '130px', borderBottom: '1px solid #d1d5db', marginBottom: '4px' }}>&nbsp;</div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>Authorized Signatory</p>
-            </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderBottom: '1px solid #6b7280', height: '28px', marginBottom: '4px' }}>&nbsp;</div>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Inspected By</p>
+            <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>{sr.inspected_by_user?.full_name || 'QC'}</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ borderBottom: '1px solid #6b7280', height: '28px', marginBottom: '4px' }}>&nbsp;</div>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Authorised Signatory</p>
+            <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>{co.name || 'Supplier'}</p>
           </div>
         </div>
+
+        {/* Bottom tagline */}
+        <p style={{ fontSize: '9px', color: '#9ca3af', margin: '8px 0 0', textAlign: 'center' }}>
+          Computer-generated sales return document{sr.credit_note_no ? ` · For financial credit refer to ${sr.credit_note_no}` : ''}.
+        </p>
       </div>
     </div>
   )
