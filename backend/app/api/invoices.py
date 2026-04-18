@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.invoice import InvoiceCreate, InvoiceFilterParams, InvoiceFromOrder, InvoiceUpdate
+from app.schemas.invoice import (
+    InvoiceCancelRequest,
+    InvoiceCreate,
+    InvoiceFilterParams,
+    InvoiceFromOrder,
+    InvoiceUpdate,
+)
 from app.services.invoice_service import InvoiceService
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
@@ -105,12 +111,17 @@ async def update_invoice(
 @router.post("/{invoice_id}/cancel", response_model=None)
 async def cancel_invoice(
     invoice_id: UUID,
+    req: InvoiceCancelRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("invoice_manage"),
 ):
-    """Cancel an issued or draft invoice. Reverses ledger entry."""
+    """Cancel an issued or draft invoice with a reason. Reverses ledger entry.
+
+    Cancelled invoices are retained (GST requirement) with a reason code,
+    optional notes, timestamp, and the cancelling user captured for audit.
+    """
     svc = InvoiceService(db)
-    result = await svc.cancel_invoice(invoice_id)
+    result = await svc.cancel_invoice(invoice_id, req, current_user.id)
     return {"success": True, "data": result}
 
 

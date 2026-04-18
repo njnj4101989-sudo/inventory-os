@@ -65,13 +65,19 @@ export async function createInvoice(data) {
   return client.post('/invoices', data)
 }
 
-export async function cancelInvoice(id) {
+export async function cancelInvoice(id, data) {
+  // data = { reason, notes? } — reason is required by the backend.
   if (USE_MOCK) {
     const invoice = invoices.find((inv) => inv.id === id)
-    if (invoice) invoice.status = 'cancelled'
+    if (invoice) {
+      invoice.status = 'cancelled'
+      invoice.cancel_reason = data?.reason
+      invoice.cancel_notes = data?.notes || null
+      invoice.cancelled_at = new Date().toISOString()
+    }
     return mockResponse(invoice, 'Invoice cancelled')
   }
-  return client.post(`/invoices/${id}/cancel`)
+  return client.post(`/invoices/${id}/cancel`, data)
 }
 
 export async function updateInvoice(id, data) {

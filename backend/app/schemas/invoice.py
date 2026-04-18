@@ -60,6 +60,22 @@ class InvoiceUpdate(BaseModel):
     due_date: date | None = None
 
 
+class InvoiceCancelRequest(BaseModel):
+    """POST /invoices/{id}/cancel — requires a reason code + optional notes.
+
+    Reason codes (industry-standard GST classification):
+      - wrong_amount      : wrong rate, qty, or total
+      - wrong_customer    : issued to the wrong party
+      - duplicate         : duplicate invoice raised by mistake
+      - customer_cancelled: customer cancelled the order pre-delivery
+      - data_entry_error  : typo or other clerical mistake
+      - other             : any reason not above (notes recommended)
+    """
+
+    reason: str
+    notes: str | None = None
+
+
 # --- Filter Params ---
 
 
@@ -111,5 +127,9 @@ class InvoiceResponse(BaseSchema):
     issued_at: datetime | None = None
     paid_at: datetime | None = None
     notes: str | None = None
+    cancel_reason: str | None = None
+    cancel_notes: str | None = None
+    cancelled_at: datetime | None = None
+    cancelled_by_name: str | None = None
     items: list[InvoiceItemResponse] = []
     created_at: datetime | None = None

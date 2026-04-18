@@ -160,6 +160,8 @@ export default function InvoicesPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  // Cancel form: reason (required) + optional notes. Reset when modal closes.
+  const [cancelForm, setCancelForm] = useState({ reason: '', notes: '' })
 
   // Credit Notes tab
   const [viewMode, setViewMode] = useState(searchParams.get('tab') || 'invoices') // invoices | credit_notes
@@ -329,9 +331,18 @@ export default function InvoicesPage() {
 
   /* ── Cancel invoice ── */
   const handleCancelInvoice = async () => {
+    if (!cancelForm.reason) { setError('Please select a cancellation reason'); return }
     setActioning(true)
-    try { await cancelInvoice(detailInvoice.id); setDetailInvoice(null); setConfirmCancel(false); fetchData() }
-    catch (err) { setError(err.response?.data?.detail || 'Failed to cancel') }
+    try {
+      await cancelInvoice(detailInvoice.id, {
+        reason: cancelForm.reason,
+        notes: cancelForm.notes.trim() || null,
+      })
+      setDetailInvoice(null)
+      setConfirmCancel(false)
+      setCancelForm({ reason: '', notes: '' })
+      fetchData()
+    } catch (err) { setError(err.response?.data?.detail || 'Failed to cancel') }
     finally { setActioning(false) }
   }
 
@@ -902,6 +913,32 @@ export default function InvoicesPage() {
           <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" /></div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+            {/* Cancelled banner — surface reason + who + when for audit */}
+            {inv.status === 'cancelled' && (
+              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 flex items-start gap-3">
+                <svg className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <p className="typo-data text-red-700">Invoice cancelled</p>
+                  <p className="text-xs text-red-700 mt-0.5">
+                    {{
+                      wrong_amount: 'Wrong amount / rate / quantity',
+                      wrong_customer: 'Wrong customer / party',
+                      duplicate: 'Duplicate invoice',
+                      customer_cancelled: 'Customer cancelled the order',
+                      data_entry_error: 'Data entry error / typo',
+                      other: 'Other',
+                    }[inv.cancel_reason] || inv.cancel_reason || 'Reason not recorded'}
+                    {inv.cancelled_at && <> · {new Date(inv.cancelled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>}
+                    {inv.cancelled_by_name && <> · by {inv.cancelled_by_name}</>}
+                  </p>
+                  {inv.cancel_notes && (
+                    <p className="text-xs text-red-600 mt-1 italic">"{inv.cancel_notes}"</p>
+                  )}
+                </div>
+              </div>
+            )}
             {/* 6 info cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               <div className="bg-gray-50 rounded p-2">
@@ -1031,17 +1068,49 @@ export default function InvoicesPage() {
               </div>
             )}
 
-            {/* Cancel confirmation */}
+            {/* Cancel confirmation — reason is required (GST audit trail) */}
             {confirmCancel && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-sm w-full mx-4 space-y-3">
-                  <h3 className="typo-data text-red-700">Cancel this invoice?</h3>
-                  <p className="text-xs text-gray-500">This will reverse the ledger entry{!inv.order_id ? ' and restore stock' : ''}. This cannot be undone.</p>
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmCancel(false); setCancelForm({ reason: '', notes: '' }) } }}>
+                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-md w-full mx-4 space-y-3">
+                  <h3 className="typo-data text-red-700">Cancel invoice {inv.invoice_number}?</h3>
+                  <p className="text-xs text-gray-500">
+                    This reverses the ledger entry{!inv.order_id ? ' and restores stock' : ''} and marks the invoice as cancelled.
+                    The invoice is retained in the books (GST compliance) with your reason attached.
+                  </p>
+                  <div>
+                    <label className="typo-label">Reason <span className="text-red-500">*</span></label>
+                    <FilterSelect
+                      full
+                      value={cancelForm.reason}
+                      onChange={(v) => setCancelForm(f => ({ ...f, reason: v }))}
+                      options={[
+                        { value: '', label: 'Select reason…' },
+                        { value: 'wrong_amount', label: 'Wrong amount / rate / quantity' },
+                        { value: 'wrong_customer', label: 'Wrong customer / party' },
+                        { value: 'duplicate', label: 'Duplicate invoice' },
+                        { value: 'customer_cancelled', label: 'Customer cancelled the order' },
+                        { value: 'data_entry_error', label: 'Data entry error / typo' },
+                        { value: 'other', label: 'Other (add note below)' },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className="typo-label">Notes <span className="text-gray-400">(optional)</span></label>
+                    <textarea
+                      rows={2}
+                      value={cancelForm.notes}
+                      onChange={(e) => setCancelForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Add details that will help during an audit…"
+                      className="typo-input w-full resize-none"
+                    />
+                  </div>
                   <div className="flex justify-end gap-2 pt-2">
-                    <button onClick={() => setConfirmCancel(false)} className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep</button>
-                    <button onClick={handleCancelInvoice} disabled={actioning}
+                    <button onClick={() => { setConfirmCancel(false); setCancelForm({ reason: '', notes: '' }) }}
+                      className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep</button>
+                    <button onClick={handleCancelInvoice} disabled={actioning || !cancelForm.reason}
                       className="rounded bg-red-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-red-700 disabled:opacity-50">
-                      {actioning ? 'Cancelling...' : 'Yes, Cancel'}
+                      {actioning ? 'Cancelling…' : 'Cancel Invoice'}
                     </button>
                   </div>
                 </div>

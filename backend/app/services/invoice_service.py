@@ -20,7 +20,7 @@ from app.schemas.invoice import (
     InvoiceUpdate,
 )
 from app.core.code_generator import next_invoice_number
-from app.core.exceptions import NotFoundError, InvalidStateTransitionError
+from app.core.exceptions import NotFoundError, InvalidStateTransitionError, ValidationError
 
 
 class InvoiceService:
@@ -59,6 +59,7 @@ class InvoiceService:
                 selectinload(Invoice.customer),
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
+                selectinload(Invoice.cancelled_by_user),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
             .order_by(Invoice.created_at.desc())
@@ -95,6 +96,7 @@ class InvoiceService:
                 selectinload(Invoice.customer),
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
+                selectinload(Invoice.cancelled_by_user),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
         )
@@ -538,14 +540,34 @@ class InvoiceService:
 
     # ── Cancel invoice ──
 
-    async def cancel_invoice(self, invoice_id: UUID) -> dict:
+    async def cancel_invoice(self, invoice_id: UUID, req, user_id: UUID | None = None) -> dict:
+        """Cancel an invoice with a required reason.
+
+        `req` is `InvoiceCancelRequest` (reason + optional notes). Reason is
+        validated against the known industry-standard set; anything else is
+        stored under 'other' so the free-text notes carry the specifics.
+        """
         invoice = await self._get_or_404(invoice_id)
         if invoice.status not in ("draft", "issued"):
             raise InvalidStateTransitionError(
                 f"Cannot cancel invoice in '{invoice.status}' status (only draft or issued)"
             )
 
+        allowed_reasons = {
+            "wrong_amount", "wrong_customer", "duplicate",
+            "customer_cancelled", "data_entry_error", "other",
+        }
+        reason = (getattr(req, "reason", None) or "").strip()
+        if not reason:
+            raise ValidationError("Cancellation reason is required")
+        if reason not in allowed_reasons:
+            reason = "other"
+
         invoice.status = "cancelled"
+        invoice.cancel_reason = reason
+        invoice.cancel_notes = (getattr(req, "notes", None) or None) or None
+        invoice.cancelled_at = datetime.now(timezone.utc)
+        invoice.cancelled_by = user_id
         await self.db.flush()
 
         # Reverse stock for standalone invoices (no order = direct sale)
@@ -603,6 +625,7 @@ class InvoiceService:
                 selectinload(Invoice.customer),
                 selectinload(Invoice.broker),
                 selectinload(Invoice.transport),
+                selectinload(Invoice.cancelled_by_user),
                 selectinload(Invoice.items).selectinload(InvoiceItem.sku),
             )
         )
@@ -678,6 +701,14 @@ class InvoiceService:
             "issued_at": inv.issued_at.isoformat() if inv.issued_at else None,
             "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
             "notes": inv.notes,
+            "cancel_reason": inv.cancel_reason,
+            "cancel_notes": inv.cancel_notes,
+            "cancelled_at": inv.cancelled_at.isoformat() if inv.cancelled_at else None,
+            "cancelled_by_name": (
+                inv.cancelled_by_user.full_name
+                if getattr(inv, "cancelled_by_user", None) and hasattr(inv.cancelled_by_user, "full_name")
+                else (inv.cancelled_by_user.username if getattr(inv, "cancelled_by_user", None) else None)
+            ),
             "items": [
                 {
                     "id": str(item.id),
