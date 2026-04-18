@@ -81,8 +81,10 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
           On screen, the 210mm-wide sheet sits inside the modal backdrop. */}
       <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: 0, fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '11px', lineHeight: '1.45' }}>
 
+        {/* TOP HALF — fixed 138.5mm so the cut line lands at exactly 148.5mm (center of 297mm A4) */}
+        <div style={{ height: '138.5mm', display: 'flex', flexDirection: 'column' }}>
         {/* Top-half content card — 6mm inner padding, subtle 2mm frame from page margin */}
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '4px', padding: '6mm', margin: '2mm', position: 'relative' }}>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '4px', padding: '6mm', margin: '2mm', position: 'relative', flex: '1 1 auto', overflow: 'hidden' }}>
 
           {/* Header strip */}
           <div style={{ borderBottom: '2px solid #059669', paddingBottom: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -210,11 +212,14 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
             </div>
           </div>
         </div>
+        </div>
+        {/* END TOP HALF (138.5mm) */}
 
-        {/* Tear line between top (content) and bottom (blank half) — printed */}
-        <div style={{ marginTop: '8mm', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '9px', color: '#9ca3af' }}>
+        {/* Tear line sits exactly at the middle of the A4 (148.5mm from top).
+            Top half = CN content (above). Bottom half = blank for counterfoil. */}
+        <div style={{ height: '10mm', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '9px', color: '#9ca3af', padding: '0 4mm' }}>
           <span style={{ flex: 1, borderTop: '1px dashed #d1d5db' }}></span>
-          <span style={{ fontStyle: 'italic' }}>cut here — second copy / customer counterfoil can be printed on bottom half</span>
+          <span style={{ fontStyle: 'italic', whiteSpace: 'nowrap' }}>✂ cut here — bottom half for counterfoil / filing</span>
           <span style={{ flex: 1, borderTop: '1px dashed #d1d5db' }}></span>
         </div>
       </div>
