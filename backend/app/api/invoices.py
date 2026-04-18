@@ -15,7 +15,9 @@ from app.schemas.invoice import (
     InvoiceFromOrder,
     InvoiceUpdate,
 )
+from app.schemas.sales_return import CreditNoteFromInvoiceRequest
 from app.services.invoice_service import InvoiceService
+from app.services.sales_return_service import SalesReturnService
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
@@ -122,6 +124,26 @@ async def cancel_invoice(
     """
     svc = InvoiceService(db)
     result = await svc.cancel_invoice(invoice_id, req, current_user.id)
+    return {"success": True, "data": result}
+
+
+@router.post("/{invoice_id}/credit-note", response_model=None, status_code=201)
+async def create_credit_note_from_invoice(
+    invoice_id: UUID,
+    req: CreditNoteFromInvoiceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Raise a credit note directly against an invoice (fast-track path).
+
+    Creates a closed SalesReturn + CN-XXXX in one step. Per-item
+    `restore_stock` controls whether inventory is added back. Used for
+    price adjustments, discount-after-billing, or clean goods-return
+    scenarios that don't need a full QC workflow.
+    """
+    fy_id = get_fy_id(current_user)
+    svc = SalesReturnService(db)
+    result = await svc.create_credit_note_from_invoice(invoice_id, req, current_user.id, fy_id)
     return {"success": True, "data": result}
 
 

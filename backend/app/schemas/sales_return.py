@@ -44,6 +44,33 @@ class SalesReturnUpdate(BaseModel):
     reason_summary: str | None = None
 
 
+# ── Fast-track credit note against an invoice ──
+# Skips the 5-step workflow (draft → received → inspected → restocked → closed)
+# and creates the SalesReturn in `closed` status directly with a CN-XXXX assigned.
+# Used for: price adjustments, post-GSTR-1 corrections, discount-after-invoice,
+# and clean customer-return cases where physical inspection isn't needed.
+
+class CreditNoteFromInvoiceItemInput(BaseModel):
+    """Single line on the credit note. Pre-filled from invoice_items but editable."""
+
+    invoice_item_id: UUID | None = None
+    sku_id: UUID
+    quantity: int                         # qty being credited
+    unit_price: Decimal                   # usually the invoice line's rate
+    restore_stock: bool = False           # add this qty back to inventory (goods returned)
+    reason: str | None = None             # per-line reason (optional)
+
+
+class CreditNoteFromInvoiceRequest(BaseModel):
+    """POST /invoices/{invoice_id}/credit-note — raise a credit note directly."""
+
+    reason: str                           # goods_returned | price_adjustment | quality_issue |
+                                          # post_filing_correction | discount | other
+    reason_notes: str | None = None
+    items: list[CreditNoteFromInvoiceItemInput]
+    gst_percent: Decimal | None = None    # defaults to invoice.gst_percent if not provided
+
+
 class InspectItemInput(BaseModel):
     item_id: UUID  # sales_return_item id
     condition: str  # good | damaged | rejected

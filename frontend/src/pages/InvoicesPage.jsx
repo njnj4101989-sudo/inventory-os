@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
 import { QRCodeSVG } from 'qrcode.react'
-import { getInvoices, getInvoice, getInvoiceByNo, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice } from '../api/invoices'
+import { getInvoices, getInvoice, getInvoiceByNo, markPaid, cancelInvoice, createInvoice, createInvoiceFromOrder, updateInvoice, createCreditNoteFromInvoice } from '../api/invoices'
 import { getSalesReturns, getSalesReturn } from '../api/salesReturns'
 import { getReturnNotes, getReturnNote } from '../api/returns'
 import DebitNotePrint from '../components/common/DebitNotePrint'
@@ -162,6 +162,10 @@ export default function InvoicesPage() {
   const [confirmCancel, setConfirmCancel] = useState(false)
   // Cancel form: reason (required) + optional notes. Reset when modal closes.
   const [cancelForm, setCancelForm] = useState({ reason: '', notes: '' })
+  // Credit-note modal: reason, notes, items pre-filled from invoice.
+  const [showCreditNote, setShowCreditNote] = useState(false)
+  const [cnForm, setCnForm] = useState({ reason: '', reason_notes: '', items: [] })
+  const [cnSaving, setCnSaving] = useState(false)
 
   // Credit Notes tab
   const [viewMode, setViewMode] = useState(searchParams.get('tab') || 'invoices') // invoices | credit_notes
@@ -327,6 +331,55 @@ export default function InvoicesPage() {
     try { await markPaid(detailInvoice.id); setDetailInvoice(null); fetchData() }
     catch (err) { setError(err.response?.data?.detail || 'Failed to mark paid') }
     finally { setActioning(false) }
+  }
+
+  /* ── Open credit-note modal: prefill line items from invoice ── */
+  const openCreditNote = () => {
+    if (!detailInvoice) return
+    setCnForm({
+      reason: '',
+      reason_notes: '',
+      items: (detailInvoice.items || []).map(it => ({
+        invoice_item_id: it.id,
+        sku_id: it.sku?.id,
+        sku_code: it.sku?.sku_code || '',
+        max_qty: it.quantity || 0,
+        quantity: it.quantity || 0,
+        unit_price: Number(it.unit_price) || 0,
+        restore_stock: false,
+      })),
+    })
+    setShowCreditNote(true)
+  }
+
+  const handleCreateCreditNote = async () => {
+    if (!cnForm.reason) { setError('Please select a credit-note reason'); return }
+    const lines = cnForm.items.filter(l => l.quantity > 0 && l.sku_id)
+    if (!lines.length) { setError('At least one line with qty > 0 is required'); return }
+    setCnSaving(true)
+    try {
+      const res = await createCreditNoteFromInvoice(detailInvoice.id, {
+        reason: cnForm.reason,
+        reason_notes: cnForm.reason_notes.trim() || null,
+        items: lines.map(l => ({
+          invoice_item_id: l.invoice_item_id,
+          sku_id: l.sku_id,
+          quantity: Number(l.quantity),
+          unit_price: Number(l.unit_price) || 0,
+          restore_stock: !!l.restore_stock,
+        })),
+      })
+      setShowCreditNote(false)
+      setCnForm({ reason: '', reason_notes: '', items: [] })
+      // Navigate to the credit note so the user can print/inspect it.
+      const cnId = res?.data?.data?.id
+      if (cnId) navigate(`/returns?tab=sales&open=${cnId}`)
+      else fetchData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to create credit note')
+    } finally {
+      setCnSaving(false)
+    }
   }
 
   /* ── Cancel invoice ── */
@@ -1061,10 +1114,161 @@ export default function InvoicesPage() {
                   className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
                   Cancel Invoice
                 </button>
+                <button onClick={openCreditNote} disabled={actioning}
+                  className="rounded border border-amber-400 text-amber-700 px-4 py-1.5 typo-btn-sm hover:bg-amber-50 disabled:opacity-50 transition-colors">
+                  Create Credit Note
+                </button>
                 <button onClick={handleMarkPaid} disabled={actioning}
                   className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
                   {actioning ? 'Processing...' : 'Mark as Paid'}
                 </button>
+              </div>
+            )}
+            {inv.status === 'cancelled' && (
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button onClick={openCreditNote} disabled={actioning}
+                  className="rounded border border-amber-400 text-amber-700 px-4 py-1.5 typo-btn-sm hover:bg-amber-50 disabled:opacity-50 transition-colors"
+                  title="Raise a credit note against this cancelled invoice (GST-correct path when the period is already filed)">
+                  Create Credit Note
+                </button>
+              </div>
+            )}
+
+            {/* Credit Note modal — fast-track, skips the 5-step QC workflow */}
+            {showCreditNote && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+                onClick={(e) => { if (e.target === e.currentTarget && !cnSaving) setShowCreditNote(false) }}>
+                <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+                  <div className="px-6 py-4 border-b flex items-center justify-between">
+                    <div>
+                      <h3 className="typo-modal-title text-gray-900">Create Credit Note</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Against invoice {inv.invoice_number} · GST-compliant (CN-XXXX will be generated)</p>
+                    </div>
+                    <button onClick={() => setShowCreditNote(false)} disabled={cnSaving}
+                      className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100 disabled:opacity-50">✕</button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="typo-label">Reason <span className="text-red-500">*</span></label>
+                        <FilterSelect
+                          full
+                          value={cnForm.reason}
+                          onChange={(v) => setCnForm(f => ({ ...f, reason: v }))}
+                          options={[
+                            { value: '', label: 'Select reason…' },
+                            { value: 'goods_returned', label: 'Goods returned by customer' },
+                            { value: 'price_adjustment', label: 'Price / rate adjustment' },
+                            { value: 'quality_issue', label: 'Quality / defect complaint' },
+                            { value: 'post_filing_correction', label: 'Post-GSTR-1 correction' },
+                            { value: 'discount', label: 'Discount after billing' },
+                            { value: 'other', label: 'Other (add note below)' },
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label className="typo-label">Notes <span className="text-gray-400">(optional)</span></label>
+                        <input type="text" value={cnForm.reason_notes}
+                          onChange={(e) => setCnForm(f => ({ ...f, reason_notes: e.target.value }))}
+                          placeholder="Short narrative for audit trail…"
+                          className="typo-input w-full" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="typo-label">Items to credit</label>
+                        <p className="text-xs text-gray-500">Tick "Restore stock" to add the qty back to inventory (goods physically returned).</p>
+                      </div>
+                      <div className="border rounded overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="typo-th text-left px-3 py-2">SKU</th>
+                              <th className="typo-th text-right px-3 py-2">Invoiced</th>
+                              <th className="typo-th text-right px-3 py-2">Credit Qty</th>
+                              <th className="typo-th text-right px-3 py-2">Rate</th>
+                              <th className="typo-th text-right px-3 py-2">Amount</th>
+                              <th className="typo-th text-center px-3 py-2">Restore Stock</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cnForm.items.map((l, idx) => (
+                              <tr key={l.invoice_item_id || idx} className="border-t">
+                                <td className="typo-td px-3 py-2 font-mono">{l.sku_code}</td>
+                                <td className="typo-td-secondary px-3 py-2 text-right">{l.max_qty}</td>
+                                <td className="px-3 py-2 text-right">
+                                  <input type="number" min={0} max={l.max_qty} value={l.quantity}
+                                    onChange={(e) => {
+                                      const v = Math.max(0, Math.min(l.max_qty, Number(e.target.value) || 0))
+                                      setCnForm(f => ({ ...f, items: f.items.map((x, i) => i === idx ? { ...x, quantity: v } : x) }))
+                                    }}
+                                    className="typo-input-sm w-20 text-right" />
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <input type="number" min={0} step="0.01" value={l.unit_price}
+                                    onChange={(e) => {
+                                      const v = Number(e.target.value) || 0
+                                      setCnForm(f => ({ ...f, items: f.items.map((x, i) => i === idx ? { ...x, unit_price: v } : x) }))
+                                    }}
+                                    className="typo-input-sm w-24 text-right" />
+                                </td>
+                                <td className="typo-td px-3 py-2 text-right">₹{(Number(l.quantity) * Number(l.unit_price)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <input type="checkbox" checked={l.restore_stock}
+                                    onChange={(e) => setCnForm(f => ({ ...f, items: f.items.map((x, i) => i === idx ? { ...x, restore_stock: e.target.checked } : x) }))}
+                                    className="h-4 w-4" />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-gray-50 border-t">
+                            <tr>
+                              <td colSpan={4} className="typo-td px-3 py-2 text-right font-semibold">Subtotal</td>
+                              <td className="typo-td px-3 py-2 text-right font-semibold">
+                                ₹{cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td />
+                            </tr>
+                            {Number(inv.gst_percent) > 0 && (
+                              <>
+                                <tr>
+                                  <td colSpan={4} className="typo-td-secondary px-3 py-2 text-right">GST @ {Number(inv.gst_percent)}%</td>
+                                  <td className="typo-td-secondary px-3 py-2 text-right">
+                                    ₹{(cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) * Number(inv.gst_percent) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td />
+                                </tr>
+                                <tr>
+                                  <td colSpan={4} className="typo-td px-3 py-2 text-right font-bold">Total Credit</td>
+                                  <td className="typo-td px-3 py-2 text-right font-bold text-amber-700">
+                                    ₹{(cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0) * (1 + Number(inv.gst_percent) / 100)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td />
+                                </tr>
+                              </>
+                            )}
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                      A credit note will be generated with a fresh <strong>CN-XXXX</strong> number and linked to this invoice.
+                      The customer ledger will be credited by the total amount. This action is recorded and cannot be undone.
+                    </div>
+                  </div>
+
+                  <div className="px-6 py-3 border-t flex justify-end gap-2">
+                    <button onClick={() => setShowCreditNote(false)} disabled={cnSaving}
+                      className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                    <button onClick={handleCreateCreditNote} disabled={cnSaving || !cnForm.reason}
+                      className="rounded bg-amber-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-amber-700 disabled:opacity-50">
+                      {cnSaving ? 'Creating…' : 'Create Credit Note'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

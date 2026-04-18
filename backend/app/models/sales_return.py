@@ -28,6 +28,12 @@ class SalesReturn(Base):
     order_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("orders.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    # When a credit note is raised directly against an invoice (fast-track path),
+    # we record which invoice it reverses. Nullable for the classic order-return
+    # flow and for standalone credit notes.
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), index=True
     )
@@ -63,6 +69,7 @@ class SalesReturn(Base):
 
     # Relationships
     order = relationship("Order", back_populates="sales_returns")
+    invoice = relationship("Invoice", foreign_keys=[invoice_id])
     customer = relationship("Customer")
     transport = relationship("Transport")
     created_by_user = relationship("User", foreign_keys=[created_by])

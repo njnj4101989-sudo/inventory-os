@@ -65,6 +65,14 @@ export async function createInvoice(data) {
   return client.post('/invoices', data)
 }
 
+export async function createCreditNoteFromInvoice(invoiceId, data) {
+  // data = { reason, reason_notes?, items: [{ invoice_item_id?, sku_id, quantity, unit_price, restore_stock?, reason? }], gst_percent? }
+  if (USE_MOCK) {
+    return mockResponse({ id: 'mock-cn', credit_note_no: 'CN-MOCK', status: 'closed' }, 'Credit note created')
+  }
+  return client.post(`/invoices/${invoiceId}/credit-note`, data)
+}
+
 export async function cancelInvoice(id, data) {
   // data = { reason, notes? } — reason is required by the backend.
   if (USE_MOCK) {

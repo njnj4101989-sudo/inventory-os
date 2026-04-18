@@ -12,8 +12,11 @@ from app.models.sales_return import SalesReturn, SalesReturnItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.customer import Customer
+from app.models.invoice import Invoice
+from app.models.invoice_item import InvoiceItem
 from app.models.sku import SKU
 from app.schemas.sales_return import (
+    CreditNoteFromInvoiceRequest,
     InspectRequest,
     SalesReturnCreate,
     SalesReturnFilterParams,
@@ -199,6 +202,205 @@ class SalesReturnService:
         await self.db.flush()
 
         await self._emit("sales_return_created", sr, user_id)
+        return await self.get_sales_return(sr.id)
+
+    # ── Fast-track: create credit note directly against an invoice ──
+
+    async def create_credit_note_from_invoice(
+        self,
+        invoice_id: UUID,
+        req: CreditNoteFromInvoiceRequest,
+        user_id: UUID,
+        fy_id: UUID,
+    ) -> dict:
+        """Create a SalesReturn in `closed` state with a CN assigned — skipping
+        the 5-step workflow. Used when the credit is purely financial
+        (price adjustment, post-filing correction, discount) or when physical
+        return inspection isn't needed. Per-item `restore_stock` controls
+        whether inventory is added back.
+        """
+        if not req.items:
+            raise ValidationError("At least one credit-note item is required")
+
+        allowed_reasons = {
+            "goods_returned", "price_adjustment", "quality_issue",
+            "post_filing_correction", "discount", "other",
+        }
+        reason = (req.reason or "").strip()
+        if not reason:
+            raise ValidationError("Reason is required")
+        if reason not in allowed_reasons:
+            reason = "other"
+
+        # Load invoice with items + order (for order-linked returned_qty updates)
+        invoice = (await self.db.execute(
+            select(Invoice)
+            .where(Invoice.id == invoice_id)
+            .options(
+                selectinload(Invoice.items).selectinload(InvoiceItem.sku),
+                selectinload(Invoice.order).selectinload(Order.items).selectinload(OrderItem.sku),
+            )
+        )).scalar_one_or_none()
+        if not invoice:
+            raise NotFoundError("Invoice not found")
+
+        # Customer: prefer invoice.customer_id, fall back to order.customer_id
+        customer_id = invoice.customer_id or (invoice.order.customer_id if invoice.order else None)
+        if not customer_id:
+            raise ValidationError("Invoice has no customer linked — cannot raise credit note")
+
+        # Validate each credit-note qty does not exceed the invoice line's qty.
+        # (We allow qty > invoice line only if invoice_item_id is None — free items.)
+        inv_item_map = {str(ii.id): ii for ii in (invoice.items or [])}
+        for line in req.items:
+            if line.invoice_item_id:
+                ii = inv_item_map.get(str(line.invoice_item_id))
+                if not ii:
+                    raise ValidationError(f"Invoice item {line.invoice_item_id} not found on this invoice")
+                if line.quantity <= 0:
+                    raise ValidationError("Credit quantity must be > 0")
+                if line.quantity > (ii.quantity or 0):
+                    raise ValidationError(
+                        f"Cannot credit {line.quantity} for {ii.sku.sku_code if ii.sku else ii.sku_id} — "
+                        f"invoiced quantity is only {ii.quantity}"
+                    )
+            else:
+                if line.quantity <= 0:
+                    raise ValidationError("Credit quantity must be > 0")
+
+        # Generate both numbers now — SRN for the record, CN for the finance side.
+        srn_no = await next_sales_return_number(self.db, fy_id)
+        cn_no = await next_credit_note_number(self.db, fy_id)
+
+        gst_pct = (
+            Decimal(str(float(req.gst_percent))) if req.gst_percent is not None
+            else (Decimal(str(float(invoice.gst_percent))) if invoice.gst_percent else Decimal("0"))
+        )
+
+        # Snapshot customer / order context from invoice
+        order_id = invoice.order_id
+        reason_summary = f"Credit note against {invoice.invoice_number}"
+        if req.reason_notes:
+            reason_summary = f"{reason_summary} — {req.reason_notes}"
+
+        now_date = datetime.now(timezone.utc).date()
+        sr = SalesReturn(
+            srn_no=srn_no,
+            order_id=order_id,
+            invoice_id=invoice.id,
+            customer_id=customer_id,
+            status="closed",
+            return_date=now_date,
+            received_date=now_date,
+            inspected_date=now_date,
+            restocked_date=now_date,
+            reason_summary=reason_summary,
+            gst_percent=gst_pct,
+            credit_note_no=cn_no,
+            created_by=user_id,
+            received_by=user_id,
+            inspected_by=user_id,
+            fy_id=fy_id,
+        )
+        self.db.add(sr)
+        await self.db.flush()
+
+        # Order items map (for order_items.returned_qty updates when invoice links to order)
+        oi_by_sku: dict = {}
+        if invoice.order and invoice.order.items:
+            for oi in invoice.order.items:
+                oi_by_sku.setdefault(oi.sku_id, []).append(oi)
+
+        total_amount = Decimal("0")
+
+        for line in req.items:
+            qty_restock = line.quantity if line.restore_stock else 0
+            qty_damage = 0 if line.restore_stock else 0  # damage tracking not surfaced in fast-track
+            sri = SalesReturnItem(
+                sales_return_id=sr.id,
+                order_item_id=None,
+                sku_id=line.sku_id,
+                unit_price=line.unit_price,
+                quantity_returned=line.quantity,
+                quantity_restocked=qty_restock,
+                quantity_damaged=qty_damage,
+                reason=line.reason or reason,
+                condition="good" if line.restore_stock else "pending",
+            )
+            self.db.add(sri)
+            total_amount += Decimal(str(float(line.unit_price))) * line.quantity
+
+            # Update linked order_item.returned_qty if this invoice came from an order
+            # and we find a matching order_item. Cap at what's actually returnable.
+            bucket = oi_by_sku.get(line.sku_id, [])
+            remaining = line.quantity
+            for oi in bucket:
+                if remaining <= 0:
+                    break
+                returnable = (oi.fulfilled_qty or 0) - (oi.returned_qty or 0)
+                if returnable <= 0:
+                    continue
+                take = min(remaining, returnable)
+                oi.returned_qty = (oi.returned_qty or 0) + take
+                remaining -= take
+
+        sr.subtotal = total_amount
+        sr.tax_amount = (total_amount * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+        sr.total_amount = sr.subtotal + sr.tax_amount
+
+        await self.db.flush()
+
+        # Inventory restore events (per-line restore_stock flag)
+        from app.services.inventory_service import InventoryService
+        inv_svc = InventoryService(self.db)
+        for line in req.items:
+            if not line.restore_stock:
+                continue
+            await inv_svc.create_event(
+                event_type="return",
+                item_type="finished_goods",
+                reference_type="sales_return",
+                reference_id=sr.id,
+                sku_id=line.sku_id,
+                quantity=line.quantity,
+                performed_by=user_id,
+                metadata={
+                    "srn_no": srn_no,
+                    "credit_note_no": cn_no,
+                    "invoice_number": invoice.invoice_number,
+                    "reason": reason,
+                },
+            )
+
+        # Ledger entry — credit the customer with the total credit amount
+        if sr.total_amount and float(sr.total_amount) > 0:
+            from app.services.ledger_service import LedgerService
+            from app.schemas.ledger import LedgerEntryCreate
+            ledger = LedgerService(self.db)
+            await ledger.create_entry(LedgerEntryCreate(
+                entry_date=now_date,
+                party_type="customer",
+                party_id=customer_id,
+                entry_type="credit_note",
+                reference_type="sales_return",
+                reference_id=sr.id,
+                debit=0,
+                credit=float(sr.total_amount),
+                description=(
+                    f"Credit Note {cn_no} against {invoice.invoice_number} — "
+                    f"₹{float(sr.total_amount):,.2f}"
+                ),
+                fy_id=sr.fy_id or fy_id,
+                created_by=user_id,
+            ))
+            await self.db.flush()
+
+        # Recalc order status if order-linked
+        if invoice.order:
+            self._recalculate_order_status(invoice.order)
+            await self.db.flush()
+
+        await self._emit("sales_return_closed", sr, user_id)
         return await self.get_sales_return(sr.id)
 
     # ── Update (draft only) ──
