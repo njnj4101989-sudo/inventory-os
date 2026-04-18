@@ -160,8 +160,10 @@ export default function InvoicesPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
-  // Cancel form: reason (required) + optional notes. Reset when modal closes.
-  const [cancelForm, setCancelForm] = useState({ reason: '', notes: '' })
+  // Cancel form: reason (required) + optional notes + whether to chain a CN.
+  // `also_credit_note` defaults true — matches Zoho/Tally habit where a cancel
+  // without a CN leaves a phantom A/R debit. Checkbox lets the user opt out.
+  const [cancelForm, setCancelForm] = useState({ reason: '', notes: '', also_credit_note: true })
   // Credit-note modal: reason, notes, items pre-filled from invoice.
   const [showCreditNote, setShowCreditNote] = useState(false)
   const [cnForm, setCnForm] = useState({ reason: '', reason_notes: '', items: [] })
@@ -386,15 +388,43 @@ export default function InvoicesPage() {
   const handleCancelInvoice = async () => {
     if (!cancelForm.reason) { setError('Please select a cancellation reason'); return }
     setActioning(true)
+    const chainCN = cancelForm.also_credit_note
+    const carryOverNotes = cancelForm.notes.trim()
     try {
       await cancelInvoice(detailInvoice.id, {
         reason: cancelForm.reason,
-        notes: cancelForm.notes.trim() || null,
+        notes: carryOverNotes || null,
       })
-      setDetailInvoice(null)
       setConfirmCancel(false)
-      setCancelForm({ reason: '', notes: '' })
-      fetchData()
+      setCancelForm({ reason: '', notes: '', also_credit_note: true })
+
+      if (chainCN) {
+        // Refetch so the cancelled banner + status flip are visible behind the CN modal.
+        try {
+          const res = await getInvoice(detailInvoice.id)
+          const fresh = res?.data?.data
+          if (fresh) setDetailInvoice(fresh)
+        } catch { /* fall back to stale detailInvoice — not critical */ }
+
+        // Pre-fill CN form from the (now cancelled) invoice's line items.
+        setCnForm({
+          reason: '',                          // user picks — cancel reason ≠ CN reason semantically
+          reason_notes: carryOverNotes || '',  // carry over cancel notes as a helpful starting point
+          items: (detailInvoice.items || []).map(it => ({
+            invoice_item_id: it.id,
+            sku_id: it.sku?.id,
+            sku_code: it.sku?.sku_code || '',
+            max_qty: it.quantity || 0,
+            quantity: it.quantity || 0,
+            unit_price: Number(it.unit_price) || 0,
+            restore_stock: true,               // default true: most cancel-then-CN flows also restore stock
+          })),
+        })
+        setShowCreditNote(true)
+      } else {
+        setDetailInvoice(null)
+        fetchData()
+      }
     } catch (err) { setError(err.response?.data?.detail || 'Failed to cancel') }
     finally { setActioning(false) }
   }
@@ -1317,7 +1347,7 @@ export default function InvoicesPage() {
             {/* Cancel confirmation — reason is required (GST audit trail) */}
             {confirmCancel && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
-                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmCancel(false); setCancelForm({ reason: '', notes: '' }) } }}>
+                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmCancel(false); setCancelForm({ reason: '', notes: '', also_credit_note: true }) } }}>
                 <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-md w-full mx-4 space-y-3">
                   <h3 className="typo-data text-red-700">Cancel invoice {inv.invoice_number}?</h3>
                   <p className="text-xs text-gray-500">
@@ -1351,12 +1381,28 @@ export default function InvoicesPage() {
                       className="typo-input w-full resize-none"
                     />
                   </div>
+                  <label className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 cursor-pointer hover:bg-amber-100 transition-colors">
+                    <input type="checkbox"
+                      checked={cancelForm.also_credit_note}
+                      onChange={(e) => setCancelForm(f => ({ ...f, also_credit_note: e.target.checked }))}
+                      className="h-4 w-4 mt-0.5 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <p className="typo-data text-amber-900">Also issue a Credit Note <span className="typo-caption text-amber-700">(recommended)</span></p>
+                      <p className="typo-caption text-amber-700 mt-0.5">
+                        Cancelling alone leaves the customer's ledger with the original debit. A Credit Note is the GST-authoritative reversal.
+                        We'll open the CN form next — pre-filled from this invoice.
+                      </p>
+                    </div>
+                  </label>
                   <div className="flex justify-end gap-2 pt-2">
-                    <button onClick={() => { setConfirmCancel(false); setCancelForm({ reason: '', notes: '' }) }}
+                    <button onClick={() => { setConfirmCancel(false); setCancelForm({ reason: '', notes: '', also_credit_note: true }) }}
                       className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep</button>
                     <button onClick={handleCancelInvoice} disabled={actioning || !cancelForm.reason}
                       className="rounded bg-red-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-red-700 disabled:opacity-50">
-                      {actioning ? 'Cancelling…' : 'Cancel Invoice'}
+                      {actioning
+                        ? (cancelForm.also_credit_note ? 'Cancelling…' : 'Cancelling…')
+                        : (cancelForm.also_credit_note ? 'Cancel + Create CN' : 'Cancel Invoice')}
                     </button>
                   </div>
                 </div>
