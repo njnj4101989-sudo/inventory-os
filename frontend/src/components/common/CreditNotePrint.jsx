@@ -57,7 +57,9 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `CreditNote-${sr.credit_note_no}`,
-    pageStyle: `@page { size: A4 portrait; margin: 12mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
+    // @page handles the physical margin. Inner container has NO extra padding
+    // so content starts at the 10mm page margin directly (not stacked).
+    pageStyle: `@page { size: A4 portrait; margin: 10mm; } * { box-sizing: border-box; } body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`,
   })
 
   return (
@@ -74,11 +76,13 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
         </div>
       </div>
 
-      {/* A4 Document — content sits in top half only (half-page layout) */}
-      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: '12mm', fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '11px', lineHeight: '1.45' }}>
+      {/* A4 Document — content sits in top half only (half-page layout).
+          No outer padding; @page's 10mm is the physical print margin.
+          On screen, the 210mm-wide sheet sits inside the modal backdrop. */}
+      <div ref={printRef} style={{ width: '210mm', minHeight: '297mm', background: '#fff', padding: 0, fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif", color: '#1f2937', fontSize: '11px', lineHeight: '1.45' }}>
 
-        {/* Top-half container with tear-line at the bottom */}
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '6px', padding: '14mm', position: 'relative' }}>
+        {/* Top-half content card — 6mm inner padding, subtle 2mm frame from page margin */}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '4px', padding: '6mm', margin: '2mm', position: 'relative' }}>
 
           {/* Header strip */}
           <div style={{ borderBottom: '2px solid #059669', paddingBottom: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
