@@ -1145,22 +1145,11 @@ export default function OrdersPage() {
                   </>
                 )}
                 {canReturn && (
-                  <div className="flex flex-col items-end gap-1">
-                    <button onClick={handleReturnAction} disabled={actioning}
-                      className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
-                      title="Fast-track Credit Note or full QC Sales Return">
-                      Create Credit Note
-                    </button>
-                    <button onClick={handleReturnAction} disabled={actioning}
-                      className="group inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 hover:bg-amber-100 hover:border-amber-300 transition-all disabled:opacity-50"
-                      title="Same flow — picks the With QC option">
-                      <svg className="h-3 w-3 text-amber-600 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fillRule="evenodd" d="M7.502 6h7.128A3.375 3.375 0 0118 9.375v9.375a3 3 0 003-3V6.108c0-1.505-1.125-2.811-2.664-2.94a48.972 48.972 0 00-.673-.05A3 3 0 0015 1.5h-1.5a3 3 0 00-2.663 1.618c-.225.015-.45.032-.673.05C8.662 3.295 7.554 4.542 7.502 6zM13.5 3A1.5 1.5 0 0012 4.5h4.5A1.5 1.5 0 0015 3h-1.5z" clipRule="evenodd" />
-                        <path fillRule="evenodd" d="M3 9.375C3 8.339 3.84 7.5 4.875 7.5h9.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-9.75A1.875 1.875 0 013 20.625V9.375zm9.586 4.594a.75.75 0 00-1.172-.938l-2.476 3.096-.908-.907a.75.75 0 00-1.06 1.06l1.5 1.5a.75.75 0 001.116-.062l3-3.75z" clipRule="evenodd" />
-                      </svg>
-                      <span className="typo-badge text-amber-700">or Sales Return</span>
-                    </button>
-                  </div>
+                  <button onClick={handleReturnAction} disabled={actioning}
+                    className="rounded border border-orange-300 text-orange-600 px-4 py-1.5 typo-btn-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                    title="Credit Note (billing term) or Sales Return (operations term) — same flow, picks Fast-track or With-QC in the next step">
+                    Credit Note <span className="text-orange-400 mx-0.5">/</span> Sales Return
+                  </button>
                 )}
                 {canAct && (
                   <button onClick={() => handleAction('ship')} disabled={actioning}
