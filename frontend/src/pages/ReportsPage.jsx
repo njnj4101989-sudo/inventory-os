@@ -530,10 +530,10 @@ function InventoryTab({ period }) {
                       <tr key={s.sku_id}
                         className={`border-b border-gray-100 ${baseBg} hover:bg-emerald-50/30 transition-colors`}>
                         <td className="py-2 px-3"></td>
-                        <td className="py-2 px-3 pl-10 typo-td font-mono text-xs text-gray-700">
+                        <td className="py-2 px-3 pl-10 typo-td">
                           <span className="flex items-center gap-2">
-                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 typo-badge ring-1 ring-inset font-semibold ${status.chipCls}`}>{status.label}</span>
-                            {s.sku_code}
+                            <span className={`inline-flex items-center justify-center w-16 rounded px-1.5 py-0.5 typo-badge ring-1 ring-inset font-semibold text-center flex-shrink-0 ${status.chipCls}`}>{status.label}</span>
+                            <span className="font-mono font-semibold text-gray-900">{s.sku_code}</span>
                           </span>
                         </td>
                         <td className="py-2 px-3 typo-td-secondary">{s.color}{s.size ? ` · ${s.size}` : ''}</td>
