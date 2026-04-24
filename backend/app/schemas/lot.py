@@ -38,6 +38,7 @@ class LotRollInput(BaseModel):
 
     roll_id: UUID
     palla_weight: Decimal
+    num_pallas: int | None = None  # Optional override; auto = floor(remaining / palla_weight)
     size_pattern: dict | None = None  # Override lot default if needed
 
 
@@ -92,6 +93,15 @@ class LotUpdate(BaseModel):
     standard_palla_meter: Decimal | None = None
     designs: list[DesignEntry] | None = None
     notes: str | None = None
+
+
+class LotRollUpdate(BaseModel):
+    """PATCH /lots/{lot_id}/rolls/{lot_roll_id} — override num_pallas on an existing
+    lot-roll. Only allowed while lot.status == 'open'. Passing null or the auto-max
+    clears the override back to floor(remaining/palla_weight).
+    """
+
+    num_pallas: int | None = None
 
 
 # --- Response ---

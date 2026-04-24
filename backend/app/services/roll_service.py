@@ -24,7 +24,7 @@ from app.schemas.roll import (
     BulkStockIn, SupplierInvoiceParams,
 )
 from app.core.code_generator import next_roll_code
-from app.core.exceptions import NotFoundError, BusinessRuleViolationError
+from app.core.exceptions import NotFoundError, BusinessRuleViolationError, InvalidStateTransitionError
 
 
 class RollService:
@@ -831,6 +831,32 @@ class RollService:
         roll = result.scalar_one()
 
         return self._to_response(roll)
+
+    async def write_off_roll(self, roll_id: UUID, reason: str, notes: str | None, user_id: UUID) -> dict:
+        """Permanently retire a remnant roll. Guard: status must be 'remnant'.
+
+        Sets remaining_weight=0 and status='written_off'. Stores audit (reason,
+        notes, user, timestamp). Written-off rolls are excluded from all active
+        pickers (_ROLL_ACTIVE tuple already omits 'written_off').
+        """
+        stmt = select(Roll).where(Roll.id == roll_id).with_for_update()
+        result = await self.db.execute(stmt)
+        roll = result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Roll {roll_id} not found")
+        if roll.status != "remnant":
+            raise InvalidStateTransitionError(
+                f"Only remnant rolls can be written off (current status: '{roll.status}')"
+            )
+
+        roll.status = "written_off"
+        roll.remaining_weight = 0
+        roll.write_off_reason = reason
+        roll.write_off_notes = notes
+        roll.written_off_at = datetime.now(timezone.utc)
+        roll.written_off_by = user_id
+        await self.db.flush()
+        return await self.get_roll(roll_id)
 
     async def delete_roll(self, roll_id: UUID) -> None:
         stmt = select(Roll).where(Roll.id == roll_id)

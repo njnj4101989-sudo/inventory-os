@@ -11,7 +11,7 @@ from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
     ReceiveFromProcessing, UpdateProcessingLog,
     BulkStockIn, SupplierInvoiceParams, SupplierInvoiceUpdate,
-    OpeningRollStockRequest,
+    OpeningRollStockRequest, RollWriteOffRequest,
 )
 from app.services.roll_service import RollService
 
@@ -120,6 +120,19 @@ async def delete_roll(
     svc = RollService(db)
     await svc.delete_roll(roll_id)
     return {"success": True, "message": "Roll deleted"}
+
+
+@router.post("/{roll_id}/write-off", response_model=None)
+async def write_off_roll(
+    roll_id: UUID,
+    req: RollWriteOffRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Write off a remnant roll. Guard: status must be 'remnant'. Sets remaining_weight=0 and status='written_off'."""
+    svc = RollService(db)
+    result = await svc.write_off_roll(roll_id, req.reason, req.notes, current_user.id)
+    return {"success": True, "data": result, "message": "Roll written off"}
 
 
 @router.get("/{roll_code}/passport", response_model=None)

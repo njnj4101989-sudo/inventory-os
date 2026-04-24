@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -9,6 +10,17 @@ from pydantic import BaseModel
 from app.schemas import BaseSchema, PaginatedParams
 from app.schemas.supplier import SupplierBrief
 from app.schemas.user import UserBrief
+
+
+class RollWriteOffRequest(BaseModel):
+    """POST /rolls/{id}/write-off — permanently retire a remnant roll.
+
+    Only allowed on rolls in status='remnant'. Sets remaining_weight=0 and
+    status='written_off'. Stores audit trail (reason/notes/who/when).
+    """
+
+    reason: Literal["too_small", "damaged", "expired", "other"]
+    notes: str | None = None
 
 
 # --- Query Params ---

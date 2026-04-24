@@ -371,6 +371,13 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 **Guard:** Only deletes if `remaining_weight == total_weight` (unused roll). Returns 400 if roll has been used in lots or processing.
 **Response:** `{ "success": true, "message": "Roll deleted" }`
 
+### POST `/rolls/{id}/write-off`
+**Auth:** `stock_in` permission required
+**Request:** `{ reason: 'too_small' | 'damaged' | 'expired' | 'other', notes?: string }`
+**Guard:** Roll status must be `'remnant'`. Returns 400 `InvalidStateTransitionError` otherwise.
+**Effect:** Sets `status='written_off'`, `remaining_weight=0`, and stores audit fields (`write_off_reason`, `write_off_notes`, `written_off_at`, `written_off_by`). Written-off rolls are excluded from all active pickers (lots, job challans).
+**Response:** `{ success: true, data: <roll>, message: 'Roll written off' }`
+
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
 Same as `GET /rolls` with status filter pre-applied.
 
@@ -829,16 +836,26 @@ Same as `GET /rolls` with status filter pre-applied.
     { "design_no": "102", "size_pattern": { "XXL": 6, "3XL": 4 } }
   ],
   "rolls": [
-    { "roll_id": "uuid", "palla_weight": 2.860, "size_pattern": null }
+    { "roll_id": "uuid", "palla_weight": 2.860, "num_pallas": null, "size_pattern": null }
   ],
   "notes": "Multi-design lot"
 }
 ```
+**Request fields:**
+- `rolls[].palla_weight` — standard palla weight per roll (kg or meters based on roll.unit)
+- `rolls[].num_pallas` — **optional** user override. Default `null` → backend auto-computes `floor(remaining / palla_weight)`. When provided, clamped server-side to `[1, auto_max]`; the delta (auto_max - num_pallas) × palla_weight flows into `waste_weight`. Used when actual per-palla weight came heavier than standard.
+
 **Response:** Created lot object (backend auto-computes: `pieces_per_palla`, `total_pallas`, `total_pieces`, `total_weight`, `lot_code` as `LT-{PT}-XXXX`, `lot_rolls[].num_pallas`, `lot_rolls[].weight_used`, `lot_rolls[].waste_weight`, `lot_rolls[].pieces_from_roll`)
 
 ### PATCH `/lots/{id}`
 **Request:** `{ status?, standard_palla_weight?, standard_palla_meter?, designs?: [{design_no, size_pattern}], notes? }`
 **Response:** Updated lot object
+
+### PATCH `/lots/{lot_id}/rolls/{lot_roll_id}`
+**Request:** `{ num_pallas: int | null }`
+**Guard:** Lot must be in `status='open'`. Returns 400 `InvalidStateTransitionError` otherwise.
+**Behaviour:** Override num_pallas on an existing lot-roll. Pass `null` or a value `>= auto_max` to reset to `floor((roll.remaining_weight + lot_roll.weight_used) / palla_weight)`. The server recomputes `weight_used`, `waste_weight`, `pieces_from_roll`, deltas the source roll's `remaining_weight` and status (`in_stock` / `remnant` / `in_cutting`), and refreshes lot totals (`total_pallas`, `total_pieces`, `total_weight`).
+**Response:** Full updated lot object.
 
 ---
 

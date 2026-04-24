@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getLots, getLot, createLot, updateLot } from '../api/lots'
+import { getLots, getLot, createLot, updateLot, updateLotRoll } from '../api/lots'
 import { distributeLot } from '../api/batches'
 import { getRolls } from '../api/rolls'
 import { getAllProductTypes, getAllDesigns } from '../api/masters'
@@ -254,11 +254,19 @@ export default function LotsPage() {
     const roll = availableRolls.find(rl => rl.id === r.roll_id)
     const rem = roll ? parseFloat(roll.remaining_weight) : 0
     const pw = parseFloat(r.palla_weight) || 0
-    const pallas = pw > 0 ? Math.floor(rem / pw) : 0
+    const autoPallas = pw > 0 ? Math.floor(rem / pw) : 0
+    // num_pallas_override: null = use auto; int = user override (clamped to [1, auto] on blur).
+    // Real-world: tailor often cuts fewer pallas because actual per-palla weight came heavier
+    // than standard — the delta flows into `waste` (cost-accounting).
+    const ov = r.num_pallas_override
+    const rawValue = ov != null ? ov : autoPallas
+    const pallas = Math.max(0, Math.min(autoPallas, Math.max(1, rawValue)))
+    const hasOverride = ov != null && ov !== autoPallas
     const used = +(pallas * pw).toFixed(3)
     const waste = +(rem - used).toFixed(3)
     const pcs = pallas * piecesPerPalla
-    return { roll, rem, pallas, used, waste, pcs }
+    const actualPerPalla = pallas > 0 ? +(rem / pallas).toFixed(3) : 0
+    return { roll, rem, autoPallas, pallas, rawValue, used, waste, pcs, hasOverride, actualPerPalla }
   })
 
   const totals = {
@@ -384,6 +392,25 @@ export default function LotsPage() {
     const rolls = [...f.rolls]; rolls[i] = { ...rolls[i], palla_weight: v }; return { ...f, rolls }
   })
 
+  const setRollPallas = (i, v) => setForm(f => {
+    const rolls = [...f.rolls]
+    rolls[i] = { ...rolls[i], num_pallas_override: v == null || v === '' ? null : parseInt(v, 10) }
+    return { ...f, rolls }
+  })
+
+  const resetRollPallas = (i) => setRollPallas(i, null)
+
+  const clampRollPallas = (i, autoMax) => setForm(f => {
+    const rolls = [...f.rolls]
+    const ov = rolls[i]?.num_pallas_override
+    if (ov == null) return f
+    // Snap to auto if override equals/exceeds auto or is empty/<1
+    if (!Number.isFinite(ov) || ov >= autoMax || ov < 1) {
+      rolls[i] = { ...rolls[i], num_pallas_override: ov < 1 ? 1 : null }
+    }
+    return { ...f, rolls }
+  })
+
   // ── Scan pairing (phone → desktop roll add) ──
   const availableRollsRef = useRef(availableRolls)
   availableRollsRef.current = availableRolls
@@ -459,7 +486,11 @@ export default function LotsPage() {
         standard_palla_weight: hasWeight ? parseFloat(form.standard_palla_weight) : null,
         standard_palla_meter: hasMeter ? parseFloat(form.standard_palla_meter) : null,
         designs: validDesigns.map(d => ({ design_no: d.design_no.trim(), design_id: d.design_id || null, size_pattern: d.size_pattern })),
-        rolls: form.rolls.map(r => ({ roll_id: r.roll_id, palla_weight: parseFloat(r.palla_weight) })),
+        rolls: form.rolls.map(r => ({
+          roll_id: r.roll_id,
+          palla_weight: parseFloat(r.palla_weight),
+          num_pallas: r.num_pallas_override ?? null,
+        })),
         notes: form.notes || null,
       })
       setShowCreate(false)
@@ -523,6 +554,17 @@ export default function LotsPage() {
     } catch (err) {
       setEditError(err.response?.data?.detail || 'Failed to update lot')
     } finally { setEditSaving(false) }
+  }
+
+  const handleLotRollPallasChange = async (lotRollId, numPallas) => {
+    if (!detailLot || detailLot.status !== 'open') return
+    try {
+      const res = await updateLotRoll(detailLot.id, lotRollId, { num_pallas: numPallas })
+      const updated = res.data.data || res.data
+      setDetailLot(updated); fetchData()
+    } catch (err) {
+      setEditError(err.response?.data?.detail || 'Failed to update lot roll')
+    }
   }
 
   const handleStatusChange = async (newStatus) => {
@@ -1005,9 +1047,45 @@ export default function LotsPage() {
                                 }}
                                 className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs tabular-nums focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                             </td>
-                            <td className="py-1.5 px-3 text-right font-bold tabular-nums border-r border-gray-100">{c.pallas}</td>
+                            <td className="py-1.5 px-3 text-right border-r border-gray-100">
+                              <div className="flex items-center justify-end gap-1">
+                                {c.hasOverride && (
+                                  <button type="button" tabIndex={-1}
+                                    onClick={() => resetRollPallas(i)}
+                                    title={`Reset to auto (${c.autoPallas})`}
+                                    className="rounded p-0.5 text-amber-500 hover:bg-amber-50 hover:text-amber-700 transition-colors">
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                  </button>
+                                )}
+                                <input type="number" min={1} max={c.autoPallas} step={1}
+                                  value={c.rawValue}
+                                  data-np-row={i}
+                                  title={c.pallas > 0 ? `≈ ${c.actualPerPalla.toFixed(3)} ${c.roll?.unit === 'meters' ? 'm' : 'kg'}/palla` : ''}
+                                  onChange={e => setRollPallas(i, e.target.value)}
+                                  onBlur={() => clampRollPallas(i, c.autoPallas)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Tab' && !e.shiftKey) {
+                                      const nextInput = document.querySelector(`[data-pw-row="${i + 1}"]`)
+                                      if (nextInput) { e.preventDefault(); nextInput.focus(); nextInput.select() }
+                                    } else if (e.key === 'Tab' && e.shiftKey) {
+                                      const prevInput = document.querySelector(`[data-pw-row="${i}"]`)
+                                      if (prevInput) { e.preventDefault(); prevInput.focus(); prevInput.select() }
+                                    } else if (e.key === 'Enter') {
+                                      const nextInput = document.querySelector(`[data-np-row="${i + 1}"]`)
+                                      if (nextInput) { e.preventDefault(); nextInput.focus(); nextInput.select() }
+                                    }
+                                  }}
+                                  className={`w-16 rounded border px-2 py-1 text-right text-xs tabular-nums font-bold focus:ring-1 transition-colors ${
+                                    c.hasOverride
+                                      ? 'border-amber-400 bg-amber-50 text-amber-900 focus:border-amber-500 focus:ring-amber-500'
+                                      : 'border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-emerald-500'
+                                  }`} />
+                              </div>
+                            </td>
                             <td className="py-1.5 px-3 text-right font-bold text-emerald-700 tabular-nums border-r border-gray-100">{c.pcs}</td>
-                            <td className="py-1.5 px-3 text-right text-red-500 tabular-nums border-r border-gray-100">{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
+                            <td className={`py-1.5 px-3 text-right tabular-nums border-r border-gray-100 ${c.hasOverride ? 'text-amber-600 font-semibold' : 'text-red-500'}`}>{c.waste > 0 ? c.waste.toFixed(3) : '—'}</td>
                             <td className="py-1.5 px-3">
                               <button tabIndex={-1} onClick={() => removeRoll(i)} className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors">
                                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1054,10 +1132,12 @@ export default function LotsPage() {
                   })()}
 
                   {/* Keyboard hint */}
-                  <div className="hidden md:flex items-center gap-4 px-4 py-1.5 text-xs text-gray-400 border-t">
-                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Tab</kbd> / <kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Enter</kbd> Next row</span>
-                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Shift+Tab</kbd> Prev row</span>
+                  <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1.5 text-xs text-gray-400 border-t">
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Tab</kbd> Palla → Pallas → next row</span>
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Enter</kbd> Next row (same column)</span>
+                    <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Shift+Tab</kbd> Prev</span>
                     <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1 py-0.5 font-mono">Delete</kbd> Remove roll</span>
+                    <span className="text-amber-500">↻ = edited (auto-waste absorbs delta)</span>
                   </div>
                 </div>
               )}
@@ -1329,19 +1409,63 @@ export default function LotsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(detailLot.lot_rolls || []).map((lr, i) => (
-                    <tr key={lr.id} className={`border-b border-gray-200 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}`}>
-                      <td className="py-1.5 px-3 text-xs text-gray-400 border-r border-gray-100">{i + 1}</td>
-                      <td className="py-1.5 px-3 font-medium border-r border-gray-100">{lr.roll_code}</td>
-                      <td className="py-1.5 px-3 border-r border-gray-100"><span className="rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 typo-badge">{lr.color}</span></td>
-                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.roll_weight || 0).toFixed(3)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.palla_weight || 0).toFixed(3)}</td>
-                      <td className="py-1.5 px-3 text-right font-bold tabular-nums border-r border-gray-100">{lr.num_pallas}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.weight_used || 0).toFixed(3)}</td>
-                      <td className="py-1.5 px-3 text-right text-red-500 tabular-nums border-r border-gray-100">{parseFloat(lr.waste_weight || 0) > 0 ? parseFloat(lr.waste_weight).toFixed(3) : '—'}</td>
-                      <td className="py-1.5 px-3 text-right font-bold text-emerald-700 tabular-nums">{lr.pieces_from_roll}</td>
-                    </tr>
-                  ))}
+                  {(detailLot.lot_rolls || []).map((lr, i) => {
+                    const pw = parseFloat(lr.palla_weight || 0)
+                    const fabricAvail = parseFloat(lr.weight_used || 0) + parseFloat(lr.waste_weight || 0)
+                    const autoMax = pw > 0 ? Math.floor(fabricAvail / pw) : 0
+                    const hasOverride = lr.num_pallas !== autoMax
+                    const isOpen = detailLot.status === 'open'
+                    const unitLbl = detailUnit
+                    const actualPerPalla = (lr.num_pallas || 0) > 0 ? (fabricAvail / lr.num_pallas).toFixed(3) : '0'
+                    return (
+                      <tr key={lr.id} className={`border-b border-gray-200 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}`}>
+                        <td className="py-1.5 px-3 text-xs text-gray-400 border-r border-gray-100">{i + 1}</td>
+                        <td className="py-1.5 px-3 font-medium border-r border-gray-100">{lr.roll_code}</td>
+                        <td className="py-1.5 px-3 border-r border-gray-100"><span className="rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5 typo-badge">{lr.color}</span></td>
+                        <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.roll_weight || 0).toFixed(3)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.palla_weight || 0).toFixed(3)}</td>
+                        {isOpen ? (
+                          <td className="py-1.5 px-3 text-right border-r border-gray-100">
+                            <div className="flex items-center justify-end gap-1">
+                              {hasOverride && (
+                                <button type="button" tabIndex={-1}
+                                  onClick={() => handleLotRollPallasChange(lr.id, null)}
+                                  title={`Reset to auto (${autoMax})`}
+                                  className="rounded p-0.5 text-amber-500 hover:bg-amber-50 hover:text-amber-700 transition-colors">
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                </button>
+                              )}
+                              <input type="number" min={1} max={autoMax} step={1}
+                                key={`${lr.id}-${lr.num_pallas}`}
+                                defaultValue={lr.num_pallas}
+                                title={`≈ ${actualPerPalla} ${unitLbl}/palla (auto max ${autoMax})`}
+                                onBlur={e => {
+                                  const typed = parseInt(e.target.value, 10)
+                                  if (isNaN(typed) || typed === lr.num_pallas) return
+                                  handleLotRollPallasChange(lr.id, typed >= autoMax ? null : typed)
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                                  if (e.key === 'Escape') { e.currentTarget.value = lr.num_pallas; e.currentTarget.blur() }
+                                }}
+                                className={`w-16 rounded border px-2 py-1 text-right text-xs tabular-nums font-bold focus:ring-1 transition-colors ${
+                                  hasOverride
+                                    ? 'border-amber-400 bg-amber-50 text-amber-900 focus:border-amber-500 focus:ring-amber-500'
+                                    : 'border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-emerald-500'
+                                }`} />
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="py-1.5 px-3 text-right font-bold tabular-nums border-r border-gray-100">{lr.num_pallas}</td>
+                        )}
+                        <td className="py-1.5 px-3 text-right tabular-nums border-r border-gray-100">{parseFloat(lr.weight_used || 0).toFixed(3)}</td>
+                        <td className={`py-1.5 px-3 text-right tabular-nums border-r border-gray-100 ${hasOverride ? 'text-amber-600 font-semibold' : 'text-red-500'}`}>{parseFloat(lr.waste_weight || 0) > 0 ? parseFloat(lr.waste_weight).toFixed(3) : '—'}</td>
+                        <td className="py-1.5 px-3 text-right font-bold text-emerald-700 tabular-nums">{lr.pieces_from_roll}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-800 text-white font-semibold text-sm">

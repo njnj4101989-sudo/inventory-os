@@ -33,7 +33,36 @@
 
 ---
 
-## Current State (Session 114 — 2026-04-18) — CLOSED
+## Current State (Session 115 — 2026-04-24) — IN PROGRESS
+
+**Cutting sheet palla override + remnant write-off (industry-standard wastage lifecycle).**
+
+Three slices shipped in one unit so stock/waste accounting stays consistent end-to-end.
+
+**1. Palla edit on cutting sheet (Option A + tooltip).** `PALLAS` column on `LotsPage` create overlay is now editable (was `floor(rem/pw)` read-only). User types fewer pallas → delta weight auto-flows into `waste`. Amber ↻ icon appears only when overridden (click resets to auto), amber-underline style on the input + amber-tinted waste cell as visual override indicator. Native `title` tooltip on the input shows `≈ {rem/pallas} kg/palla` — the real per-palla weight that shape would require. Clamped `[1, auto_max]`; server re-clamps as defence-in-depth. Matches the handwritten register: `CHIKU 31.260 kg` with auto=10 → user types 9 → 9×3.020=27.180 used, 4.080 waste, 171 pieces (instead of auto 10/30.200/1.060/190). Covered by:
+  - Backend: `LotRollInput.num_pallas: int | None = None` (optional override). `lot_service.create_lot` reads `roll_input.num_pallas`, clamps to `[1, floor(rem/pw)]`, recomputes `weight_used/waste_weight/pieces_from_roll` from the clamped value.
+  - Frontend: `rollCalcs` now tracks `num_pallas_override` per row. Reset via `resetRollPallas(i)` sets override to `null` (back to auto). `handleCreate` payload includes `num_pallas: r.num_pallas_override ?? null`.
+
+**2. Edit/Delete correctness after creation.** New `PATCH /lots/{lot_id}/rolls/{lot_roll_id}` endpoint (body `{num_pallas: int | null}`). Guard: `lot.status == 'open'` (matches existing `remove_roll_from_lot` rule). Service method `update_lot_roll` locks source roll FOR UPDATE, computes `fabric_available = roll.remaining_weight + lot_roll.weight_used` (self-consistent even after earlier edits), clamps, recomputes, deltas `roll.remaining_weight` back, flips `roll.status` (in_stock ↔ remnant ↔ in_cutting based on new waste), refreshes `lot.total_pallas/pieces/weight`. Detail overlay mirrors create UX: uncontrolled input with `key={lr.id}-${lr.num_pallas}` remount on server response; `onBlur` commits, `Enter` commits, `Escape` reverts. Read-only display when `status != 'open'` (can't edit after physical cutting has begun). Three-state truth enforced: `open` = plan (editable), `cutting/distributed` = committed (locked). Existing `remove_roll_from_lot` audited — `remaining = 4.080 + 27.180 = 31.260` cascade is correct even after an edit.
+
+**3. Roll write-off — industry-standard lifecycle exit.** Before this session, remnants lived forever in `status='remnant'` with no retirement path. Now: `POST /rolls/{id}/write-off` with `{reason: 'too_small' | 'damaged' | 'expired' | 'other', notes?}`. Guard: only `status='remnant'` → `status='written_off'`, `remaining_weight=0`, and 4 audit columns populated (`written_off_at`, `written_off_by`, `write_off_reason`, `write_off_notes`). Migration `i9j0k1l2m3n4_s115_roll_write_off` adds columns + expands `valid_status` CHECK constraint (drops both `ck_rolls_valid_status` and `valid_status` per the ck_-prefix memory). Written-off rolls excluded from all active pickers automatically: `LotsPage.fetchRolls` only queries `status: 'in_stock'` and `status: 'remnant'` (never `written_off`); `_ROLL_ACTIVE` tuple in `roll_service.py` already omits `written_off`; job_challan guard `status not in ("in_stock", "remnant")` blocks them. UI: amber "Write Off" button in `RollsPage` detail overlay header when `status === 'remnant'`. Modal with reason dropdown + optional notes. `ROLL_STATUS_LABELS` gains `written_off: 'Written Off'` + `returned: 'Returned'` entries.
+
+**Files touched:**
+  - Backend: `schemas/lot.py` (added `num_pallas` to `LotRollInput`, new `LotRollUpdate`), `schemas/roll.py` (new `RollWriteOffRequest`), `services/lot_service.py` (`create_lot` clamp logic, new `update_lot_roll`), `services/roll_service.py` (new `write_off_roll`, import `InvalidStateTransitionError`), `api/lots.py` (new PATCH /lots/{id}/rolls/{lot_roll_id}), `api/rolls.py` (new POST /rolls/{id}/write-off), `models/roll.py` (4 write-off columns + expanded CHECK), `migrations/versions/i9j0k1l2m3n4_s115_roll_write_off.py`.
+  - Frontend: `api/lots.js` (new `updateLotRoll`), `api/rolls.js` (new `writeOffRoll`), `pages/LotsPage.jsx` (editable PALLAS on create overlay + detail overlay, ↻ reset, tooltip, keyboard hint updated), `pages/RollsPage.jsx` (Write Off button + modal, `ROLL_STATUS_LABELS` updated).
+  - Docs: `API_REFERENCE.md` — documented `rolls[].num_pallas` override on POST /lots, new PATCH /lots/{lot_id}/rolls/{lot_roll_id}, new POST /rolls/{id}/write-off.
+
+**S115 deferred to S116:**
+  1. Wastage Report (Reports page tab) — cutting waste + damage waste + write-off waste, FY-scoped, monthly, ₹ valuation via WAC
+  2. Remnant tab polish — age column + suggest-write-off inline button for tiny remnants
+  3. MRP bulk backfill tool (carry-over since S112)
+  4. ChallansPage 4d scan-to-receive refinement (open since S109)
+
+**Prod deploy:** Requires running migration `i9j0k1l2m3n4` on EC2 (SSH → alembic upgrade head).
+
+---
+
+## Previous State (Session 114 — 2026-04-18) — CLOSED
 
 **Unified Credit Note picker + full print-suite redesign (sales + purchase).**
 

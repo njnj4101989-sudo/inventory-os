@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate
+from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate, LotRollUpdate
 from app.services.lot_service import LotService
 
 router = APIRouter(prefix="/lots", tags=["Lots"])
@@ -74,4 +74,18 @@ async def update_lot(
     """Update lot metadata or status."""
     svc = LotService(db)
     result = await svc.update_lot(lot_id, req)
+    return {"success": True, "data": result}
+
+
+@router.patch("/{lot_id}/rolls/{lot_roll_id}", response_model=None)
+async def update_lot_roll(
+    lot_id: UUID,
+    lot_roll_id: UUID,
+    req: LotRollUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("lot_manage"),
+):
+    """Override num_pallas on a lot-roll. Lot must be in 'open' status."""
+    svc = LotService(db)
+    result = await svc.update_lot_roll(lot_id, lot_roll_id, req)
     return {"success": True, "data": result}

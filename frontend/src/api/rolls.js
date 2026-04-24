@@ -293,6 +293,23 @@ export async function deleteRoll(id) {
   return client.delete(`/rolls/${id}`)
 }
 
+export async function writeOffRoll(id, { reason, notes }) {
+  if (USE_MOCK) {
+    const roll = rolls.find((r) => r.id === id)
+    if (!roll) throw { response: { data: { detail: 'Roll not found' } } }
+    if (roll.status !== 'remnant') throw { response: { data: { detail: 'Only remnant rolls can be written off' } } }
+    Object.assign(roll, {
+      status: 'written_off',
+      remaining_weight: 0,
+      write_off_reason: reason,
+      write_off_notes: notes || null,
+      written_off_at: new Date().toISOString(),
+    })
+    return mockResponse(roll, 'Roll written off')
+  }
+  return client.post(`/rolls/${id}/write-off`, { reason, notes: notes || null })
+}
+
 // ── Processing ──
 
 export async function getProcessingRolls() {

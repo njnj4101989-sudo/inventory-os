@@ -97,3 +97,31 @@ export async function updateLot(id, data) {
   }
   return client.patch(`/lots/${id}`, data)
 }
+
+export async function updateLotRoll(lotId, lotRollId, data) {
+  if (USE_MOCK) {
+    const lot = lots.find((l) => l.id === lotId)
+    if (!lot) return mockResponse(null, 'Lot not found')
+    const lr = (lot.lot_rolls || []).find((r) => r.id === lotRollId)
+    if (!lr) return mockResponse(lot, 'Lot roll not found')
+    const pw = parseFloat(lr.palla_weight) || 0
+    const sourceRoll = rolls.find((r) => r.id === lr.roll_id)
+    const fabricAvail = (sourceRoll ? parseFloat(sourceRoll.remaining_weight) : 0) + parseFloat(lr.weight_used || 0)
+    const autoMax = pw > 0 ? Math.floor(fabricAvail / pw) : 0
+    const np = data.num_pallas == null || data.num_pallas >= autoMax ? autoMax : Math.max(1, parseInt(data.num_pallas, 10))
+    const oldUsed = parseFloat(lr.weight_used || 0)
+    const oldPallas = lr.num_pallas || 0
+    const oldPieces = lr.pieces_from_roll || 0
+    const piecesPerPalla = lot.pieces_per_palla || 0
+    const newUsed = +(np * pw).toFixed(3)
+    const newWaste = +(fabricAvail - newUsed).toFixed(3)
+    const newPieces = np * piecesPerPalla
+    Object.assign(lr, { num_pallas: np, weight_used: newUsed, waste_weight: newWaste, pieces_from_roll: newPieces })
+    if (sourceRoll) sourceRoll.remaining_weight = newWaste
+    lot.total_pallas = (lot.total_pallas || 0) - oldPallas + np
+    lot.total_pieces = (lot.total_pieces || 0) - oldPieces + newPieces
+    lot.total_weight = +(((lot.total_weight || 0) - oldUsed + newUsed).toFixed(3))
+    return mockResponse(lot, 'Lot roll updated')
+  }
+  return client.patch(`/lots/${lotId}/rolls/${lotRollId}`, data)
+}

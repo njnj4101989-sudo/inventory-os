@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, writeOffRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
@@ -33,6 +33,8 @@ const ROLL_STATUS_LABELS = {
   sent_for_processing: 'Processing',
   in_cutting: 'In Cutting',
   remnant: 'Remnant',
+  written_off: 'Written Off',
+  returned: 'Returned',
 }
 
 // ── Invoice tab columns ──
@@ -565,6 +567,27 @@ export default function RollsPage() {
   const [editProcError, setEditProcError] = useState(null)
 
   const isEditable = detailRoll && detailRoll.remaining_weight >= (detailRoll.current_weight || detailRoll.total_weight) && detailRoll.status === 'in_stock'
+
+  // Write-off modal state
+  const [writeOffOpen, setWriteOffOpen] = useState(false)
+  const [writeOffForm, setWriteOffForm] = useState({ reason: 'too_small', notes: '' })
+  const [writeOffSaving, setWriteOffSaving] = useState(false)
+  const [writeOffError, setWriteOffError] = useState(null)
+
+  const openWriteOff = () => {
+    setWriteOffForm({ reason: 'too_small', notes: '' })
+    setWriteOffError(null); setWriteOffOpen(true)
+  }
+  const handleWriteOff = async () => {
+    if (!detailRoll) return
+    setWriteOffSaving(true); setWriteOffError(null)
+    try {
+      await writeOffRoll(detailRoll.id, { reason: writeOffForm.reason, notes: writeOffForm.notes || null })
+      setWriteOffOpen(false); setDetailRoll(null); fetchRolls()
+    } catch (err) {
+      setWriteOffError(err.response?.data?.detail || 'Failed to write off roll')
+    } finally { setWriteOffSaving(false) }
+  }
 
   // ── Shift+M Quick Master ──
   const refreshMasters = useCallback(() => {
@@ -3132,6 +3155,16 @@ export default function RollsPage() {
                       Send for VA
                     </button>
                   )}
+                  {detailRoll?.status === 'remnant' && (
+                    <button onClick={openWriteOff}
+                      title="Permanently retire this remnant roll"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/90 px-3 py-1.5 text-sm font-medium hover:bg-amber-600 transition-colors">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22" />
+                      </svg>
+                      Write Off
+                    </button>
+                  )}
                   {detailRoll?.status === 'sent_for_processing' && (() => {
                     const latestLog = detailRoll.processing_logs?.[detailRoll.processing_logs.length - 1]
                     return (
@@ -3876,6 +3909,45 @@ export default function RollsPage() {
 
       {/* Shift+M Quick Master Create */}
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
+
+      {/* Write-off confirmation modal (remnant rolls only) */}
+      <Modal open={writeOffOpen} onClose={() => setWriteOffOpen(false)} title="Write Off Remnant Roll"
+        actions={<>
+          <button onClick={() => setWriteOffOpen(false)} disabled={writeOffSaving}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+          <button onClick={handleWriteOff} disabled={writeOffSaving}
+            className="rounded-lg bg-amber-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-amber-700 transition-colors disabled:opacity-50">
+            {writeOffSaving ? 'Writing off…' : 'Confirm Write-off'}
+          </button>
+        </>}>
+        <div className="space-y-3">
+          {writeOffError && <ErrorAlert message={writeOffError} onDismiss={() => setWriteOffError(null)} />}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <div className="font-semibold">{detailRoll?.roll_code}</div>
+            <div className="text-xs text-amber-700 mt-1">
+              {detailRoll?.remaining_weight} {detailRoll?.unit || 'kg'} remaining will be zeroed. This cannot be undone.
+            </div>
+          </div>
+          <div>
+            <label className="typo-label">Reason</label>
+            <FilterSelect full value={writeOffForm.reason}
+              onChange={v => setWriteOffForm(f => ({ ...f, reason: v }))}
+              options={[
+                { value: 'too_small', label: 'Too small to use' },
+                { value: 'damaged', label: 'Damaged' },
+                { value: 'expired', label: 'Expired / Obsolete' },
+                { value: 'other', label: 'Other' },
+              ]} />
+          </div>
+          <div>
+            <label className="typo-label">Notes {writeOffForm.reason === 'other' && <span className="text-red-500">*</span>}</label>
+            <textarea value={writeOffForm.notes}
+              onChange={e => setWriteOffForm(f => ({ ...f, notes: e.target.value }))}
+              rows={2} placeholder="Optional details (required if reason is Other)"
+              className="typo-input" />
+          </div>
+        </div>
+      </Modal>
 
       {/* Opening Roll Stock — Full-page overlay (grouped entry) */}
       {openingRollOpen && (

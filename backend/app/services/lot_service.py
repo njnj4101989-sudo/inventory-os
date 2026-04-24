@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll
 from app.models.batch import Batch
-from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate, LotResponse
+from app.schemas.lot import LotCreate, LotFilterParams, LotUpdate, LotResponse, LotRollUpdate
 from app.core.code_generator import next_lot_code, max_batch_number_for_fy
 from app.core.exceptions import (
     NotFoundError,
@@ -149,12 +149,21 @@ class LotService:
             if remaining <= 0:
                 raise InsufficientStockError(f"Roll {roll.roll_code} has no remaining weight")
 
-            num_pallas = floor(remaining / palla_weight)
-            if num_pallas <= 0:
+            auto_pallas = floor(remaining / palla_weight)
+            if auto_pallas <= 0:
                 raise InsufficientStockError(
                     f"Roll {roll.roll_code} remaining ({remaining} {roll.unit}) "
                     f"is less than palla value ({palla_weight} {roll.unit})"
                 )
+
+            # Honour caller override when provided; clamp to physical max.
+            # Real-world: tailor often cuts fewer pallas than auto because actual
+            # per-palla weight came slightly heavier than the standard — extra
+            # weight lands in waste_weight (cost accounting).
+            if roll_input.num_pallas is not None and roll_input.num_pallas > 0:
+                num_pallas = min(int(roll_input.num_pallas), auto_pallas)
+            else:
+                num_pallas = auto_pallas
 
             weight_used = num_pallas * palla_weight
             waste_weight = remaining - weight_used
@@ -298,6 +307,79 @@ class LotService:
         lot.total_pallas = (lot.total_pallas or 0) + num_pallas
         lot.total_pieces = (lot.total_pieces or 0) + pieces_from_roll
         lot.total_weight = float(lot.total_weight or 0) + weight_used
+
+        await self.db.flush()
+        return await self.get_lot(lot_id)
+
+    async def update_lot_roll(self, lot_id: UUID, lot_roll_id: UUID, req: LotRollUpdate) -> dict:
+        """Override num_pallas on an existing lot-roll. Only allowed while lot is 'open'.
+
+        Recomputes weight_used/waste_weight/pieces_from_roll, deltas the source roll's
+        remaining_weight, and refreshes lot totals. Passing num_pallas=null (or the
+        auto-max value) clears the override back to floor(remaining/palla_weight).
+        """
+        lot = await self._get_or_404(lot_id)
+        if lot.status not in ("open",):
+            raise InvalidStateTransitionError("Can only edit rolls on lots in 'open' status")
+
+        lr_stmt = select(LotRoll).where(LotRoll.id == lot_roll_id, LotRoll.lot_id == lot_id)
+        lr_result = await self.db.execute(lr_stmt)
+        lot_roll = lr_result.scalar_one_or_none()
+        if not lot_roll:
+            raise NotFoundError(f"LotRoll {lot_roll_id} not found in lot {lot_id}")
+
+        # Lock source roll for consistent remaining_weight math
+        roll_stmt = select(Roll).where(Roll.id == lot_roll.roll_id).with_for_update()
+        roll_result = await self.db.execute(roll_stmt)
+        roll = roll_result.scalar_one_or_none()
+        if not roll:
+            raise NotFoundError(f"Source roll {lot_roll.roll_id} not found")
+
+        palla_weight = float(lot_roll.palla_weight or 0)
+        if palla_weight <= 0:
+            raise InvalidStateTransitionError("Lot roll has invalid palla_weight")
+
+        old_weight_used = float(lot_roll.weight_used or 0)
+        old_num_pallas = int(lot_roll.num_pallas or 0)
+        old_pieces = int(lot_roll.pieces_from_roll or 0)
+
+        # Fabric available to this lot_roll = what's currently in roll + what we already took
+        fabric_available = float(roll.remaining_weight or 0) + old_weight_used
+        auto_pallas = floor(fabric_available / palla_weight)
+        if auto_pallas <= 0:
+            raise InsufficientStockError("Fabric insufficient for even one palla at this palla_weight")
+
+        # Clamp the override — null/>=auto → reset to auto; <1 → clamp to 1
+        if req.num_pallas is None or req.num_pallas >= auto_pallas:
+            new_num_pallas = auto_pallas
+        else:
+            new_num_pallas = max(1, int(req.num_pallas))
+
+        pieces_per_palla = lot.pieces_per_palla or 0
+        new_weight_used = new_num_pallas * palla_weight
+        new_waste_weight = fabric_available - new_weight_used
+        new_pieces = new_num_pallas * pieces_per_palla
+
+        # Apply to lot_roll
+        lot_roll.num_pallas = new_num_pallas
+        lot_roll.weight_used = new_weight_used
+        lot_roll.waste_weight = new_waste_weight
+        lot_roll.pieces_from_roll = new_pieces
+
+        # Delta the roll's remaining_weight: (old_used - new_used) flows back to roll
+        # (positive when fewer pallas = more waste left on the roll as remnant/in_stock)
+        roll.remaining_weight = fabric_available - new_weight_used
+        if roll.remaining_weight <= 0:
+            roll.status = "in_cutting"
+        elif float(roll.remaining_weight) < palla_weight:
+            roll.status = "remnant"
+        else:
+            roll.status = "in_stock"
+
+        # Update lot totals (remove old contribution, add new)
+        lot.total_pallas = max(0, (lot.total_pallas or 0) - old_num_pallas + new_num_pallas)
+        lot.total_pieces = max(0, (lot.total_pieces or 0) - old_pieces + new_pieces)
+        lot.total_weight = max(0, float(lot.total_weight or 0) - old_weight_used + new_weight_used)
 
         await self.db.flush()
         return await self.get_lot(lot_id)
