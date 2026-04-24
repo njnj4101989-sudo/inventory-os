@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getInventory, getEvents, adjust, reconcile, getVerifications, createVerification, getVerification, updateVerificationCounts, completeVerification, approveVerification } from '../api/inventory'
 import { getInventorySummary, getRawMaterialSummary, getWIPSummary } from '../api/dashboard'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -380,7 +381,20 @@ function WIPTab() {
 }
 
 export default function InventoryPage() {
-  const [activeTab, setActiveTab] = useState('finished')
+  // Persist active tab in URL (?tab=raw etc.) so refresh preserves context
+  const [invSearchParams, setInvSearchParams] = useSearchParams()
+  const validInvTabs = INV_TABS.map(t => t.key)
+  const initialInvTab = validInvTabs.includes(invSearchParams.get('tab')) ? invSearchParams.get('tab') : 'finished'
+  const [activeTab, setActiveTabInternal] = useState(initialInvTab)
+  const setActiveTab = (next) => {
+    setActiveTabInternal(next)
+    if (next === 'finished') {
+      invSearchParams.delete('tab')
+    } else {
+      invSearchParams.set('tab', next)
+    }
+    setInvSearchParams(invSearchParams, { replace: true })
+  }
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
