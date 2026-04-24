@@ -975,7 +975,7 @@ function SalesTab({ period }) {
                       onClick={() => navigate(`/skus?open=${p.sku_id}`)}
                       className="border-b border-gray-100 hover:bg-emerald-50/40 cursor-pointer transition-colors">
                       <td className="py-2 px-3 typo-td-secondary">{i + 1}</td>
-                      <td className="py-2 px-3 typo-td font-mono text-xs">{p.sku_code}</td>
+                      <td className="py-2 px-3 typo-td font-mono font-semibold text-gray-900">{p.sku_code}</td>
                       <td className="py-2 px-3 typo-td">{p.product_name}</td>
                       <td className="py-2 px-3 text-right typo-td font-bold text-emerald-700 tabular-nums">{p.units_sold}</td>
                       <td className="py-2 px-3 text-right typo-td font-semibold tabular-nums">₹{Number(p.revenue_inr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
