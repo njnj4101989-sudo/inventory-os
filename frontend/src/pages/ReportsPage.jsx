@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV, downloadSalesReportCSV } from '../api/dashboard'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import FilterSelect from '../components/common/FilterSelect'
 import SearchInput from '../components/common/SearchInput'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -1969,7 +1969,20 @@ function ClosingStockTab({ data }) {
 //  MAIN REPORTS PAGE
 // ═══════════════════════════════════════════════════════
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState('production')
+  // Persist active tab in URL (?tab=sales etc.) so refresh preserves the user's context
+  const [reportSearchParams, setReportSearchParams] = useSearchParams()
+  const validTabs = ['production', 'sales', 'inventory', 'financial', 'accounting', 'va', 'purchases', 'returns', 'closing_stock', 'tailor']
+  const initialTab = validTabs.includes(reportSearchParams.get('tab')) ? reportSearchParams.get('tab') : 'production'
+  const [activeTab, setActiveTabInternal] = useState(initialTab)
+  const setActiveTab = (next) => {
+    setActiveTabInternal(next)
+    if (next === 'production') {
+      reportSearchParams.delete('tab')
+    } else {
+      reportSearchParams.set('tab', next)
+    }
+    setReportSearchParams(reportSearchParams, { replace: true })
+  }
   const [period, setPeriod] = useState('30d')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
