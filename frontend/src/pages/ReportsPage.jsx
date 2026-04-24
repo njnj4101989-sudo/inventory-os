@@ -185,6 +185,25 @@ function zeroMutedSigned(n, sign = '+') {
   return <span className={`font-medium ${color}`}>{label}</span>
 }
 
+// Stock status chip — priority: Out > Locked > Dead > Free.
+// Returns {label, chipCls, rowCls}. rowCls applied only to actionable states
+// (Out/Locked) so healthy rows stay clean.
+function getStockStatus(s) {
+  const closing = Number(s.closing_stock) || 0
+  const available = Number(s.available_qty) || 0
+  const ageing = s.ageing_days
+  if (closing === 0) {
+    return { label: 'Out', chipCls: 'bg-red-50 text-red-700 ring-red-600/30', rowCls: 'bg-red-50/60' }
+  }
+  if (available === 0) {
+    return { label: 'Locked', chipCls: 'bg-amber-50 text-amber-700 ring-amber-600/30', rowCls: 'bg-amber-50/60' }
+  }
+  if (ageing == null || ageing >= 60) {
+    return { label: 'Dead', chipCls: 'bg-gray-100 text-gray-600 ring-gray-500/30', rowCls: '' }
+  }
+  return { label: 'Free', chipCls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/30', rowCls: '' }
+}
+
 function InventoryTab({ period }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -373,12 +392,20 @@ function InventoryTab({ period }) {
                       <td className="py-3 px-3 text-right typo-td font-bold text-violet-700 tabular-nums">{formatINR(g.value_inr)}</td>
                       <td className="py-3 px-3 text-center typo-td-secondary">—</td>
                     </tr>
-                    {/* SKU children — indented + zero-muted numbers */}
-                    {isOpen && g.skus.map((s, si) => (
+                    {/* SKU children — indented + zero-muted numbers + stock status chip */}
+                    {isOpen && g.skus.map((s, si) => {
+                      const status = getStockStatus(s)
+                      const baseBg = status.rowCls || (si % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')
+                      return (
                       <tr key={s.sku_id}
-                        className={`border-b border-gray-100 ${si % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-emerald-50/30 transition-colors`}>
+                        className={`border-b border-gray-100 ${baseBg} hover:bg-emerald-50/30 transition-colors`}>
                         <td className="py-2 px-3"></td>
-                        <td className="py-2 px-3 pl-10 typo-td font-mono text-xs text-gray-700">{s.sku_code}</td>
+                        <td className="py-2 px-3 pl-10 typo-td font-mono text-xs text-gray-700">
+                          <span className="flex items-center gap-2">
+                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 typo-badge ring-1 ring-inset font-semibold ${status.chipCls}`}>{status.label}</span>
+                            {s.sku_code}
+                          </span>
+                        </td>
                         <td className="py-2 px-3 typo-td-secondary">{s.color}{s.size ? ` · ${s.size}` : ''}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{zeroMuted(s.opening_stock)}</td>
                         <td className="py-2 px-3 text-right tabular-nums">{zeroMutedSigned(s.stock_in, '+')}</td>
@@ -395,7 +422,8 @@ function InventoryTab({ period }) {
                           </span>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </React.Fragment>
                 )
               })}
