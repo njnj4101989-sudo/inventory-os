@@ -480,6 +480,9 @@ class DashboardService:
         sku_svc = SKUService(self.db)
         wac_map = await sku_svc.compute_wac_map(sku_ids)
 
+        # Canonical size order (matches SKUsPage grouped view — sku_service.SIZE_ORDER)
+        from app.services.sku_service import _size_rank
+
         # ── Step 6: Build per-SKU rows + apply post-filters (stock_status, min_value) ──
         today = date.today()
         sku_rows: list[dict] = []
@@ -557,6 +560,10 @@ class DashboardService:
             g["available_qty"] += row["available_qty"]
             g["value_inr"] = round(g["value_inr"] + row["value_inr"], 2)
             g["skus"].append(row)
+
+        # Sort SKUs within each group by canonical (size, color) — matches SKUsPage
+        for g in groups_map.values():
+            g["skus"].sort(key=lambda x: (_size_rank(x["size"]), x["color"] or ""))
 
         groups = sorted(groups_map.values(), key=lambda g: g["value_inr"], reverse=True)
 
