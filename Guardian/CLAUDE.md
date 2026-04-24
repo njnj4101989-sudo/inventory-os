@@ -33,7 +33,34 @@
 
 ---
 
-## Current State (Session 115 — 2026-04-24) — IN PROGRESS
+## Current State (Session 115b — 2026-04-24) — IN PROGRESS
+
+**Write-off UX polish: contextual helpers + bulk write-off on Remnant tab.**
+
+Follow-up on S115. Two user-driven additions:
+
+**1. Contextual helpers for write-off action:**
+  - Amber info strip below the status badge on roll detail (only when `status='remnant'`): "Too small or damaged? Click Write Off to retire it permanently — data stays for audit & wastage reports." Teaches first-time users without cluttering the UI.
+  - Enhanced write-off modal body with a blue "What happens next" card listing 6 effects (status → written_off, weight → 0, audit saved, hidden from pickers, visible in wastage report, irreversible).
+  - Existing `title` tooltip on the Write Off button retained.
+  - New gray "This roll has been written off" audit strip on detail page when `status='written_off'` — shows reason, timestamp, notes.
+
+**2. Bulk write-off from Remnant tab:**
+  - New backend endpoint `POST /rolls/bulk-write-off` — accepts `{roll_ids, reason, notes}`, per-roll FOR UPDATE + status guard. Ineligible rolls skipped (reported in `failed[]`), not aborted. All processed rolls share same `written_off_at` timestamp. Returns `{processed, processed_ids, failed}`.
+  - Frontend reuses the existing `selectedRolls` Set + floating bulk action bar pattern (same as bulk label print / Create Lot / Send for Processing). New amber "Write Off (N)" button appears in the toolbar ONLY when ALL selected rolls have `status='remnant'` — defence against mixing statuses.
+  - Modal is polymorphic: `bulkWriteOffTargets.length > 0` = bulk mode (shows target count + list preview + total weight); else single mode.
+  - Existing "Max wt" filter on Remnant tab (added pre-S115, not noticed until now) already serves as the threshold quick-select: user filters by Max wt, clicks header Select All, clicks Write Off. No new threshold UI needed.
+
+**Files touched:**
+  - Backend: `schemas/roll.py` (new `RollBulkWriteOffRequest`), `services/roll_service.py` (new `bulk_write_off_rolls`), `api/rolls.py` (new `POST /rolls/bulk-write-off`).
+  - Frontend: `api/rolls.js` (new `bulkWriteOffRolls` + mock), `pages/RollsPage.jsx` (detail info strips + written-off audit strip + enhanced modal + polymorphic single/bulk modes + Write Off button in floating toolbar with `allRemnant` guard).
+  - Docs: `API_REFERENCE.md` (new bulk endpoint documented).
+
+**No migration needed** — builds on S115 data model.
+
+---
+
+## Previous State (Session 115 — 2026-04-24) — CLOSED
 
 **Cutting sheet palla override + remnant write-off (industry-standard wastage lifecycle).**
 

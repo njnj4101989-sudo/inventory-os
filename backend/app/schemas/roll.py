@@ -23,6 +23,18 @@ class RollWriteOffRequest(BaseModel):
     notes: str | None = None
 
 
+class RollBulkWriteOffRequest(BaseModel):
+    """POST /rolls/bulk-write-off — retire many remnant rolls atomically.
+
+    Per-roll status guard (must be 'remnant'); ineligible rolls are skipped
+    and reported in `failed[]` without aborting the batch.
+    """
+
+    roll_ids: list[UUID]
+    reason: Literal["too_small", "damaged", "expired", "other"]
+    notes: str | None = None
+
+
 # --- Query Params ---
 
 

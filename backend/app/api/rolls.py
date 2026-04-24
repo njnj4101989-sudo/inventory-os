@@ -11,7 +11,7 @@ from app.schemas.roll import (
     RollCreate, RollUpdate, RollFilterParams,
     ReceiveFromProcessing, UpdateProcessingLog,
     BulkStockIn, SupplierInvoiceParams, SupplierInvoiceUpdate,
-    OpeningRollStockRequest, RollWriteOffRequest,
+    OpeningRollStockRequest, RollWriteOffRequest, RollBulkWriteOffRequest,
 )
 from app.services.roll_service import RollService
 
@@ -120,6 +120,18 @@ async def delete_roll(
     svc = RollService(db)
     await svc.delete_roll(roll_id)
     return {"success": True, "message": "Roll deleted"}
+
+
+@router.post("/bulk-write-off", response_model=None)
+async def bulk_write_off_rolls(
+    req: RollBulkWriteOffRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("stock_in"),
+):
+    """Bulk write-off for multiple remnant rolls. Skips ineligible rolls and reports them."""
+    svc = RollService(db)
+    result = await svc.bulk_write_off_rolls(req.roll_ids, req.reason, req.notes, current_user.id)
+    return {"success": True, "data": result, "message": f"Wrote off {result['processed']} roll(s)"}
 
 
 @router.post("/{roll_id}/write-off", response_model=None)

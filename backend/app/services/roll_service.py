@@ -858,6 +858,54 @@ class RollService:
         await self.db.flush()
         return await self.get_roll(roll_id)
 
+    async def bulk_write_off_rolls(
+        self, roll_ids: list[UUID], reason: str, notes: str | None, user_id: UUID
+    ) -> dict:
+        """Bulk write-off for many remnant rolls in one transaction.
+
+        Per-roll guard: status must be 'remnant'. Ineligible rolls are skipped
+        and reported in `failed`. All eligible rolls share the same timestamp.
+        """
+        if not roll_ids:
+            return {"processed": 0, "failed": [], "processed_ids": []}
+
+        now = datetime.now(timezone.utc)
+        processed_ids: list[UUID] = []
+        failed: list[dict] = []
+
+        # Batch-fetch for lock + validation
+        stmt = select(Roll).where(Roll.id.in_(roll_ids)).with_for_update()
+        result = await self.db.execute(stmt)
+        rolls_map = {r.id: r for r in result.scalars().all()}
+
+        for rid in roll_ids:
+            roll = rolls_map.get(rid)
+            if not roll:
+                failed.append({"roll_id": str(rid), "error": "Roll not found"})
+                continue
+            if roll.status != "remnant":
+                failed.append({
+                    "roll_id": str(rid),
+                    "roll_code": roll.roll_code,
+                    "error": f"Not a remnant roll (status: '{roll.status}')",
+                })
+                continue
+
+            roll.status = "written_off"
+            roll.remaining_weight = 0
+            roll.write_off_reason = reason
+            roll.write_off_notes = notes
+            roll.written_off_at = now
+            roll.written_off_by = user_id
+            processed_ids.append(roll.id)
+
+        await self.db.flush()
+        return {
+            "processed": len(processed_ids),
+            "failed": failed,
+            "processed_ids": [str(i) for i in processed_ids],
+        }
+
     async def delete_roll(self, roll_id: UUID) -> None:
         stmt = select(Roll).where(Roll.id == roll_id)
         result = await self.db.execute(stmt)

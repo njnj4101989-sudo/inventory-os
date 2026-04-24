@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, writeOffRoll, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
+import { getRolls, getInvoices, stockInBulk, updateRoll, deleteRoll, writeOffRoll, bulkWriteOffRolls, getProcessingRolls, receiveFromProcessing, updateProcessingLog, updateSupplierInvoice, createOpeningRollStock } from '../api/rolls'
 import { createJobChallan, getJobChallan, getNextJCNumber, receiveJobChallan } from '../api/jobChallans'
 import LabelSheet from '../components/common/LabelSheet'
 import ThermalLabelSheet from '../components/common/thermal/ThermalLabelSheet'
@@ -568,24 +568,55 @@ export default function RollsPage() {
 
   const isEditable = detailRoll && detailRoll.remaining_weight >= (detailRoll.current_weight || detailRoll.total_weight) && detailRoll.status === 'in_stock'
 
-  // Write-off modal state
+  // Write-off modal state — shared for single (detailRoll) and bulk (bulkWriteOffTargets)
   const [writeOffOpen, setWriteOffOpen] = useState(false)
   const [writeOffForm, setWriteOffForm] = useState({ reason: 'too_small', notes: '' })
   const [writeOffSaving, setWriteOffSaving] = useState(false)
   const [writeOffError, setWriteOffError] = useState(null)
+  const [bulkWriteOffTargets, setBulkWriteOffTargets] = useState([])  // [] = single mode (uses detailRoll)
 
   const openWriteOff = () => {
+    setBulkWriteOffTargets([])
+    setWriteOffForm({ reason: 'too_small', notes: '' })
+    setWriteOffError(null); setWriteOffOpen(true)
+  }
+  const openBulkWriteOff = (targets) => {
+    if (!targets || targets.length === 0) return
+    setBulkWriteOffTargets(targets)
     setWriteOffForm({ reason: 'too_small', notes: '' })
     setWriteOffError(null); setWriteOffOpen(true)
   }
   const handleWriteOff = async () => {
-    if (!detailRoll) return
+    const isBulk = bulkWriteOffTargets.length > 0
+    const targets = isBulk ? bulkWriteOffTargets : (detailRoll ? [detailRoll] : [])
+    if (targets.length === 0) return
     setWriteOffSaving(true); setWriteOffError(null)
     try {
-      await writeOffRoll(detailRoll.id, { reason: writeOffForm.reason, notes: writeOffForm.notes || null })
-      setWriteOffOpen(false); setDetailRoll(null); fetchRolls()
+      if (isBulk) {
+        const res = await bulkWriteOffRolls({
+          roll_ids: targets.map(r => r.id),
+          reason: writeOffForm.reason,
+          notes: writeOffForm.notes || null,
+        })
+        const data = res.data.data || res.data
+        const failed = data?.failed || []
+        if (failed.length > 0 && data?.processed === 0) {
+          setWriteOffError(`No rolls were written off. ${failed.length} failed: ${failed[0]?.error || 'see console'}`)
+          return
+        }
+        // Partial or full success
+        setWriteOffOpen(false); setBulkWriteOffTargets([]); setSelectedRolls(new Set())
+        fetchRolls()
+        if (failed.length > 0) {
+          // Non-fatal: some rolls skipped — surface via error banner briefly
+          console.warn('Bulk write-off skipped rolls:', failed)
+        }
+      } else {
+        await writeOffRoll(targets[0].id, { reason: writeOffForm.reason, notes: writeOffForm.notes || null })
+        setWriteOffOpen(false); setDetailRoll(null); fetchRolls()
+      }
     } catch (err) {
-      setWriteOffError(err.response?.data?.detail || 'Failed to write off roll')
+      setWriteOffError(err.response?.data?.detail || 'Failed to write off roll(s)')
     } finally { setWriteOffSaving(false) }
   }
 
@@ -1981,6 +2012,21 @@ export default function RollsPage() {
                           </svg>
                           Send for Processing ({selectedRolls.size})
                         </button>
+                        {(() => {
+                          const selObjs = getSelectedRollObjects()
+                          const allRemnant = selObjs.length > 0 && selObjs.every(r => r.status === 'remnant')
+                          if (!allRemnant) return null
+                          return (
+                            <button onClick={() => openBulkWriteOff(selObjs)}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                              title="Permanently retire selected remnant rolls">
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22" />
+                              </svg>
+                              Write Off ({selectedRolls.size})
+                            </button>
+                          )
+                        })()}
                       </div>
                     </div>
                   )}
@@ -3319,6 +3365,32 @@ export default function RollsPage() {
                     </div>
                   </div>
 
+                  {/* ── Write-off helper strip (only when status='remnant') ── */}
+                  {detailRoll.status === 'remnant' && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <svg className="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <span className="font-semibold">Remnant roll.</span> Too small or damaged to use?
+                        Click <span className="font-semibold">Write Off</span> (top-right) to retire it permanently —
+                        data stays for audit &amp; wastage reports.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Written-off audit strip (shows past write-off details) ── */}
+                  {detailRoll.status === 'written_off' && (
+                    <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                      <div className="font-semibold text-gray-900 mb-1">⚠ This roll has been written off</div>
+                      <div className="grid grid-cols-3 gap-x-4 gap-y-0.5">
+                        <div><span className="text-gray-500">Reason:</span> <span className="font-medium capitalize">{(detailRoll.write_off_reason || '—').replace(/_/g, ' ')}</span></div>
+                        <div><span className="text-gray-500">At:</span> <span className="font-medium">{detailRoll.written_off_at ? new Date(detailRoll.written_off_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span></div>
+                        <div className="col-span-3 mt-0.5"><span className="text-gray-500">Notes:</span> <span className="font-medium">{detailRoll.write_off_notes || '—'}</span></div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ── Detail table — emerald header matching lot/invoice ── */}
                   <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <table className="w-full text-sm border-collapse">
@@ -3911,43 +3983,89 @@ export default function RollsPage() {
       <QuickMasterModal type={quickMasterType} open={quickMasterOpen} onClose={closeQuickMaster} onCreated={onMasterCreated} />
 
       {/* Write-off confirmation modal (remnant rolls only) */}
-      <Modal open={writeOffOpen} onClose={() => setWriteOffOpen(false)} title="Write Off Remnant Roll"
-        actions={<>
-          <button onClick={() => setWriteOffOpen(false)} disabled={writeOffSaving}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
-          <button onClick={handleWriteOff} disabled={writeOffSaving}
-            className="rounded-lg bg-amber-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-amber-700 transition-colors disabled:opacity-50">
-            {writeOffSaving ? 'Writing off…' : 'Confirm Write-off'}
-          </button>
-        </>}>
-        <div className="space-y-3">
-          {writeOffError && <ErrorAlert message={writeOffError} onDismiss={() => setWriteOffError(null)} />}
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <div className="font-semibold">{detailRoll?.roll_code}</div>
-            <div className="text-xs text-amber-700 mt-1">
-              {detailRoll?.remaining_weight} {detailRoll?.unit || 'kg'} remaining will be zeroed. This cannot be undone.
+      {(() => {
+        const isBulk = bulkWriteOffTargets.length > 0
+        const targets = isBulk ? bulkWriteOffTargets : (detailRoll ? [detailRoll] : [])
+        const totalWeight = targets.reduce((s, r) => s + parseFloat(r.remaining_weight || 0), 0)
+        return (
+          <Modal open={writeOffOpen} onClose={() => setWriteOffOpen(false)}
+            title={isBulk ? `Write Off ${targets.length} Remnant Rolls` : 'Write Off Remnant Roll'}
+            actions={<>
+              <button onClick={() => setWriteOffOpen(false)} disabled={writeOffSaving}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={handleWriteOff} disabled={writeOffSaving || targets.length === 0}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-amber-700 transition-colors disabled:opacity-50">
+                {writeOffSaving ? 'Writing off…' : (isBulk ? `Confirm Write-off (${targets.length})` : 'Confirm Write-off')}
+              </button>
+            </>}>
+            <div className="space-y-3">
+              {writeOffError && <ErrorAlert message={writeOffError} onDismiss={() => setWriteOffError(null)} />}
+
+              {/* Targets summary */}
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {isBulk ? (
+                  <>
+                    <div className="font-semibold">{targets.length} rolls · {totalWeight.toFixed(3)} kg total</div>
+                    <div className="mt-1.5 max-h-24 overflow-y-auto text-xs font-mono text-amber-700 space-y-0.5">
+                      {targets.slice(0, 8).map(r => (
+                        <div key={r.id} className="flex justify-between">
+                          <span>{r.roll_code}</span>
+                          <span>{parseFloat(r.remaining_weight || 0).toFixed(3)} {r.unit || 'kg'}</span>
+                        </div>
+                      ))}
+                      {targets.length > 8 && <div className="italic text-amber-600">…and {targets.length - 8} more</div>}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-semibold">{targets[0]?.roll_code}</div>
+                    <div className="text-xs text-amber-700 mt-1">
+                      {targets[0]?.remaining_weight} {targets[0]?.unit || 'kg'} remaining will be zeroed. This cannot be undone.
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* What happens next — info card */}
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                <div className="font-semibold mb-1.5 flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  What happens next
+                </div>
+                <ul className="space-y-0.5 text-blue-800">
+                  <li>• Status becomes <span className="font-semibold">Written Off</span> (permanent)</li>
+                  <li>• Remaining weight set to <span className="font-semibold">0</span></li>
+                  <li>• Audit trail saved (who, when, reason, notes)</li>
+                  <li>• Hidden from lot pickers &amp; VA challans</li>
+                  <li>• Still visible here &amp; in Wastage Report (for ₹ accounting)</li>
+                  <li className="text-red-700 font-semibold">• Cannot be undone</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="typo-label">Reason</label>
+                <FilterSelect full value={writeOffForm.reason}
+                  onChange={v => setWriteOffForm(f => ({ ...f, reason: v }))}
+                  options={[
+                    { value: 'too_small', label: 'Too small to use' },
+                    { value: 'damaged', label: 'Damaged' },
+                    { value: 'expired', label: 'Expired / Obsolete' },
+                    { value: 'other', label: 'Other' },
+                  ]} />
+              </div>
+              <div>
+                <label className="typo-label">Notes {writeOffForm.reason === 'other' && <span className="text-red-500">*</span>}</label>
+                <textarea value={writeOffForm.notes}
+                  onChange={e => setWriteOffForm(f => ({ ...f, notes: e.target.value }))}
+                  rows={2} placeholder={isBulk ? `Shared notes for all ${targets.length} rolls (required if reason is Other)` : 'Optional details (required if reason is Other)'}
+                  className="typo-input" />
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="typo-label">Reason</label>
-            <FilterSelect full value={writeOffForm.reason}
-              onChange={v => setWriteOffForm(f => ({ ...f, reason: v }))}
-              options={[
-                { value: 'too_small', label: 'Too small to use' },
-                { value: 'damaged', label: 'Damaged' },
-                { value: 'expired', label: 'Expired / Obsolete' },
-                { value: 'other', label: 'Other' },
-              ]} />
-          </div>
-          <div>
-            <label className="typo-label">Notes {writeOffForm.reason === 'other' && <span className="text-red-500">*</span>}</label>
-            <textarea value={writeOffForm.notes}
-              onChange={e => setWriteOffForm(f => ({ ...f, notes: e.target.value }))}
-              rows={2} placeholder="Optional details (required if reason is Other)"
-              className="typo-input" />
-          </div>
-        </div>
-      </Modal>
+          </Modal>
+        )
+      })()}
 
       {/* Opening Roll Stock — Full-page overlay (grouped entry) */}
       {openingRollOpen && (

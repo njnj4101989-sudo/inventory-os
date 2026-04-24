@@ -310,6 +310,32 @@ export async function writeOffRoll(id, { reason, notes }) {
   return client.post(`/rolls/${id}/write-off`, { reason, notes: notes || null })
 }
 
+export async function bulkWriteOffRolls({ roll_ids, reason, notes }) {
+  if (USE_MOCK) {
+    const now = new Date().toISOString()
+    const processed_ids = []
+    const failed = []
+    for (const rid of roll_ids) {
+      const roll = rolls.find((r) => r.id === rid)
+      if (!roll) { failed.push({ roll_id: rid, error: 'Roll not found' }); continue }
+      if (roll.status !== 'remnant') {
+        failed.push({ roll_id: rid, roll_code: roll.roll_code, error: `Not a remnant roll (status: '${roll.status}')` })
+        continue
+      }
+      Object.assign(roll, {
+        status: 'written_off',
+        remaining_weight: 0,
+        write_off_reason: reason,
+        write_off_notes: notes || null,
+        written_off_at: now,
+      })
+      processed_ids.push(rid)
+    }
+    return mockResponse({ processed: processed_ids.length, failed, processed_ids }, `Wrote off ${processed_ids.length} roll(s)`)
+  }
+  return client.post('/rolls/bulk-write-off', { roll_ids, reason, notes: notes || null })
+}
+
 // ── Processing ──
 
 export async function getProcessingRolls() {

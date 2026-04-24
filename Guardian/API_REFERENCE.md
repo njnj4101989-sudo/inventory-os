@@ -378,6 +378,23 @@ Note: `quantity` maps to `total_weight` (kg) or `total_length` (meters) dependin
 **Effect:** Sets `status='written_off'`, `remaining_weight=0`, and stores audit fields (`write_off_reason`, `write_off_notes`, `written_off_at`, `written_off_by`). Written-off rolls are excluded from all active pickers (lots, job challans).
 **Response:** `{ success: true, data: <roll>, message: 'Roll written off' }`
 
+### POST `/rolls/bulk-write-off`
+**Auth:** `stock_in` permission required
+**Request:** `{ roll_ids: [UUID], reason: 'too_small' | 'damaged' | 'expired' | 'other', notes?: string }`
+**Behaviour:** Iterates roll_ids with per-roll FOR UPDATE lock. Each roll must be `status='remnant'`; ineligible rolls are **skipped** and recorded in `failed[]` without aborting the batch. All processed rolls share the same `written_off_at` timestamp.
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "processed": 12,
+    "processed_ids": ["uuid", ...],
+    "failed": [{ "roll_id": "uuid", "roll_code": "...", "error": "Not a remnant roll (status: 'in_stock')" }]
+  },
+  "message": "Wrote off 12 roll(s)"
+}
+```
+
 ### GET `/rolls?status=sent_for_processing` (Processing Rolls)
 Same as `GET /rolls` with status filter pre-applied.
 
