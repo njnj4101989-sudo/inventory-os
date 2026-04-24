@@ -33,7 +33,23 @@
 
 ---
 
-## Current State (Session 115d — 2026-04-24) — IN PROGRESS
+## Current State (Session 115d — 2026-04-24) — CLOSED
+
+**Reports overhaul (P4.1 Inventory + P5 Tier 1 Sales) + UX polish.**
+
+Full checklist, API shapes, file maps → [REPORTS_AND_INVENTORY_PLAN.md](REPORTS_AND_INVENTORY_PLAN.md) (§ Phase 4 + § Phase 5).
+
+Commits: `407ca6c` (P4.1), `d9e9bf0` (P5 Tier 1), then polish (`9abf66b 21c02a6 7e366ee 65c05cc 2ee114d 7ad4366 70f2df1 ecadf3d e8b3dea f765522 a84c8da efe9503 2c114e6 902e839`) — deployed to prod.
+
+Polish delivered this session:
+- Inventory tab expanded-row chips (Free / Locked / Out / Dead) with fixed-width alignment + row tinting + user-tunable Dead-days threshold.
+- Sales tab stuck-days filter, horizontal funnel, typography fixes, deep-link `?open=` on SKUsPage.
+- URL-synced active tab on both ReportsPage (`?tab=sales`) and InventoryPage (`?tab=raw`) — refresh preserves context.
+- Fixed OrdersPage `?status=` deep-link from stuck-orders banner.
+
+---
+
+## Previous State (Session 115c — 2026-04-24) — CLOSED
 
 **P5 Tier 1: Sales & Orders Report WOW overhaul — stuck-orders alert, MoM delta KPIs, revenue sparkline, real funnel, top products, CSV.**
 
