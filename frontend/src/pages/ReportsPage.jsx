@@ -351,9 +351,7 @@ function InventoryTab({ period }) {
                     {isOpen && g.skus.map((s) => (
                       <tr key={s.sku_id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-1.5 px-3"></td>
-                        <td className="py-1.5 px-3 typo-td font-mono text-xs">
-                          <span className="text-gray-400 mr-2">└</span>{s.sku_code}
-                        </td>
+                        <td className="py-1.5 px-3 pl-10 typo-td font-mono text-xs">{s.sku_code}</td>
                         <td className="py-1.5 px-3 typo-td-secondary">{s.color} · {s.size}</td>
                         <td className="py-1.5 px-3 text-right typo-td">{s.opening_stock}</td>
                         <td className="py-1.5 px-3 text-right typo-td text-emerald-600 font-medium">+{s.stock_in}</td>
