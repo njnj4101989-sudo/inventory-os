@@ -474,6 +474,18 @@ export default function OrdersPage() {
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── Deep-link: ?status=pending|processing|... → pre-select status filter ── */
+  useEffect(() => {
+    const s = searchParams.get('status')
+    if (!s) return
+    const valid = ['pending', 'processing', 'partially_shipped', 'shipped', 'delivered', 'cancelled']
+    if (!valid.includes(s)) return
+    setStatusFilter(s)
+    setPage(1)
+    searchParams.delete('status')
+    setSearchParams(searchParams, { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── KPIs (derived from full unfiltered list, not paginated page) ── */
   const kpis = useMemo(() => {
     const all = allOrders
