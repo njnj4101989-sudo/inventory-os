@@ -11,7 +11,8 @@
 | **P1** — Sales + Accounting + Inventory Raw Material | ✅ COMPLETE | S95 |
 | **P2** — VA Processing + Purchases & Suppliers | ✅ COMPLETE | S95 |
 | **P3** — Returns Analysis + Inventory Enhancements + Polish | ✅ COMPLETE | S95 |
-| **P4** — Inventory Reports Professional Overhaul (this doc, jump to [§ Phase 4](#phase-4-inventory-reports-professional-overhaul)) | 🟡 QUEUED | S116+ |
+| **P4.1** — Structural rebuild (grouped + ₹ + ageing + CSV) | ✅ COMPLETE (1 deferred: 4.1j) | S115c (commit `407ca6c`) |
+| **P4.2–4.8** — Remaining sub-phases (Ageing / Reorder / ABC / Raw Material / Variance / Wastage / UX) | 🟡 QUEUED | S116+ |
 
 ---
 
@@ -503,7 +504,7 @@ After all 3 phases: **44 of 42 tables** represented in reports (some tables cont
 #### Deploy gate
 
 - [x] **4.1l** Local smoke: group expand/collapse works, filters combine, CSV downloads, KPIs match totals (backend import + route registration verified; frontend syntax clean)
-- [ ] **4.1m** Update `CLAUDE.md` session entry, commit, push — verify CI/CD + Vercel
+- [x] **4.1m** Update `CLAUDE.md` session entry, commit, push — verify CI/CD + Vercel (commit `407ca6c`)
 
 ---
 
