@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getSKUs, getSKU, createSKU, updateSKU, purchaseStock, getPurchaseInvoices, getSKUCostHistory, getSKUOpenDemand, createSKUOpeningStock, getSKUsGrouped, getSKUSummary } from '../api/skus'
 import { adjust, getEvents } from '../api/inventory'
 import { getSuppliers } from '../api/suppliers'
@@ -249,6 +250,16 @@ export default function SKUsPage() {
   useEffect(() => { loadColorMap() }, [])
   useEffect(() => { fetchSKUs() }, [fetchSKUs])
   useEffect(() => { fetchSummary() }, [fetchSummary])
+
+  // Deep-link: ?open=<skuId> → auto-open detail (used by Reports > Best Sellers row click)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    searchParams.delete('open')
+    setSearchParams(searchParams, { replace: true })
+    openDetail({ id: openId })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cache every SKU we've seen so cross-page selections survive page changes.
   useEffect(() => {
