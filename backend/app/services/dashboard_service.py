@@ -580,7 +580,9 @@ class DashboardService:
         short_count = 0
         for r in sku_rows:
             ad = r["ageing_days"]
-            if r["closing_stock"] > 0 and (ad is None or ad >= dead_stock_days):
+            # Dead = actually stagnant (sold before, nothing in dead_stock_days). Never-sold
+            # SKUs are not dead — they're simply new stock that hasn't moved yet.
+            if r["closing_stock"] > 0 and ad is not None and ad >= dead_stock_days:
                 dead_count += 1
             if 0 < r["available_qty"] <= low_stock_threshold:
                 short_count += 1

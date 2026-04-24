@@ -198,7 +198,8 @@ function getStockStatus(s) {
   if (available === 0) {
     return { label: 'Locked', chipCls: 'bg-amber-50 text-amber-700 ring-amber-600/30', rowCls: 'bg-amber-50/60' }
   }
-  if (ageing == null || ageing >= 60) {
+  // Dead = actually stagnant (sold before, nothing in 60d). Never-sold SKUs are NOT Dead — they're new stock.
+  if (ageing != null && ageing >= 60) {
     return { label: 'Dead', chipCls: 'bg-gray-100 text-gray-600 ring-gray-500/30', rowCls: '' }
   }
   return { label: 'Free', chipCls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/30', rowCls: '' }
