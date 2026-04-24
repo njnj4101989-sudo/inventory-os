@@ -99,7 +99,7 @@ function pctDelta(curr, prev) {
   return ((c - p) / p) * 100
 }
 
-// P5.5 — Order fulfilment funnel (hand-drawn SVG-less, no deps)
+// P5.5 — Order fulfilment funnel (horizontal bars, clean hierarchy)
 function OrderFunnel({ fulfillment, onStageClick }) {
   const stages = [
     { key: 'pending', label: 'Pending', count: fulfillment.pending || 0, color: '#9ca3af' },
@@ -113,40 +113,51 @@ function OrderFunnel({ fulfillment, onStageClick }) {
 
   return (
     <div>
-      <div className="flex items-stretch gap-2">
+      <div className="space-y-1.5">
         {stages.map((s, i) => {
-          const heightPct = Math.max(8, (s.count / maxCount) * 100)
+          const widthPct = Math.max(2, (s.count / maxCount) * 100)
           const dropoff = i > 0 && stages[i - 1].count > 0
             ? Math.round(((stages[i - 1].count - s.count) / stages[i - 1].count) * 100)
             : null
+          const prevPct = i > 0 && stages[0].count > 0
+            ? Math.round((s.count / stages[0].count) * 100)
+            : null
           return (
-            <React.Fragment key={s.key}>
-              <div className="flex-1 flex flex-col items-center">
-                <button
-                  onClick={() => onStageClick && onStageClick(s.key)}
-                  className="w-full flex flex-col items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-                  style={{ backgroundColor: s.color, height: `${24 + heightPct * 0.8}px`, color: 'white' }}
-                  title={`${s.label}: ${s.count} orders — click to view`}>
-                  <span className="typo-kpi-sm text-white font-bold">{s.count}</span>
-                </button>
-                <span className="typo-caption mt-1.5 text-gray-600">{s.label}</span>
+            <div key={s.key} className="flex items-center gap-3">
+              <button
+                onClick={() => onStageClick && onStageClick(s.key)}
+                className="w-28 text-left typo-label-sm text-gray-700 hover:text-emerald-700 focus:outline-none focus:text-emerald-700 cursor-pointer truncate"
+                title={`Click to view ${s.label} orders`}>
+                {s.label}
+              </button>
+              <div className="flex-1 h-7 bg-gray-50 rounded-md overflow-hidden relative border border-gray-100">
+                <div
+                  className="h-full rounded-md transition-all"
+                  style={{ width: `${widthPct}%`, backgroundColor: s.color }}
+                />
+                <span className="absolute inset-0 flex items-center px-3 typo-badge font-bold text-gray-800">
+                  {s.count}
+                  {prevPct != null && <span className="ml-2 text-gray-500 font-normal">({prevPct}% of start)</span>}
+                </span>
               </div>
-              {dropoff != null && i < stages.length - 1 && (
-                <div className="flex flex-col items-center justify-center self-center -mx-1 z-10">
-                  <span className={`typo-badge rounded px-1.5 py-0.5 ring-1 ring-inset ${dropoff > 0 ? 'bg-red-50 text-red-700 ring-red-600/30' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/30'}`}>
+              <div className="w-16 text-right">
+                {dropoff != null ? (
+                  <span className={`typo-badge ${dropoff > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                     {dropoff > 0 ? `-${dropoff}%` : `+${Math.abs(dropoff)}%`}
                   </span>
-                </div>
-              )}
-            </React.Fragment>
+                ) : (
+                  <span className="typo-badge text-gray-300">—</span>
+                )}
+              </div>
+            </div>
           )
         })}
       </div>
       {cancelled > 0 && (
-        <div className="mt-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
           <span className="typo-badge rounded bg-red-100 text-red-700 px-2 py-0.5 font-semibold">Cancelled</span>
-          <span className="typo-data text-red-700">{cancelled} order{cancelled !== 1 ? 's' : ''}</span>
-          <span className="typo-caption text-red-600 ml-auto">Exit before fulfilment</span>
+          <span className="typo-badge text-red-700 font-medium">{cancelled} order{cancelled !== 1 ? 's' : ''}</span>
+          <span className="typo-badge text-red-500 ml-auto">Exit before fulfilment</span>
         </div>
       )}
     </div>
@@ -822,9 +833,28 @@ function TailorTab({ data }) {
 // ═══════════════════════════════════════════════════════
 //  SALES & ORDERS TAB
 // ═══════════════════════════════════════════════════════
-function SalesTab({ data, period }) {
+function SalesTab({ period }) {
   const navigate = useNavigate()
   const [stuckDismissed, setStuckDismissed] = useState(false)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [stuckDays, setStuckDays] = useState(7)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const res = await getSalesReport({ period, stuck_days: stuckDays })
+      setData(res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load sales report')
+    } finally { setLoading(false) }
+  }, [period, stuckDays])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  if (loading && !data) return <div className="py-12"><LoadingSpinner size="lg" text="Loading sales report..." /></div>
+  if (error) return <ErrorAlert message={error} onDismiss={() => setError(null)} />
   if (!data) return null
   const k = data.kpis
   const prev = data.previous_period || {}
@@ -832,7 +862,7 @@ function SalesTab({ data, period }) {
   const topProducts = data.top_products || []
   const revenueDaily = (data.revenue_daily || []).map(r => r.revenue)
 
-  const handleCSV = () => downloadSalesReportCSV({ period })
+  const handleCSV = () => downloadSalesReportCSV({ period, stuck_days: stuckDays })
 
   return (
     <div className="space-y-6">
@@ -862,8 +892,16 @@ function SalesTab({ data, period }) {
         </div>
       )}
 
-      {/* Export CSV button, above KPIs */}
-      <div className="flex justify-end">
+      {/* Filter bar + Export CSV (above KPIs) */}
+      <div className="flex items-center justify-between flex-wrap gap-3 rounded-xl bg-white p-3 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2">
+          <span className="typo-caption text-gray-500">Stuck threshold:</span>
+          <input type="number" min="1" max="90" step="1" value={stuckDays}
+            onChange={e => setStuckDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))}
+            title="Flag orders pending at least this many days as Stuck"
+            className="typo-input-sm w-16 text-right" />
+          <span className="typo-caption text-gray-500">days</span>
+        </div>
         <button onClick={handleCSV}
           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 transition-colors shadow-sm">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1958,8 +1996,7 @@ export default function ReportsPage() {
         const res = await getProductionReport(params)
         setProductionData(res.data.data)
       } else if (activeTab === 'sales') {
-        const res = await getSalesReport(params)
-        setSalesData(res.data.data)
+        // SalesTab self-fetches (P5.1 — supports stuck_days filter)
       } else if (activeTab === 'inventory') {
         // InventoryTab self-fetches via getInventoryPosition (P4.1)
       } else if (activeTab === 'financial') {
@@ -2055,7 +2092,7 @@ export default function ReportsPage() {
         ) : (
           <>
             {activeTab === 'production' && <ProductionTab data={productionData} />}
-            {activeTab === 'sales' && <SalesTab data={salesData} period={period} />}
+            {activeTab === 'sales' && <SalesTab period={period} />}
             {activeTab === 'inventory' && <InventoryTab period={period} />}
             {activeTab === 'financial' && <FinancialTab data={financialData} />}
             {activeTab === 'accounting' && <AccountingTab data={accountingData} />}
