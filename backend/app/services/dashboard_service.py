@@ -611,6 +611,10 @@ class DashboardService:
             "groups": groups,
             "totals": totals,
             "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+            "thresholds": {
+                "dead_stock_days": dead_stock_days,
+                "low_stock_threshold": low_stock_threshold,
+            },
         }
 
     async def get_inventory_summary(self) -> dict:

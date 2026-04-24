@@ -138,13 +138,15 @@ async def inventory_position(
     stock_status: str | None = Query(None, regex="^(has|zero|negative)?$"),
     min_value: float | None = Query(None),
     search: str | None = Query(None),
+    dead_days: int = Query(60, ge=1, le=365),
+    low_stock: int = Query(5, ge=0, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("report_view"),
 ):
     """P4.1 — Grouped inventory position with ₹ valuation, ageing, 8 KPIs.
 
-    Groups SKUs by design. Filters: product_type, fabric_type, stock_status
-    (has/zero/negative), min_value, search (sku_code/product_name/color).
+    Filters: product_type, fabric_type, stock_status, min_value, search.
+    Thresholds: dead_days (default 60, 1-365), low_stock (default 5, 0-1000).
     """
     fd, td = _resolve_period(period, from_date, to_date)
     svc = DashboardService(db)
@@ -155,6 +157,8 @@ async def inventory_position(
         stock_status=stock_status,
         min_value_inr=min_value,
         search=search,
+        dead_stock_days=dead_days,
+        low_stock_threshold=low_stock,
     )
     return {"success": True, "data": result}
 
@@ -169,6 +173,8 @@ async def inventory_position_csv(
     stock_status: str | None = Query(None, regex="^(has|zero|negative)?$"),
     min_value: float | None = Query(None),
     search: str | None = Query(None),
+    dead_days: int = Query(60, ge=1, le=365),
+    low_stock: int = Query(5, ge=0, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("report_view"),
 ):
@@ -182,6 +188,8 @@ async def inventory_position_csv(
         stock_status=stock_status,
         min_value_inr=min_value,
         search=search,
+        dead_stock_days=dead_days,
+        low_stock_threshold=low_stock,
     )
 
     buf = io.StringIO()

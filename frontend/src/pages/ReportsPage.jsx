@@ -186,9 +186,10 @@ function zeroMutedSigned(n, sign = '+') {
 }
 
 // Stock status chip — priority: Out > Locked > Dead > Free.
+// deadDays: configurable threshold (matches backend dead_stock_days param).
 // Returns {label, chipCls, rowCls}. rowCls applied only to actionable states
 // (Out/Locked) so healthy rows stay clean.
-function getStockStatus(s) {
+function getStockStatus(s, deadDays = 60) {
   const closing = Number(s.closing_stock) || 0
   const available = Number(s.available_qty) || 0
   const ageing = s.ageing_days
@@ -198,8 +199,8 @@ function getStockStatus(s) {
   if (available === 0) {
     return { label: 'Locked', chipCls: 'bg-amber-50 text-amber-700 ring-amber-600/30', rowCls: 'bg-amber-50/60' }
   }
-  // Dead = actually stagnant (sold before, nothing in 60d). Never-sold SKUs are NOT Dead — they're new stock.
-  if (ageing != null && ageing >= 60) {
+  // Dead = actually stagnant (sold before, nothing in deadDays). Never-sold SKUs are NOT Dead — they're new stock.
+  if (ageing != null && ageing >= deadDays) {
     return { label: 'Dead', chipCls: 'bg-gray-100 text-gray-600 ring-gray-500/30', rowCls: '' }
   }
   return { label: 'Free', chipCls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/30', rowCls: '' }
@@ -215,6 +216,7 @@ function InventoryTab({ period }) {
   const [stockStatus, setStockStatus] = useState('')
   const [minValue, setMinValue] = useState('')
   const [search, setSearch] = useState('')
+  const [deadDays, setDeadDays] = useState(60)
 
   // Expanded design groups
   const [expanded, setExpanded] = useState(new Set())
@@ -227,6 +229,7 @@ function InventoryTab({ period }) {
       if (stockStatus) params.stock_status = stockStatus
       if (minValue) params.min_value = parseFloat(minValue)
       if (search.trim()) params.search = search.trim()
+      if (deadDays) params.dead_days = deadDays
       const res = await getInventoryPosition(params)
       const payload = res.data.data
       // Client-side: augment each group with movement aggregates (parent row shows real numbers, not '—')
@@ -243,7 +246,7 @@ function InventoryTab({ period }) {
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load inventory position')
     } finally { setLoading(false) }
-  }, [period, productType, stockStatus, minValue, search])
+  }, [period, productType, stockStatus, minValue, search, deadDays])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -262,6 +265,7 @@ function InventoryTab({ period }) {
     if (stockStatus) params.stock_status = stockStatus
     if (minValue) params.min_value = minValue
     if (search.trim()) params.search = search.trim()
+    if (deadDays) params.dead_days = deadDays
     downloadInventoryPositionCSV(params)
   }
 
@@ -292,7 +296,7 @@ function InventoryTab({ period }) {
           color="bg-violet-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         <KpiCard label="SKUs with Stock" value={kpis.skus_with_stock} sub="Active inventory"
           color="bg-emerald-600" icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        <KpiCard label="Dead SKUs" value={kpis.dead_sku_count} sub="No sale in 60d"
+        <KpiCard label="Dead SKUs" value={kpis.dead_sku_count} sub={`No sale in ${deadDays}d`}
           color="bg-red-500" icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         <KpiCard label="Low Stock" value={kpis.short_sku_count} sub="Available ≤ 5"
           color="bg-amber-500" icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -312,6 +316,14 @@ function InventoryTab({ period }) {
             onChange={e => setMinValue(e.target.value)}
             placeholder="Min ₹ Value"
             className="typo-input-sm w-32" />
+          <div className="flex items-center gap-1.5">
+            <span className="typo-caption text-gray-500">Dead ≥</span>
+            <input type="number" min="1" max="365" step="1" value={deadDays}
+              onChange={e => setDeadDays(Math.max(1, Math.min(365, parseInt(e.target.value) || 60)))}
+              title="SKUs flagged Dead when last sale was ≥ this many days ago"
+              className="typo-input-sm w-16 text-right" />
+            <span className="typo-caption text-gray-500">d</span>
+          </div>
           <div className="flex-1 max-w-sm">
             <SearchInput value={search} onChange={setSearch} placeholder="Search SKU, design, color..." />
           </div>
@@ -395,7 +407,7 @@ function InventoryTab({ period }) {
                     </tr>
                     {/* SKU children — indented + zero-muted numbers + stock status chip */}
                     {isOpen && g.skus.map((s, si) => {
-                      const status = getStockStatus(s)
+                      const status = getStockStatus(s, deadDays)
                       const baseBg = status.rowCls || (si % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')
                       return (
                       <tr key={s.sku_id}

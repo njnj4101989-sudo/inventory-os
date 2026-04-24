@@ -1496,6 +1496,8 @@ When `sku` is present:
 - `stock_status?` — `has` / `zero` / `negative`
 - `min_value?` — min ₹ value per SKU (float)
 - `search?` — matches sku_code, product_name, color (case-insensitive)
+- `dead_days?` — threshold for Dead-stock flag in days (default `60`, range `1-365`). SKUs with `ageing_days >= dead_days` count in `dead_sku_count` KPI
+- `low_stock?` — threshold for Low-stock flag in pieces (default `5`, range `0-1000`). SKUs with `0 < available_qty <= low_stock` count in `short_sku_count` KPI
 
 **Response:**
 ```json
@@ -1534,16 +1536,19 @@ When `sku` is present:
       "opening_stock": 1000, "closing_stock": 2400,
       "reserved_qty": 120, "available_qty": 2280, "value_inr": 1368000.0
     },
-    "period": { "from": "2026-03-25", "to": "2026-04-24" }
+    "period": { "from": "2026-03-25", "to": "2026-04-24" },
+    "thresholds": { "dead_stock_days": 60, "low_stock_threshold": 5 }
   }
 }
 ```
 **Notes:**
 - Groups are sorted by `value_inr` desc (highest-value designs first)
+- SKUs within each group are sorted by canonical size order (S→M→L→XL→XXL→3XL→4XL→Free), then color alphabetical
 - `ageing_days` = days since last STOCK_OUT event per SKU (`null` if never sold)
 - `value_inr` per SKU = `available_qty × WAC` (WAC from `SKUService.compute_wac_map`, falls back to `base_price` if no cost-bearing events)
-- `dead_sku_count` = SKUs with `closing > 0` AND (`ageing_days` null OR `>= 60d`)
-- `short_sku_count` = SKUs with `0 < available_qty <= 5` (**placeholder** — P4.3 swaps for per-SKU `reorder_level`)
+- `dead_sku_count` = SKUs with `closing > 0` AND `ageing_days IS NOT NULL` AND `ageing_days >= dead_days` (never-sold SKUs excluded — they are new, not dead)
+- `short_sku_count` = SKUs with `0 < available_qty <= low_stock` (**placeholder** — P4.3 swaps for per-SKU `reorder_level`)
+- `thresholds` in response echoes the applied values so the frontend chip logic and KPI stay in sync with user filters
 
 ### GET `/dashboard/inventory-position.csv` (P4.1)
 **Auth:** `report_view` permission required
