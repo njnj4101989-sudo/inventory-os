@@ -170,6 +170,21 @@ function formatINR(n) {
   return '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
 }
 
+// Mute zero values — reduces visual noise across a dense table.
+// `emphasizeNonZero` wraps non-zero in a color+weight class.
+function zeroMuted(n, emphasizeClass = 'text-gray-900 font-medium') {
+  const v = Number(n) || 0
+  if (v === 0) return <span className="text-gray-300">0</span>
+  return <span className={emphasizeClass}>{v}</span>
+}
+function zeroMutedSigned(n, sign = '+') {
+  const v = Number(n) || 0
+  if (v === 0) return <span className="text-gray-300">0</span>
+  const color = sign === '-' ? 'text-red-600' : (v >= 0 ? 'text-emerald-600' : 'text-red-600')
+  const label = sign === '-' ? `-${Math.abs(v)}` : (v >= 0 ? `+${v}` : `${v}`)
+  return <span className={`font-medium ${color}`}>{label}</span>
+}
+
 function InventoryTab({ period }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -193,7 +208,18 @@ function InventoryTab({ period }) {
       if (minValue) params.min_value = parseFloat(minValue)
       if (search.trim()) params.search = search.trim()
       const res = await getInventoryPosition(params)
-      setData(res.data.data)
+      const payload = res.data.data
+      // Client-side: augment each group with movement aggregates (parent row shows real numbers, not '—')
+      if (payload?.groups) {
+        payload.groups = payload.groups.map(g => ({
+          ...g,
+          opening_stock: g.skus.reduce((s, r) => s + (r.opening_stock || 0), 0),
+          stock_in: g.skus.reduce((s, r) => s + (r.stock_in || 0), 0),
+          stock_out: g.skus.reduce((s, r) => s + (r.stock_out || 0), 0),
+          net_change: g.skus.reduce((s, r) => s + (r.net_change || 0), 0),
+        }))
+      }
+      setData(payload)
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load inventory position')
     } finally { setLoading(false) }
@@ -326,45 +352,44 @@ function InventoryTab({ period }) {
                 const isOpen = expanded.has(key)
                 return (
                   <React.Fragment key={key}>
-                    {/* Design parent row */}
+                    {/* Design parent row — section-header feel with emerald accent + real aggregates */}
                     <tr onClick={() => toggleGroup(key)}
-                      className="border-b border-gray-100 bg-gray-50/80 hover:bg-emerald-50/60 cursor-pointer transition-colors">
-                      <td className="py-2 px-3">
-                        <svg className={`h-4 w-4 text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      className={`border-b-2 border-emerald-100 ${isOpen ? 'bg-emerald-50/80' : 'bg-emerald-50/40'} hover:bg-emerald-100/60 cursor-pointer transition-colors`}>
+                      <td className="py-3 px-3">
+                        <svg className={`h-4 w-4 text-emerald-600 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </td>
-                      <td className="py-2 px-3 typo-td font-semibold text-emerald-700">{g.design_no || '—'} <span className="typo-caption ml-1">({g.sku_count} SKUs)</span></td>
-                      <td className="py-2 px-3"><span className="typo-badge rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5">{g.product_type || '—'}</span></td>
-                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
-                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
-                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
-                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
-                      <td className="py-2 px-3 text-right typo-td font-semibold">{g.total_qty}</td>
-                      <td className="py-2 px-3 text-right typo-td">{g.reserved_qty}</td>
-                      <td className="py-2 px-3 text-right typo-td font-semibold text-emerald-700">{g.available_qty}</td>
-                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
-                      <td className="py-2 px-3 text-right typo-td font-bold text-violet-700">{formatINR(g.value_inr)}</td>
-                      <td className="py-2 px-3 text-center typo-td-secondary">—</td>
+                      <td className="py-3 px-3 typo-td font-bold text-emerald-800 text-base">{g.design_no || '—'}<span className="typo-caption ml-2 text-emerald-600">({g.sku_count} SKU{g.sku_count !== 1 ? 's' : ''})</span></td>
+                      <td className="py-3 px-3"><span className="typo-badge rounded bg-white border border-emerald-200 px-2 py-0.5 text-emerald-700 font-semibold">{g.product_type || '—'}</span></td>
+                      <td className="py-3 px-3 text-right tabular-nums">{zeroMuted(g.opening_stock)}</td>
+                      <td className="py-3 px-3 text-right tabular-nums">{zeroMutedSigned(g.stock_in, '+')}</td>
+                      <td className="py-3 px-3 text-right tabular-nums">{zeroMutedSigned(g.stock_out, '-')}</td>
+                      <td className="py-3 px-3 text-right tabular-nums">{zeroMutedSigned(g.net_change)}</td>
+                      <td className="py-3 px-3 text-right typo-td font-bold tabular-nums">{g.total_qty}</td>
+                      <td className="py-3 px-3 text-right tabular-nums">{zeroMuted(g.reserved_qty, 'text-gray-700')}</td>
+                      <td className="py-3 px-3 text-right typo-td font-bold text-emerald-700 tabular-nums">{g.available_qty}</td>
+                      <td className="py-3 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-3 px-3 text-right typo-td font-bold text-violet-700 tabular-nums">{formatINR(g.value_inr)}</td>
+                      <td className="py-3 px-3 text-center typo-td-secondary">—</td>
                     </tr>
-                    {/* SKU children */}
-                    {isOpen && g.skus.map((s) => (
-                      <tr key={s.sku_id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-1.5 px-3"></td>
-                        <td className="py-1.5 px-3 pl-10 typo-td font-mono text-xs">{s.sku_code}</td>
-                        <td className="py-1.5 px-3 typo-td-secondary">{s.color} · {s.size}</td>
-                        <td className="py-1.5 px-3 text-right typo-td">{s.opening_stock}</td>
-                        <td className="py-1.5 px-3 text-right typo-td text-emerald-600 font-medium">+{s.stock_in}</td>
-                        <td className="py-1.5 px-3 text-right typo-td text-red-600 font-medium">-{s.stock_out}</td>
-                        <td className={`py-1.5 px-3 text-right typo-td font-semibold ${s.net_change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {s.net_change >= 0 ? '+' : ''}{s.net_change}
-                        </td>
-                        <td className="py-1.5 px-3 text-right typo-td font-semibold">{s.closing_stock}</td>
-                        <td className="py-1.5 px-3 text-right typo-td-secondary">{s.reserved_qty}</td>
-                        <td className="py-1.5 px-3 text-right typo-td font-medium text-emerald-700">{s.available_qty}</td>
-                        <td className="py-1.5 px-3 text-right typo-td-secondary">{formatINR(s.wac)}</td>
-                        <td className="py-1.5 px-3 text-right typo-td font-medium">{formatINR(s.value_inr)}</td>
-                        <td className="py-1.5 px-3 text-center">
+                    {/* SKU children — indented + zero-muted numbers */}
+                    {isOpen && g.skus.map((s, si) => (
+                      <tr key={s.sku_id}
+                        className={`border-b border-gray-100 ${si % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-emerald-50/30 transition-colors`}>
+                        <td className="py-2 px-3"></td>
+                        <td className="py-2 px-3 pl-10 typo-td font-mono text-xs text-gray-700">{s.sku_code}</td>
+                        <td className="py-2 px-3 typo-td-secondary">{s.color}{s.size ? ` · ${s.size}` : ''}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{zeroMuted(s.opening_stock)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{zeroMutedSigned(s.stock_in, '+')}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{zeroMutedSigned(s.stock_out, '-')}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{zeroMutedSigned(s.net_change)}</td>
+                        <td className="py-2 px-3 text-right typo-td font-semibold tabular-nums">{s.closing_stock}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{zeroMuted(s.reserved_qty, 'text-gray-700')}</td>
+                        <td className="py-2 px-3 text-right typo-td font-medium text-emerald-700 tabular-nums">{s.available_qty}</td>
+                        <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{s.wac > 0 ? formatINR(s.wac) : '—'}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{s.value_inr > 0 ? <span className="font-medium text-violet-700">{formatINR(s.value_inr)}</span> : <span className="text-gray-300">—</span>}</td>
+                        <td className="py-2 px-3 text-center">
                           <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${ageingBadgeClass(s.ageing_days)}`}>
                             {s.ageing_days == null ? '—' : `${s.ageing_days}d`}
                           </span>
