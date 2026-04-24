@@ -1486,6 +1486,72 @@ When `sku` is present:
 }
 ```
 
+### GET `/dashboard/inventory-position` (P4.1)
+**Auth:** `report_view` permission required
+**Query:**
+- `period?` — `7d` / `30d` / `90d` (default 30d if no `from`/`to`)
+- `from?`, `to?` — explicit date range (ISO `YYYY-MM-DD`), overrides `period`
+- `product_type?` — filter by SKU product_type code
+- `fabric_type?` — filter by fabric (matches substring in product_name)
+- `stock_status?` — `has` / `zero` / `negative`
+- `min_value?` — min ₹ value per SKU (float)
+- `search?` — matches sku_code, product_name, color (case-insensitive)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "kpis": {
+      "stock_in": 450, "stock_out": 1200, "returns": 12, "net_change": -738,
+      "total_value_inr": 8945230.50, "skus_with_stock": 428,
+      "dead_sku_count": 37, "short_sku_count": 8
+    },
+    "groups": [
+      {
+        "design_id": "uuid",
+        "design_no": "1080",
+        "product_type": "FBL",
+        "sku_count": 6,
+        "total_qty": 240,
+        "reserved_qty": 20,
+        "available_qty": 220,
+        "value_inr": 132000.0,
+        "skus": [
+          {
+            "sku_id": "uuid", "sku_code": "FBL-1080-RED-M", "product_name": "1080",
+            "product_type": "FBL", "color": "Red", "size": "M",
+            "design_id": "uuid",
+            "opening_stock": 50, "stock_in": 30, "stock_out": 20,
+            "returns": 0, "losses": 0, "net_change": 10,
+            "closing_stock": 60, "reserved_qty": 5, "available_qty": 55,
+            "wac": 600.0, "value_inr": 33000.0, "ageing_days": 12
+          }
+        ]
+      }
+    ],
+    "totals": {
+      "opening_stock": 1000, "closing_stock": 2400,
+      "reserved_qty": 120, "available_qty": 2280, "value_inr": 1368000.0
+    },
+    "period": { "from": "2026-03-25", "to": "2026-04-24" }
+  }
+}
+```
+**Notes:**
+- Groups are sorted by `value_inr` desc (highest-value designs first)
+- `ageing_days` = days since last STOCK_OUT event per SKU (`null` if never sold)
+- `value_inr` per SKU = `available_qty × WAC` (WAC from `SKUService.compute_wac_map`, falls back to `base_price` if no cost-bearing events)
+- `dead_sku_count` = SKUs with `closing > 0` AND (`ageing_days` null OR `>= 60d`)
+- `short_sku_count` = SKUs with `0 < available_qty <= 5` (**placeholder** — P4.3 swaps for per-SKU `reorder_level`)
+
+### GET `/dashboard/inventory-position.csv` (P4.1)
+**Auth:** `report_view` permission required
+**Query:** same as `/inventory-position`
+**Response:** `text/csv` attachment. Filename: `inventory-position_<from>_<to>.csv`
+**Columns:** Design, SKU Code, Product, Color, Size, Opening, Stock In, Stock Out, Returns, Losses, Net, Closing, Reserved, Available, WAC (₹), Value (₹), Ageing (days)
+**Note:** One row per SKU (flattened across groups). Not envelope-wrapped.
+
 ### GET `/dashboard/inventory-summary`
 **Response:**
 ```json

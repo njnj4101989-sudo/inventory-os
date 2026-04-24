@@ -1,8 +1,11 @@
 """Dashboard routes — summary, reports, tailor performance, inventory movement."""
 
+import csv
+import io
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
@@ -123,6 +126,87 @@ async def inventory_movement(
     svc = DashboardService(db)
     result = await svc.get_inventory_movement(sku_id or "", fd, td)
     return {"success": True, "data": result}
+
+
+@router.get("/inventory-position", response_model=None)
+async def inventory_position(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    product_type: str | None = Query(None),
+    fabric_type: str | None = Query(None),
+    stock_status: str | None = Query(None, regex="^(has|zero|negative)?$"),
+    min_value: float | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """P4.1 — Grouped inventory position with ₹ valuation, ageing, 8 KPIs.
+
+    Groups SKUs by design. Filters: product_type, fabric_type, stock_status
+    (has/zero/negative), min_value, search (sku_code/product_name/color).
+    """
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_inventory_position(
+        fd, td,
+        product_type=product_type,
+        fabric_type=fabric_type,
+        stock_status=stock_status,
+        min_value_inr=min_value,
+        search=search,
+    )
+    return {"success": True, "data": result}
+
+
+@router.get("/inventory-position.csv", response_model=None)
+async def inventory_position_csv(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    product_type: str | None = Query(None),
+    fabric_type: str | None = Query(None),
+    stock_status: str | None = Query(None, regex="^(has|zero|negative)?$"),
+    min_value: float | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """CSV export — same filters as inventory-position. Streams a single sheet."""
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_inventory_position(
+        fd, td,
+        product_type=product_type,
+        fabric_type=fabric_type,
+        stock_status=stock_status,
+        min_value_inr=min_value,
+        search=search,
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Design", "SKU Code", "Product", "Color", "Size",
+        "Opening", "Stock In", "Stock Out", "Returns", "Losses", "Net",
+        "Closing", "Reserved", "Available", "WAC (₹)", "Value (₹)", "Ageing (days)",
+    ])
+    for g in result["groups"]:
+        for s in g["skus"]:
+            writer.writerow([
+                g["design_no"] or "", s["sku_code"], s["product_name"], s["color"], s["size"],
+                s["opening_stock"], s["stock_in"], s["stock_out"], s["returns"], s["losses"], s["net_change"],
+                s["closing_stock"], s["reserved_qty"], s["available_qty"],
+                f"{s['wac']:.2f}", f"{s['value_inr']:.2f}",
+                s["ageing_days"] if s["ageing_days"] is not None else "",
+            ])
+    buf.seek(0)
+    filename = f"inventory-position_{fd.isoformat()}_{td.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/sales-report", response_model=None)

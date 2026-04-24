@@ -381,6 +381,229 @@ class DashboardService:
 
         return results
 
+    async def get_inventory_position(
+        self,
+        from_date: date,
+        to_date: date,
+        *,
+        product_type: str | None = None,
+        fabric_type: str | None = None,
+        stock_status: str | None = None,  # 'has' | 'zero' | 'negative'
+        min_value_inr: float | None = None,
+        search: str | None = None,
+        low_stock_threshold: int = 5,
+        dead_stock_days: int = 60,
+    ) -> dict:
+        """P4.1 — Grouped inventory position with ₹ valuation, ageing, KPIs.
+
+        Groups SKUs by design (design_id or product_name fallback). Per-SKU:
+        opening/in/out/returns/net/closing, reserved, available, WAC, value_inr,
+        ageing_days (days since last STOCK_OUT).
+
+        KPIs (period + position):
+          - stock_in, stock_out, returns, net_change (period-scoped)
+          - total_value_inr, skus_with_stock, dead_sku_count (no STOCK_OUT in
+            dead_stock_days), short_sku_count (available <= low_stock_threshold
+            and > 0 — placeholder until P4.3 adds per-SKU reorder_level)
+
+        Returns: {kpis, groups: [{design_no, design_id, product_type, sku_count,
+          total_qty, reserved_qty, available_qty, value_inr, skus: [...]}],
+          totals, period: {from, to}}
+        """
+        from uuid import UUID as UUIDType
+        from collections import defaultdict
+
+        # Lazy import to avoid circular (SKUService imports nothing heavy)
+        from app.services.sku_service import SKUService
+
+        # ── Step 1: Fetch SKUs (filtered at DB level) ──
+        sku_stmt = select(SKU).where(SKU.is_active == True)
+        if product_type:
+            sku_stmt = sku_stmt.where(SKU.product_type == product_type)
+        if search:
+            s = f"%{search.lower()}%"
+            sku_stmt = sku_stmt.where(
+                func.lower(SKU.sku_code).like(s)
+                | func.lower(SKU.product_name).like(s)
+                | func.lower(SKU.color).like(s)
+            )
+        skus = (await self.db.execute(sku_stmt)).scalars().all()
+        if not skus:
+            return {
+                "kpis": {
+                    "stock_in": 0, "stock_out": 0, "returns": 0, "net_change": 0,
+                    "total_value_inr": 0.0, "skus_with_stock": 0,
+                    "dead_sku_count": 0, "short_sku_count": 0,
+                },
+                "groups": [], "totals": {}, "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+            }
+
+        sku_ids = [s.id for s in skus]
+
+        # ── Step 2: Period movement events (single GROUP BY) ──
+        evt_stmt = (
+            select(
+                InventoryEvent.sku_id,
+                InventoryEvent.event_type,
+                func.sum(InventoryEvent.quantity).label("total"),
+            )
+            .where(
+                InventoryEvent.sku_id.in_(sku_ids),
+                func.date(InventoryEvent.performed_at) >= from_date,
+                func.date(InventoryEvent.performed_at) <= to_date,
+            )
+            .group_by(InventoryEvent.sku_id, InventoryEvent.event_type)
+        )
+        evt_map: dict = defaultdict(dict)
+        for row in (await self.db.execute(evt_stmt)).all():
+            evt_map[row.sku_id][row.event_type] = int(row.total)
+
+        # ── Step 3: Last STOCK_OUT per SKU (for ageing + dead-stock KPI) ──
+        last_out_stmt = (
+            select(
+                InventoryEvent.sku_id,
+                func.max(func.date(InventoryEvent.performed_at)).label("last_out"),
+            )
+            .where(
+                InventoryEvent.sku_id.in_(sku_ids),
+                InventoryEvent.event_type.in_(("stock_out", "STOCK_OUT")),
+            )
+            .group_by(InventoryEvent.sku_id)
+        )
+        last_out_map = {r.sku_id: r.last_out for r in (await self.db.execute(last_out_stmt)).all()}
+
+        # ── Step 4: Current inventory state ──
+        inv_stmt = select(InventoryState).where(InventoryState.sku_id.in_(sku_ids))
+        inv_map = {s.sku_id: s for s in (await self.db.execute(inv_stmt)).scalars().all()}
+
+        # ── Step 5: WAC per SKU (₹ valuation source, AS-2 compliant) ──
+        sku_svc = SKUService(self.db)
+        wac_map = await sku_svc.compute_wac_map(sku_ids)
+
+        # ── Step 6: Build per-SKU rows + apply post-filters (stock_status, min_value) ──
+        today = date.today()
+        sku_rows: list[dict] = []
+        for sku in skus:
+            totals = evt_map.get(sku.id, {})
+            stock_in = totals.get("stock_in", 0) + totals.get("STOCK_IN", 0)
+            stock_out = totals.get("stock_out", 0) + totals.get("STOCK_OUT", 0)
+            returns_ = totals.get("return", 0) + totals.get("RETURN", 0)
+            losses = totals.get("loss", 0) + totals.get("LOSS", 0)
+            net_change = stock_in + returns_ - stock_out - losses
+
+            inv = inv_map.get(sku.id)
+            closing = inv.total_qty if inv else 0
+            reserved = inv.reserved_qty if inv else 0
+            available = inv.available_qty if inv else 0
+            opening = max(closing - net_change, 0)
+
+            wac = wac_map.get(sku.id) or float(sku.base_price or 0)
+            value_inr = round(available * wac, 2) if available > 0 else 0.0
+
+            last_out = last_out_map.get(sku.id)
+            ageing_days = (today - last_out).days if last_out else None
+
+            # Post-filters
+            if stock_status == "has" and closing <= 0:
+                continue
+            if stock_status == "zero" and closing != 0:
+                continue
+            if stock_status == "negative" and closing >= 0:
+                continue
+            if min_value_inr is not None and value_inr < min_value_inr:
+                continue
+            if fabric_type:
+                # SKUs have no fabric_type column — filter by product_name containing fabric
+                if fabric_type.lower() not in (sku.product_name or "").lower():
+                    continue
+
+            sku_rows.append({
+                "sku_id": str(sku.id),
+                "sku_code": sku.sku_code,
+                "product_name": sku.product_name,
+                "product_type": sku.product_type,
+                "color": sku.color,
+                "size": sku.size,
+                "design_id": str(sku.design_id) if sku.design_id else None,
+                "opening_stock": opening,
+                "stock_in": stock_in,
+                "stock_out": stock_out,
+                "returns": returns_,
+                "losses": losses,
+                "net_change": net_change,
+                "closing_stock": closing,
+                "reserved_qty": reserved,
+                "available_qty": available,
+                "wac": round(wac, 2),
+                "value_inr": value_inr,
+                "ageing_days": ageing_days,
+            })
+
+        # ── Step 7: Group by design (design_id | product_name fallback) ──
+        groups_map: dict = defaultdict(lambda: {
+            "design_id": None, "design_no": None, "product_type": None,
+            "sku_count": 0, "total_qty": 0, "reserved_qty": 0, "available_qty": 0,
+            "value_inr": 0.0, "skus": [],
+        })
+        for row in sku_rows:
+            key = row["design_id"] or f"name:{row['product_name']}"
+            g = groups_map[key]
+            g["design_id"] = row["design_id"]
+            g["design_no"] = row["product_name"]
+            g["product_type"] = row["product_type"]
+            g["sku_count"] += 1
+            g["total_qty"] += row["closing_stock"]
+            g["reserved_qty"] += row["reserved_qty"]
+            g["available_qty"] += row["available_qty"]
+            g["value_inr"] = round(g["value_inr"] + row["value_inr"], 2)
+            g["skus"].append(row)
+
+        groups = sorted(groups_map.values(), key=lambda g: g["value_inr"], reverse=True)
+
+        # ── Step 8: KPIs ──
+        total_in = sum(r["stock_in"] for r in sku_rows)
+        total_out = sum(r["stock_out"] for r in sku_rows)
+        total_ret = sum(r["returns"] for r in sku_rows)
+        total_loss = sum(r["losses"] for r in sku_rows)
+        total_net = total_in + total_ret - total_out - total_loss
+        total_value = round(sum(r["value_inr"] for r in sku_rows), 2)
+        skus_with_stock = sum(1 for r in sku_rows if r["closing_stock"] > 0)
+
+        dead_count = 0
+        short_count = 0
+        for r in sku_rows:
+            ad = r["ageing_days"]
+            if r["closing_stock"] > 0 and (ad is None or ad >= dead_stock_days):
+                dead_count += 1
+            if 0 < r["available_qty"] <= low_stock_threshold:
+                short_count += 1
+
+        kpis = {
+            "stock_in": total_in,
+            "stock_out": total_out,
+            "returns": total_ret,
+            "net_change": total_net,
+            "total_value_inr": total_value,
+            "skus_with_stock": skus_with_stock,
+            "dead_sku_count": dead_count,
+            "short_sku_count": short_count,  # placeholder — P4.3 will use per-SKU reorder_level
+        }
+
+        totals = {
+            "opening_stock": sum(r["opening_stock"] for r in sku_rows),
+            "closing_stock": sum(r["closing_stock"] for r in sku_rows),
+            "reserved_qty": sum(r["reserved_qty"] for r in sku_rows),
+            "available_qty": sum(r["available_qty"] for r in sku_rows),
+            "value_inr": total_value,
+        }
+
+        return {
+            "kpis": kpis,
+            "groups": groups,
+            "totals": totals,
+            "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+        }
+
     async def get_inventory_summary(self) -> dict:
         """Inventory KPI cards — matches API_REFERENCE.md §12 inventory-summary."""
         # Total SKUs

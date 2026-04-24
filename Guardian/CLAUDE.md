@@ -33,7 +33,43 @@
 
 ---
 
-## Current State (Session 115b — 2026-04-24) — IN PROGRESS
+## Current State (Session 115c — 2026-04-24) — IN PROGRESS
+
+**P4.1: Inventory Reports professional overhaul — grouped by design, ₹ valuation, 8 KPIs, CSV export.**
+
+Rebuilt the `Inventory` tab in `ReportsPage` from a flat SKU movement table into a professional report surface matching the plan in `REPORTS_AND_INVENTORY_PLAN.md` § Phase 4.
+
+**Backend:**
+  - `dashboard_service.py::get_inventory_position(from_date, to_date, *, product_type, fabric_type, stock_status, min_value_inr, search, low_stock_threshold, dead_stock_days)` — single call returning `{kpis, groups[design → skus[]], totals, period}`. Reuses `SKUService.compute_wac_map` for AS-2 compliant valuation. Ageing = days since last `STOCK_OUT` event per SKU. 8 KPIs computed in-method (4 period + 4 position). Groups sorted by `value_inr` desc.
+  - New endpoints: `GET /dashboard/inventory-position` + `GET /dashboard/inventory-position.csv` (streaming text/csv with attachment disposition). Both filter-aware.
+  - `fabric_type` filter currently matches substring in `product_name` — SKUs don't have a fabric_type column. P4.5 (Raw Material sub-tab) is the real home for fabric-level grouping.
+  - `short_sku_count` uses a hard threshold of 5 as placeholder — P4.3 swaps this for per-SKU `reorder_level` column.
+
+**Frontend:**
+  - `ReportsPage.jsx::InventoryTab` completely rewritten. Self-fetches via `getInventoryPosition`. State: 5 filter fields + expanded-groups Set.
+  - 8 KPI cards in 2 rows (4+4): Stock In / Out / Returns / Net Change + Inventory Value / SKUs with Stock / Dead SKUs / Low Stock.
+  - Custom accordion (not DataTable — DataTable's expandedRows pattern doesn't fit sibling-row grouping cleanly). Design parent row shows aggregates + chevron; click expands nested SKU rows.
+  - Ageing badge colour logic extracted to `ageingBadgeClass(days)` helper: green <30d, amber 30-60d, orange 60-90d, red >90d, gray null.
+  - Filter bar: FilterSelect (product_type, stock_status) + numeric min-value input + SearchInput + Clear. Expand All / Collapse All links. Emerald "Export CSV" button right-aligned.
+  - Typography: strict `.typo-*` adherence per guardian.md Protocol 10 (`typo-page-title`, `typo-section-title`, `typo-th`, `typo-td`, `typo-td-secondary`, `typo-kpi`, `typo-kpi-label`, `typo-badge`, `typo-btn-sm`, `typo-caption`, `typo-empty`, `typo-input-sm`). Emerald-600 theme for all primary actions.
+  - Removed dead `movementData` state + `getMovement` import from parent.
+
+**Docs:**
+  - `API_REFERENCE.md`: both endpoints documented with full request/response shape, filter semantics, CSV column list, ageing/WAC notes.
+  - `REPORTS_AND_INVENTORY_PLAN.md`: P4.1 checklist ticked. `4.1j` (custom date-range popover) deferred to P4.8 (global period picker coordination).
+
+**Deferred in P4.1:**
+  - `4.1j` custom date-range popover — low-value alone; fold into P4.8 polish pass.
+  - `fabric_type` filter semantics — wait for P4.5.
+  - Per-SKU reorder_level — P4.3 scope.
+
+**Next up in Phase 4:** P4.5 (Raw Material sub-tab — biggest missing data gap), then P4.2 (Ageing & Dead Stock dedicated view).
+
+**No migration. Pure read-side aggregation over existing tables.**
+
+---
+
+## Previous State (Session 115b — 2026-04-24) — CLOSED
 
 **Write-off UX polish: contextual helpers + bulk write-off on Remnant tab.**
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getMovement, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport } from '../api/dashboard'
+import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV } from '../api/dashboard'
+import FilterSelect from '../components/common/FilterSelect'
+import SearchInput from '../components/common/SearchInput'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ErrorAlert from '../components/common/ErrorAlert'
 
@@ -154,106 +156,246 @@ function ProductionTab({ data }) {
 // ═══════════════════════════════════════════════════════
 //  INVENTORY TAB
 // ═══════════════════════════════════════════════════════
-function InventoryTab({ data }) {
-  if (!data || data.length === 0) return <p className="typo-empty py-8 text-center">No inventory movement data.</p>
+// ── P4.1: Ageing badge colours (< 30d green, 30-60d amber, 60-90d orange, >90d red) ──
+function ageingBadgeClass(days) {
+  if (days == null) return 'bg-gray-50 text-gray-500 ring-gray-400/20'
+  if (days < 30) return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+  if (days < 60) return 'bg-amber-50 text-amber-700 ring-amber-600/20'
+  if (days < 90) return 'bg-orange-50 text-orange-700 ring-orange-600/20'
+  return 'bg-red-50 text-red-700 ring-red-600/20'
+}
 
-  const totals = data.reduce((acc, r) => ({
-    stock_in: acc.stock_in + r.stock_in,
-    stock_out: acc.stock_out + r.stock_out,
-    returns: acc.returns + r.returns,
-    losses: acc.losses + r.losses,
-    net: acc.net + r.net_change,
-  }), { stock_in: 0, stock_out: 0, returns: 0, losses: 0, net: 0 })
+function formatINR(n) {
+  if (n == null || isNaN(n)) return '₹0'
+  return '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+}
+
+function InventoryTab({ period }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Filters
+  const [productType, setProductType] = useState('')
+  const [stockStatus, setStockStatus] = useState('')
+  const [minValue, setMinValue] = useState('')
+  const [search, setSearch] = useState('')
+
+  // Expanded design groups
+  const [expanded, setExpanded] = useState(new Set())
+
+  const fetchData = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const params = { period }
+      if (productType) params.product_type = productType
+      if (stockStatus) params.stock_status = stockStatus
+      if (minValue) params.min_value = parseFloat(minValue)
+      if (search.trim()) params.search = search.trim()
+      const res = await getInventoryPosition(params)
+      setData(res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load inventory position')
+    } finally { setLoading(false) }
+  }, [period, productType, stockStatus, minValue, search])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const toggleGroup = (key) => setExpanded(s => {
+    const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n
+  })
+  const expandAll = () => setExpanded(new Set((data?.groups || []).map(g => g.design_id || g.design_no)))
+  const collapseAll = () => setExpanded(new Set())
+
+  const clearFilters = () => { setProductType(''); setStockStatus(''); setMinValue(''); setSearch('') }
+  const activeFilters = [productType, stockStatus, minValue, search].filter(v => v !== '' && v != null).length
+
+  const handleCSV = () => {
+    const params = { period }
+    if (productType) params.product_type = productType
+    if (stockStatus) params.stock_status = stockStatus
+    if (minValue) params.min_value = minValue
+    if (search.trim()) params.search = search.trim()
+    downloadInventoryPositionCSV(params)
+  }
+
+  if (loading && !data) return <div className="py-12"><LoadingSpinner size="lg" text="Loading inventory position..." /></div>
+  if (error) return <ErrorAlert message={error} onDismiss={() => setError(null)} />
+  if (!data) return <p className="typo-empty py-8 text-center">No data.</p>
+
+  const { kpis, groups, totals } = data
+  const productTypeOptions = [{ value: '', label: 'All Product Types' }, ...new Set(groups.map(g => g.product_type).filter(Boolean))].map(v => typeof v === 'string' ? { value: v, label: v } : v)
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
+      {/* ── KPI Grid: Row 1 = Period movement, Row 2 = Position (as-of-today) ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Stock In" value={`+${totals.stock_in}`} sub="Total incoming pieces"
+        <KpiCard label="Stock In" value={`+${kpis.stock_in}`} sub="Incoming pieces"
           color="bg-emerald-500" icon="M7 11l5-5m0 0l5 5m-5-5v12" />
-        <KpiCard label="Stock Out" value={`-${totals.stock_out}`} sub="Total shipped / consumed"
+        <KpiCard label="Stock Out" value={`-${kpis.stock_out}`} sub="Shipped / consumed"
           color="bg-red-500" icon="M17 13l-5 5m0 0l-5-5m5 5V6" />
-        <KpiCard label="Returns" value={totals.returns} sub="Pieces returned"
+        <KpiCard label="Returns" value={kpis.returns} sub="Pieces returned"
           color="bg-amber-500" icon="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-        <KpiCard label="Net Change" value={totals.net >= 0 ? `+${totals.net}` : totals.net}
-          sub={totals.net >= 0 ? 'Stock increased' : 'Stock decreased'}
-          color={totals.net >= 0 ? 'bg-blue-500' : 'bg-red-500'}
+        <KpiCard label="Net Change" value={kpis.net_change >= 0 ? `+${kpis.net_change}` : kpis.net_change}
+          sub={kpis.net_change >= 0 ? 'Stock increased' : 'Stock decreased'}
+          color={kpis.net_change >= 0 ? 'bg-blue-500' : 'bg-red-500'}
           icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
       </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Inventory Value" value={formatINR(kpis.total_value_inr)} sub="Current ₹ on hand (WAC)"
+          color="bg-violet-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="SKUs with Stock" value={kpis.skus_with_stock} sub="Active inventory"
+          color="bg-emerald-600" icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        <KpiCard label="Dead SKUs" value={kpis.dead_sku_count} sub="No sale in 60d"
+          color="bg-red-500" icon="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <KpiCard label="Low Stock" value={kpis.short_sku_count} sub="Available ≤ 5"
+          color="bg-amber-500" icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </div>
 
-      {/* Movement Table */}
-      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="typo-section-title mb-4">SKU-wise Movement</h3>
+      {/* ── Filter bar ── */}
+      <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterSelect value={productType} onChange={setProductType} options={productTypeOptions} />
+          <FilterSelect value={stockStatus} onChange={setStockStatus} options={[
+            { value: '', label: 'All Stock' },
+            { value: 'has', label: 'Has Stock' },
+            { value: 'zero', label: 'Zero Stock' },
+            { value: 'negative', label: 'Negative Stock' },
+          ]} />
+          <input type="number" min="0" step="100" value={minValue}
+            onChange={e => setMinValue(e.target.value)}
+            placeholder="Min ₹ Value"
+            className="typo-input-sm w-32" />
+          <div className="flex-1 max-w-sm">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search SKU, design, color..." />
+          </div>
+          {activeFilters > 0 && (
+            <button onClick={clearFilters}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              Clear ({activeFilters})
+            </button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={expandAll} className="typo-btn-sm text-gray-500 hover:text-emerald-700 underline">Expand All</button>
+            <span className="text-gray-300">·</span>
+            <button onClick={collapseAll} className="typo-btn-sm text-gray-500 hover:text-emerald-700 underline">Collapse All</button>
+            <button onClick={handleCSV}
+              title="Download CSV"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 transition-colors shadow-sm">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Grouped Accordion Table ── */}
+      <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="typo-section-title">Inventory Position (by Design)</h3>
+          <span className="typo-caption">{groups.length} design group{groups.length !== 1 ? 's' : ''}</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-gray-500">
-                <th className="pb-3 font-medium">SKU</th>
-                <th className="pb-3 font-medium">Product</th>
-                <th className="pb-3 font-medium">Period</th>
-                <th className="pb-3 font-medium">Opening</th>
-                <th className="pb-3 font-medium text-emerald-600">Stock In</th>
-                <th className="pb-3 font-medium text-red-600">Stock Out</th>
-                <th className="pb-3 font-medium">Returns</th>
-                <th className="pb-3 font-medium">Losses</th>
-                <th className="pb-3 font-medium">Net</th>
-                <th className="pb-3 font-medium">Closing</th>
-                <th className="pb-3 font-medium">Turnover</th>
+              <tr className="border-b bg-gray-50 text-left">
+                <th className="py-2 px-3 typo-th w-6"></th>
+                <th className="py-2 px-3 typo-th">Design / SKU</th>
+                <th className="py-2 px-3 typo-th">Product</th>
+                <th className="py-2 px-3 typo-th text-right">Opening</th>
+                <th className="py-2 px-3 typo-th text-right">In</th>
+                <th className="py-2 px-3 typo-th text-right">Out</th>
+                <th className="py-2 px-3 typo-th text-right">Net</th>
+                <th className="py-2 px-3 typo-th text-right">Closing</th>
+                <th className="py-2 px-3 typo-th text-right">Reserved</th>
+                <th className="py-2 px-3 typo-th text-right">Available</th>
+                <th className="py-2 px-3 typo-th text-right">WAC</th>
+                <th className="py-2 px-3 typo-th text-right">Value (₹)</th>
+                <th className="py-2 px-3 typo-th text-center">Ageing</th>
               </tr>
             </thead>
             <tbody>
-              {data.map((row, i) => (
-                <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-3 typo-data">{row.sku_code}</td>
-                  <td className="py-3 text-gray-500 text-xs">{row.product_name}</td>
-                  <td className="py-3 text-gray-400 text-xs">
-                    {new Date(row.period.from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                    {' — '}
-                    {new Date(row.period.to).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                  </td>
-                  <td className="py-3 font-medium">{row.opening_stock}</td>
-                  <td className="py-3 text-emerald-600 font-medium">+{row.stock_in}</td>
-                  <td className="py-3 text-red-600 font-medium">-{row.stock_out}</td>
-                  <td className="py-3">{row.returns}</td>
-                  <td className="py-3">{row.losses > 0 ? <span className="text-red-500">{row.losses}</span> : '0'}</td>
-                  <td className="py-3">
-                    <span className={`font-semibold ${row.net_change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {row.net_change >= 0 ? '+' : ''}{row.net_change}
-                    </span>
-                  </td>
-                  <td className="py-3 font-bold text-gray-900">{row.closing_stock}</td>
-                  <td className="py-3">
-                    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${
-                      row.turnover_rate > 0.3
-                        ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
-                        : row.turnover_rate > 0.1
-                          ? 'bg-amber-50 text-amber-700 ring-amber-600/20'
-                          : 'bg-gray-50 text-gray-600 ring-gray-600/20'
-                    }`}>
-                      {(row.turnover_rate * 100).toFixed(0)}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {groups.length === 0 && (
+                <tr><td colSpan={13} className="py-8 text-center"><span className="typo-empty">No SKUs match the current filters.</span></td></tr>
+              )}
+              {groups.map((g) => {
+                const key = g.design_id || g.design_no
+                const isOpen = expanded.has(key)
+                return (
+                  <React.Fragment key={key}>
+                    {/* Design parent row */}
+                    <tr onClick={() => toggleGroup(key)}
+                      className="border-b border-gray-100 bg-gray-50/80 hover:bg-emerald-50/60 cursor-pointer transition-colors">
+                      <td className="py-2 px-3">
+                        <svg className={`h-4 w-4 text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </td>
+                      <td className="py-2 px-3 typo-td font-semibold text-emerald-700">{g.design_no || '—'} <span className="typo-caption ml-1">({g.sku_count} SKUs)</span></td>
+                      <td className="py-2 px-3"><span className="typo-badge rounded bg-gray-100 border border-gray-200 px-1.5 py-0.5">{g.product_type || '—'}</span></td>
+                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-2 px-3 text-right typo-td font-semibold">{g.total_qty}</td>
+                      <td className="py-2 px-3 text-right typo-td">{g.reserved_qty}</td>
+                      <td className="py-2 px-3 text-right typo-td font-semibold text-emerald-700">{g.available_qty}</td>
+                      <td className="py-2 px-3 text-right typo-td-secondary">—</td>
+                      <td className="py-2 px-3 text-right typo-td font-bold text-violet-700">{formatINR(g.value_inr)}</td>
+                      <td className="py-2 px-3 text-center typo-td-secondary">—</td>
+                    </tr>
+                    {/* SKU children */}
+                    {isOpen && g.skus.map((s) => (
+                      <tr key={s.sku_id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-1.5 px-3"></td>
+                        <td className="py-1.5 px-3 typo-td font-mono text-xs">
+                          <span className="text-gray-400 mr-2">└</span>{s.sku_code}
+                        </td>
+                        <td className="py-1.5 px-3 typo-td-secondary">{s.color} · {s.size}</td>
+                        <td className="py-1.5 px-3 text-right typo-td">{s.opening_stock}</td>
+                        <td className="py-1.5 px-3 text-right typo-td text-emerald-600 font-medium">+{s.stock_in}</td>
+                        <td className="py-1.5 px-3 text-right typo-td text-red-600 font-medium">-{s.stock_out}</td>
+                        <td className={`py-1.5 px-3 text-right typo-td font-semibold ${s.net_change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {s.net_change >= 0 ? '+' : ''}{s.net_change}
+                        </td>
+                        <td className="py-1.5 px-3 text-right typo-td font-semibold">{s.closing_stock}</td>
+                        <td className="py-1.5 px-3 text-right typo-td-secondary">{s.reserved_qty}</td>
+                        <td className="py-1.5 px-3 text-right typo-td font-medium text-emerald-700">{s.available_qty}</td>
+                        <td className="py-1.5 px-3 text-right typo-td-secondary">{formatINR(s.wac)}</td>
+                        <td className="py-1.5 px-3 text-right typo-td font-medium">{formatINR(s.value_inr)}</td>
+                        <td className="py-1.5 px-3 text-center">
+                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 typo-badge ring-1 ring-inset ${ageingBadgeClass(s.ageing_days)}`}>
+                            {s.ageing_days == null ? '—' : `${s.ageing_days}d`}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                )
+              })}
             </tbody>
-            {/* Totals row */}
-            <tfoot>
-              <tr className="bg-gray-50 typo-data">
-                <td className="py-3" colSpan={3}>Totals</td>
-                <td className="py-3">{data.reduce((s, r) => s + r.opening_stock, 0)}</td>
-                <td className="py-3 text-emerald-600">+{totals.stock_in}</td>
-                <td className="py-3 text-red-600">-{totals.stock_out}</td>
-                <td className="py-3">{totals.returns}</td>
-                <td className="py-3">{totals.losses}</td>
-                <td className="py-3">
-                  <span className={totals.net >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                    {totals.net >= 0 ? '+' : ''}{totals.net}
-                  </span>
-                </td>
-                <td className="py-3">{data.reduce((s, r) => s + r.closing_stock, 0)}</td>
-                <td className="py-3">—</td>
-              </tr>
-            </tfoot>
+            {groups.length > 0 && (
+              <tfoot>
+                <tr className="bg-gray-900 text-white typo-td font-semibold">
+                  <td colSpan={3} className="py-2 px-3">Totals</td>
+                  <td className="py-2 px-3 text-right">{totals.opening_stock}</td>
+                  <td className="py-2 px-3 text-right text-emerald-300">+{kpis.stock_in}</td>
+                  <td className="py-2 px-3 text-right text-red-300">-{kpis.stock_out}</td>
+                  <td className={`py-2 px-3 text-right ${kpis.net_change >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {kpis.net_change >= 0 ? '+' : ''}{kpis.net_change}
+                  </td>
+                  <td className="py-2 px-3 text-right">{totals.closing_stock}</td>
+                  <td className="py-2 px-3 text-right">{totals.reserved_qty}</td>
+                  <td className="py-2 px-3 text-right">{totals.available_qty}</td>
+                  <td className="py-2 px-3 text-right">—</td>
+                  <td className="py-2 px-3 text-right text-violet-200">{formatINR(totals.value_inr)}</td>
+                  <td className="py-2 px-3 text-center">—</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -1538,7 +1680,7 @@ export default function ReportsPage() {
   // Data per tab
   const [productionData, setProductionData] = useState(null)
   const [salesData, setSalesData] = useState(null)
-  const [movementData, setMovementData] = useState([])
+  // Inventory tab self-fetches (P4.1 — grouped by design)
   const [financialData, setFinancialData] = useState(null)
   const [accountingData, setAccountingData] = useState(null)
   const [vaData, setVaData] = useState(null)
@@ -1559,8 +1701,7 @@ export default function ReportsPage() {
         const res = await getSalesReport(params)
         setSalesData(res.data.data)
       } else if (activeTab === 'inventory') {
-        const res = await getMovement(params)
-        setMovementData(res.data.data)
+        // InventoryTab self-fetches via getInventoryPosition (P4.1)
       } else if (activeTab === 'financial') {
         const res = await getFinancialReport(params)
         setFinancialData(res.data.data)
@@ -1655,7 +1796,7 @@ export default function ReportsPage() {
           <>
             {activeTab === 'production' && <ProductionTab data={productionData} />}
             {activeTab === 'sales' && <SalesTab data={salesData} />}
-            {activeTab === 'inventory' && <InventoryTab data={movementData} />}
+            {activeTab === 'inventory' && <InventoryTab period={period} />}
             {activeTab === 'financial' && <FinancialTab data={financialData} />}
             {activeTab === 'accounting' && <AccountingTab data={accountingData} />}
             {activeTab === 'va' && <VATab data={vaData} />}

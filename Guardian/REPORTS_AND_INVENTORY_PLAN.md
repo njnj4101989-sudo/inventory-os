@@ -4,6 +4,15 @@
 > **Scope:** New report tabs on ReportsPage + Inventory page upgrade
 > **Stop-safe:** Every checkbox is independently deployable. Pause after any item.
 
+## Status Snapshot
+
+| Phase | Delivered | Session |
+|-------|-----------|---------|
+| **P1** — Sales + Accounting + Inventory Raw Material | ✅ COMPLETE | S95 |
+| **P2** — VA Processing + Purchases & Suppliers | ✅ COMPLETE | S95 |
+| **P3** — Returns Analysis + Inventory Enhancements + Polish | ✅ COMPLETE | S95 |
+| **P4** — Inventory Reports Professional Overhaul (this doc, jump to [§ Phase 4](#phase-4-inventory-reports-professional-overhaul)) | 🟡 QUEUED | S116+ |
+
 ---
 
 ## Current State
@@ -430,3 +439,272 @@
 After all 3 phases: **44 of 42 tables** represented in reports (some tables contribute to multiple reports).
 
 **No new models, no migrations. Pure read-only aggregation queries + UI.**
+
+---
+
+## Phase 4: Inventory Reports Professional Overhaul
+
+> **Created:** 2026-04-24 (Session 115/116)
+> **Trigger:** User feedback — current Inventory tab is flat, pieces-only, no grouping, no ₹ value, no ageing/reorder signals, rolls absent.
+> **Goal:** Turn the Inventory tab from a single flat SKU movement table into a professional reports suite with grouped views, ₹ valuation, dead stock / shortage detection, raw material visibility, and export.
+> **Stop-safe:** Each sub-phase (P4.1, P4.2, …) ships independently. Close any of them whenever the value is captured.
+
+### Non-negotiable constraints (read BEFORE touching code)
+
+- **Typography** — use `.typo-*` classes only. See [guardian.md Protocol 10](guardian.md). No raw Tailwind typography like `text-sm font-medium text-gray-700`, no per-file constants (`const LABEL = ...`). Quick map:
+  - Page: `typo-page-title` / Section: `typo-section-title` / Card: `typo-card-title` / Modal: `typo-modal-title`
+  - Table: `typo-th` (header), `typo-td` (cell), `typo-td-secondary` (muted cell)
+  - KPIs: `typo-kpi` (big), `typo-kpi-sm` (small — pair with color class for coloured KPIs), `typo-kpi-label`
+  - Form: `typo-label`, `typo-label-sm`, `typo-input`, `typo-input-sm`
+  - Buttons: `typo-btn`, `typo-btn-sm` / Chips: `typo-badge`
+  - Tabs: `typo-tab` + emerald underline (`border-b-2 border-emerald-600 text-emerald-700`)
+  - Body: `typo-body` / Caption/empty: `typo-caption`, `typo-empty` (have gray baked in — don't use on dark bg)
+- **Theme** — all focus rings, active tabs, primary buttons, filter pills use **emerald-600**. No `primary-600`, no blue for UI chrome.
+- **Dropdowns** — use `FilterSelect` component (not native `<select>`). `full` prop for forms, default for filters. `searchable` prop for lists >20 items.
+- **Pagination** — use `Pagination` component. Use `page_size=0` to "fetch all" when aggregating client-side (memory rule).
+- **Auth** — all new endpoints require `get_fy_id(current_user)` + permission check (usually `reports_view` or `inventory_view`).
+- **Response envelope** — all endpoints return `{ success, data, message? }`. Paginated lists: `{ data: [], total, page, pages }`.
+- **No new models, no migrations** unless explicitly approved — aggregations over existing tables only.
+- **API_REFERENCE.md updates mandatory** — every new endpoint documented before commit (Protocol 5).
+
+---
+
+### P4.1 — Structural rebuild of Inventory tab (grouped + valued + ageing)
+
+**Goal:** Replace the flat `SKU-wise Movement` table with design-grouped accordion. Add ₹ valuation, reserved/available, ageing column, and CSV export. Add 4 more KPI cards (total 8).
+
+#### Backend
+
+- [x] **4.1a** New service method `get_inventory_position(fy_id, filters, group_by='design')` in `dashboard_service.py`
+  - Returns `{ kpis: {...}, groups: [{ design_no, design_id, product_type, sku_count, total_qty, reserved_qty, available_qty, value_inr, skus: [...] }], totals: {...} }`
+  - ₹ value per SKU = `available_qty × WAC` (reuse `SKUService.compute_wac_map(fy_id)`)
+  - Ageing per SKU = days since last `STOCK_OUT` inventory_event (null → "never sold")
+  - Filters: `product_type`, `fabric_type`, `stock_status` (has/zero/negative), `min_value_inr`, `design_search`
+- [x] **4.1b** KPI calc inside the same method — 8 metrics:
+  - Row 1 (movement, period-scoped): `stock_in`, `stock_out`, `returns`, `net_change` (existing)
+  - Row 2 (position, as-of-today): `total_value_inr`, `skus_with_stock`, `dead_sku_count` (no STOCK_OUT in 60d), `short_sku_count` (available < `sku.reorder_level`, ignore if reorder_level null)
+- [x] **4.1c** New endpoint `GET /dashboard/inventory-position` — accepts `?from=&to=&product_type=&fabric_type=&stock_status=&min_value=&search=`
+- [x] **4.1d** CSV export variant `GET /dashboard/inventory-position.csv` — same filters, streams CSV (no envelope) with columns: Design, SKU, Color, Size, Opening, In, Out, Returns, Net, Closing, Reserved, Available, WAC, Value ₹, Ageing Days
+- [x] **4.1e** Document both endpoints in `API_REFERENCE.md`
+
+#### Frontend — `ReportsPage.jsx::InventoryTab`
+
+- [x] **4.1f** Two-row KPI grid (4 + 4) using `KpiCard` — row 1 period-scoped (existing), row 2 position-scoped (new); follow existing `KpiCard` pattern, keep `typo-kpi` / `typo-kpi-label`
+- [x] **4.1g** Replace flat table with grouped accordion:
+  - Parent row (design): chevron + design_no + product_type badge + aggregate columns (sku_count, total_qty, reserved, available, value_inr)
+  - Child rows (SKUs within design): current columns PLUS Reserved, Available, WAC, Value ₹, Ageing Days
+  - Ageing badge colour: `<30d` emerald, `30-60d` amber, `60-90d` orange, `>90d` red — implemented via `ageingBadgeClass` helper + `typo-badge`
+  - Custom accordion (chevron on design row, click to toggle) instead of DataTable — DataTable's expandedRows pattern didn't fit the sibling-row model cleanly
+- [x] **4.1h** Sticky filter bar above table: `FilterSelect` for product_type + stock_status + min_value numeric input + `SearchInput` + Clear button. (`fabric_type` filter deferred — SKUs don't have a fabric_type column, only rolls do; needs P4.5 roll-side work to be meaningful)
+- [x] **4.1i** CSV export button — `typo-btn-sm` emerald, right of filter bar. Hits `.csv` endpoint via `downloadInventoryPositionCSV` helper (anchor click; cookies inherited).
+- [ ] **4.1j** Period picker upgrade — **DEFERRED to P4.8 polish**. Would require cross-tab coordination (period picker is global). Current `7d/30d/90d` pills still work for inventory. Scoped custom date-range can layer in when P4.8 ships.
+- [x] **4.1k** Wire to `getInventoryPosition(params)` in `api/dashboard.js` (+ mock + CSV download helper)
+
+#### Deploy gate
+
+- [x] **4.1l** Local smoke: group expand/collapse works, filters combine, CSV downloads, KPIs match totals (backend import + route registration verified; frontend syntax clean)
+- [ ] **4.1m** Update `CLAUDE.md` session entry, commit, push — verify CI/CD + Vercel
+
+---
+
+### P4.2 — Ageing & Dead Stock sub-tab
+
+**Goal:** A dedicated view sorted by inactivity with ₹-at-risk totals. Answers "what capital is stuck in non-moving stock?"
+
+#### Backend
+
+- [ ] **4.2a** New service method `get_stock_ageing(fy_id, thresholds={30,60,90})` in `dashboard_service.py`
+  - Returns `{ buckets: [{ label: '0-30d', sku_count, value_inr }, ...], rows: [{ sku_code, design_no, available_qty, wac, value_inr, last_out_date, days_idle, bucket }] }`
+  - `days_idle` = days since last STOCK_OUT event (null → "never sold, age from first STOCK_IN")
+- [ ] **4.2b** New endpoint `GET /dashboard/stock-ageing` — accepts `?thresholds=30,60,90` (optional), `?product_type=`, `?min_value=`
+- [ ] **4.2c** Document in `API_REFERENCE.md`
+
+#### Frontend — new sub-tab inside Inventory
+
+- [ ] **4.2d** Introduce a **sub-tab bar** inside `InventoryTab` — emerald underline, `typo-tab` — options: `Stock Position` (P4.1) / `Ageing & Dead Stock` (P4.2) / `Reorder & Shortage` (P4.3) / `ABC Analysis` (P4.4) / `Raw Material` (P4.5) / `Variance` (P4.6) / `Wastage` (P4.7)
+- [ ] **4.2e** `AgeingTab` component: 4 KPI bucket cards (0-30 / 30-60 / 60-90 / 90+) each showing sku_count + value_inr. Table sorted by `days_idle desc` with ageing badge column.
+- [ ] **4.2f** Row click → link to SKU detail page (reuse existing `/skus?open=<id>` deep-link)
+- [ ] **4.2g** CSV export variant
+
+#### Deploy gate
+
+- [ ] **4.2h** Local smoke, commit, deploy
+
+---
+
+### P4.3 — Reorder & Shortage sub-tab
+
+**Goal:** "What's about to stock out?" List SKUs where current availability is below the reorder threshold.
+
+#### Data-model decision (pick one before building)
+
+- **Option A (simple):** New nullable column `skus.reorder_level: int` — user sets per SKU via SKUs page (inline edit). Null = not tracked.
+- **Option B (smart):** Compute demand velocity per SKU (avg units sold / day over last 30d), combine with fixed `lead_time_days` (setting on company), threshold = `velocity × lead_time`.
+- **Recommendation:** A first (ships fast, user-controlled). B can layer in later with `reorder_level_auto` fallback.
+
+#### Backend
+
+- [ ] **4.3a** **[IF Option A]** Migration: add nullable `skus.reorder_level INT` to tenant schema (follow Protocol 9 pattern — `tenant_utils.col_exists` guard)
+- [ ] **4.3b** Schema: add `reorder_level` to `SKUUpdate` request + response
+- [ ] **4.3c** Service method `get_reorder_report(fy_id)` in `dashboard_service.py`
+  - Returns rows where `available_qty < reorder_level` — columns: sku_code, design, available, reserved, reorder_level, gap, avg_daily_velocity_30d, days_until_stockout (= available / velocity, null if velocity 0), value_at_risk
+- [ ] **4.3d** New endpoint `GET /dashboard/reorder-report`
+- [ ] **4.3e** Document endpoint + column in `API_REFERENCE.md`
+
+#### Frontend
+
+- [ ] **4.3f** SKUsPage: add `reorder_level` inline-editable cell (compact `typo-input-sm`, numeric)
+- [ ] **4.3g** `ReorderTab` component: 3 KPIs (skus_short, value_at_risk, avg_days_to_stockout). Table sorted by `days_until_stockout asc` (most urgent first). Red row bg if <3d.
+- [ ] **4.3h** Wire via `getReorderReport(params)` in `api/dashboard.js`
+- [ ] **4.3i** CSV export
+
+#### Deploy gate
+
+- [ ] **4.3j** Migration run on prod (if Option A) — CI/CD handles via `alembic upgrade head`
+- [ ] **4.3k** Local smoke, commit, deploy
+
+---
+
+### P4.4 — ABC Analysis sub-tab
+
+**Goal:** 80/20 classification — which SKUs carry the bulk of value (A) vs the long tail (C). Drives attention, cycle-count cadence, procurement priority.
+
+#### Backend
+
+- [ ] **4.4a** Service method `get_abc_analysis(fy_id, period_days=365)` in `dashboard_service.py`
+  - For each SKU: `annual_revenue = SUM(invoice_items.qty × rate)` over period → sort desc → cumulative % → bucket A (≤80% cumulative), B (80-95%), C (>95%)
+  - Also compute `annual_volume` (qty sold) for secondary analysis
+  - Return: `{ buckets: { A: {count, value_pct}, B: {...}, C: {...} }, rows: [{ sku_code, design, annual_revenue, annual_volume, value_pct, cumulative_pct, bucket }] }`
+- [ ] **4.4b** New endpoint `GET /dashboard/abc-analysis?period_days=365`
+- [ ] **4.4c** Document in `API_REFERENCE.md`
+
+#### Frontend
+
+- [ ] **4.4d** `ABCTab` component: 3 KPI cards (A / B / C) showing `sku_count (value_pct%)` each. Table with A/B/C coloured badge (emerald / amber / gray).
+- [ ] **4.4e** Default sort by `annual_revenue desc`; sticky filter: bucket, product_type
+- [ ] **4.4f** CSV export
+
+#### Deploy gate
+
+- [ ] **4.4g** Local smoke, commit, deploy
+
+---
+
+### P4.5 — Raw Material (Rolls) sub-tab — upgrade + drill-in
+
+**Goal:** Raw material IS a report gap today — the existing `Raw Material` tab is on InventoryPage but not inside Reports. Bring rolls into ReportsPage Inventory.
+
+#### Backend
+
+- [ ] **4.5a** Service method `get_raw_material_report(fy_id, group_by='fabric')` in `dashboard_service.py`
+  - Groups rolls by `fabric_type` → `color` → `supplier`. Each leaf: `roll_count, total_weight_kg, total_value_inr` (weight × WAC from roll.base_price / purchase events)
+  - KPIs: total_rolls, total_weight, in_stock_value, at_va_value, remnant_value, written_off_value
+  - Exclude `status='returned'` from active totals; include `written_off` in its own metric
+- [ ] **4.5b** New endpoint `GET /dashboard/raw-material-report?group_by=fabric|color|supplier`
+- [ ] **4.5c** Document in `API_REFERENCE.md`
+
+#### Frontend
+
+- [ ] **4.5d** `RawMaterialTab` in the new sub-tab bar (mirrors existing InventoryPage tab but with reports-style aggregation). Accordion by fabric → color → supplier. Row click → deep-link `/rolls?fabric=&color=`
+- [ ] **4.5e** 6 KPI cards: Total Rolls, Total Weight, In Stock ₹, At VA ₹, Remnant ₹, Written-off ₹
+- [ ] **4.5f** CSV export
+
+#### Deploy gate
+
+- [ ] **4.5g** Local smoke, commit, deploy
+
+---
+
+### P4.6 — Variance sub-tab (physical vs system)
+
+**Goal:** Expose the existing `StockVerification` model (built S97, unused in reports) as a report surface.
+
+#### Backend
+
+- [ ] **4.6a** Service method `get_variance_report(fy_id)` — queries `stock_verifications` + `stock_verification_items`. Per-verification summary + per-SKU variance rows
+- [ ] **4.6b** New endpoint `GET /dashboard/variance-report`
+- [ ] **4.6c** Document in `API_REFERENCE.md`
+
+#### Frontend
+
+- [ ] **4.6d** `VarianceTab` component: verification history list (date, counted_by, skus_checked, variance_sku_count, variance_value_inr). Click a verification → drawer with per-SKU variance lines
+- [ ] **4.6e** KPIs: last_verification_date, total_variance_value_inr (absolute), skus_with_variance
+
+#### Deploy gate
+
+- [ ] **4.6f** Local smoke, commit, deploy
+
+---
+
+### P4.7 — Wastage Report sub-tab
+
+**Goal:** Carries over from S116 queue. Unify three waste streams into one ₹ picture.
+
+#### Backend
+
+- [ ] **4.7a** Service method `get_wastage_report(fy_id, from_date, to_date)` — aggregates:
+  1. **Cutting waste** — SUM(`lot_rolls.waste_weight × roll.base_price`) per lot
+  2. **Damage waste** — SUM(`return_note_items.pieces_damaged × sku.base_price`) + SUM(`sales_return_items.pieces_damaged × sku.base_price`)
+  3. **Write-off waste** — SUM rolls where `status='written_off'` of `remaining_weight_at_writeoff × base_price` (snapshot at write-off time — for now use `write_off_notes` or query InventoryEvent; fallback: `total_weight × base_price` if no snapshot)
+  - Group by month. Total wastage ₹, wastage % (waste / total consumption)
+- [ ] **4.7b** New endpoint `GET /dashboard/wastage-report?from=&to=`
+- [ ] **4.7c** Document in `API_REFERENCE.md`
+
+#### Frontend
+
+- [ ] **4.7d** `WastageTab` component: 4 KPIs (Cutting Waste ₹, Damage ₹, Write-off ₹, Total Wastage %). Monthly breakdown table + stacked bar chart (optional, defer if tight)
+- [ ] **4.7e** CSV export
+
+#### Deploy gate
+
+- [ ] **4.7f** Local smoke, commit, deploy
+
+---
+
+### P4.8 — Cross-cutting UX polish (bundles with whichever phase ships first)
+
+- [ ] **4.8a** Sticky filter bar at top of `InventoryTab` (outside sub-tabs) — period picker lives here (global across sub-tabs)
+- [ ] **4.8b** Drill-down links consistent across all sub-tabs: SKU → `/skus?open=<id>`; Design → `/skus?design=<no>`; Roll → `/scan/roll/<code>`; Lot → `/lots?open=<id>`
+- [ ] **4.8c** Keyboard: `Ctrl+F` focuses search; `E` exports current sub-tab CSV
+- [ ] **4.8d** Empty states per sub-tab — use `typo-empty` class, single line, no clipart
+- [ ] **4.8e** Loading states — use `LoadingSpinner` size="lg" with `text="Loading {subtab} report..."`
+
+---
+
+### P4 File Change Map (estimated)
+
+| Layer | File | Touch |
+|---|---|---|
+| BE schema | `schemas/dashboard.py` or new `schemas/reports.py` | Add 7 response models |
+| BE service | `services/dashboard_service.py` | +7 methods (or split into `reports_service.py` if >2000 lines) |
+| BE service | `services/sku_service.py` | Reuse `compute_wac_map` — no change |
+| BE migration | `migrations/versions/XXXX_reorder_level.py` | +1 (P4.3 only, if Option A) |
+| BE model | `models/sku.py` | +1 column (P4.3 only, if Option A) |
+| BE routes | `api/dashboard.py` or new `api/reports.py` | +7 endpoints + 1 CSV variant |
+| FE API | `api/dashboard.js` | +7 functions + mocks |
+| FE page | `pages/ReportsPage.jsx` | Rewrite `InventoryTab` + add sub-tab bar + 7 sub-tab components |
+| FE page | `pages/SKUsPage.jsx` | Add `reorder_level` inline edit (P4.3) |
+| Docs | `Guardian/API_REFERENCE.md` | Document 7 endpoints + 1 CSV + `reorder_level` field |
+| Docs | `Guardian/CLAUDE.md` | Per-sub-phase session entries |
+
+---
+
+### P4 Summary
+
+| Sub-phase | Backend Methods | New Endpoints | Frontend | Migrations | Risk |
+|---|---:|---:|---|---:|---|
+| P4.1 Structural | 1 | 2 (JSON + CSV) | Rebuild InventoryTab | 0 | Low |
+| P4.2 Ageing | 1 | 1 | New sub-tab | 0 | Low |
+| P4.3 Reorder | 1 | 1 | New sub-tab + SKU edit | 1 (if Option A) | Medium |
+| P4.4 ABC | 1 | 1 | New sub-tab | 0 | Low |
+| P4.5 Raw Material | 1 | 1 | New sub-tab | 0 | Low |
+| P4.6 Variance | 1 | 1 | New sub-tab | 0 | Low |
+| P4.7 Wastage | 1 | 1 | New sub-tab | 0 | Low |
+| P4.8 UX | — | — | Cross-cutting | 0 | Low |
+| **Total** | **7** | **8** | **7 new sub-tabs + rebuilt parent** | **0-1** | — |
+
+**Recommended start order:** P4.1 → P4.5 → P4.2 → P4.3 → P4.4 → P4.7 → P4.6 → P4.8
+
+Rationale: P4.1 delivers the biggest daily-use improvement (the table everyone uses). P4.5 covers the visible gap (rolls invisible in reports). P4.2 + P4.3 unblock capital-efficiency decisions. P4.4 + P4.7 are analysis layers. P4.6 is audit-oriented (lowest frequency). P4.8 folds in polish as phases ship.
+
+**Close criteria per sub-phase:** All checkboxes ticked + deployed to prod + `CLAUDE.md` session entry updated. No sub-phase requires the next to be valuable.
