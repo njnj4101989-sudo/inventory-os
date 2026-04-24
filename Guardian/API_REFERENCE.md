@@ -1703,7 +1703,12 @@ When `sku` is present:
 
 ### GET `/dashboard/sales-report`
 **Auth:** `report_view`
-**Query:** `period` (`7d`|`30d`|`90d`) or `from`+`to` dates
+**Query:**
+- `period?` — `7d`/`30d`/`90d` (default 30d)
+- `from?`, `to?` — explicit date range
+- `stuck_days?` — pending orders older than this count as stuck (default `7`, range `1-90`). P5.1
+- `top_n?` — top N products + top N stuck-order rows (default `10`, range `5-50`). P5.1
+
 **Response:**
 ```json
 {
@@ -1755,9 +1760,52 @@ When `sku` is present:
       "commission_rate": 3.0,
       "commission_earned": 2250.0
     }
+  ],
+  "previous_period": {
+    "from": "2026-02-23", "to": "2026-03-24",
+    "total_orders": 20, "total_revenue": 120000.0,
+    "avg_fulfillment_days": 2.8, "return_rate_pct": 3.5
+  },
+  "stuck_orders": {
+    "count": 8,
+    "total_value": 240000.0,
+    "threshold_days": 7,
+    "rows": [
+      {
+        "order_id": "uuid", "order_number": "ORD-0042",
+        "customer_name": "Fashion Hub",
+        "days_pending": 12,
+        "total_amount": 32000.0
+      }
+    ]
+  },
+  "top_products": [
+    {
+      "sku_id": "uuid", "sku_code": "FBL-1080-RED-M",
+      "product_name": "1080",
+      "units_sold": 45,
+      "revenue_inr": 22500.0,
+      "available_qty": 18
+    }
+  ],
+  "revenue_daily": [
+    { "date": "2026-03-25", "revenue": 4500.0 },
+    { "date": "2026-03-26", "revenue": 6200.0 }
   ]
 }
 ```
+
+**Notes (P5.1):**
+- `previous_period` = shifted same-span window (e.g., period `30d` → previous 30d just before). Used for MoM delta badges.
+- `stuck_orders.rows` capped at `top_n`; `count` + `total_value` are aggregates across ALL stuck orders.
+- `top_products` — top N by units sold (invoice_items). `available_qty` is current InventoryState.
+- `revenue_daily` — zero-filled array for every date in range (sparkline fits even with sparse data).
+
+### GET `/dashboard/sales-report.csv` (P5.2)
+**Auth:** `report_view`
+**Query:** same as `/sales-report` (period + from/to)
+**Response:** `text/csv` attachment. Filename: `sales-report_<from>_<to>.csv`
+**Columns:** Rank, Customer, Orders, Revenue (₹), Returns (₹), Net Revenue (₹), Avg Order (₹) — one row per customer from the ranking.
 
 ### GET `/dashboard/accounting-report`
 **Auth:** `report_view`

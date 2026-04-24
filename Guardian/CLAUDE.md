@@ -33,7 +33,39 @@
 
 ---
 
-## Current State (Session 115c — 2026-04-24) — IN PROGRESS
+## Current State (Session 115d — 2026-04-24) — IN PROGRESS
+
+**P5 Tier 1: Sales & Orders Report WOW overhaul — stuck-orders alert, MoM delta KPIs, revenue sparkline, real funnel, top products, CSV.**
+
+Rebuilt `SalesTab` in ReportsPage per Phase 5 of `REPORTS_AND_INVENTORY_PLAN.md`.
+
+**Backend (`dashboard_service.get_sales_report`):**
+  - Extended single endpoint to return 4 new payload sections: `previous_period` (shifted same-span window for deltas), `stuck_orders` (count/total_value/rows for pending orders > threshold), `top_products` (top N by units sold with current stock), `revenue_daily` (per-day series for sparkline).
+  - New query params: `stuck_days` (1-90, default 7), `top_n` (5-50, default 10).
+  - New endpoint `GET /dashboard/sales-report.csv` — streams customer-ranking sheet.
+
+**Frontend (`SalesTab`, `KpiCard`, new helpers):**
+  - Amber **stuck-orders banner** at top (dismissable, links to `/orders?status=pending`).
+  - `KpiCard` upgraded with optional `delta` (green/red pill with ▲/▼ arrow) + `sparkline` (SVG line+area chart, no deps). All 4 KPIs show MoM delta; Revenue KPI shows 30-day sparkline.
+  - `OrderFunnel` component (new) — 5-stage horizontal bars sized proportionally by count. Drop-off % labels between stages (red for loss, emerald for gain). Cancelled shown separately as exit-before-fulfilment. Stages are clickable and deep-link to Orders page filtered.
+  - **Top Products** section — ranked table with SKU, design, units sold, revenue ₹, and stock-level pill (emerald > 10, amber ≤ 10, red 0). Row click → SKU detail.
+  - Emerald "Export CSV" button above KPIs → downloads customer-ranking CSV.
+  - All existing Customer Ranking + Broker Commission tables retained unchanged.
+
+**Note on tool friction this session:** the Edit tool's JSON transport layer converts `₹` JS unicode escapes in my input strings to the literal `₹` char, so targeted Edit calls on lines containing the existing escape sequences repeatedly failed to match. Worked around by using a Python script to do the SalesTab rewrite directly. New code uses literal `₹` instead of `₹` escape — same runtime output, no future edit friction.
+
+**Files touched:**
+  - BE: `schemas/lot.py` imports InvoiceItem; `services/dashboard_service.py` (extended get_sales_report + 4 new sections); `api/dashboard.py` (new params on /sales-report, new /sales-report.csv endpoint).
+  - FE: `api/dashboard.js` (new `downloadSalesReportCSV` helper); `pages/ReportsPage.jsx` (upgraded KpiCard with delta+sparkline, new Sparkline + OrderFunnel + pctDelta helpers, rewritten SalesTab).
+  - Docs: `API_REFERENCE.md` (extended sales-report + new CSV endpoint); `REPORTS_AND_INVENTORY_PLAN.md` (Phase 5 added + all Tier 1 checkboxes ticked).
+
+**No migration.** Read-side aggregation only.
+
+**Tier 2/3 deferred** — per plan: customer-bar charts, geo cut, order-size buckets, churn risk, broker ROI, drill-down drawers, period compare toggle.
+
+---
+
+## Previous State (Session 115c — 2026-04-24) — CLOSED
 
 **P4.1: Inventory Reports professional overhaul — grouped by design, ₹ valuation, 8 KPIs, CSV export.**
 

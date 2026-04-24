@@ -110,6 +110,20 @@ export function downloadInventoryPositionCSV(params = {}) {
   document.body.appendChild(a); a.click(); a.remove()
 }
 
+// P5.2 — Sales report CSV download (customer ranking sheet)
+export function downloadSalesReportCSV(params = {}) {
+  const qs = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.append(k, v)
+  })
+  const base = client.defaults.baseURL || ''
+  const url = `${base}/dashboard/sales-report.csv?${qs.toString()}`
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a); a.click(); a.remove()
+}
+
 export async function getProductionReport(params = {}) {
   if (USE_MOCK) {
     return mockResponse(productionReport)

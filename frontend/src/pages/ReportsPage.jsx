@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV } from '../api/dashboard'
+import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV, downloadSalesReportCSV } from '../api/dashboard'
+import { useNavigate } from 'react-router-dom'
 import FilterSelect from '../components/common/FilterSelect'
 import SearchInput from '../components/common/SearchInput'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -26,23 +27,128 @@ const PERIODS = [
 ]
 
 // ── Shared KPI Card ───────────────────────────────────
-function KpiCard({ label, value, sub, color = 'bg-blue-500', icon }) {
+// P5.4: supports optional `delta` ({pct, label, higherIsBetter}) and `sparkline` (number[]).
+function KpiCard({ label, value, sub, color = 'bg-blue-500', icon, delta, sparkline }) {
+  let deltaNode = null
+  if (delta && typeof delta.pct === 'number' && isFinite(delta.pct)) {
+    const higherIsBetter = delta.higherIsBetter !== false
+    const isNeutral = delta.pct === 0
+    const isGood = higherIsBetter ? delta.pct > 0 : delta.pct < 0
+    const arrow = isNeutral ? '—' : (delta.pct > 0 ? '▲' : '▼')
+    const cls = isNeutral
+      ? 'bg-gray-100 text-gray-500'
+      : (isGood ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700')
+    deltaNode = (
+      <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 typo-badge font-semibold ${cls}`}>
+        {arrow} {Math.abs(delta.pct).toFixed(1)}%
+      </span>
+    )
+  }
   return (
     <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
       <div className="flex items-start justify-between">
-        <div>
-          <p className="typo-kpi-label">{label}</p>
-          <p className="mt-1 typo-kpi">{value}</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="typo-kpi-label">{label}</p>
+            {deltaNode}
+          </div>
+          <p className="mt-1 typo-kpi truncate">{value}</p>
           {sub && <p className="mt-1 typo-caption">{sub}</p>}
+          {sparkline && sparkline.length > 1 && <Sparkline points={sparkline} />}
         </div>
         {icon && (
-          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color}`}>
+          <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${color} flex-shrink-0`}>
             <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} />
             </svg>
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Sparkline — hand-drawn SVG line chart, no deps ────
+function Sparkline({ points, width = 140, height = 32, color = '#059669' /* emerald-600 */ }) {
+  if (!points || points.length < 2) return null
+  const max = Math.max(...points, 1)
+  const min = Math.min(...points, 0)
+  const range = max - min || 1
+  const step = width / (points.length - 1)
+  const path = points.map((v, i) => {
+    const x = (i * step).toFixed(1)
+    const y = (height - ((v - min) / range) * height).toFixed(1)
+    return `${i === 0 ? 'M' : 'L'}${x},${y}`
+  }).join(' ')
+  // Area fill
+  const area = `${path} L${width},${height} L0,${height} Z`
+  return (
+    <svg className="mt-2" width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <path d={area} fill={color} opacity="0.1" />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+// Compute a safe percentage delta between two numbers. Returns null if prev=0 and curr=0.
+function pctDelta(curr, prev) {
+  const c = Number(curr) || 0
+  const p = Number(prev) || 0
+  if (p === 0 && c === 0) return 0
+  if (p === 0) return 100
+  return ((c - p) / p) * 100
+}
+
+// P5.5 — Order fulfilment funnel (hand-drawn SVG-less, no deps)
+function OrderFunnel({ fulfillment, onStageClick }) {
+  const stages = [
+    { key: 'pending', label: 'Pending', count: fulfillment.pending || 0, color: '#9ca3af' },
+    { key: 'processing', label: 'Processing', count: fulfillment.processing || 0, color: '#3b82f6' },
+    { key: 'partially_shipped', label: 'Partial Ship', count: fulfillment.partially_shipped || 0, color: '#f59e0b' },
+    { key: 'shipped', label: 'Shipped', count: fulfillment.shipped || 0, color: '#10b981' },
+    { key: 'delivered', label: 'Delivered', count: fulfillment.delivered || 0, color: '#059669' },
+  ]
+  const cancelled = fulfillment.cancelled || 0
+  const maxCount = Math.max(...stages.map(s => s.count), 1)
+
+  return (
+    <div>
+      <div className="flex items-stretch gap-2">
+        {stages.map((s, i) => {
+          const heightPct = Math.max(8, (s.count / maxCount) * 100)
+          const dropoff = i > 0 && stages[i - 1].count > 0
+            ? Math.round(((stages[i - 1].count - s.count) / stages[i - 1].count) * 100)
+            : null
+          return (
+            <React.Fragment key={s.key}>
+              <div className="flex-1 flex flex-col items-center">
+                <button
+                  onClick={() => onStageClick && onStageClick(s.key)}
+                  className="w-full flex flex-col items-center justify-center rounded-lg transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  style={{ backgroundColor: s.color, height: `${24 + heightPct * 0.8}px`, color: 'white' }}
+                  title={`${s.label}: ${s.count} orders — click to view`}>
+                  <span className="typo-kpi-sm text-white font-bold">{s.count}</span>
+                </button>
+                <span className="typo-caption mt-1.5 text-gray-600">{s.label}</span>
+              </div>
+              {dropoff != null && i < stages.length - 1 && (
+                <div className="flex flex-col items-center justify-center self-center -mx-1 z-10">
+                  <span className={`typo-badge rounded px-1.5 py-0.5 ring-1 ring-inset ${dropoff > 0 ? 'bg-red-50 text-red-700 ring-red-600/30' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/30'}`}>
+                    {dropoff > 0 ? `-${dropoff}%` : `+${Math.abs(dropoff)}%`}
+                  </span>
+                </div>
+              )}
+            </React.Fragment>
+          )
+        })}
+      </div>
+      {cancelled > 0 && (
+        <div className="mt-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+          <span className="typo-badge rounded bg-red-100 text-red-700 px-2 py-0.5 font-semibold">Cancelled</span>
+          <span className="typo-data text-red-700">{cancelled} order{cancelled !== 1 ? 's' : ''}</span>
+          <span className="typo-caption text-red-600 ml-auto">Exit before fulfilment</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -716,48 +822,138 @@ function TailorTab({ data }) {
 // ═══════════════════════════════════════════════════════
 //  SALES & ORDERS TAB
 // ═══════════════════════════════════════════════════════
-function SalesTab({ data }) {
+function SalesTab({ data, period }) {
+  const navigate = useNavigate()
+  const [stuckDismissed, setStuckDismissed] = useState(false)
   if (!data) return null
   const k = data.kpis
+  const prev = data.previous_period || {}
+  const stuck = data.stuck_orders || { count: 0, total_value: 0, threshold_days: 7, rows: [] }
+  const topProducts = data.top_products || []
+  const revenueDaily = (data.revenue_daily || []).map(r => r.revenue)
+
+  const handleCSV = () => downloadSalesReportCSV({ period })
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Orders" value={k.total_orders} sub={`Pending: ${k.orders_by_status?.pending || 0}, Shipped: ${k.orders_by_status?.shipped || 0}`}
-          color="bg-blue-500" icon="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-        <KpiCard label="Total Revenue" value={`\u20B9${k.total_revenue.toLocaleString()}`} sub="From invoices (issued + paid)"
-          color="bg-emerald-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        <KpiCard label="Avg Fulfillment" value={`${k.avg_fulfillment_days}d`} sub="Order to shipment"
-          color={k.avg_fulfillment_days <= 3 ? 'bg-emerald-500' : 'bg-amber-500'} icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        <KpiCard label="Return Rate" value={`${k.return_rate_pct}%`} sub={k.return_rate_pct <= 5 ? 'Healthy' : 'Needs attention'}
-          color={k.return_rate_pct <= 5 ? 'bg-emerald-500' : 'bg-red-500'} icon="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+      {/* P5.3 - Stuck orders alert banner */}
+      {stuck.count > 0 && !stuckDismissed && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <svg className="h-5 w-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="typo-body text-amber-900">
+              <span className="font-semibold">{stuck.count} order{stuck.count !== 1 ? 's' : ''} pending {'>'} {stuck.threshold_days}d</span>
+              <span className="text-amber-700"> - ₹{Number(stuck.total_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })} stuck</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => navigate('/orders?status=pending')}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-amber-700 transition-colors">
+              View -{'>'}
+            </button>
+            <button onClick={() => setStuckDismissed(true)}
+              title="Dismiss (will reappear next load)"
+              className="rounded p-1 text-amber-600 hover:bg-amber-100">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Export CSV button, above KPIs */}
+      <div className="flex justify-end">
+        <button onClick={handleCSV}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 transition-colors shadow-sm">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Export CSV
+        </button>
       </div>
 
-      {/* Fulfillment Funnel */}
+      {/* KPIs with MoM delta + Revenue sparkline (P5.4) */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Orders" value={k.total_orders}
+          sub={`Pending: ${k.orders_by_status?.pending || 0}, Shipped: ${k.orders_by_status?.shipped || 0}`}
+          color="bg-blue-500" icon="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+          delta={{ pct: pctDelta(k.total_orders, prev.total_orders), label: 'vs prev' }} />
+        <KpiCard label="Total Revenue" value={`₹${Number(k.total_revenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} sub="From invoices (issued + paid)"
+          color="bg-emerald-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          delta={{ pct: pctDelta(k.total_revenue, prev.total_revenue), label: 'vs prev' }}
+          sparkline={revenueDaily} />
+        <KpiCard label="Avg Fulfillment" value={`${k.avg_fulfillment_days}d`} sub="Order to shipment"
+          color={k.avg_fulfillment_days <= 3 ? 'bg-emerald-500' : 'bg-amber-500'} icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+          delta={{ pct: pctDelta(k.avg_fulfillment_days, prev.avg_fulfillment_days), label: 'vs prev', higherIsBetter: false }} />
+        <KpiCard label="Return Rate" value={`${k.return_rate_pct}%`} sub={k.return_rate_pct <= 5 ? 'Healthy' : 'Needs attention'}
+          color={k.return_rate_pct <= 5 ? 'bg-emerald-500' : 'bg-red-500'} icon="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+          delta={{ pct: pctDelta(k.return_rate_pct, prev.return_rate_pct), label: 'vs prev', higherIsBetter: false }} />
+      </div>
+
+      {/* P5.5 - Fulfillment funnel (SVG tapered) */}
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h3 className="typo-section-title mb-4">Order Fulfillment Funnel</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4">
-          {[
-            { label: 'Pending', val: data.fulfillment.pending, color: 'bg-gray-100 text-gray-700' },
-            { label: 'Processing', val: data.fulfillment.processing, color: 'bg-blue-100 text-blue-700' },
-            { label: 'Partial Ship', val: data.fulfillment.partially_shipped, color: 'bg-amber-100 text-amber-700' },
-            { label: 'Shipped', val: data.fulfillment.shipped, color: 'bg-emerald-100 text-emerald-700' },
-            { label: 'Delivered', val: data.fulfillment.delivered, color: 'bg-green-100 text-green-700' },
-            { label: 'Cancelled', val: data.fulfillment.cancelled, color: 'bg-red-100 text-red-700' },
-            { label: 'Fulfillment', val: `${data.fulfillment.fulfillment_rate_pct}%`, color: 'bg-emerald-600 text-white' },
-          ].map((s) => (
-            <div key={s.label} className={`rounded-lg p-3 text-center ${s.color}`}>
-              <p className="typo-kpi-label">{s.label}</p>
-              <p className="typo-kpi-sm mt-1">{s.val}</p>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="typo-section-title">Order Fulfillment Funnel</h3>
+          <span className="typo-caption">{data.fulfillment.fulfillment_rate_pct}% items fulfilled</span>
         </div>
-        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+        <OrderFunnel fulfillment={data.fulfillment} onStageClick={(status) => navigate(`/orders?status=${status}`)} />
+        <div className="grid grid-cols-3 gap-4 pt-4 mt-4 border-t border-gray-100">
           <div><p className="typo-data-label">Items Ordered</p><p className="typo-data">{data.fulfillment.items_ordered}</p></div>
           <div><p className="typo-data-label">Items Fulfilled</p><p className="typo-data text-emerald-600">{data.fulfillment.items_fulfilled}</p></div>
           <div><p className="typo-data-label">Items Returned</p><p className="typo-data text-red-600">{data.fulfillment.items_returned}</p></div>
         </div>
+      </div>
+
+      {/* P5.6 - Top Products (Best Sellers) */}
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="typo-section-title">Best Sellers (This Period)</h3>
+          <span className="typo-caption">Top {topProducts.length} by units sold</span>
+        </div>
+        {topProducts.length === 0 ? (
+          <p className="typo-empty py-6 text-center">No products sold in this period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50 text-left">
+                  <th className="py-2 px-3 typo-th w-10">#</th>
+                  <th className="py-2 px-3 typo-th">SKU</th>
+                  <th className="py-2 px-3 typo-th">Design</th>
+                  <th className="py-2 px-3 typo-th text-right">Units Sold</th>
+                  <th className="py-2 px-3 typo-th text-right">Revenue</th>
+                  <th className="py-2 px-3 typo-th text-center">Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topProducts.map((p, i) => {
+                  const stockCls = p.available_qty === 0
+                    ? 'bg-red-50 text-red-700 ring-red-600/30'
+                    : p.available_qty <= 10
+                      ? 'bg-amber-50 text-amber-700 ring-amber-600/30'
+                      : 'bg-emerald-50 text-emerald-700 ring-emerald-600/30'
+                  return (
+                    <tr key={p.sku_id}
+                      onClick={() => navigate(`/skus?open=${p.sku_id}`)}
+                      className="border-b border-gray-100 hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                      <td className="py-2 px-3 typo-td-secondary">{i + 1}</td>
+                      <td className="py-2 px-3 typo-td font-mono text-xs">{p.sku_code}</td>
+                      <td className="py-2 px-3 typo-td">{p.product_name}</td>
+                      <td className="py-2 px-3 text-right typo-td font-bold text-emerald-700 tabular-nums">{p.units_sold}</td>
+                      <td className="py-2 px-3 text-right typo-td font-semibold tabular-nums">₹{Number(p.revenue_inr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                      <td className="py-2 px-3 text-center">
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 typo-badge ring-1 ring-inset ${stockCls}`}>
+                          {p.available_qty}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Customer Ranking */}
@@ -1859,7 +2055,7 @@ export default function ReportsPage() {
         ) : (
           <>
             {activeTab === 'production' && <ProductionTab data={productionData} />}
-            {activeTab === 'sales' && <SalesTab data={salesData} />}
+            {activeTab === 'sales' && <SalesTab data={salesData} period={period} />}
             {activeTab === 'inventory' && <InventoryTab period={period} />}
             {activeTab === 'financial' && <FinancialTab data={financialData} />}
             {activeTab === 'accounting' && <AccountingTab data={accountingData} />}

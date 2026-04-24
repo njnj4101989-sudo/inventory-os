@@ -29,6 +29,7 @@ from app.models.ledger_entry import LedgerEntry
 from app.models.va_party import VAParty
 from app.models.job_challan import JobChallan
 from app.models.batch_challan import BatchChallan
+from app.models.invoice_item import InvoiceItem
 
 
 class DashboardService:
@@ -930,8 +931,13 @@ class DashboardService:
     #  SALES & ORDERS REPORT (P1.1)
     # ═══════════════════════════════════════════════════════
 
-    async def get_sales_report(self, from_date: date, to_date: date, fy_id=None) -> dict:
-        """Sales & Orders report — KPIs, customer ranking, fulfillment funnel, broker commission."""
+    async def get_sales_report(
+        self, from_date: date, to_date: date, fy_id=None,
+        *, stuck_days: int = 7, top_n: int = 10,
+    ) -> dict:
+        """Sales & Orders report — KPIs, customer ranking, fulfillment funnel,
+        broker commission, stuck-orders alert, top products, daily revenue series,
+        and previous-period comparison (P5.1)."""
         ord_fy = [Order.fy_id == fy_id] if fy_id else []
         inv_fy = [Invoice.fy_id == fy_id] if fy_id else []
 
@@ -1130,6 +1136,172 @@ class DashboardService:
                 "commission_earned": commission,
             })
 
+        # ── P5.1: Previous-period KPIs (shifted date range, same span) ──
+        span_days = (to_date - from_date).days + 1
+        prev_from = from_date - timedelta(days=span_days)
+        prev_to = from_date - timedelta(days=1)
+
+        prev_orders_count = (await self.db.execute(
+            select(func.count()).select_from(Order)
+            .where(
+                func.date(Order.created_at) >= prev_from,
+                func.date(Order.created_at) <= prev_to,
+                *ord_fy,
+            )
+        )).scalar() or 0
+
+        prev_revenue = float((await self.db.execute(
+            select(func.coalesce(func.sum(Invoice.total_amount), 0))
+            .where(
+                Invoice.status.in_(["issued", "paid"]),
+                func.date(Invoice.created_at) >= prev_from,
+                func.date(Invoice.created_at) <= prev_to,
+                *inv_fy,
+            )
+        )).scalar() or 0)
+
+        prev_ship_agg = (await self.db.execute(
+            select(
+                func.avg(
+                    func.extract("epoch", Shipment.shipped_at - Order.created_at) / 86400
+                ).label("avg_days"),
+            )
+            .join(Order, Order.id == Shipment.order_id)
+            .where(
+                func.date(Order.created_at) >= prev_from,
+                func.date(Order.created_at) <= prev_to,
+                *ord_fy,
+            )
+        )).one()
+        prev_avg_fulfillment = round(float(prev_ship_agg.avg_days or 0), 1)
+
+        prev_sr_count = (await self.db.execute(
+            select(func.count()).select_from(SalesReturn)
+            .where(
+                SalesReturn.status != "cancelled",
+                func.date(SalesReturn.created_at) >= prev_from,
+                func.date(SalesReturn.created_at) <= prev_to,
+            )
+        )).scalar() or 0
+        prev_return_rate = round(prev_sr_count / prev_orders_count * 100, 1) if prev_orders_count > 0 else 0.0
+
+        previous_period = {
+            "from": prev_from.isoformat(),
+            "to": prev_to.isoformat(),
+            "total_orders": int(prev_orders_count),
+            "total_revenue": prev_revenue,
+            "avg_fulfillment_days": prev_avg_fulfillment,
+            "return_rate_pct": prev_return_rate,
+        }
+
+        # ── P5.1: Stuck orders (pending > stuck_days) ──
+        today = date.today()
+        stuck_cutoff = today - timedelta(days=stuck_days)
+        stuck_rows = (await self.db.execute(
+            select(
+                Order.id, Order.order_number, Order.created_at, Order.total_amount,
+                Customer.name.label("customer_name"),
+            )
+            .join(Customer, Customer.id == Order.customer_id)
+            .where(
+                Order.status.in_(["pending", "processing"]),
+                func.date(Order.created_at) <= stuck_cutoff,
+                *ord_fy,
+            )
+            .order_by(Order.created_at.asc())
+            .limit(top_n)
+        )).all()
+        stuck_count_agg = (await self.db.execute(
+            select(
+                func.count().label("cnt"),
+                func.coalesce(func.sum(Order.total_amount), 0).label("total"),
+            )
+            .where(
+                Order.status.in_(["pending", "processing"]),
+                func.date(Order.created_at) <= stuck_cutoff,
+                *ord_fy,
+            )
+        )).one()
+        stuck_orders = {
+            "count": int(stuck_count_agg.cnt or 0),
+            "total_value": float(stuck_count_agg.total or 0),
+            "threshold_days": stuck_days,
+            "rows": [
+                {
+                    "order_id": str(r.id),
+                    "order_number": r.order_number,
+                    "customer_name": r.customer_name,
+                    "days_pending": (today - r.created_at.date()).days,
+                    "total_amount": float(r.total_amount or 0),
+                }
+                for r in stuck_rows
+            ],
+        }
+
+        # ── P5.1: Top products (by units sold in period, via invoice_items) ──
+        top_prod_stmt = (
+            select(
+                SKU.id, SKU.sku_code, SKU.product_name,
+                func.coalesce(func.sum(InvoiceItem.quantity), 0).label("units_sold"),
+                func.coalesce(func.sum(InvoiceItem.total_price), 0).label("revenue"),
+            )
+            .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+            .join(SKU, SKU.id == InvoiceItem.sku_id)
+            .where(
+                Invoice.status.in_(["issued", "paid"]),
+                func.date(Invoice.created_at) >= from_date,
+                func.date(Invoice.created_at) <= to_date,
+                *inv_fy,
+            )
+            .group_by(SKU.id, SKU.sku_code, SKU.product_name)
+            .order_by(func.coalesce(func.sum(InvoiceItem.quantity), 0).desc())
+            .limit(top_n)
+        )
+        top_prod_rows = (await self.db.execute(top_prod_stmt)).all()
+        top_sku_ids = [r.id for r in top_prod_rows]
+        top_inv_map = {}
+        if top_sku_ids:
+            top_inv_rows = (await self.db.execute(
+                select(InventoryState.sku_id, InventoryState.available_qty)
+                .where(InventoryState.sku_id.in_(top_sku_ids))
+            )).all()
+            top_inv_map = {r.sku_id: int(r.available_qty or 0) for r in top_inv_rows}
+        top_products = [
+            {
+                "sku_id": str(r.id),
+                "sku_code": r.sku_code,
+                "product_name": r.product_name,
+                "units_sold": int(r.units_sold),
+                "revenue_inr": float(r.revenue),
+                "available_qty": top_inv_map.get(r.id, 0),
+            }
+            for r in top_prod_rows
+        ]
+
+        # ── P5.1: Daily revenue series (for sparkline) ──
+        daily_stmt = (
+            select(
+                func.date(Invoice.created_at).label("d"),
+                func.coalesce(func.sum(Invoice.total_amount), 0).label("rev"),
+            )
+            .where(
+                Invoice.status.in_(["issued", "paid"]),
+                func.date(Invoice.created_at) >= from_date,
+                func.date(Invoice.created_at) <= to_date,
+                *inv_fy,
+            )
+            .group_by(func.date(Invoice.created_at))
+            .order_by(func.date(Invoice.created_at))
+        )
+        daily_rows = (await self.db.execute(daily_stmt)).all()
+        daily_map = {r.d.isoformat() if hasattr(r.d, "isoformat") else str(r.d): float(r.rev) for r in daily_rows}
+        revenue_daily = []
+        cursor = from_date
+        while cursor <= to_date:
+            iso = cursor.isoformat()
+            revenue_daily.append({"date": iso, "revenue": daily_map.get(iso, 0.0)})
+            cursor = cursor + timedelta(days=1)
+
         return {
             "kpis": {
                 "total_orders": total_orders,
@@ -1138,6 +1310,10 @@ class DashboardService:
                 "return_rate_pct": return_rate,
                 "orders_by_status": orders_by_status,
             },
+            "previous_period": previous_period,
+            "stuck_orders": stuck_orders,
+            "top_products": top_products,
+            "revenue_daily": revenue_daily,
             "customer_ranking": customer_ranking,
             "fulfillment": fulfillment,
             "broker_commission": broker_commission,

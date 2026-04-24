@@ -222,15 +222,54 @@ async def sales_report(
     period: str | None = Query(None),
     from_date: date | None = Query(None, alias="from"),
     to_date: date | None = Query(None, alias="to"),
+    stuck_days: int = Query(7, ge=1, le=90),
+    top_n: int = Query(10, ge=5, le=50),
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("report_view"),
 ):
-    """Sales & Orders report: KPIs, customer ranking, fulfillment funnel, broker commission."""
+    """Sales & Orders report: KPIs, customer ranking, fulfillment funnel, broker
+    commission + previous-period deltas, stuck-orders alert, top products,
+    daily revenue for sparkline (P5.1).
+    """
+    fy_id = get_fy_id(current_user)
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_sales_report(fd, td, fy_id, stuck_days=stuck_days, top_n=top_n)
+    return {"success": True, "data": result}
+
+
+@router.get("/sales-report.csv", response_model=None)
+async def sales_report_csv(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """CSV export — customer ranking of sales report. Streams a single sheet."""
     fy_id = get_fy_id(current_user)
     fd, td = _resolve_period(period, from_date, to_date)
     svc = DashboardService(db)
     result = await svc.get_sales_report(fd, td, fy_id)
-    return {"success": True, "data": result}
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Rank", "Customer", "Orders", "Revenue (₹)", "Returns (₹)", "Net Revenue (₹)", "Avg Order (₹)",
+    ])
+    for i, c in enumerate(result.get("customer_ranking", []), start=1):
+        writer.writerow([
+            i, c["customer_name"], c["order_count"],
+            f"{c['total_revenue']:.2f}", f"{c['total_returns']:.2f}",
+            f"{c['net_revenue']:.2f}", f"{c['avg_order_value']:.2f}",
+        ])
+    buf.seek(0)
+    filename = f"sales-report_{fd.isoformat()}_{td.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/accounting-report", response_model=None)

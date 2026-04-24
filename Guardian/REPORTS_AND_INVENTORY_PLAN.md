@@ -13,6 +13,7 @@
 | **P3** — Returns Analysis + Inventory Enhancements + Polish | ✅ COMPLETE | S95 |
 | **P4.1** — Structural rebuild (grouped + ₹ + ageing + CSV) | ✅ COMPLETE (1 deferred: 4.1j) | S115c (commit `407ca6c`) |
 | **P4.2–4.8** — Remaining sub-phases (Ageing / Reorder / ABC / Raw Material / Variance / Wastage / UX) | 🟡 QUEUED | S116+ |
+| **P5** — Sales & Orders Report WOW Overhaul (Tier 1 COMPLETE: banner + delta KPIs + sparkline + funnel + top products + CSV) | ✅ Tier 1 DONE | S115d |
 
 ---
 
@@ -709,3 +710,92 @@ After all 3 phases: **44 of 42 tables** represented in reports (some tables cont
 Rationale: P4.1 delivers the biggest daily-use improvement (the table everyone uses). P4.5 covers the visible gap (rolls invisible in reports). P4.2 + P4.3 unblock capital-efficiency decisions. P4.4 + P4.7 are analysis layers. P4.6 is audit-oriented (lowest frequency). P4.8 folds in polish as phases ship.
 
 **Close criteria per sub-phase:** All checkboxes ticked + deployed to prod + `CLAUDE.md` session entry updated. No sub-phase requires the next to be valuable.
+
+---
+
+## Phase 5: Sales & Orders Report WOW Overhaul
+
+> **Created:** 2026-04-24 (Session 115d)
+> **Trigger:** User feedback — current Sales tab is flat tables + 7 status cards. No trends, no alerts, no comparisons, no top products.
+> **Goal:** Turn Sales tab into an actionable dashboard — stuck-orders alert, MoM deltas, revenue sparkline, real funnel visualisation, top products panel, CSV export.
+> **Stop-safe:** Tier 1 items are independent. Ship whichever is highest-value first.
+
+### Constraints (inherits from P4 non-negotiables)
+All P4 typography + emerald-theme + component rules apply. See P4 "Non-negotiable constraints" block above. No new dependencies (`recharts` etc.) — SVG hand-drawn for charts.
+
+---
+
+### P5.1 — Backend: extended sales-report payload
+
+**Goal:** single endpoint returns everything the new UI needs — previous-period comparison, stuck orders, top products, daily revenue for sparkline.
+
+- [x] **5.1a** Extend `dashboard_service.get_sales_report(from, to, fy_id, *, stuck_days=7, top_n=10)`:
+  - `previous_period: { total_revenue, total_orders, avg_fulfillment_days, return_rate_pct }` — shifted date range = `(from - span, to - span)` where `span = (to - from) + 1`
+  - `stuck_orders: { count, total_value, threshold_days, rows: [{order_id, order_no, customer_name, days_pending, total_amount}] }` — pending orders older than `stuck_days` (top 10 rows only, full count in summary)
+  - `top_products: [{ sku_id, sku_code, product_name, units_sold, revenue_inr, available_qty }]` — top N by units sold in period, from invoice_items
+  - `revenue_daily: [{ date, revenue }]` — per-day revenue array for sparkline
+- [x] **5.1b** Expose new query params on `GET /dashboard/sales-report`: `stuck_days` (default 7, range 1-90) + `top_n` (default 10, range 5-50)
+- [x] **5.1c** Document extended payload in `API_REFERENCE.md`
+
+### P5.2 — Backend: CSV export
+
+- [x] **5.2a** New endpoint `GET /dashboard/sales-report.csv` — streams customer ranking with columns: Customer, Orders, Revenue, Returns, Net Revenue, Avg Order Value. Same filter params as JSON endpoint.
+- [x] **5.2b** Document in `API_REFERENCE.md`
+
+### P5.3 — Frontend: stuck-orders alert banner
+
+- [x] **5.3a** Amber banner at top of `SalesTab` when `stuck_orders.count > 0`. Format: `⚠ {N} orders pending > {days}d · ₹{value} stuck`. Right-aligned CTA "View →" that deep-links to `/orders?status=pending&from=<date>` (or similar filter).
+- [x] **5.3b** Dismissable (session-scoped; reappears on reload). Use same amber palette as the write-off strip from S115b.
+
+### P5.4 — Frontend: KPIs with MoM delta + Revenue sparkline
+
+- [x] **5.4a** Upgrade `KpiCard` to support optional `delta` prop: `{ pct: number, label: 'vs prev 30d' }` → renders a small pill (green with `▲` if +, red with `▼` if -, gray `—` if 0).
+- [x] **5.4b** Add optional `sparkline` prop: `number[]` (30 data points) → SVG line chart inside the card. No deps.
+- [x] **5.4c** Wire all 4 KPIs: Orders, Revenue, Avg Fulfillment, Return Rate each show delta vs `previous_period`. Revenue KPI additionally shows the 30-day sparkline.
+
+### P5.5 — Frontend: real funnel visualisation (SVG)
+
+- [x] **5.5a** Replace the 7 flat status cards with a tapered horizontal funnel: Pending → Processing → Shipped → Delivered. Width ∝ count per stage. Drop-off % labels between stages (`-12%`).
+- [x] **5.5b** Cancelled shown as a separate small side-card (not in the main funnel flow — it's exit, not progression).
+- [x] **5.5c** Click a funnel segment → deep-link to Orders filtered by that status.
+
+### P5.6 — Frontend: Top Products panel
+
+- [x] **5.6a** New section after funnel titled "Best Sellers (This Period)". Rows: rank, SKU code (mono), design/product name, units sold, revenue ₹, available stock chip (emerald if >10, amber ≤10, red 0).
+- [x] **5.6b** Empty state when no products sold in period.
+- [x] **5.6c** Row click → deep-link `/skus?open=<sku_id>` (S111 pattern).
+
+### P5.7 — Frontend: CSV export + deploy
+
+- [x] **5.7a** Emerald "Export CSV" button at top-right of `SalesTab` (above KPIs). Uses same anchor-tag approach as `downloadInventoryPositionCSV`.
+- [ ] **5.7b** Tick all P5 checkboxes in plan doc, update `CLAUDE.md`, commit, push, verify CI/CD + Vercel.
+
+---
+
+### P5 File Change Map
+
+| Layer | File | Touch |
+|---|---|---|
+| BE service | `services/dashboard_service.py` | Extend `get_sales_report` with 4 new data sections |
+| BE routes | `api/dashboard.py` | `stuck_days` + `top_n` query params on JSON; new CSV endpoint |
+| BE import | `models/sku.py` (already imported) + `models/invoice_item.py` (new import for top_products query) | — |
+| FE API | `api/dashboard.js` | Pass new params; new `downloadSalesReportCSV` helper |
+| FE shared | `pages/ReportsPage.jsx::KpiCard` | Add `delta` + `sparkline` props (inline SVG) |
+| FE component | `pages/ReportsPage.jsx::SalesTab` | Rebuild: banner + KPIs+delta + funnel SVG + Top Products + existing customer/broker tables retained |
+| Docs | `Guardian/API_REFERENCE.md` | Document extended sales-report + CSV endpoint |
+
+---
+
+### P5 Summary
+
+| Item | Backend | Frontend | New deps |
+|---|---|---|---|
+| P5.1 Extended payload | 1 method extended, 2 new query params | — | 0 |
+| P5.2 CSV | 1 new endpoint | — | 0 |
+| P5.3 Stuck banner | — | +30 lines | 0 |
+| P5.4 KPIs + sparkline | — | `KpiCard` upgraded + wire | 0 |
+| P5.5 Funnel SVG | — | +60 lines SVG | 0 |
+| P5.6 Top Products | — | +40 lines | 0 |
+| P5.7 CSV + deploy | — | +15 lines button + plan/doc updates | 0 |
+
+**Deferred to later (Tier 2+):** customer ranking as bars, geo cut, order-size distribution, new-vs-repeat split, churn-risk, broker ROI, clickable rows drawer, period-compare toggle.
