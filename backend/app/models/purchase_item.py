@@ -22,6 +22,13 @@ class PurchaseItem(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     total_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     hsn_code: Mapped[str | None] = mapped_column(String(8))
+    # RESERVED for future multi-rate invoicing (FINANCIAL_SYMMETRY_PLAN
+    # Phase 4.1, deferred). Currently always NULL — the SKUsPage purchase
+    # form collects GST at header level only and stores it on
+    # SupplierInvoice.gst_percent, which drives all totals math. Wire
+    # this into the line form + switch math to SUM(line.qty × line.unit_price
+    # × line.gst_percent / 100) only when a real mixed-HSN supplier
+    # invoice case appears (e.g. fabric @ 5% + trim @ 18% on one invoice).
     gst_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
 
     # Relationships

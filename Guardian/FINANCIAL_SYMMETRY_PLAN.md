@@ -106,7 +106,7 @@ Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoic
 ## Phase 4 — Minor Cleanups 🔒 DEFERRED (1 of 6 done)
 
 ### Scope
-- [ ] `PurchaseItem.gst_percent` (per-line) vs `SupplierInvoice.gst_percent` (header) — pick one home, drop the other or aggregate consistently
+- [ ] `PurchaseItem.gst_percent` — **kept as reserved field** (Option A, S122). Documented in code at `models/purchase_item.py`, `schemas/sku.py:PurchaseLineItem`, and `services/sku_service.py:purchase_stock`. Frontend doesn't collect per-line GST today; header `SupplierInvoice.gst_percent` drives all math. Wire it up only when a real mixed-HSN supplier invoice case appears (e.g. fabric @ 5% + trim @ 18% on one invoice). When that happens: add per-line input to `SKUsPage` purchase form + switch math to `SUM(line.qty × line.unit_price × line.gst_percent / 100)`.
 - [ ] `SKU.gst_percent` — currently inert (HSN drives GST in invoices); decide: drop or wire into `pickDefaultRate` chain
 - [ ] Free-text `additional_label` on Order + Invoice + SupplierInvoice (e.g. "Freight" / "Cartage" / "Packing") — UX nice-to-have once Phase 2 is live
 - [ ] **Bank/Cash chart-of-accounts ("Deposit To" ledger)** — Zoho/QB pattern. Today `payment_mode` is a free string ("neft"/"cash"/etc.); industry-standard is to pick a specific bank ledger (HDFC Current / SBI / Petty Cash). Needs new `BankLedger` master + `bank_ledger_id` FK on payment ledger entries. Defer until a real chart-of-accounts is needed. Linked to S119 (invoice payment recording).

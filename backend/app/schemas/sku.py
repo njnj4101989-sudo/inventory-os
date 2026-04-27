@@ -118,6 +118,10 @@ class PurchaseLineItem(BaseModel):
     qty: int
     unit_price: Decimal
     hsn_code: str | None = None
+    # RESERVED — see PurchaseItem.gst_percent model comment. Frontend
+    # never sends this today; header gst_percent on PurchaseStockRequest
+    # drives all math. Kept on the schema so the wire format is forward-
+    # compatible when multi-rate invoicing is wired up (Phase 4.1).
     gst_percent: Decimal | None = None
 
     @field_validator("qty")

@@ -622,6 +622,10 @@ class SKUService:
             sku.base_price = item.unit_price
             if item.hsn_code and not sku.hsn_code:
                 sku.hsn_code = item.hsn_code
+            # NOTE — item.gst_percent is RESERVED for future multi-rate invoicing
+            # (Phase 4.1, deferred). Today the form sends only header gst_percent,
+            # so this branch never fires in practice. Kept so that wiring up
+            # per-line GST later is a frontend-only change.
             if item.gst_percent is not None and sku.gst_percent is None:
                 sku.gst_percent = item.gst_percent
 
@@ -633,7 +637,7 @@ class SKUService:
                 unit_price=item.unit_price,
                 total_price=total_price,
                 hsn_code=item.hsn_code,
-                gst_percent=item.gst_percent,
+                gst_percent=item.gst_percent,  # reserved — see PurchaseItem model + Phase 4.1
             )
             self.db.add(pi)
             await self.db.flush()
