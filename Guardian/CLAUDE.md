@@ -21,6 +21,7 @@
 | `FY_TRANSITION_PLAN.md` | Opening stock + FY closing fixes + valuation + verification (6 phases) | Before any FY/opening stock work |
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) — COMPLETE | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
+| `FINANCIAL_SYMMETRY_PLAN.md` | Totals stack symmetry across sales/purchase/VA (Phase 1 ✅, Phase 2 next) | Before any totals/discount/additional/tax work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |
