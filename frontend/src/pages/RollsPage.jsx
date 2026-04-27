@@ -505,8 +505,13 @@ export default function RollsPage() {
   const [showLabelSheet, setShowLabelSheet] = useState(false)
   const [showThermalSheet, setShowThermalSheet] = useState(false)
 
-  // Roll selection + bulk actions
+  // Roll selection + bulk actions.
+  // selectedRolls is the source of truth (Set of IDs). rollIndex caches Roll
+  // objects across pages so getSelectedRollObjects() can resolve a selection
+  // that spans multiple search/pagination/filter views — same pattern as
+  // SKUsPage's skuIndex. Cap at 500 entries to bound memory.
   const [selectedRolls, setSelectedRolls] = useState(new Set())
+  const [rollIndex, setRollIndex] = useState(new Map())
   const [showBulkLabels, setShowBulkLabels] = useState(false)
   const [showBulkThermal, setShowBulkThermal] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
@@ -747,10 +752,37 @@ export default function RollsPage() {
 
   const refreshAll = () => { fetchInvoices(); fetchRolls(); fetchProcessing() }
 
-  // Clear selection on any filter/tab/page change
-  useEffect(() => { setSelectedRolls(new Set()) }, [tab, rollStatusFilter, rollAvailFilter, rollSupplierFilter, rollFabricFilter, rollProcessFilter, rollPage, rollSearch])
+  // Clear selection only on TAB change (different action context — All Rolls
+  // vs Stock-In Invoices vs Processing). Search/pagination/filter changes do
+  // NOT wipe — user may be composing a multi-roll selection across queries
+  // (industry standard: Gmail, Linear, Asana). Manual "Clear" button on the
+  // floating bulk bar handles intentional reset.
+  useEffect(() => { setSelectedRolls(new Set()); setRollIndex(new Map()) }, [tab])
 
-  const getSelectedRollObjects = () => rolls.filter((r) => selectedRolls.has(r.id))
+  // Cache visible rolls into rollIndex so cross-page selection survives. Cap
+  // at 500 to avoid unbounded growth on long sessions. Newest entries win.
+  useEffect(() => {
+    if (!rolls || rolls.length === 0) return
+    setRollIndex(prev => {
+      const next = new Map(prev)
+      rolls.forEach(r => next.set(r.id, r))
+      if (next.size > 500) {
+        return new Map([...next].slice(-500))
+      }
+      return next
+    })
+  }, [rolls])
+
+  // Resolve selected IDs to Roll objects via the cache. Falls back to current
+  // page's `rolls` array when an ID isn't cached yet (first-load edge case).
+  const getSelectedRollObjects = () => {
+    const out = []
+    for (const id of selectedRolls) {
+      const r = rollIndex.get(id) || rolls.find(x => x.id === id)
+      if (r) out.push(r)
+    }
+    return out
+  }
 
   const handleBulkSendProcessing = async () => {
     if (!bulkSendForm.value_addition_id) { setBulkSendError('Value Addition is required'); return }
@@ -1934,14 +1966,26 @@ export default function RollsPage() {
             {(() => {
               const isSelectableView = rollStatusFilter !== 'in_stock_processed'
               const sendableRolls = rolls.filter((r) => (r.status === 'in_stock' || r.status === 'remnant') && (r.remaining_weight || 0) > 0)
-              const allSelected = sendableRolls.length > 0 && sendableRolls.every((r) => selectedRolls.has(r.id))
+              const pageAllSelected = sendableRolls.length > 0 && sendableRolls.every((r) => selectedRolls.has(r.id))
+              const pageSomeSelected = sendableRolls.some((r) => selectedRolls.has(r.id)) && !pageAllSelected
               const CHECKBOX_COL = {
                 key: '__select',
                 label: (
-                  <input type="checkbox" checked={allSelected}
+                  <input type="checkbox"
+                    checked={pageAllSelected}
+                    ref={el => { if (el) el.indeterminate = pageSomeSelected }}
                     onChange={() => {
-                      if (allSelected) setSelectedRolls(new Set())
-                      else setSelectedRolls(new Set(sendableRolls.map((r) => r.id)))
+                      // Toggle ONLY current-page sendable rolls. Cross-page
+                      // selections survive — same pattern as SKUsPage.
+                      setSelectedRolls(prev => {
+                        const next = new Set(prev)
+                        if (pageAllSelected) {
+                          sendableRolls.forEach(r => next.delete(r.id))
+                        } else {
+                          sendableRolls.forEach(r => next.add(r.id))
+                        }
+                        return next
+                      })
                     }}
                     className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                 ),
@@ -1974,12 +2018,18 @@ export default function RollsPage() {
                   <Pagination page={rollPage} pages={rollPages} total={rollTotal} onChange={setRollPage} />
 
                   {/* ── Floating bulk action bar ── */}
-                  {selectedRolls.size > 0 && (
+                  {selectedRolls.size > 0 && (() => {
+                    const onPageCount = sendableRolls.filter(r => selectedRolls.has(r.id)).length
+                    const offPageCount = selectedRolls.size - onPageCount
+                    return (
                     <div className="sticky bottom-4 z-20 mt-3 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/95 backdrop-blur px-5 py-3 shadow-lg">
                       <div className="flex items-center gap-3">
                         <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">{selectedRolls.size}</span>
-                        <span className="text-sm font-semibold text-primary-800">roll{selectedRolls.size > 1 ? 's' : ''} selected</span>
-                        <button onClick={() => setSelectedRolls(new Set())} className="text-xs text-primary-500 hover:text-primary-700 underline">Clear</button>
+                        <span className="typo-data text-primary-800">roll{selectedRolls.size > 1 ? 's' : ''} selected</span>
+                        {offPageCount > 0 && (
+                          <span className="typo-caption text-primary-600">({onPageCount} on this page · {offPageCount} from other view{offPageCount > 1 ? 's' : ''})</span>
+                        )}
+                        <button onClick={() => setSelectedRolls(new Set())} className="typo-caption text-primary-500 hover:text-primary-700 underline">Clear</button>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={() => setShowBulkLabels(true)}
@@ -2038,7 +2088,8 @@ export default function RollsPage() {
                         })()}
                       </div>
                     </div>
-                  )}
+                    )
+                  })()}
                 </div>
               )
             })()}
