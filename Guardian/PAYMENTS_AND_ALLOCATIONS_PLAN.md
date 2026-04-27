@@ -514,7 +514,7 @@ S123/S124 receipt voucher to all four bill kinds: `invoice`, `supplier_invoice`,
 
 ### Phase 4 (post-S125) — Polish & follow-ups (deferred)
 
-- [ ] **On-account application UX (Q4):** when creating a new invoice/SI/challan for a party with positive on-account balance, prompt "Apply ₹X on-account?" — surfaces the residue chip already on the receipt form into the document forms (touches OrdersPage + InvoicesPage + RollsPage stock-in + ChallansPage)
+- ~~**On-account auto-application at invoice creation:**~~ **REJECTED 2026-04-27.** Tally / Zoho / QuickBooks / SAP B1 all keep this manual — credit might be earmarked for a disputed bill, auto-apply is hard to reverse, CAs prefer deliberate allocation. Existing flow is correct: residue is visible on the customer balance + LedgerPanel chip, and naturally consumed when the user records the next receipt (RecordPaymentForm shows open bills + on-account chip together, user types Apply amounts manually).
 - [ ] **Outstanding aging report:** dashboard tile + dedicated report (0–30 / 31–60 / 61–90 / 90+ days) for receivables AND payables (mirror split now that all 3 party types have receipts)
 - [ ] **Synthetic backfill of pre-S123 payments (Q7):** if user wants historical S119 single-shot Mark-as-Paid receipts visible in new Payments list
 - [ ] **Receipt cancel flow:** with proper ledger reversal + audit trail (Q10 — only if real cancel case appears)
