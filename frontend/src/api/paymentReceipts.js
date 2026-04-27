@@ -30,6 +30,38 @@ export async function getPaymentReceipt(id) {
   return client.get(`/payment-receipts/${id}`)
 }
 
+export async function cancelPaymentReceipt(id, data) {
+  if (USE_MOCK) {
+    const r = paymentReceipts.find((row) => row.id === id)
+    if (!r) return mockResponse(null, 'Receipt not found')
+    if (r.status === 'cancelled') return mockResponse(r, 'Already cancelled')
+    // Reverse mock invoice amount_paid + status
+    if (r.party_type === 'customer') {
+      for (const a of r.allocations || []) {
+        const inv = invoices.find((iv) => iv.id === a.bill_id)
+        if (!inv) continue
+        const paidNow = Math.max(0, (Number(inv.amount_paid) || 0) - (Number(a.amount_applied) || 0))
+        inv.amount_paid = paidNow
+        const total = Number(inv.total_amount) || 0
+        if (paidNow <= 0.005) {
+          inv.status = 'issued'
+          inv.paid_at = null
+        } else if (paidNow < total - 0.005) {
+          inv.status = 'partially_paid'
+          inv.paid_at = null
+        }
+        inv.outstanding_amount = Math.max(0, total - paidNow)
+      }
+    }
+    r.status = 'cancelled'
+    r.cancel_reason = data.cancel_reason
+    r.cancel_notes = data.cancel_notes || null
+    r.cancelled_at = new Date().toISOString()
+    return mockResponse(r, 'Receipt cancelled')
+  }
+  return client.post(`/payment-receipts/${id}/cancel`, data)
+}
+
 export async function recordPayment(data) {
   if (USE_MOCK) {
     const next = `PAY-${String(paymentReceipts.length + 1).padStart(4, '0')}`

@@ -32,6 +32,8 @@ class PaymentReceiptFilterParams(PaginatedParams):
     date_from: date | None = None
     date_to: date | None = None
     search: str | None = None  # matches receipt_no or reference_no
+    # S126: 'active' (default), 'cancelled', or 'all' to include both
+    status: str | None = None
 
 
 # --- Request ---
@@ -98,6 +100,38 @@ class PaymentReceiptCreate(BaseModel):
     def party_type_valid(cls, v: str) -> str:
         if v not in _VALID_PARTY_TYPES:
             raise ValueError(f"party_type must be one of: {', '.join(_VALID_PARTY_TYPES)}")
+        return v
+
+
+# --- Cancel Request (S126) ---
+
+
+_VALID_CANCEL_REASONS = (
+    "wrong_customer",
+    "wrong_amount",
+    "duplicate",
+    "bounced_cheque",
+    "payment_reversed",
+    "data_entry_error",
+    "other",
+)
+
+
+class PaymentReceiptCancelRequest(BaseModel):
+    """POST /payment-receipts/{id}/cancel — voids a receipt + reverses all
+    allocation effects (bills' amount_paid decremented + invoice statuses
+    rolled back + compensating Dr/Cr ledger rows posted)."""
+
+    cancel_reason: str
+    cancel_notes: str | None = None
+
+    @field_validator("cancel_reason")
+    @classmethod
+    def reason_valid(cls, v: str) -> str:
+        if v not in _VALID_CANCEL_REASONS:
+            raise ValueError(
+                f"cancel_reason must be one of: {', '.join(_VALID_CANCEL_REASONS)}"
+            )
         return v
 
 
@@ -174,6 +208,13 @@ class PaymentReceiptResponse(BaseSchema):
     notes: str | None = None
     fy_id: UUID | None = None
     created_at: datetime | None = None
+
+    # S126 — cancel audit
+    status: str = "active"
+    cancel_reason: str | None = None
+    cancel_notes: str | None = None
+    cancelled_at: datetime | None = None
+    cancelled_by_name: str | None = None
 
 
 class OnAccountBalance(BaseSchema):

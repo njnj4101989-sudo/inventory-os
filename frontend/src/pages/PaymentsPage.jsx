@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useReactToPrint } from 'react-to-print'
 import {
+  cancelPaymentReceipt,
   getPaymentReceipts,
   getPaymentReceipt,
 } from '../api/paymentReceipts'
@@ -75,6 +76,13 @@ const TAB_LABELS = {
 }
 
 function StatusPill({ receipt }) {
+  if (receipt.status === 'cancelled') {
+    return (
+      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge bg-rose-100 text-rose-700">
+        Cancelled
+      </span>
+    )
+  }
   if (Number(receipt.on_account_amount) > 0.005) {
     return (
       <span className="inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge bg-sky-100 text-sky-700">
@@ -88,6 +96,16 @@ function StatusPill({ receipt }) {
     </span>
   )
 }
+
+const CANCEL_REASONS = [
+  { value: 'wrong_customer', label: 'Wrong customer' },
+  { value: 'wrong_amount', label: 'Wrong amount' },
+  { value: 'duplicate', label: 'Duplicate entry' },
+  { value: 'bounced_cheque', label: 'Bounced cheque' },
+  { value: 'payment_reversed', label: 'Payment reversed (UPI/transfer failed)' },
+  { value: 'data_entry_error', label: 'Data entry error' },
+  { value: 'other', label: 'Other' },
+]
 
 const billTypeChip = (bt) => {
   if (bt === 'invoice') return null
@@ -130,10 +148,18 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState('')
   const [partyFilter, setPartyFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('active') // S126
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // S126 cancel state
+  const [cancelModal, setCancelModal] = useState(null) // receipt being cancelled
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelNotes, setCancelNotes] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
 
   const [customers, setCustomers] = useState([])
   const [suppliers, setSuppliers] = useState([])
@@ -191,6 +217,7 @@ export default function PaymentsPage() {
     setPartyFilter('')
     setSearch('')
     setModeFilter('')
+    setStatusFilter('active')
     setDateFrom('')
     setDateTo('')
     setPage(1)
@@ -215,6 +242,7 @@ export default function PaymentsPage() {
         search: search || undefined,
         payment_mode: modeFilter || undefined,
         party_id: partyFilter || undefined,
+        status: statusFilter || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       }
@@ -227,7 +255,7 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, page, search, modeFilter, partyFilter, dateFrom, dateTo])
+  }, [activeTab, page, search, modeFilter, partyFilter, statusFilter, dateFrom, dateTo])
 
   useEffect(() => {
     fetchData()
@@ -282,6 +310,35 @@ export default function PaymentsPage() {
   const onCreateSuccess = () => {
     setCreateMode(false)
     fetchData()
+  }
+
+  const submitCancel = async () => {
+    if (!cancelModal) return
+    if (!cancelReason) {
+      setCancelError('Pick a reason')
+      return
+    }
+    setCancelling(true)
+    setCancelError(null)
+    try {
+      const res = await cancelPaymentReceipt(cancelModal.id, {
+        cancel_reason: cancelReason,
+        cancel_notes: cancelNotes || null,
+      })
+      const updated = res.data?.data || res.data
+      setCancelModal(null)
+      setDetail(updated)
+      fetchData()
+    } catch (err) {
+      setCancelError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to cancel receipt',
+      )
+    } finally {
+      setCancelling(false)
+    }
   }
 
   const openPrint = () => {
@@ -368,6 +425,19 @@ export default function PaymentsPage() {
               >
                 Print Receipt
               </button>
+              {detail.status === 'active' && (
+                <button
+                  onClick={() => {
+                    setCancelReason('')
+                    setCancelNotes('')
+                    setCancelError(null)
+                    setCancelModal(detail)
+                  }}
+                  className="rounded bg-rose-500/90 px-3 py-1.5 typo-btn-sm hover:bg-rose-500"
+                >
+                  Cancel Receipt
+                </button>
+              )}
               <button
                 onClick={() => setDetail(null)}
                 className="rounded bg-white/20 px-3 py-1.5 typo-btn-sm hover:bg-white/30"
@@ -383,6 +453,31 @@ export default function PaymentsPage() {
             </div>
           ) : (
             <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+              {/* S126 — cancelled banner */}
+              {detail.status === 'cancelled' && (
+                <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 flex items-start gap-2">
+                  <svg className="w-4 h-4 mt-0.5 text-rose-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1 typo-data text-rose-800">
+                    <span className="font-semibold">Cancelled</span>
+                    {detail.cancel_reason && (
+                      <span className="ml-2 text-rose-700">
+                        ({CANCEL_REASONS.find((r) => r.value === detail.cancel_reason)?.label || detail.cancel_reason})
+                      </span>
+                    )}
+                    <span className="ml-2 text-rose-600">· {fmtDate(detail.cancelled_at)}</span>
+                    {detail.cancelled_by_name && (
+                      <span className="ml-2 text-rose-600">· by {detail.cancelled_by_name}</span>
+                    )}
+                    {detail.cancel_notes && (
+                      <p className="mt-1 italic text-rose-700">"{detail.cancel_notes}"</p>
+                    )}
+                    <p className="mt-1 typo-caption text-rose-600">All allocations have been reversed and a compensating ledger entry has been posted.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Summary cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="bg-gray-50 rounded p-2">
@@ -521,6 +616,84 @@ export default function PaymentsPage() {
             />
           </div>
         )}
+
+        {/* S126 — Cancel modal */}
+        {cancelModal && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !cancelling) setCancelModal(null)
+            }}
+          >
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-rose-600 to-rose-500 text-white flex items-center justify-between">
+                <div>
+                  <h3 className="typo-modal-title text-white">Cancel Receipt {cancelModal.receipt_no}</h3>
+                  <p className="typo-caption text-rose-100">
+                    Reverses all allocations + posts a compensating ledger entry
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !cancelling && setCancelModal(null)}
+                  className="rounded bg-white/20 px-2 py-1 typo-btn-sm hover:bg-white/30"
+                  disabled={cancelling}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="rounded bg-rose-50 border border-rose-200 px-3 py-2 typo-caption text-rose-700">
+                  This is reversible only by recording a fresh receipt — the original row stays in the audit log marked as cancelled.
+                </div>
+                <div>
+                  <label className="typo-label-sm">
+                    Reason <span className="text-red-500">*</span>
+                  </label>
+                  <FilterSelect
+                    value={cancelReason}
+                    onChange={setCancelReason}
+                    options={[{ value: '', label: 'Select reason…' }, ...CANCEL_REASONS]}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="typo-label-sm">Notes (optional)</label>
+                  <textarea
+                    rows={3}
+                    value={cancelNotes}
+                    onChange={(e) => setCancelNotes(e.target.value)}
+                    placeholder="Add any extra context for the audit log…"
+                    className="typo-input-sm w-full resize-none"
+                  />
+                </div>
+                {cancelError && (
+                  <div className="rounded bg-rose-50 border border-rose-200 px-3 py-2 typo-data text-rose-700">
+                    {cancelError}
+                  </div>
+                )}
+              </div>
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => !cancelling && setCancelModal(null)}
+                  disabled={cancelling}
+                  className="typo-btn-sm border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded"
+                >
+                  Keep Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={submitCancel}
+                  disabled={cancelling || !cancelReason}
+                  className="typo-btn-sm bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 px-3 py-1.5 rounded"
+                >
+                  {cancelling ? 'Cancelling…' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     )
   }
@@ -616,7 +789,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
         <div className="md:col-span-2">
           <label className="typo-label-sm">Search</label>
           <SearchInput
@@ -646,6 +819,18 @@ export default function PaymentsPage() {
         <div>
           <label className="typo-label-sm">Mode</label>
           <FilterSelect value={modeFilter} onChange={(v) => { setModeFilter(v); setPage(1) }} options={MODES} />
+        </div>
+        <div>
+          <label className="typo-label-sm">Status</label>
+          <FilterSelect
+            value={statusFilter}
+            onChange={(v) => { setStatusFilter(v); setPage(1) }}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'cancelled', label: 'Cancelled' },
+              { value: 'all', label: 'All' },
+            ]}
+          />
         </div>
         <div>
           <label className="typo-label-sm">From</label>

@@ -3407,6 +3407,25 @@ Returns: full `PaymentReceiptResponse` with allocations + party brief + derived 
 
 Returns: same shape as POST.
 
+### POST `/payment-receipts/{id}/cancel` — NEW S126
+**Permission:** `invoice_manage` | **Auth:** Cookie
+
+Voids an active receipt + reverses all allocation effects. Atomic: locks receipt + bills FOR UPDATE, decrements `bill.amount_paid` per allocation, walks back invoice status (paid → partially_paid → issued) from remaining live amount_paid, posts compensating Dr/Cr `LedgerEntry` rows (reference_type='payment_receipt_cancel'), reverses on-account residue + TDS/TCS, sets `status='cancelled'` + audit cols.
+
+Request body:
+```json
+{
+  "cancel_reason": "wrong_amount",
+  "cancel_notes": "Customer disputed — re-record correct amount tomorrow"
+}
+```
+
+Valid `cancel_reason` values: `wrong_customer`, `wrong_amount`, `duplicate`, `bounced_cheque`, `payment_reversed`, `data_entry_error`, `other`.
+
+Returns: full receipt with `status='cancelled'` + audit fields populated.
+
+422 if receipt is already cancelled. Original receipt + allocation rows are retained for audit (Tally voucher-cancel pattern).
+
 ### Response shape — `PaymentReceiptResponse`
 ```json
 {

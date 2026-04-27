@@ -27,7 +27,9 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from datetime import datetime as _datetime
+
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -43,6 +45,10 @@ class PaymentReceipt(Base):
         CheckConstraint(
             "amount > 0",
             name="pr_amount_positive",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'cancelled')",
+            name="pr_valid_status",
         ),
     )
 
@@ -79,6 +85,19 @@ class PaymentReceipt(Base):
         Numeric(12, 2), default=0, server_default="0"
     )
 
+    # Lifecycle (S126). Active = bills' amount_paid is bumped + ledger live.
+    # Cancelled = service has reversed all allocation effects + posted compensating
+    # ledger entries; row retained for audit (Tally / Zoho voucher-cancel pattern).
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active", index=True
+    )
+    cancel_reason: Mapped[str | None] = mapped_column(String(50))
+    cancel_notes: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[_datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("public.users.id", ondelete="SET NULL"), index=True
+    )
+
     # Audit / scope
     notes: Mapped[str | None] = mapped_column(Text)
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -93,3 +112,4 @@ class PaymentReceipt(Base):
         back_populates="receipt", cascade="all, delete-orphan"
     )
     created_by_user = relationship("User", foreign_keys=[created_by])
+    cancelled_by_user = relationship("User", foreign_keys=[cancelled_by])

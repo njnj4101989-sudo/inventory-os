@@ -35,7 +35,29 @@
 
 ---
 
-## Current State (Session 125 — 2026-04-27) — IN PROGRESS
+## Current State (Session 126 — 2026-04-27) — IN PROGRESS
+
+**Receipt cancel flow.** Closes the last operational gap on the payments module — users can now void a recorded receipt with full ledger reversal + audit trail (Tally voucher-cancel pattern). Pulled from PAYMENTS_AND_ALLOCATIONS_PLAN Phase 4.
+
+**Backend:**
+  - `models/payment_receipt.py` — +5 cols: `status VARCHAR(20) NOT NULL DEFAULT 'active'` (CHECK `pr_valid_status` IN active/cancelled), `cancel_reason VARCHAR(50)`, `cancel_notes TEXT`, `cancelled_at TIMESTAMPTZ`, `cancelled_by UUID FK public.users(id) ON DELETE SET NULL`. New `cancelled_by_user` relationship.
+  - `schemas/payment_receipt.py` — new `PaymentReceiptCancelRequest` with 7-reason enum (`wrong_customer`/`wrong_amount`/`duplicate`/`bounced_cheque`/`payment_reversed`/`data_entry_error`/`other`). Filter params extended with `status` (default `active`, accepts `cancelled` / `all`). Response surfaces `status`/`cancel_reason`/`cancel_notes`/`cancelled_at`/`cancelled_by_name`.
+  - `services/payment_receipt_service.py` — new `cancel_receipt(receipt_id, req, user_id)`: locks receipt + bills FOR UPDATE, validates status='active', decrements `bill.amount_paid` per allocation, walks back invoice status (paid → partially_paid → issued) from remaining live amount_paid, posts compensating Dr/Cr `LedgerEntry` per allocation (reference_type='payment_receipt_cancel'), reverses on-account residue + TDS/TCS lines, sets `receipt.status='cancelled'` + audit cols. `get_on_account_balance` filters to status='active' so cancelled credit doesn't bleed into balance. List view defaults to active-only.
+  - `api/payment_receipts.py` — new `POST /payment-receipts/{id}/cancel` (permission `invoice_manage`).
+
+**Migration:** `q7r8s9t0u1v2_s126_payment_receipt_cancel.py` — tenant-iterating, `col_exists` + `constraint_exists` + `index_exists` guarded. Adds 5 cols + CHECK + 2 indexes. No backfill needed (status defaults to 'active' which is correct for all extant rows). Round-trip safe.
+
+**Frontend:**
+  - `api/paymentReceipts.js` — new `cancelPaymentReceipt(id, data)` with mock branch that walks back invoice status correctly.
+  - `pages/PaymentsPage.jsx` — red "Cancel Receipt" button in detail header opens **confirmation modal** (NOT one-click); modal requires reason from dropdown + optional notes; "Confirm Cancel" disabled until reason picked; "Keep Receipt" / outside-click dismisses. Cancelled receipts: red banner on detail with reason + by + when + notes + reversal note; "Cancelled" status pill in list view (rose); Status filter (Active/Cancelled/All) added to filter bar, defaults to Active.
+
+**Industry alignment:** matches Tally voucher cancel (Alt+X / Alt+D in voucher chronicle), Zoho Books "Void Payment", QuickBooks "Void Payment". Original receipt + allocations retained for audit; reversal posted as new ledger rows (never edit/delete history).
+
+**Pending:** local migration ✅, backend imports ✅ (236 routes), vite build ✅. Commit + push.
+
+---
+
+## Previous State (Session 125 — 2026-04-27) — CLOSED
 
 **Phase 3 of PAYMENTS_AND_ALLOCATIONS_PLAN — Supplier + VA bill-wise payments.** Closes the loop opened in S123 (customer receipt voucher) and S124 (frontend) by extending the same Tally-style allocation model to supplier invoices + VA challans (job + batch). Refactor is **polymorphic** — `PaymentAllocation` swaps `invoice_id` FK for `bill_type` + `bill_id` + CHECK constraint `pa_valid_bill_type`. The receipt voucher now serves all four bill kinds with a single service method.
 

@@ -47,6 +47,7 @@ from app.models.va_party import VAParty
 from app.schemas.payment_receipt import (
     OnAccountBalance,
     OpenBillBrief,
+    PaymentReceiptCancelRequest,
     PaymentReceiptCreate,
     PaymentReceiptFilterParams,
 )
@@ -410,6 +411,13 @@ class PaymentReceiptService:
             filters.append(
                 or_(PaymentReceipt.receipt_no.ilike(q), PaymentReceipt.reference_no.ilike(q))
             )
+        # S126: status filter — default 'active' (hide cancelled), 'all' shows both
+        status_filter = (params.status or "active").lower()
+        if status_filter == "active":
+            filters.append(PaymentReceipt.status == "active")
+        elif status_filter == "cancelled":
+            filters.append(PaymentReceipt.status == "cancelled")
+        # 'all' → no filter
 
         count_stmt = select(func.count()).select_from(PaymentReceipt)
         for f in filters:
@@ -421,7 +429,10 @@ class PaymentReceiptService:
 
         stmt = (
             select(PaymentReceipt)
-            .options(selectinload(PaymentReceipt.allocations))
+            .options(
+                selectinload(PaymentReceipt.allocations),
+                selectinload(PaymentReceipt.cancelled_by_user),
+            )
             .order_by(PaymentReceipt.payment_date.desc(), PaymentReceipt.created_at.desc())
         )
         for f in filters:
@@ -448,7 +459,10 @@ class PaymentReceiptService:
         stmt = (
             select(PaymentReceipt)
             .where(PaymentReceipt.id == receipt_id)
-            .options(selectinload(PaymentReceipt.allocations))
+            .options(
+                selectinload(PaymentReceipt.allocations),
+                selectinload(PaymentReceipt.cancelled_by_user),
+            )
         )
         receipt = (await self.db.execute(stmt)).scalar_one_or_none()
         if not receipt:
@@ -603,16 +617,226 @@ class PaymentReceiptService:
     async def get_on_account_balance(
         self, party_type: str, party_id: UUID, fy_id: UUID
     ) -> dict:
-        """Sum of on_account_amount across all receipts for this party + FY."""
+        """Sum of on_account_amount across active receipts for this party + FY.
+
+        S126: cancelled receipts are excluded — their on-account residue was
+        reversed by the cancel flow.
+        """
         stmt = select(func.coalesce(func.sum(PaymentReceipt.on_account_amount), 0)).where(
             PaymentReceipt.party_type == party_type,
             PaymentReceipt.party_id == party_id,
             PaymentReceipt.fy_id == fy_id,
+            PaymentReceipt.status == "active",
         )
         balance = Decimal(str((await self.db.execute(stmt)).scalar() or 0))
         return OnAccountBalance(
             party_type=party_type, party_id=party_id, balance=balance
         ).model_dump()
+
+    # ── Cancel (S126) ────────────────────────────────────────────────────────
+
+    async def cancel_receipt(
+        self,
+        receipt_id: UUID,
+        req: PaymentReceiptCancelRequest,
+        user_id: UUID | None = None,
+    ) -> dict:
+        """Atomic: void a receipt + reverse all allocation effects.
+
+        Steps (all under FOR UPDATE):
+            1. Lock receipt — must be status='active', else 422.
+            2. Lock + load all allocations + their bills (per type).
+            3. Decrement bill.amount_paid by amount_applied per allocation.
+            4. Recompute invoice status (paid/partially_paid/issued) from
+               remaining live amount_paid; SI/JC/BC just have the number
+               rolled back (no status flip needed).
+            5. Post compensating Dr/Cr LedgerEntry per allocation
+               (reference_type='payment_receipt_cancel', reference_id=receipt.id).
+               One extra reversal for any on-account residue. TDS/TCS reversed too.
+            6. Mark receipt status='cancelled' + audit cols + flush.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
+        from app.models.invoice import Invoice
+
+        # 1. Lock receipt
+        stmt = (
+            select(PaymentReceipt)
+            .where(PaymentReceipt.id == receipt_id)
+            .with_for_update()
+            .options(
+                selectinload(PaymentReceipt.allocations),
+                selectinload(PaymentReceipt.cancelled_by_user),
+            )
+        )
+        receipt = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not receipt:
+            raise NotFoundError("Payment receipt not found")
+        if receipt.status != "active":
+            raise ValidationError(
+                f"Receipt {receipt.receipt_no} is already {receipt.status} — cannot cancel"
+            )
+
+        is_customer = receipt.party_type == "customer"
+        allocations = list(receipt.allocations or [])
+
+        # 2. Lock + load all referenced bills, grouped by type
+        bills_by_ref: dict[tuple[str, UUID], object] = {}
+        ids_by_type: dict[str, list[UUID]] = {}
+        for a in allocations:
+            ids_by_type.setdefault(a.bill_type, []).append(a.bill_id)
+        for bill_type, ids in ids_by_type.items():
+            meta = _bill_meta(bill_type)
+            stmt = (
+                select(meta["model"])
+                .where(meta["model"].id.in_(ids))
+                .with_for_update()
+            )
+            for row in (await self.db.execute(stmt)).scalars().all():
+                bills_by_ref[(bill_type, row.id)] = row
+
+        # 3 + 4. Per-allocation reversal
+        mode_str = f" ({receipt.payment_mode.upper()})" if receipt.payment_mode else ""
+        ref_str = f" Ref: {receipt.reference_no}" if receipt.reference_no else ""
+
+        for a in allocations:
+            bill = bills_by_ref.get((a.bill_type, a.bill_id))
+            applied = Decimal(str(a.amount_applied)).quantize(Decimal("0.01"))
+
+            if bill is not None:
+                new_paid = (
+                    Decimal(str(getattr(bill, "amount_paid", 0) or 0)) - applied
+                ).quantize(Decimal("0.01"))
+                if new_paid < Decimal("0"):
+                    new_paid = Decimal("0")
+                bill.amount_paid = new_paid
+
+                # Invoice status walk-back: paid → partially_paid → issued
+                if a.bill_type == "invoice":
+                    total = Decimal(str(bill.total_amount or 0))
+                    if new_paid <= Decimal("0.005"):
+                        bill.status = "issued"
+                        bill.paid_at = None
+                    elif new_paid < total - Decimal("0.005"):
+                        bill.status = "partially_paid"
+                        bill.paid_at = None
+                    # else stays 'paid' (other receipts still cover it)
+
+            bill_code = (
+                getattr(bill, _bill_meta(a.bill_type)["code_attr"], None)
+                if bill is not None else None
+            ) or str(a.bill_id)
+
+            # 5. Compensating ledger row — flip Dr/Cr from original
+            # Original (active): customer Cr / supplier|VA Dr.
+            # Reversal:          customer Dr / supplier|VA Cr.
+            debit = applied if is_customer else Decimal("0")
+            credit = Decimal("0") if is_customer else applied
+            description = (
+                f"Payment cancelled{mode_str}{ref_str} "
+                f"→ {bill_code} (was {receipt.receipt_no})"
+            )
+            self.db.add(
+                LedgerEntry(
+                    entry_date=_dt.now(_tz.utc).date(),
+                    party_type=receipt.party_type,
+                    party_id=receipt.party_id,
+                    entry_type="payment_cancel",
+                    reference_type="payment_receipt_cancel",
+                    reference_id=receipt.id,
+                    debit=debit,
+                    credit=credit,
+                    net_amount=applied,
+                    description=description,
+                    created_by=user_id,
+                    fy_id=receipt.fy_id,
+                    notes=req.cancel_notes,
+                )
+            )
+
+        # 5b. Reverse on-account residue (if any)
+        on_account = Decimal(str(receipt.on_account_amount or 0))
+        if on_account > Decimal("0"):
+            debit = on_account if is_customer else Decimal("0")
+            credit = Decimal("0") if is_customer else on_account
+            self.db.add(
+                LedgerEntry(
+                    entry_date=_dt.now(_tz.utc).date(),
+                    party_type=receipt.party_type,
+                    party_id=receipt.party_id,
+                    entry_type="payment_cancel",
+                    reference_type="payment_receipt_cancel",
+                    reference_id=receipt.id,
+                    debit=debit,
+                    credit=credit,
+                    net_amount=on_account,
+                    description=f"Payment cancelled{mode_str}{ref_str} → On-account reversal ({receipt.receipt_no})",
+                    created_by=user_id,
+                    fy_id=receipt.fy_id,
+                    notes=req.cancel_notes,
+                )
+            )
+
+        # 5c. Reverse TDS/TCS lines if any
+        tds_amount = Decimal(str(receipt.tds_amount or 0))
+        tcs_amount = Decimal(str(receipt.tcs_amount or 0))
+        if tds_amount > 0:
+            self.db.add(
+                LedgerEntry(
+                    entry_date=_dt.now(_tz.utc).date(),
+                    party_type=receipt.party_type,
+                    party_id=receipt.party_id,
+                    entry_type="tds_cancel",
+                    reference_type="payment_receipt_cancel",
+                    reference_id=receipt.id,
+                    debit=Decimal("0") if not is_customer else tds_amount,
+                    credit=tds_amount if not is_customer else Decimal("0"),
+                    tds_amount=tds_amount,
+                    tds_section=receipt.tds_section,
+                    description=f"TDS reversed (cancel of {receipt.receipt_no})",
+                    created_by=user_id,
+                    fy_id=receipt.fy_id,
+                )
+            )
+        if tcs_amount > 0:
+            self.db.add(
+                LedgerEntry(
+                    entry_date=_dt.now(_tz.utc).date(),
+                    party_type=receipt.party_type,
+                    party_id=receipt.party_id,
+                    entry_type="tcs_cancel",
+                    reference_type="payment_receipt_cancel",
+                    reference_id=receipt.id,
+                    debit=tcs_amount,
+                    credit=Decimal("0"),
+                    tcs_amount=tcs_amount,
+                    description=f"TCS reversed (cancel of {receipt.receipt_no})",
+                    created_by=user_id,
+                    fy_id=receipt.fy_id,
+                )
+            )
+
+        # 6. Mark cancelled
+        receipt.status = "cancelled"
+        receipt.cancel_reason = req.cancel_reason
+        receipt.cancel_notes = req.cancel_notes
+        receipt.cancelled_at = _dt.now(_tz.utc)
+        receipt.cancelled_by = user_id
+
+        await self.db.flush()
+
+        # SSE emit (best-effort)
+        try:
+            from app.core.event_bus import event_bus
+            await event_bus.emit("payment_cancelled", {
+                "receipt_no": receipt.receipt_no,
+                "reason": req.cancel_reason,
+                "amount": float(receipt.amount or 0),
+            })
+        except Exception:
+            pass
+
+        return await self.get_receipt(receipt.id)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -715,6 +939,21 @@ class PaymentReceiptService:
             "notes": r.notes,
             "fy_id": str(r.fy_id) if r.fy_id else None,
             "created_at": r.created_at.isoformat() if r.created_at else None,
+            # S126 — cancel audit
+            "status": r.status or "active",
+            "cancel_reason": r.cancel_reason,
+            "cancel_notes": r.cancel_notes,
+            "cancelled_at": r.cancelled_at.isoformat() if r.cancelled_at else None,
+            "cancelled_by_name": (
+                r.cancelled_by_user.full_name
+                if getattr(r, "cancelled_by_user", None)
+                and getattr(r.cancelled_by_user, "full_name", None)
+                else (
+                    r.cancelled_by_user.username
+                    if getattr(r, "cancelled_by_user", None)
+                    else None
+                )
+            ),
         }
 
 
