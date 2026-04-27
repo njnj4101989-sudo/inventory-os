@@ -78,6 +78,30 @@ class InvoiceCancelRequest(BaseModel):
     notes: str | None = None
 
 
+class MarkPaidRequest(BaseModel):
+    """PATCH /invoices/{id}/pay — full-payment receipt against the invoice.
+
+    Records a customer payment ledger entry (Cr customer) via
+    LedgerService.record_payment() and flips invoice.status -> 'paid'.
+    The ledger row is linked back via reference_type='invoice' so the
+    payment shows on the customer ledger and deep-links to the invoice.
+
+    v1 is strict full-payment: amount must equal invoice.total_amount.
+    Partial payment / On-Account tracking is Phase 4 of FINANCIAL_SYMMETRY_PLAN.
+    """
+
+    payment_date: date
+    payment_mode: str | None = None  # cash / neft / upi / cheque
+    reference_no: str | None = None  # UTR / cheque #
+    tds_applicable: bool = False
+    tds_rate: Decimal | None = None
+    tds_section: str | None = None
+    tcs_applicable: bool = False
+    tcs_rate: Decimal | None = None
+    tcs_section: str | None = None
+    notes: str | None = None
+
+
 # --- Filter Params ---
 
 

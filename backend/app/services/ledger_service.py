@@ -36,8 +36,21 @@ class LedgerService:
 
     # ── Record payment (with TDS/TCS) ──
 
-    async def record_payment(self, data: PaymentCreate, fy_id: UUID, created_by: UUID | None = None) -> list[LedgerEntry]:
-        """Record payment + optional TDS/TCS as separate entries. Returns all created entries."""
+    async def record_payment(
+        self,
+        data: PaymentCreate,
+        fy_id: UUID,
+        created_by: UUID | None = None,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+    ) -> list[LedgerEntry]:
+        """Record payment + optional TDS/TCS as separate entries.
+
+        `reference_type`/`reference_id` are optional source-document links
+        (e.g. `'invoice'` + invoice.id when the payment is recorded from
+        the invoice's "Mark as Paid" flow). Defaults to `'manual'` for
+        ad-hoc receipts via the LedgerPanel.
+        """
         entries = []
         amount = data.amount
         tds_amount = Decimal("0")
@@ -57,6 +70,8 @@ class LedgerService:
         mode_str = f" ({data.payment_mode.upper()})" if data.payment_mode else ""
         ref_str = f" Ref: {data.reference_no}" if data.reference_no else ""
 
+        ref_t = reference_type or "manual"
+
         # Main payment entry
         if data.party_type == "customer":
             # Customer pays us → credit
@@ -65,7 +80,8 @@ class LedgerService:
                 party_type=data.party_type,
                 party_id=data.party_id,
                 entry_type="payment",
-                reference_type="manual",
+                reference_type=ref_t,
+                reference_id=reference_id,
                 debit=Decimal("0"),
                 credit=net_amount,
                 net_amount=net_amount,
@@ -81,7 +97,8 @@ class LedgerService:
                 party_type=data.party_type,
                 party_id=data.party_id,
                 entry_type="payment",
-                reference_type="manual",
+                reference_type=ref_t,
+                reference_id=reference_id,
                 debit=net_amount,
                 credit=Decimal("0"),
                 net_amount=net_amount,
@@ -99,7 +116,8 @@ class LedgerService:
                 party_type=data.party_type,
                 party_id=data.party_id,
                 entry_type="tds",
-                reference_type="manual",
+                reference_type=ref_t,
+                reference_id=reference_id,
                 debit=tds_amount if data.party_type != "customer" else Decimal("0"),
                 credit=Decimal("0") if data.party_type != "customer" else tds_amount,
                 tds_amount=tds_amount,
@@ -117,7 +135,8 @@ class LedgerService:
                 party_type=data.party_type,
                 party_id=data.party_id,
                 entry_type="tcs",
-                reference_type="manual",
+                reference_type=ref_t,
+                reference_id=reference_id,
                 debit=Decimal("0"),
                 credit=tcs_amount,
                 tcs_amount=tcs_amount,

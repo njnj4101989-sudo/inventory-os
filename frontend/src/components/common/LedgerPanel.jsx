@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLedger, getPartyBalance, recordPayment } from '../../api/ledger'
+import PaymentForm, { emptyPaymentForm } from './PaymentForm'
 
 // Map a ledger entry's reference_type + reference_id to a deep-link URL.
 // Returns null when the entry has no navigable source document.
@@ -27,23 +28,6 @@ const ENTRY_COLORS = {
   adjustment: 'bg-gray-50 text-gray-600',
 }
 
-const PAYMENT_MODES = [
-  { value: 'neft', label: 'NEFT/RTGS' },
-  { value: 'upi', label: 'UPI' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'cheque', label: 'Cheque' },
-]
-
-const TDS_SECTIONS = [
-  { value: '194C', label: '194C — Job Work (1%/2%)' },
-  { value: '194H', label: '194H — Brokerage (5%)' },
-  { value: '194J', label: '194J — Professional (10%)' },
-]
-
-const TCS_SECTIONS = [
-  { value: '206C(1H)', label: '206C(1H) — Sale >50L (0.1%)' },
-]
-
 function fmt(n) {
   if (n == null || n === 0) return ''
   return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -55,12 +39,7 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
   const [balance, setBalance] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showPayment, setShowPayment] = useState(false)
-  const [payForm, setPayForm] = useState({
-    amount: '', payment_date: new Date().toISOString().split('T')[0],
-    payment_mode: 'neft', reference_no: '', notes: '',
-    tds_applicable: false, tds_rate: '', tds_section: '',
-    tcs_applicable: false, tcs_rate: '', tcs_section: '',
-  })
+  const [payForm, setPayForm] = useState(emptyPaymentForm())
   const [saving, setSaving] = useState(false)
   const [payError, setPayError] = useState(null)
 
@@ -110,12 +89,7 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
         notes: payForm.notes || null,
       })
       setShowPayment(false)
-      setPayForm({
-        amount: '', payment_date: new Date().toISOString().split('T')[0],
-        payment_mode: 'neft', reference_no: '', notes: '',
-        tds_applicable: false, tds_rate: '', tds_section: '',
-        tcs_applicable: false, tcs_rate: '', tcs_section: '',
-      })
+      setPayForm(emptyPaymentForm())
       fetchData()
     } catch (err) {
       setPayError(err.response?.data?.detail || 'Payment failed')
@@ -136,10 +110,6 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
     }
     return { ...e, running }
   })
-
-  const isCustomer = partyType === 'customer'
-  const showTDS = !isCustomer
-  const showTCS = isCustomer
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -181,72 +151,10 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
               <h3 className="typo-badge text-emerald-800">Record Payment</h3>
               <button onClick={() => setShowPayment(false)} className="typo-btn-sm text-gray-500 hover:text-gray-700">Cancel</button>
             </div>
-            {payError && <p className="typo-caption text-red-600">{payError}</p>}
-            <div className="grid grid-cols-4 gap-2">
-              <div>
-                <label className="typo-label-sm">Amount *</label>
-                <input type="number" value={payForm.amount} onChange={(e) => setPayForm(f => ({ ...f, amount: e.target.value }))}
-                  className="typo-input-sm" placeholder="0.00" />
-              </div>
-              <div>
-                <label className="typo-label-sm">Date *</label>
-                <input type="date" value={payForm.payment_date} onChange={(e) => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
-                  className="typo-input-sm" />
-              </div>
-              <div>
-                <label className="typo-label-sm">Mode</label>
-                <select value={payForm.payment_mode} onChange={(e) => setPayForm(f => ({ ...f, payment_mode: e.target.value }))}
-                  className="typo-input-sm">
-                  {PAYMENT_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="typo-label-sm">Ref No.</label>
-                <input type="text" value={payForm.reference_no} onChange={(e) => setPayForm(f => ({ ...f, reference_no: e.target.value }))}
-                  className="typo-input-sm" placeholder="UTR / Cheque #" />
-              </div>
-            </div>
-            <div className="grid grid-cols-4 gap-2 items-end">
-              {showTDS && (
-                <>
-                  <label className="flex items-center gap-1 typo-btn-sm text-gray-700">
-                    <input type="checkbox" checked={payForm.tds_applicable} onChange={(e) => setPayForm(f => ({ ...f, tds_applicable: e.target.checked }))} />
-                    TDS
-                  </label>
-                  {payForm.tds_applicable && (
-                    <>
-                      <select value={payForm.tds_section} onChange={(e) => setPayForm(f => ({ ...f, tds_section: e.target.value }))}
-                        className="typo-input-sm !w-auto">
-                        <option value="">Section</option>
-                        {TDS_SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                      <input type="number" value={payForm.tds_rate} onChange={(e) => setPayForm(f => ({ ...f, tds_rate: e.target.value }))}
-                        className="typo-input-sm !w-auto" placeholder="Rate %" />
-                    </>
-                  )}
-                </>
-              )}
-              {showTCS && (
-                <>
-                  <label className="flex items-center gap-1 typo-btn-sm text-gray-700">
-                    <input type="checkbox" checked={payForm.tcs_applicable} onChange={(e) => setPayForm(f => ({ ...f, tcs_applicable: e.target.checked }))} />
-                    TCS
-                  </label>
-                  {payForm.tcs_applicable && (
-                    <>
-                      <select value={payForm.tcs_section} onChange={(e) => setPayForm(f => ({ ...f, tcs_section: e.target.value }))}
-                        className="typo-input-sm !w-auto">
-                        <option value="">Section</option>
-                        {TCS_SECTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                      <input type="number" value={payForm.tcs_rate} onChange={(e) => setPayForm(f => ({ ...f, tcs_rate: e.target.value }))}
-                        className="typo-input-sm !w-auto" placeholder="Rate %" />
-                    </>
-                  )}
-                </>
-              )}
+            <PaymentForm value={payForm} onChange={setPayForm} partyType={partyType} error={payError} />
+            <div className="flex justify-end pt-1">
               <button onClick={handlePayment} disabled={saving}
-                className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50 col-start-4">
+                className="rounded bg-emerald-600 text-white px-3 py-1 typo-btn-sm hover:bg-emerald-700 disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save Payment'}
               </button>
             </div>

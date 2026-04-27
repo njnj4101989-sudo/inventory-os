@@ -34,7 +34,35 @@
 
 ---
 
-## Current State (Session 118 — 2026-04-27) — IN PROGRESS
+## Current State (Session 119 — 2026-04-27) — IN PROGRESS
+
+**Invoice Mark-as-Paid → proper payment ledger entry (Option B, industry-standard).** S118 left a silent-correctness gap on the invoice detail page: clicking "Mark as Paid" flipped `invoice.status='paid'` + set `paid_at` but **never wrote a payment ledger entry**, so the customer's account still showed the full debit outstanding even though the invoice card said paid. Two sources of truth disagreed.
+
+S119 fixes this with the Zoho/QB/Marg pattern (Tally-grade correctness underneath, cloud SME UX on top): "Mark as Paid" now opens a confirm modal carrying the **shared `<PaymentForm>`** (same component LedgerPanel uses) — date / mode (neft/upi/cash/cheque) / reference# / TCS toggle (customer side) / notes. On confirm, backend `mark_paid()` builds a `PaymentCreate` and calls `LedgerService.record_payment(reference_type='invoice', reference_id=invoice.id)`, then flips status. The ledger row deep-links back to this invoice from the customer ledger panel.
+
+**Backend:**
+  - `schemas/invoice.py` — new `MarkPaidRequest` (payment_date · payment_mode · reference_no · tds/tcs toggles + section + rate · notes).
+  - `services/ledger_service.py` — `record_payment()` now accepts optional `reference_type` + `reference_id`; defaults to `'manual'` for ad-hoc receipts, `'invoice'`/invoice.id when called from invoice flow.
+  - `services/invoice_service.py` — `mark_paid()` rewrite: validates state (`draft`/`issued` only) + customer presence, builds `PaymentCreate` from request + invoice context (`amount = invoice.total_amount`, `party_type = 'customer'`, `party_id = invoice.customer_id`), calls `record_payment(reference_type='invoice', reference_id=invoice.id)`, then flips status. v1 strict full-payment.
+  - `api/invoices.py` — `mark_paid` route gains `req: MarkPaidRequest` body + extracts `fy_id` via `get_fy_id(current_user)` (matches existing pattern; `get_fy_id` is a plain function, not a Depends).
+
+**Frontend:**
+  - `components/common/PaymentForm.jsx` — NEW shared component extracted from LedgerPanel (PAYMENT_MODES + TDS_SECTIONS + TCS_SECTIONS exported as named consts; `emptyPaymentForm()` helper). Renders amount (with optional `amountReadOnly` + `amountHelper`) · date · mode · ref# · TDS panel (supplier/VA) · TCS panel (customer) · notes. Auto-clears stale TDS/TCS toggles when partyType flips.
+  - `components/common/LedgerPanel.jsx` — refactored to use `<PaymentForm>` (~80 lines of inline form removed; behaviour identical).
+  - `pages/InvoicesPage.jsx` — `openMarkPaid()` opens confirm modal pre-filled with `amount = inv.total_amount`. `handleMarkPaid()` posts the payload; modal sits beside the existing Cancel modal in z-[60]. Mark-as-Paid button now triggers `openMarkPaid` (was direct fire).
+  - `api/invoices.js` — `markPaid(id, data)` signature; mock branch left unchanged.
+
+**Industry alignment:** Zoho Books / QuickBooks / Marg pattern (invoice button opens payment receipt form, books the payment, links back). Tally Receipt Voucher (F6) is heavier — separate voucher type — but identical correctness. CAs accept both.
+
+**Phase 4 deferrals (added to FINANCIAL_SYMMETRY_PLAN):**
+  - **Bank/Cash chart-of-accounts ("Deposit To" ledger)** — Zoho/QB ask which bank ledger receives money; today `payment_mode` is a free string. Needs `BankLedger` master + `bank_ledger_id` FK on payment ledger entries.
+  - **Partial payment / On-Account tracking** — Tally's bill-wise pattern. Adds `Invoice.amount_paid` Numeric col + `partially_paid` status + balance-aware UI. Defer until a real partial case appears.
+
+**Pending:** local boot smoke + commit + push. Vite build clean. Backend imports clean (226 routes).
+
+---
+
+## Previous State (Session 118 — 2026-04-27) — CLOSED
 
 **Phase 2 of FINANCIAL_SYMMETRY_PLAN — purchase-side totals symmetry.** Mirrors S117 across the supplier chain so every financial document carries the same totals stack and uses the same math (`taxable = subtotal − discount + additional → +GST → total`).
 

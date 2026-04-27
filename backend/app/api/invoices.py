@@ -14,6 +14,7 @@ from app.schemas.invoice import (
     InvoiceFilterParams,
     InvoiceFromOrder,
     InvoiceUpdate,
+    MarkPaidRequest,
 )
 from app.schemas.sales_return import CreditNoteFromInvoiceRequest
 from app.services.invoice_service import InvoiceService
@@ -88,12 +89,20 @@ async def get_invoice(
 @router.patch("/{invoice_id}/pay", response_model=None)
 async def mark_paid(
     invoice_id: UUID,
+    req: MarkPaidRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("invoice_manage"),
 ):
-    """Mark invoice as paid."""
+    """Mark invoice as paid by recording a payment receipt.
+
+    Posts a customer-side payment ledger entry (Cr customer) for
+    `invoice.total_amount`, optionally with TDS/TCS split, then flips
+    invoice.status -> 'paid'. The ledger row is linked back via
+    `reference_type='invoice'` for deep-link from customer ledger.
+    """
+    fy_id = get_fy_id(current_user)
     svc = InvoiceService(db)
-    result = await svc.mark_paid(invoice_id)
+    result = await svc.mark_paid(invoice_id, req, fy_id=fy_id, user_id=current_user.id)
     return {"success": True, "data": result}
 
 

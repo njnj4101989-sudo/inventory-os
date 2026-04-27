@@ -35,7 +35,8 @@ export async function getInvoiceByNo(invoiceNo) {
   return client.get(`/invoices/by-no/${encodeURIComponent(invoiceNo)}`)
 }
 
-export async function markPaid(id) {
+export async function markPaid(id, data) {
+  // data = { payment_date, payment_mode?, reference_no?, tds_applicable?, tds_rate?, tds_section?, tcs_applicable?, tcs_rate?, tcs_section?, notes? }
   if (USE_MOCK) {
     const invoice = invoices.find((inv) => inv.id === id)
     if (invoice) {
@@ -44,7 +45,7 @@ export async function markPaid(id) {
     }
     return mockResponse(invoice, 'Invoice marked as paid')
   }
-  return client.patch(`/invoices/${id}/pay`)
+  return client.patch(`/invoices/${id}/pay`, data)
 }
 
 export async function createInvoice(data) {

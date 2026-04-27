@@ -12,6 +12,7 @@ import { getCompany } from '../api/company'
 import CreditNotePrint from '../components/common/CreditNotePrint'
 import FilterSelect from '../components/common/FilterSelect'
 import CreditNotePickerModal from '../components/common/CreditNotePickerModal'
+import PaymentForm, { emptyPaymentForm } from '../components/common/PaymentForm'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
@@ -165,6 +166,11 @@ export default function InvoicesPage() {
   // `also_credit_note` defaults true — matches Zoho/Tally habit where a cancel
   // without a CN leaves a phantom A/R debit. Checkbox lets the user opt out.
   const [cancelForm, setCancelForm] = useState({ reason: '', notes: '', also_credit_note: true })
+  // Mark-paid modal — uses shared PaymentForm. Amount is locked to invoice
+  // total (strict full-payment v1, partial-payment is Phase 4 deferral).
+  const [confirmMarkPaid, setConfirmMarkPaid] = useState(false)
+  const [payForm, setPayForm] = useState(emptyPaymentForm())
+  const [payError, setPayError] = useState(null)
   // Credit-note modal: reason, notes, items pre-filled from invoice.
   const [showCreditNote, setShowCreditNote] = useState(false)
   const [cnForm, setCnForm] = useState({ reason: '', reason_notes: '', items: [] })
@@ -354,11 +360,40 @@ export default function InvoicesPage() {
   }
 
   /* ── Mark paid ── */
+  const openMarkPaid = () => {
+    if (!detailInvoice) return
+    setPayError(null)
+    setPayForm({
+      ...emptyPaymentForm(),
+      amount: String(detailInvoice.total_amount || 0),  // locked, display only
+    })
+    setConfirmMarkPaid(true)
+  }
+
   const handleMarkPaid = async () => {
+    if (!detailInvoice) return
+    if (!payForm.payment_date) { setPayError('Payment date is required'); return }
     setActioning(true)
-    try { await markPaid(detailInvoice.id); setDetailInvoice(null); fetchData() }
-    catch (err) { setError(err.response?.data?.detail || 'Failed to mark paid') }
-    finally { setActioning(false) }
+    setPayError(null)
+    try {
+      await markPaid(detailInvoice.id, {
+        payment_date: payForm.payment_date,
+        payment_mode: payForm.payment_mode || null,
+        reference_no: payForm.reference_no || null,
+        tds_applicable: payForm.tds_applicable,
+        tds_rate: payForm.tds_applicable && payForm.tds_rate ? Number(payForm.tds_rate) : null,
+        tds_section: payForm.tds_applicable ? payForm.tds_section || null : null,
+        tcs_applicable: payForm.tcs_applicable,
+        tcs_rate: payForm.tcs_applicable && payForm.tcs_rate ? Number(payForm.tcs_rate) : null,
+        tcs_section: payForm.tcs_applicable ? payForm.tcs_section || null : null,
+        notes: payForm.notes || null,
+      })
+      setConfirmMarkPaid(false)
+      setDetailInvoice(null)
+      fetchData()
+    } catch (err) {
+      setPayError(err.response?.data?.detail || 'Failed to record payment')
+    } finally { setActioning(false) }
   }
 
   /* ── Open the workflow picker first (unified entry) ── */
@@ -1223,9 +1258,9 @@ export default function InvoicesPage() {
                   className="rounded border border-amber-400 text-amber-700 px-4 py-1.5 typo-btn-sm hover:bg-amber-50 disabled:opacity-50 transition-colors">
                   Create Credit Note
                 </button>
-                <button onClick={handleMarkPaid} disabled={actioning}
+                <button onClick={openMarkPaid} disabled={actioning}
                   className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  {actioning ? 'Processing...' : 'Mark as Paid'}
+                  Mark as Paid
                 </button>
               </div>
             )}
@@ -1497,6 +1532,35 @@ export default function InvoicesPage() {
                       {actioning
                         ? (cancelForm.also_credit_note ? 'Cancelling…' : 'Cancelling…')
                         : (cancelForm.also_credit_note ? 'Cancel + Create CN' : 'Cancel Invoice')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mark-as-Paid confirm + payment receipt — uses shared PaymentForm.
+                v1 strict full-payment: amount locked to invoice.total_amount.
+                Posts to PATCH /invoices/{id}/pay which records a customer
+                payment ledger entry (Cr customer) linked back to this invoice
+                via reference_type='invoice'. */}
+            {confirmMarkPaid && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmMarkPaid(false); setPayError(null) } }}>
+                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-2xl w-full mx-4 space-y-3">
+                  <h3 className="typo-data text-emerald-700">Record payment for {inv.invoice_number}?</h3>
+                  <p className="text-xs text-gray-500">
+                    Posts a payment receipt against {inv.customer_name || 'customer'} for the full invoice total.
+                    Customer ledger gets a credit entry (Cr) linked back to this invoice. Invoice flips to <strong>Paid</strong>.
+                  </p>
+                  <PaymentForm value={payForm} onChange={setPayForm} partyType="customer"
+                    amountReadOnly amountHelper="Locked to invoice total — full payment only (v1)"
+                    error={payError} />
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => { setConfirmMarkPaid(false); setPayError(null) }}
+                      className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={handleMarkPaid} disabled={actioning || !payForm.payment_date}
+                      className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50">
+                      {actioning ? 'Recording…' : 'Confirm Paid'}
                     </button>
                   </div>
                 </div>

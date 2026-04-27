@@ -1401,7 +1401,25 @@ When `sku` is present:
 **Permission:** `invoice_manage`
 
 ### PATCH `/invoices/{id}/pay`
+**Request:**
+```json
+{
+  "payment_date": "2026-04-27",
+  "payment_mode": "neft",
+  "reference_no": "UTR-12345",
+  "tds_applicable": false,
+  "tds_rate": null,
+  "tds_section": null,
+  "tcs_applicable": false,
+  "tcs_rate": null,
+  "tcs_section": null,
+  "notes": null
+}
+```
 **Response:** Updated invoice (status → `paid`, `paid_at` set)
+**Side effects (S119):** Records a customer payment ledger entry (`entry_type='payment'`, Cr customer) for `invoice.total_amount`, optionally with TDS/TCS split into separate ledger lines. Ledger row carries `reference_type='invoice'` + `reference_id=invoice.id` so it deep-links back from the customer ledger panel.
+**v1 strict full-payment:** amount is always `invoice.total_amount` — partial-payment / On-Account tracking is Phase 4 of FINANCIAL_SYMMETRY_PLAN. State guard: only `draft` or `issued` invoices can be marked paid.
+**Permission:** `invoice_manage`
 
 ### POST `/invoices/{id}/cancel`
 **Response:** Updated invoice (status → `cancelled`). Only `draft` or `issued` invoices can be cancelled. Reverses ledger entry (credit note).

@@ -18,7 +18,10 @@ from app.schemas.invoice import (
     InvoiceFilterParams,
     InvoiceFromOrder,
     InvoiceUpdate,
+    MarkPaidRequest,
 )
+from app.schemas.ledger import PaymentCreate
+from app.services.ledger_service import LedgerService
 from app.core.code_generator import next_invoice_number
 from app.core.exceptions import NotFoundError, InvalidStateTransitionError, ValidationError
 
@@ -541,10 +544,60 @@ class InvoiceService:
 
     # ── Mark paid ──
 
-    async def mark_paid(self, invoice_id: UUID) -> dict:
+    async def mark_paid(
+        self,
+        invoice_id: UUID,
+        req: MarkPaidRequest,
+        fy_id: UUID,
+        user_id: UUID | None = None,
+    ) -> dict:
+        """Record full payment receipt against the invoice.
+
+        v1 is strict full-payment: posts a customer-side payment ledger
+        entry (Cr customer) for `invoice.total_amount`, optionally with
+        TDS/TCS split, then flips invoice.status = 'paid'. Ledger row is
+        linked back via `reference_type='invoice'` so it deep-links from
+        the customer ledger to this invoice.
+
+        Partial payment / On-Account tracking is Phase 4 of
+        FINANCIAL_SYMMETRY_PLAN — strict full-payment for v1.
+        """
         invoice = await self._get_or_404(invoice_id)
         if invoice.status == "paid":
             raise InvalidStateTransitionError("Invoice is already paid")
+        if invoice.status not in ("draft", "issued"):
+            raise InvalidStateTransitionError(
+                f"Cannot mark invoice as paid in '{invoice.status}' status (only draft or issued)"
+            )
+        if not invoice.customer_id:
+            raise ValidationError("Invoice has no customer — cannot record payment")
+
+        # Build PaymentCreate from request + invoice context (full-payment v1)
+        payment = PaymentCreate(
+            party_type="customer",
+            party_id=invoice.customer_id,
+            amount=invoice.total_amount or 0,
+            payment_date=req.payment_date,
+            payment_mode=req.payment_mode,
+            reference_no=req.reference_no,
+            tds_applicable=req.tds_applicable,
+            tds_rate=req.tds_rate,
+            tds_section=req.tds_section,
+            tcs_applicable=req.tcs_applicable,
+            tcs_rate=req.tcs_rate,
+            tcs_section=req.tcs_section,
+            notes=req.notes,
+        )
+
+        # Record payment ledger entry(s) linked back to this invoice
+        ledger_svc = LedgerService(self.db)
+        await ledger_svc.record_payment(
+            payment,
+            fy_id=fy_id,
+            created_by=user_id,
+            reference_type="invoice",
+            reference_id=invoice.id,
+        )
 
         invoice.status = "paid"
         invoice.paid_at = datetime.now(timezone.utc)
