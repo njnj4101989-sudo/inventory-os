@@ -496,7 +496,7 @@ export default function RollsPage() {
   // Stock-in modal — challan style with design groups
   const EMPTY_GROUP = { fabric_type: '', cost_per_unit: '', unit: 'kg', panna: '', gsm: '', notes: '', colorRows: [{ color: '', weights: [''] }] }
   const [stockInOpen, setStockInOpen] = useState(false)
-  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '', gst_percent: '' })
+  const [invoiceHeader, setInvoiceHeader] = useState({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: '', sr_no: '', gst_percent: '', discount_amount: '', additional_amount: '' })
   const [designGroups, setDesignGroups] = useState([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
   const [pendingDeleteRow, setPendingDeleteRow] = useState(null) // { gIdx, cIdx } — Delete key confirmation
   const [saving, setSaving] = useState(false)
@@ -807,7 +807,7 @@ export default function RollsPage() {
     const existingSrNos = invoices.map((inv) => parseInt(inv.sr_no, 10)).filter((n) => !isNaN(n))
     const nextSr = existingSrNos.length > 0 ? Math.max(...existingSrNos) + 1 : 1
     const today = new Date().toISOString().split('T')[0]
-    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: today, sr_no: String(nextSr), gst_percent: '' })
+    setInvoiceHeader({ supplier_id: '', supplier_invoice_no: '', supplier_challan_no: '', supplier_invoice_date: today, sr_no: String(nextSr), gst_percent: '', discount_amount: '', additional_amount: '' })
     setDesignGroups([{ ...EMPTY_GROUP, colorRows: [{ color: '', weights: [''] }] }])
     setFormError(null)
     setStockInOpen(true)
@@ -827,6 +827,8 @@ export default function RollsPage() {
       supplier_invoice_date: selectedInvoice.invoice_date || '',
       sr_no: selectedInvoice.sr_no || '',
       gst_percent: selectedInvoice.gst_percent ? String(selectedInvoice.gst_percent) : '',
+      discount_amount: selectedInvoice.discount_amount ? String(selectedInvoice.discount_amount) : '',
+      additional_amount: selectedInvoice.additional_amount ? String(selectedInvoice.additional_amount) : '',
     })
     // Group rolls by fabric_type → design groups, then by color within each
     // Sort rolls by created_at (or received_at) to preserve original entry order
@@ -1054,6 +1056,8 @@ export default function RollsPage() {
           try {
             await updateSupplierInvoice(editingInvoice.supplier_invoice_id, {
               gst_percent: invoiceHeader.gst_percent ? parseFloat(invoiceHeader.gst_percent) : 0,
+              discount_amount: parseFloat(invoiceHeader.discount_amount) || 0,
+              additional_amount: parseFloat(invoiceHeader.additional_amount) || 0,
               invoice_no: invoiceHeader.supplier_invoice_no || null,
               challan_no: invoiceHeader.supplier_challan_no || null,
               invoice_date: invoiceHeader.supplier_invoice_date || null,
@@ -1568,9 +1572,14 @@ export default function RollsPage() {
       return acc
     }, { count: 0, weight: 0, value: 0, colors: 0 })
     const gstPct = parseFloat(invoiceHeader.gst_percent) || 0
+    const disc = parseFloat(invoiceHeader.discount_amount) || 0
+    const addl = parseFloat(invoiceHeader.additional_amount) || 0
+    const taxable = base.value - disc + addl
     base.gstPercent = gstPct
-    base.gstAmount = Math.round(base.value * gstPct / 100 * 100) / 100
-    base.totalWithGst = Math.round((base.value + base.gstAmount) * 100) / 100
+    base.discount = disc
+    base.additional = addl
+    base.gstAmount = Math.round(taxable * gstPct / 100 * 100) / 100
+    base.totalWithGst = Math.round((taxable + base.gstAmount) * 100) / 100
     return base
   })()
 
@@ -2596,13 +2605,19 @@ export default function RollsPage() {
               })}
 
               {/* ── Summary KPIs — matching lot page grid ── */}
-              <div className={`grid ${selectedInvoice.total_value > 0 ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-2">
                 {[
                   { value: allColors.size, label: 'Colors', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
                   { value: selectedInvoice.roll_count, label: 'Rolls', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200' },
                   { value: `${selectedInvoice.total_weight.toFixed(3)}`, label: `Weight (${fabricGroups[0]?.unit || 'kg'})`, color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
                   ...(selectedInvoice.total_value > 0 ? [
-                    { value: `₹${selectedInvoice.total_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Value', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                    { value: `₹${selectedInvoice.total_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Subtotal', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                  ] : []),
+                  ...((selectedInvoice.discount_amount || 0) > 0 ? [
+                    { value: `-₹${selectedInvoice.discount_amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Discount', color: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+                  ] : []),
+                  ...((selectedInvoice.additional_amount || 0) > 0 ? [
+                    { value: `+₹${selectedInvoice.additional_amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: 'Additional', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
                   ] : []),
                   ...(selectedInvoice.total_value > 0 && selectedInvoice.gst_percent > 0 ? [
                     { value: `₹${(selectedInvoice.total_with_gst || selectedInvoice.total_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, label: `Total (+${selectedInvoice.gst_percent}% GST)`, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
@@ -2797,6 +2812,19 @@ export default function RollsPage() {
                     <label className="typo-label-sm">GST %</label>
                     <FilterSelect full value={invoiceHeader.gst_percent} onChange={(v) => setHeader('gst_percent', v)}
                       options={[{ value: '', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Discount (-₹)</label>
+                    <input type="number" min="0" step="0.01" value={invoiceHeader.discount_amount}
+                      onChange={(e) => setHeader('discount_amount', e.target.value)}
+                      placeholder="0.00" className="typo-input-sm" />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Additional (+₹)</label>
+                    <input type="number" min="0" step="0.01" value={invoiceHeader.additional_amount}
+                      onChange={(e) => setHeader('additional_amount', e.target.value)}
+                      placeholder="0.00" className="typo-input-sm"
+                      title="Extra taxable charge — freight, loading, packing" />
                   </div>
                 </div>
               </div>
@@ -3087,7 +3115,7 @@ export default function RollsPage() {
                   <div className="border-b border-gray-100 bg-gray-50 px-4 py-1.5">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Summary</span>
                   </div>
-                  <div className={`grid ${challanTotals.value > 0 && challanTotals.gstAmount > 0 ? 'grid-cols-3 md:grid-cols-6' : challanTotals.value > 0 ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'} divide-x divide-gray-100`}>
+                  <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 divide-x divide-gray-100">
                     <div className="px-4 py-3 text-center">
                       <div className="text-lg font-bold text-gray-800">{challanTotals.count}</div>
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Rolls</div>
@@ -3108,6 +3136,18 @@ export default function RollsPage() {
                       <div className="px-4 py-3 text-center">
                         <div className="text-lg font-bold text-emerald-700">₹{challanTotals.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                         <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Subtotal</div>
+                      </div>
+                    )}
+                    {challanTotals.discount > 0 && (
+                      <div className="px-4 py-3 text-center">
+                        <div className="text-lg font-bold text-green-700">-₹{challanTotals.discount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Discount</div>
+                      </div>
+                    )}
+                    {challanTotals.additional > 0 && (
+                      <div className="px-4 py-3 text-center">
+                        <div className="text-lg font-bold text-blue-700">+₹{challanTotals.additional.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Additional</div>
                       </div>
                     )}
                     {challanTotals.value > 0 && challanTotals.gstAmount > 0 && (

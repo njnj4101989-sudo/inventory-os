@@ -189,7 +189,7 @@ export default function SKUsPage() {
 
   // Purchase overlay
   const [purchaseOpen, setPurchaseOpen] = useState(false)
-  const [purchaseHeader, setPurchaseHeader] = useState({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', notes: '' })
+  const [purchaseHeader, setPurchaseHeader] = useState({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', discount_amount: '', additional_amount: '', notes: '' })
   const [purchaseLines, setPurchaseLines] = useState([{ ...EMPTY_LINE }])
   const [purchaseSaving, setPurchaseSaving] = useState(false)
   const [purchaseError, setPurchaseError] = useState(null)
@@ -425,7 +425,7 @@ export default function SKUsPage() {
 
   // Purchase overlay
   const openPurchase = () => {
-    setPurchaseHeader({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', notes: '' })
+    setPurchaseHeader({ supplier_id: '', invoice_no: '', challan_no: '', invoice_date: '', sr_no: '', gst_percent: '0', discount_amount: '', additional_amount: '', notes: '' })
     setPurchaseLines([{ ...EMPTY_LINE }])
     setPurchaseError(null)
     setPurchaseOpen(true)
@@ -456,10 +456,14 @@ export default function SKUsPage() {
     }, 0)
   }, [purchaseLines])
 
+  const purchaseDiscount = useMemo(() => parseFloat(purchaseHeader.discount_amount) || 0, [purchaseHeader.discount_amount])
+  const purchaseAdditional = useMemo(() => parseFloat(purchaseHeader.additional_amount) || 0, [purchaseHeader.additional_amount])
+  const purchaseTaxable = useMemo(() => Math.max(0, purchaseSubtotal - purchaseDiscount + purchaseAdditional), [purchaseSubtotal, purchaseDiscount, purchaseAdditional])
   const purchaseGstAmt = useMemo(() => {
     const gst = parseFloat(purchaseHeader.gst_percent) || 0
-    return Math.round(purchaseSubtotal * gst / 100 * 100) / 100
-  }, [purchaseSubtotal, purchaseHeader.gst_percent])
+    return Math.round(purchaseTaxable * gst / 100 * 100) / 100
+  }, [purchaseTaxable, purchaseHeader.gst_percent])
+  const purchaseGrandTotal = useMemo(() => Math.round((purchaseTaxable + purchaseGstAmt) * 100) / 100, [purchaseTaxable, purchaseGstAmt])
 
   const handlePurchaseSubmit = async () => {
     const validLines = purchaseLines.filter(l => (l.design_no || l.design_id) && (l.color || l.color_id) && l.size && parseInt(l.qty) > 0 && parseFloat(l.unit_price) > 0)
@@ -475,6 +479,8 @@ export default function SKUsPage() {
         invoice_date: purchaseHeader.invoice_date || null,
         sr_no: purchaseHeader.sr_no || null,
         gst_percent: parseFloat(purchaseHeader.gst_percent) || 0,
+        discount_amount: parseFloat(purchaseHeader.discount_amount) || 0,
+        additional_amount: parseFloat(purchaseHeader.additional_amount) || 0,
         notes: purchaseHeader.notes || null,
         line_items: validLines.map(l => ({
           product_type: l.product_type,
@@ -828,6 +834,20 @@ export default function SKUsPage() {
                   options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
               </div>
               <div>
+                <label className="typo-label-sm">Discount (-₹)</label>
+                <input type="number" min="0" step="0.01" className="typo-input-sm text-right"
+                  value={purchaseHeader.discount_amount}
+                  onChange={e => setPurchaseHeader(p => ({ ...p, discount_amount: e.target.value }))}
+                  placeholder="0.00" />
+              </div>
+              <div>
+                <label className="typo-label-sm">Additional (+₹)</label>
+                <input type="number" min="0" step="0.01" className="typo-input-sm text-right"
+                  value={purchaseHeader.additional_amount}
+                  onChange={e => setPurchaseHeader(p => ({ ...p, additional_amount: e.target.value }))}
+                  placeholder="Freight / pkg / round-off" />
+              </div>
+              <div>
                 <label className="typo-label-sm">Notes</label>
                 <input className="typo-input-sm" value={purchaseHeader.notes} onChange={e => setPurchaseHeader(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
               </div>
@@ -925,10 +945,19 @@ export default function SKUsPage() {
 
             {/* Totals */}
             <div className="mt-3 flex justify-end">
-              <div className="w-56 space-y-1.5 border-t border-gray-200 pt-2">
+              <div className="w-64 space-y-1.5 border-t border-gray-200 pt-2">
                 <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{purchaseSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                {purchaseDiscount > 0 && (
+                  <div className="flex justify-between typo-td-secondary text-rose-600"><span>Discount</span><span>− ₹{purchaseDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                )}
+                {purchaseAdditional > 0 && (
+                  <div className="flex justify-between typo-td-secondary text-emerald-700"><span>Additional</span><span>+ ₹{purchaseAdditional.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                )}
+                {(purchaseDiscount > 0 || purchaseAdditional > 0) && (
+                  <div className="flex justify-between typo-td-secondary border-t border-dashed border-gray-200 pt-1"><span>Taxable</span><span>₹{purchaseTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                )}
                 <div className="flex justify-between typo-td-secondary"><span>GST ({purchaseHeader.gst_percent}%)</span><span>₹{purchaseGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{(purchaseSubtotal + purchaseGstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{purchaseGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               </div>
             </div>
           </div>

@@ -142,6 +142,8 @@ class PurchaseStockRequest(BaseModel):
     invoice_date: date | None = None
     sr_no: str | None = None
     gst_percent: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     notes: str | None = None
     line_items: list[PurchaseLineItem]
 
@@ -180,6 +182,10 @@ class PurchaseInvoiceResponse(BaseSchema):
     notes: str | None = None
     items: list[PurchaseItemBrief] = []
     item_count: int = 0
+    subtotal: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
     total_amount: Decimal = Decimal("0")
 
 

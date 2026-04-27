@@ -19,6 +19,8 @@ class SupplierInvoiceCreate(BaseModel):
     invoice_date: date | None = None
     sr_no: str | None = None
     gst_percent: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     notes: str | None = None
 
 
@@ -30,5 +32,10 @@ class SupplierInvoiceResponse(BaseSchema):
     invoice_date: date | None = None
     sr_no: str | None = None
     gst_percent: Decimal = Decimal("0")
+    subtotal: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    total_amount: Decimal = Decimal("0")
     received_at: datetime | None = None
     notes: str | None = None

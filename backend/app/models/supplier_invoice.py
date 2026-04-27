@@ -29,6 +29,14 @@ class SupplierInvoice(Base):
     gst_percent: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"
     )
+    # Totals stack — matches sales-side Invoice (S117 mirror).
+    # Stored (not derived) so supplier-level discount + additional charges
+    # captured at receipt are durable and ledger-consistent.
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    additional_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

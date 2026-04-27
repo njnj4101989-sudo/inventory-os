@@ -579,7 +579,8 @@ class SKUService:
                     f"Purchase invoice {req.invoice_no} already exists for this supplier"
                 )
 
-        # Create SupplierInvoice
+        # Create SupplierInvoice. Totals (subtotal/tax/total) populated below
+        # after line items are flushed.
         supplier_inv = SupplierInvoice(
             supplier_id=req.supplier_id,
             invoice_no=req.invoice_no,
@@ -587,6 +588,8 @@ class SKUService:
             invoice_date=req.invoice_date,
             sr_no=req.sr_no,
             gst_percent=req.gst_percent,
+            discount_amount=req.discount_amount,
+            additional_amount=req.additional_amount,
             received_by=received_by,
             received_at=now,
             notes=req.notes,
@@ -654,12 +657,22 @@ class SKUService:
                 "total_price": total_price,
             })
 
-        # Ledger entry — keep Decimal throughout for precision
+        # Compute + store totals on the SupplierInvoice. Math mirrors sales-side
+        # Invoice (S117): taxable = subtotal - discount + additional → +GST → total.
         subtotal = sum((it["total_price"] for it in created_items), Decimal("0"))
-        if subtotal > 0:
-            gst_pct = req.gst_percent or Decimal("0")
-            gst_amt = (subtotal * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
-            total = subtotal + gst_amt
+        gst_pct = req.gst_percent or Decimal("0")
+        disc = req.discount_amount or Decimal("0")
+        addl = req.additional_amount or Decimal("0")
+        taxable = subtotal - disc + addl
+        gst_amt = (taxable * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+        total = taxable + gst_amt
+
+        supplier_inv.subtotal = subtotal
+        supplier_inv.tax_amount = gst_amt
+        supplier_inv.total_amount = total
+        await self.db.flush()
+
+        if total > 0:
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
             ledger = LedgerService(self.db)
@@ -686,6 +699,10 @@ class SKUService:
                 {**it, "total_price": float(it["total_price"])} for it in created_items
             ],
             "subtotal": float(subtotal),
+            "discount_amount": float(disc),
+            "additional_amount": float(addl),
+            "tax_amount": float(gst_amt),
+            "total_amount": float(total),
         }
 
     async def create_opening_stock(
@@ -814,9 +831,9 @@ class SKUService:
 
     def _purchase_invoice_to_response(self, inv: SupplierInvoice) -> dict:
         items = []
-        total_amount = Decimal("0")
+        line_subtotal = Decimal("0")
         for pi in (inv.purchase_items or []):
-            total_amount += pi.total_price or 0
+            line_subtotal += pi.total_price or 0
             items.append({
                 "id": str(pi.id),
                 "sku_id": str(pi.sku_id),
@@ -831,6 +848,19 @@ class SKUService:
                 "hsn_code": pi.hsn_code,
                 "gst_percent": float(pi.gst_percent) if pi.gst_percent else None,
             })
+
+        # Prefer stored totals (S118+); fall back to line-aggregate for legacy SIs.
+        stored_subtotal = float(inv.subtotal) if inv.subtotal else 0.0
+        stored_total = float(inv.total_amount) if inv.total_amount else 0.0
+        subtotal_val = stored_subtotal if stored_subtotal > 0 else float(line_subtotal)
+        if stored_total > 0:
+            total_val = stored_total
+            tax_val = float(inv.tax_amount) if inv.tax_amount else 0.0
+        else:
+            gst_pct = float(inv.gst_percent or 0)
+            tax_val = round(subtotal_val * gst_pct / 100, 2)
+            total_val = round(subtotal_val + tax_val, 2)
+
         return {
             "id": str(inv.id),
             "supplier": {"id": str(inv.supplier.id), "name": inv.supplier.name} if inv.supplier else None,
@@ -843,7 +873,11 @@ class SKUService:
             "notes": inv.notes,
             "items": items,
             "item_count": len(items),
-            "total_amount": float(total_amount),
+            "subtotal": subtotal_val,
+            "discount_amount": float(inv.discount_amount) if inv.discount_amount else 0.0,
+            "additional_amount": float(inv.additional_amount) if inv.additional_amount else 0.0,
+            "tax_amount": tax_val,
+            "total_amount": total_val,
         }
 
     async def stock_check(self, sku_ids: list, order_id=None) -> dict:

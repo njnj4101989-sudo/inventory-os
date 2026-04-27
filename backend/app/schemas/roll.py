@@ -105,6 +105,8 @@ class BulkStockIn(BaseModel):
     supplier_invoice_date: date | None = None
     sr_no: str | None = None
     gst_percent: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     supplier_invoice_id: UUID | None = None  # existing invoice — skip dup check, link rolls to it
     rolls: list[BulkRollEntry]
 
@@ -150,6 +152,8 @@ class SupplierInvoiceUpdate(BaseModel):
     """PATCH /rolls/supplier-invoices/{id} — update invoice-level fields."""
 
     gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
     invoice_no: str | None = None
     challan_no: str | None = None
     invoice_date: date | None = None

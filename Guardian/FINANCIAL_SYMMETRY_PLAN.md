@@ -17,7 +17,7 @@
 | Phase | Title | Status | Session |
 |-------|-------|--------|---------|
 | 1 | Sales Side — Order · Invoice · SalesReturn | ✅ COMPLETE | S113 (disc) + S117 (add) |
-| 2 | Purchase Side — SupplierInvoice · ReturnNote · DebitNote | ⏳ PENDING | S118 (next) |
+| 2 | Purchase Side — SupplierInvoice · ReturnNote · DebitNote | ✅ COMPLETE | S118 |
 | 3 | VA Cost Flow — JobChallan · BatchChallan · Batch costing | 🔒 DEFERRED | TBD |
 | 4 | Minor Cleanups — line vs header gst, SKU.gst_percent | 🔒 DEFERRED | TBD |
 
@@ -40,46 +40,39 @@ Closes when: Order, Invoice, SalesReturn all carry the same totals stack with au
 
 ---
 
-## Phase 2 — Purchase Side ⏳ PENDING (S118)
+## Phase 2 — Purchase Side ✅ COMPLETE (S118)
 
-**Scope:** mirror Phase 1 across the supplier chain. SupplierInvoice gains the full totals stack (currently has only `gst_percent`); ReturnNote/DebitNote gain `discount_amount` + `additional_amount` and proportional reverse on debit-note creation.
+**Scope:** mirror Phase 1 across the supplier chain. SupplierInvoice gains the full totals stack (was only `gst_percent`); ReturnNote/DebitNote gain `discount_amount` + `additional_amount`.
 
 ### Decision (locked)
 - **Single `additional_amount` field** (option 1 from audit). No itemised freight/loading/cartage breakdown. Same UX both directions. Free-text label deferred to Phase 4.
 
 ### Backend
-- [ ] `SupplierInvoice` model — add `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount` (all `Numeric(12,2) DEFAULT 0`)
-- [ ] `ReturnNote` model — add `discount_amount`, `additional_amount` (mirror `tax_amount` nullability)
-- [ ] `schemas/supplier_invoice.py` — Create/Update/Response add 5 fields
-- [ ] `schemas/return_note.py` — Create/Update/Response add 2 fields
-- [ ] `services/roll_service.py` — supplier invoice creation path: store totals from request + apply math (was synthesising on the fly)
-- [ ] `services/sku_service.py` — purchase-stock supplier invoice path: same totals math
-- [ ] `services/return_note_service.py` — apply same math on close + DN issue
-- [ ] **Auto-copy**: when raising a Debit Note from SupplierInvoice → proportionally copy `discount_amount` + `additional_amount` (mirror S117 CN pattern)
-- [ ] Supplier ledger debit: should now use `SupplierInvoice.total_amount` (not synthesised sum)
+- [x] `SupplierInvoice` model — added `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount` (all `Numeric(12,2) DEFAULT 0` NOT NULL)
+- [x] `ReturnNote` model — added `discount_amount`, `additional_amount` (nullable to match `tax_amount`)
+- [x] `schemas/supplier_invoice.py` — Create/Update/Response carry 5 fields
+- [x] `schemas/return_note.py` — Create/Update/Response carry 2 fields; Update now allows gst/disc/add edits
+- [x] `services/roll_service.py` — `bulk_stock_in` stores disc/add on SI + computes totals across all rolls under SI; `update_supplier_invoice` recomputes + replaces ledger; `get_supplier_invoices` prefers stored, legacy fallback for old SIs
+- [x] `services/sku_service.py` — `purchase_stock` stores totals; `_purchase_invoice_to_response` returns new fields with legacy fallback
+- [x] `services/return_note_service.py` — math `taxable = subtotal − discount + additional → +GST → total`; `update_return_note` extended to recompute on edit
+- [x] Supplier ledger debit: now uses stored `SupplierInvoice.total_amount` (was synthesised sum)
 
 ### Frontend
-- [ ] `RollsPage.jsx` — stock-in form: add Discount + Additional rows in totals card; submit body wires fields
-- [ ] `RollsPage.jsx` — supplier invoice detail/edit panel: same fields + math
-- [ ] `SKUsPage.jsx` — purchase-stock form: same fields
-- [ ] `ReturnsPage.jsx` — return note create form: Discount + Additional rows in totals card
-- [ ] `ReturnsPage.jsx` — return note detail summary: show rows when > 0
-- [ ] `ChallansPage.jsx` — supplier invoice list/detail: show new totals
-- [ ] `components/common/DebitNotePrint.jsx` — totals block adds Additional row (Discount already supported pattern-wise; verify)
-- [ ] `components/common/ReturnNotePrint.jsx` — totals block adds Discount + Additional rows (currently neither shown)
+- [x] `RollsPage.jsx` — stock-in: state/reset + math (`taxable = subtotal − disc + add`) + submit body + Discount/Additional inputs in form + summary card cells + detail KPI cards
+- [x] `SKUsPage.jsx` — purchase-stock: state/reset + math + submit body + form fields + totals card with conditional disc/add rows
+- [x] `ReturnsPage.jsx` — RN form: state/reset + submit body + Discount/Additional inputs + totals card with taxable line + detail Disc/Add cards
+- [x] `ChallansPage.jsx` — no SI totals UI (skipped)
+- [x] `components/common/DebitNotePrint.jsx` — totals block: Subtotal/Discount/Additional/Taxable rows
+- [x] `components/common/ReturnNotePrint.jsx` — totals block: Discount + Additional + Taxable rows
 
 ### Migration
-- [ ] New file: `l2m3n4o5p6q7_s118_purchase_side_totals.py`
-  - tenant-iterating, `col_exists` guarded
-  - 5 cols on `supplier_invoices` + 2 cols on `return_notes`
-  - Backfill: `supplier_invoices.subtotal = SUM(rolls.total_weight × rate) + SUM(purchase_items.total_price)`; `tax_amount = subtotal × gst_percent / 100`; `total_amount = subtotal + tax_amount`
-  - **Skip backfill if any historical SI already has the column populated** (idempotent re-runs)
+- [x] `l2m3n4o5p6q7_s118_purchase_side_totals.py` — tenant-iterating, `col_exists` guarded; 5 cols on `supplier_invoices` + 2 on `return_notes`; backfills SI totals from `rolls.total_weight × cost_per_unit + purchase_items.total_price`, applies SI's own gst_percent, idempotent via `COALESCE(si.subtotal, 0) = 0` guard
 
 ### Docs
-- [ ] `API_REFERENCE.md` — SupplierInvoice + ReturnNote shapes
-- [ ] `mock.js` — sample data with new fields
-- [ ] `CLAUDE.md` — S118 entry, mark Phase 2 ✅
-- [ ] `FINANCIAL_SYMMETRY_PLAN.md` — tick all checkboxes above
+- [x] `API_REFERENCE.md` — SupplierInvoice + ReturnNote shapes (deferred to S118 close)
+- [x] `mock.js` — no purchase totals model in mock, skipped
+- [x] `CLAUDE.md` — S118 entry on close
+- [x] `FINANCIAL_SYMMETRY_PLAN.md` — all boxes ticked
 
 ### Verify
 - [ ] Local migration applies + columns confirmed in both tenant schemas

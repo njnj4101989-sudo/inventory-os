@@ -97,6 +97,8 @@ class ReturnNoteService:
         note_no = await next_return_note_number(self.db, fy_id)
 
         gst_percent = req.gst_percent if req.gst_percent is not None else Decimal("0")
+        discount_amount = req.discount_amount or Decimal("0")
+        additional_amount = req.additional_amount or Decimal("0")
 
         note = ReturnNote(
             return_note_no=note_no,
@@ -107,6 +109,8 @@ class ReturnNoteService:
             transport_id=req.transport_id,
             lr_number=req.lr_number,
             gst_percent=gst_percent,
+            discount_amount=discount_amount,
+            additional_amount=additional_amount,
             notes=req.notes,
             created_by=created_by,
             fy_id=fy_id,
@@ -137,9 +141,13 @@ class ReturnNoteService:
             self.db.add(rni)
             item_total += amount
 
+        # Math mirrors sales-side (S117): taxable = subtotal - disc + add → +GST → total.
+        # Industry convention (Tally/Busy/Zoho): additional_amount on a return note
+        # represents charges supplier has agreed to reimburse — always positive.
+        taxable = item_total - discount_amount + additional_amount
         note.subtotal = item_total
-        note.tax_amount = item_total * gst_percent / Decimal("100")
-        note.total_amount = note.subtotal + note.tax_amount
+        note.tax_amount = (taxable * gst_percent / Decimal("100")).quantize(Decimal("0.01"))
+        note.total_amount = taxable + note.tax_amount
         await self.db.flush()
 
         await self._emit("return_created", note, created_by)
@@ -158,6 +166,29 @@ class ReturnNoteService:
             note.lr_number = req.lr_number or None
         if req.notes is not None:
             note.notes = req.notes or None
+
+        # Allow editing the totals stack on draft. Recompute when any of
+        # gst/discount/additional changes — keeps tax + total consistent
+        # with the same math used at creation.
+        recompute = False
+        if req.gst_percent is not None:
+            note.gst_percent = req.gst_percent
+            recompute = True
+        if req.discount_amount is not None:
+            note.discount_amount = req.discount_amount
+            recompute = True
+        if req.additional_amount is not None:
+            note.additional_amount = req.additional_amount
+            recompute = True
+
+        if recompute:
+            subtotal = Decimal(str(float(note.subtotal or 0)))
+            disc = Decimal(str(float(note.discount_amount or 0)))
+            addl = Decimal(str(float(note.additional_amount or 0)))
+            gst_pct = Decimal(str(float(note.gst_percent or 0)))
+            taxable = subtotal - disc + addl
+            note.tax_amount = (taxable * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+            note.total_amount = taxable + note.tax_amount
 
         await self.db.flush()
         return await self.get_return_note(note_id)
@@ -328,6 +359,8 @@ class ReturnNoteService:
             "total_amount": float(n.total_amount) if n.total_amount else 0,
             "gst_percent": float(n.gst_percent) if n.gst_percent else 0,
             "subtotal": float(n.subtotal) if n.subtotal else 0,
+            "discount_amount": float(n.discount_amount) if n.discount_amount else 0,
+            "additional_amount": float(n.additional_amount) if n.additional_amount else 0,
             "tax_amount": float(n.tax_amount) if n.tax_amount else 0,
             "debit_note_no": n.debit_note_no,
             "notes": n.notes,

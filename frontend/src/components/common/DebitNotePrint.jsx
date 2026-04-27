@@ -47,9 +47,10 @@ export default function DebitNotePrint({ note, company, onClose }) {
   const gstPct = Number(rn.gst_percent) || 0
   const subtotal = Number(rn.subtotal) || 0
   const discount = Number(rn.discount_amount) || 0
+  const additional = Number(rn.additional_amount) || 0
   const taxAmt = Number(rn.tax_amount) || 0
   const total = Number(rn.total_amount) || 0
-  const taxableValue = subtotal - discount
+  const taxableValue = Math.max(0, subtotal - discount + additional)
 
   const originalPurchaseInvNo = rn.supplier_invoice?.invoice_no || rn.supplier_invoice_no || null
 
@@ -152,13 +153,25 @@ export default function DebitNotePrint({ note, company, onClose }) {
               <table style={{ width: '100%', fontSize: '13px' }}>
                 <tbody>
                   <tr>
-                    <td style={{ color: '#374151', padding: '2px 0' }}>Taxable Value</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCurrency(taxableValue)}</td>
+                    <td style={{ color: '#374151', padding: '2px 0' }}>Subtotal</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCurrency(subtotal)}</td>
                   </tr>
                   {discount > 0 && (
                     <tr>
                       <td style={{ color: '#d97706', padding: '2px 0' }}>(Discount)</td>
                       <td style={{ textAlign: 'right', color: '#d97706', fontWeight: 600 }}>-{fmtCurrency(discount)}</td>
+                    </tr>
+                  )}
+                  {additional > 0 && (
+                    <tr>
+                      <td style={{ color: '#059669', padding: '2px 0' }}>Additional</td>
+                      <td style={{ textAlign: 'right', color: '#059669', fontWeight: 600 }}>+{fmtCurrency(additional)}</td>
+                    </tr>
+                  )}
+                  {(discount > 0 || additional > 0) && (
+                    <tr>
+                      <td style={{ color: '#374151', padding: '2px 0', borderTop: '1px dashed #d1d5db' }}>Taxable Value</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, borderTop: '1px dashed #d1d5db' }}>{fmtCurrency(taxableValue)}</td>
                     </tr>
                   )}
                   {gstPct > 0 && (

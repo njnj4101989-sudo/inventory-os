@@ -34,7 +34,39 @@
 
 ---
 
-## Current State (Session 117 — 2026-04-27) — IN PROGRESS
+## Current State (Session 118 — 2026-04-27) — IN PROGRESS
+
+**Phase 2 of FINANCIAL_SYMMETRY_PLAN — purchase-side totals symmetry.** Mirrors S117 across the supplier chain so every financial document carries the same totals stack and uses the same math (`taxable = subtotal − discount + additional → +GST → total`).
+
+**Backend:**
+  - `models/supplier_invoice.py` — +5 NOT NULL cols: `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount` (was only carrying `gst_percent`; totals were synthesised on every read from rolls × cost + purchase_items).
+  - `models/return_note.py` — +2 nullable cols mirroring `tax_amount`: `discount_amount`, `additional_amount`.
+  - `schemas/supplier_invoice.py` + `schemas/return_note.py` + `schemas/roll.py` (BulkStockIn + SupplierInvoiceUpdate) + `schemas/sku.py` (PurchaseStockRequest + PurchaseInvoiceResponse).
+  - `services/roll_service.py` — `bulk_stock_in` stores disc/add on SI + computes totals over **all** rolls under that SI (handles "add to existing invoice"); `update_supplier_invoice` recomputes + replaces ledger when gst/disc/add change; `get_supplier_invoices` prefers stored totals, legacy fallback for old SIs.
+  - `services/sku_service.py` — `purchase_stock` stores totals + uses stored total for ledger; `_purchase_invoice_to_response` returns new fields with legacy fallback.
+  - `services/return_note_service.py` — `create_return_note` applies the rule; `update_return_note` extended to allow editing gst/disc/add with recompute; `_to_response` includes both new fields.
+  - **Ledger (supplier credit on stock-in / debit on return)** — both paths now use the stored `total_amount` (was using on-the-fly synthesised sum).
+
+**Frontend:**
+  - `RollsPage.jsx` — stock-in: `invoiceHeader` + reset + `openEditInvoice` prefill + submit body + `challanTotals` math; Discount/Additional inputs in form; `summary card` grid expanded to 8 cols with conditional disc/add cells; detail KPI grid +Discount/Additional cards.
+  - `SKUsPage.jsx` — purchase-stock: state/reset + math (`purchaseTaxable`, `purchaseGrandTotal` memos) + submit body + form fields after GST + totals card with conditional disc/add/taxable rows.
+  - `ReturnsPage.jsx` — RN create form: state/reset + Discount/Additional inputs after GST + totals card with disc/add/taxable rows + submit body + detail Disc/Add cards.
+  - `api/rolls.js` — `stockInBulk` payload now sends `discount_amount` + `additional_amount`.
+  - `components/common/DebitNotePrint.jsx` — totals block now: Subtotal · (Discount) · Additional · Taxable Value · GST · TOTAL DEBIT.
+  - `components/common/ReturnNotePrint.jsx` — totals block now: Subtotal · Discount · Additional · Taxable Value · CGST/SGST · TOTAL VALUE.
+  - `ChallansPage.jsx` — no SI totals UI present, skipped.
+
+**Migration:** `l2m3n4o5p6q7_s118_purchase_side_totals` — tenant-iterating, `col_exists` guarded; 5 cols on `supplier_invoices` (NOT NULL DEFAULT 0) + 2 cols on `return_notes` (nullable DEFAULT 0). Backfill reconstructs SI subtotal from `rolls.total_weight × cost_per_unit + purchase_items.total_price`, applies the SI's own `gst_percent`, fills `tax_amount` + `total_amount`. Idempotent via `COALESCE(si.subtotal, 0) = 0` skip — safe to re-run.
+
+**Docs:** `API_REFERENCE.md` (Supplier Invoice grouping endpoint + PATCH SI shape extended); `FINANCIAL_SYMMETRY_PLAN.md` (Phase 2 ✅, all boxes ticked).
+
+**Prod deploy:** Run by CI on push (S117 deploy confirmed CI auto-runs `alembic upgrade head`).
+
+**Pending:** local migrate verification, vite build, smoke tests, commit + push.
+
+---
+
+## Previous State (Session 117 — 2026-04-27) — CLOSED
 
 **Additional Amount column** on Order + Invoice grand totals. Mirrors `discount_amount` exactly — taxable = subtotal − discount + **additional** → +GST → total. Auto-copies order→invoice (full + proportional per-shipment). Proportionally reverses on credit-note (matches S113 discount pattern). Use cases: packing, freight, handling, labour. Client reference: per-line "Add Amt" in their accounting software simplified to single header-level field per UX request.
 

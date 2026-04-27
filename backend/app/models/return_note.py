@@ -47,6 +47,12 @@ class ReturnNote(Base):
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     gst_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0, server_default="0")
     subtotal: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    discount_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
+    additional_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     debit_note_no: Mapped[str | None] = mapped_column(String(50))
     notes: Mapped[str | None] = mapped_column(Text)

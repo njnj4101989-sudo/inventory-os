@@ -556,6 +556,11 @@ Same as `GET /rolls` with status filter pre-applied.
   "supplier": { "id": "uuid", "name": "Krishna Textiles" },
   "supplier_invoice_id": "uuid | null",
   "gst_percent": 12.0,
+  "subtotal": 11100.00,
+  "discount_amount": 0,
+  "additional_amount": 0,
+  "tax_amount": 1332.00,
+  "total_amount": 12432.00,
   "gst_amount": 1332.00,
   "total_with_gst": 12432.00,
   "rolls": [ ...full roll objects (same shape as GET /rolls items) ],
@@ -568,10 +573,12 @@ Same as `GET /rolls` with status filter pre-applied.
 ```
 - Rolls within each group sorted by `created_at ASC` (preserves original entry order)
 - Groups sorted by `received_at DESC` (newest first)
-- `total_value` = sum of `total_weight * cost_per_unit` per roll
+- `total_value` = sum of `total_weight * cost_per_unit` per roll (raw subtotal)
+- **S118 — purchase-side totals symmetry:** `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount` come from the stored `SupplierInvoice` record (post-S118). For legacy SIs without stored totals, the response falls back to `gst_amount` / `total_with_gst` synthesised from rolls.
+- Math: `taxable = subtotal − discount + additional`; `tax = taxable × gst_pct / 100`; `total = taxable + tax`
 - `gst_percent` — from linked `SupplierInvoice` record (0 if no link)
-- `gst_amount` = `total_value * gst_percent / 100` (2 decimal places)
-- `total_with_gst` = `total_value + gst_amount`
+- `gst_amount` (legacy) = `total_value * gst_percent / 100` (2 decimal places)
+- `total_with_gst` (legacy) = `total_value + gst_amount`
 - `supplier_invoice_id` — FK to `SupplierInvoice` record (null for legacy rolls)
 - Rolls without `supplier_invoice_no` get unique key `NO-INV-{roll_id}` (shown as standalone)
 
@@ -583,6 +590,8 @@ Same as `GET /rolls` with status filter pre-applied.
 ```json
 {
   "gst_percent": 18,
+  "discount_amount": 0,
+  "additional_amount": 0,
   "invoice_no": "KT-2026-0451",
   "challan_no": "CH-451",
   "invoice_date": "2026-02-06",
@@ -590,7 +599,7 @@ Same as `GET /rolls` with status filter pre-applied.
   "notes": "Updated"
 }
 ```
-**Allowed fields:** `gst_percent`, `invoice_no`, `challan_no`, `invoice_date`, `sr_no`, `notes`
+**Allowed fields:** `gst_percent`, `discount_amount`, `additional_amount`, `invoice_no`, `challan_no`, `invoice_date`, `sr_no`, `notes`. When any of `gst_percent`/`discount_amount`/`additional_amount` change, the SI's stored `subtotal`/`tax_amount`/`total_amount` are recomputed from the rolls + items aggregate and the supplier ledger entry is replaced (S118).
 
 **Response:**
 ```json

@@ -192,7 +192,7 @@ export default function ReturnsPage() {
   const [createMode, setCreateMode] = useState(false)
   const [suppliers, setSuppliers] = useState([])
   const [transports, setTransports] = useState([])
-  const [form, setForm] = useState({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', notes: '' })
+  const [form, setForm] = useState({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', discount_amount: '', additional_amount: '', notes: '' })
   const [formItems, setFormItems] = useState([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -364,7 +364,7 @@ export default function ReturnsPage() {
     setFormError(null)
     setScanMode(false)
     setScanStatus(null)
-    setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', notes: '' })
+    setForm({ return_type: 'roll_return', supplier_id: '', transport_id: '', lr_number: '', gst_percent: '0', discount_amount: '', additional_amount: '', notes: '' })
     setFormItems([{ roll_id: '', sku_id: '', roll_code: '', roll_detail: null, quantity: 1, weight: '', unit_price: '', reason: '', notes: '' }])
     setSupplierRolls([])
     setSupplierSkus([])
@@ -577,6 +577,8 @@ export default function ReturnsPage() {
         transport_id: form.transport_id || null,
         lr_number: form.lr_number?.trim() || null,
         gst_percent: parseFloat(form.gst_percent) || 0,
+        discount_amount: parseFloat(form.discount_amount) || 0,
+        additional_amount: parseFloat(form.additional_amount) || 0,
         notes: form.notes?.trim() || null,
         items: formItems.map(item => ({
           roll_id: item.roll_id || null,
@@ -1324,6 +1326,18 @@ export default function ReturnsPage() {
                 <p className="typo-label-sm">Total Amount</p>
                 <p className="typo-body font-semibold">{fmtCurrency(n.total_amount)}</p>
               </div>
+              {(n.discount_amount || 0) > 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded p-2">
+                  <p className="typo-label-sm text-rose-700">Discount</p>
+                  <p className="typo-body font-semibold text-rose-700">− {fmtCurrency(n.discount_amount)}</p>
+                </div>
+              )}
+              {(n.additional_amount || 0) > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
+                  <p className="typo-label-sm text-emerald-700">Additional</p>
+                  <p className="typo-body font-semibold text-emerald-700">+ {fmtCurrency(n.additional_amount)}</p>
+                </div>
+              )}
               {n.transport && (
                 <div className="bg-gray-50 rounded p-2">
                   <p className="typo-label-sm">Transport</p>
@@ -1525,6 +1539,20 @@ export default function ReturnsPage() {
                   onChange={v => setForm(f => ({ ...f, gst_percent: v }))}
                   options={[{ value: '0', label: '0%' }, { value: '5', label: '5%' }, { value: '12', label: '12%' }, { value: '18', label: '18%' }, { value: '28', label: '28%' }]} />
               </div>
+              <div>
+                <label className="typo-label-sm">DISCOUNT (-₹)</label>
+                <input type="number" min="0" step="0.01" className="typo-input text-right"
+                  value={form.discount_amount}
+                  onChange={e => setForm(f => ({ ...f, discount_amount: e.target.value }))}
+                  placeholder="0.00" />
+              </div>
+              <div>
+                <label className="typo-label-sm">ADDITIONAL (+₹)</label>
+                <input type="number" min="0" step="0.01" className="typo-input text-right"
+                  value={form.additional_amount}
+                  onChange={e => setForm(f => ({ ...f, additional_amount: e.target.value }))}
+                  placeholder="Freight / pkg / round-off" />
+              </div>
             </div>
           </div>
 
@@ -1702,8 +1730,11 @@ export default function ReturnsPage() {
           {(() => {
             const subtotal = formItems.reduce((s, i) => s + (parseFloat(i.unit_price) || 0) * (form.return_type === 'roll_return' ? (parseFloat(i.weight) || 0) : (i.quantity || 0)), 0)
             const gstPct = parseFloat(form.gst_percent) || 0
-            const taxAmt = subtotal * gstPct / 100
-            const total = subtotal + taxAmt
+            const discount = parseFloat(form.discount_amount) || 0
+            const additional = parseFloat(form.additional_amount) || 0
+            const taxable = Math.max(0, subtotal - discount + additional)
+            const taxAmt = Math.round(taxable * gstPct / 100 * 100) / 100
+            const total = Math.round((taxable + taxAmt) * 100) / 100
             return (
               <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 <div className="flex items-end gap-0 border-b border-gray-200 bg-gray-50">
@@ -1714,6 +1745,15 @@ export default function ReturnsPage() {
                 <div className="px-4 py-3 flex justify-end">
                   <div className="w-64 space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-semibold">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-rose-600"><span>Discount</span><span>− ₹{discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    )}
+                    {additional > 0 && (
+                      <div className="flex justify-between text-emerald-700"><span>Additional</span><span>+ ₹{additional.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    )}
+                    {(discount > 0 || additional > 0) && (
+                      <div className="flex justify-between pt-1 border-t border-dashed border-gray-200 text-gray-600"><span>Taxable</span><span>₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    )}
                     {gstPct > 0 && (<>
                       <div className="flex justify-between"><span className="text-gray-500">CGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                       <div className="flex justify-between"><span className="text-gray-500">SGST ({gstPct / 2}%)</span><span>₹{(taxAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>

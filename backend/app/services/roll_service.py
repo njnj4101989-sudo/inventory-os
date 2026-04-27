@@ -304,7 +304,8 @@ class RollService:
                         f"Please verify before re-entering."
                     )
 
-            # Create new SupplierInvoice record
+            # Create new SupplierInvoice record. Totals (subtotal/tax/total)
+            # populated below after rolls are flushed and the line sum is known.
             supplier_inv = SupplierInvoice(
                 supplier_id=req.supplier_id,
                 invoice_no=req.supplier_invoice_no,
@@ -312,6 +313,8 @@ class RollService:
                 invoice_date=req.supplier_invoice_date,
                 sr_no=req.sr_no,
                 gst_percent=req.gst_percent,
+                discount_amount=req.discount_amount,
+                additional_amount=req.additional_amount,
                 received_by=received_by,
                 received_at=now,
                 fy_id=fy_id,
@@ -365,15 +368,30 @@ class RollService:
 
         await self.db.flush()
 
-        # Auto-create ledger entry for supplier invoice
-        subtotal = sum(
-            float(r.total_weight or 0) * float(r.cost_per_unit or 0)
-            for r in created_rolls
-        )
-        if subtotal > 0:
-            gst_pct = float(req.gst_percent or 0)
-            gst_amt = round(subtotal * gst_pct / 100, 2)
-            total = round(subtotal + gst_amt, 2)
+        # Compute + store totals on the SupplierInvoice. Math mirrors sales-side
+        # Invoice (S117): taxable = subtotal - discount + additional → +GST → total.
+        # Re-aggregate over ALL rolls under this SI (not just created_rolls) so
+        # the "add to existing invoice" path also lands on a correct total.
+        line_subtotal = (await self.db.execute(
+            select(func.coalesce(
+                func.sum(Roll.total_weight * func.coalesce(Roll.cost_per_unit, 0)), 0
+            )).where(Roll.supplier_invoice_id == supplier_inv.id)
+        )).scalar() or 0
+        line_subtotal = float(line_subtotal)
+
+        gst_pct = float(supplier_inv.gst_percent or 0)
+        disc = float(supplier_inv.discount_amount or 0)
+        addl = float(supplier_inv.additional_amount or 0)
+        taxable = line_subtotal - disc + addl
+        tax_amt = round(taxable * gst_pct / 100, 2)
+        total = round(taxable + tax_amt, 2)
+
+        supplier_inv.subtotal = line_subtotal
+        supplier_inv.tax_amount = tax_amt
+        supplier_inv.total_amount = total
+        await self.db.flush()
+
+        if total > 0:
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
             ledger = LedgerService(self.db)
@@ -547,11 +565,24 @@ class RollService:
                 s = group_rolls[0].supplier
                 supplier = {"id": str(s.id), "name": s.name}
 
-            # GST from SupplierInvoice (new rolls) or 0 (legacy rolls)
+            # GST + stored totals come from SupplierInvoice. Legacy SIs (created
+            # before S118) have subtotal=0 — fall back to roll-aggregate sum.
             si = next((r.supplier_invoice for r in group_rolls if r.supplier_invoice), None)
             gst_pct = float(si.gst_percent) if si and si.gst_percent else 0.0
-            total_val = float(g.total_value) if g.total_value else 0.0
-            gst_amount = round(total_val * gst_pct / 100, 2)
+            roll_value = float(g.total_value) if g.total_value else 0.0
+            disc = float(si.discount_amount) if si and si.discount_amount else 0.0
+            addl = float(si.additional_amount) if si and si.additional_amount else 0.0
+
+            stored_subtotal = float(si.subtotal) if si and si.subtotal else 0.0
+            subtotal_val = stored_subtotal if stored_subtotal > 0 else roll_value
+            stored_total = float(si.total_amount) if si and si.total_amount else 0.0
+            stored_tax = float(si.tax_amount) if si and si.tax_amount else 0.0
+            if stored_total > 0:
+                gst_amount = stored_tax
+                total_with_gst = stored_total
+            else:
+                gst_amount = round(subtotal_val * gst_pct / 100, 2)
+                total_with_gst = round(subtotal_val + gst_amount, 2)
 
             data.append({
                 "invoice_no": g.supplier_invoice_no,
@@ -561,13 +592,15 @@ class RollService:
                 "supplier": supplier,
                 "supplier_invoice_id": str(si.id) if si else None,
                 "gst_percent": gst_pct,
+                "discount_amount": disc,
+                "additional_amount": addl,
                 "gst_amount": gst_amount,
-                "total_with_gst": round(total_val + gst_amount, 2),
+                "total_with_gst": total_with_gst,
                 "rolls": [self._to_response(r) for r in group_rolls],
                 "roll_count": int(g.roll_count),
                 "total_weight": float(g.total_weight) if g.total_weight else 0.0,
                 "total_length": float(g.total_length) if g.total_length else 0.0,
-                "total_value": total_val,
+                "total_value": roll_value,
                 "received_at": g.received_at.isoformat() if g.received_at else None,
             })
 
@@ -749,7 +782,12 @@ class RollService:
         }
 
     async def update_supplier_invoice(self, invoice_id: UUID, updates) -> dict:
-        """Update a SupplierInvoice record (e.g. gst_percent, invoice_no, etc.)."""
+        """Update a SupplierInvoice record (e.g. gst_percent, invoice_no, etc.).
+
+        If gst_percent / discount_amount / additional_amount changes, recompute
+        the totals stack from the linked rolls and rewrite the supplier ledger
+        entry so A/P stays in sync. Mirrors the sales-side update_invoice flow.
+        """
         stmt = (
             select(SupplierInvoice)
             .where(SupplierInvoice.id == invoice_id)
@@ -760,8 +798,46 @@ class RollService:
         if not si:
             raise NotFoundError(f"Supplier invoice {invoice_id} not found")
 
-        for field, value in updates.model_dump(exclude_unset=True).items():
+        applied = updates.model_dump(exclude_unset=True)
+        for field, value in applied.items():
             setattr(si, field, value)
+
+        recompute = any(k in applied for k in ("gst_percent", "discount_amount", "additional_amount"))
+        if recompute:
+            line_subtotal = (await self.db.execute(
+                select(func.coalesce(
+                    func.sum(Roll.total_weight * func.coalesce(Roll.cost_per_unit, 0)), 0
+                )).where(Roll.supplier_invoice_id == si.id)
+            )).scalar() or 0
+            line_subtotal = float(line_subtotal)
+
+            gst_pct = float(si.gst_percent or 0)
+            disc = float(si.discount_amount or 0)
+            addl = float(si.additional_amount or 0)
+            taxable = line_subtotal - disc + addl
+            tax_amt = round(taxable * gst_pct / 100, 2)
+            total = round(taxable + tax_amt, 2)
+
+            si.subtotal = line_subtotal
+            si.tax_amount = tax_amt
+            si.total_amount = total
+            await self.db.flush()
+
+            # Replace supplier ledger entry to match new total
+            from app.models.ledger_entry import LedgerEntry
+            ledger_stmt = select(LedgerEntry).where(
+                LedgerEntry.reference_type == "supplier_invoice",
+                LedgerEntry.reference_id == si.id,
+                LedgerEntry.entry_type == "invoice",
+            )
+            existing_entry = (await self.db.execute(ledger_stmt)).scalar_one_or_none()
+            if existing_entry and total > 0:
+                existing_entry.credit = total
+                existing_entry.debit = 0
+                existing_entry.description = (
+                    f"Stock-in {si.invoice_no or 'N/A'} — ₹{total:,.2f} (edited)"
+                )
+                await self.db.flush()
 
         await self.db.flush()
         return {
@@ -772,6 +848,11 @@ class RollService:
             "invoice_date": si.invoice_date.isoformat() if si.invoice_date else None,
             "sr_no": si.sr_no,
             "gst_percent": float(si.gst_percent) if si.gst_percent else 0,
+            "discount_amount": float(si.discount_amount) if si.discount_amount else 0,
+            "additional_amount": float(si.additional_amount) if si.additional_amount else 0,
+            "subtotal": float(si.subtotal) if si.subtotal else 0,
+            "tax_amount": float(si.tax_amount) if si.tax_amount else 0,
+            "total_amount": float(si.total_amount) if si.total_amount else 0,
         }
 
     async def update_roll(self, roll_id: UUID, req: RollUpdate) -> dict:
