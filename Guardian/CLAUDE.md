@@ -33,215 +33,42 @@
 
 ---
 
-## Current State (Session 115d — 2026-04-24) — CLOSED
+## Current State (Session 116 — 2026-04-27) — IN PROGRESS
 
-**Reports overhaul (P4.1 Inventory + P5 Tier 1 Sales) + UX polish.**
+**P4.7 Wastage Report** — closes the S115 write-off loop. New top-level Reports tab unifying 5 wastage streams (cutting, roll VA damage, batch VA damage, sales-return damage, write-off) into one ₹ picture (AS-2 valued).
 
-Full checklist, API shapes, file maps → [REPORTS_AND_INVENTORY_PLAN.md](REPORTS_AND_INVENTORY_PLAN.md) (§ Phase 4 + § Phase 5).
+Full spec, deviations from original plan, file maps → [REPORTS_AND_INVENTORY_PLAN.md § P4.7](REPORTS_AND_INVENTORY_PLAN.md).
 
-Commits: `407ca6c` (P4.1), `d9e9bf0` (P5 Tier 1), then polish (`9abf66b 21c02a6 7e366ee 65c05cc 2ee114d 7ad4366 70f2df1 ecadf3d e8b3dea f765522 a84c8da efe9503 2c114e6 902e839`) — deployed to prod.
+**Files:**
+  - BE: `models/roll.py` (+`weight_at_write_off`), `services/roll_service.py` (snapshot before zero, both single + bulk write-off), `services/dashboard_service.py` (+`get_wastage_report`), `api/dashboard.py` (+2 endpoints).
+  - FE: `api/dashboard.js` (+`getWastageReport`, +`downloadWastageReportCSV`), `pages/ReportsPage.jsx` (+`WastageTab` + tab wired into `TABS`/`validTabs`/render switch).
+  - Migration: `j0k1l2m3n4o5_s116_writeoff_snapshot` — adds `Roll.weight_at_write_off` + backfills historical written-off rolls via reconstruction.
+  - Docs: `API_REFERENCE.md` (+2 endpoints), `REPORTS_AND_INVENTORY_PLAN.md` (P4.7 ✅, table updated).
 
-Polish delivered this session:
-- Inventory tab expanded-row chips (Free / Locked / Out / Dead) with fixed-width alignment + row tinting + user-tunable Dead-days threshold.
-- Sales tab stuck-days filter, horizontal funnel, typography fixes, deep-link `?open=` on SKUsPage.
-- URL-synced active tab on both ReportsPage (`?tab=sales`) and InventoryPage (`?tab=raw`) — refresh preserves context.
-- Fixed OrdersPage `?status=` deep-link from stuck-orders banner.
+**Architectural note:** S115's `write_off_roll` zeroed `remaining_weight` without snapshotting it — historical wastage was unrecoverable. S116 fixes this properly (no band-aid): new snapshot column, service captures pre-zero value, migration backfills via `total_weight - SUM(consumed) - SUM(va_damage)` clamped ≥ 0.
 
----
-
-## Previous State (Session 115c — 2026-04-24) — CLOSED
-
-**P5 Tier 1: Sales & Orders Report WOW overhaul — stuck-orders alert, MoM delta KPIs, revenue sparkline, real funnel, top products, CSV.**
-
-Rebuilt `SalesTab` in ReportsPage per Phase 5 of `REPORTS_AND_INVENTORY_PLAN.md`.
-
-**Backend (`dashboard_service.get_sales_report`):**
-  - Extended single endpoint to return 4 new payload sections: `previous_period` (shifted same-span window for deltas), `stuck_orders` (count/total_value/rows for pending orders > threshold), `top_products` (top N by units sold with current stock), `revenue_daily` (per-day series for sparkline).
-  - New query params: `stuck_days` (1-90, default 7), `top_n` (5-50, default 10).
-  - New endpoint `GET /dashboard/sales-report.csv` — streams customer-ranking sheet.
-
-**Frontend (`SalesTab`, `KpiCard`, new helpers):**
-  - Amber **stuck-orders banner** at top (dismissable, links to `/orders?status=pending`).
-  - `KpiCard` upgraded with optional `delta` (green/red pill with ▲/▼ arrow) + `sparkline` (SVG line+area chart, no deps). All 4 KPIs show MoM delta; Revenue KPI shows 30-day sparkline.
-  - `OrderFunnel` component (new) — 5-stage horizontal bars sized proportionally by count. Drop-off % labels between stages (red for loss, emerald for gain). Cancelled shown separately as exit-before-fulfilment. Stages are clickable and deep-link to Orders page filtered.
-  - **Top Products** section — ranked table with SKU, design, units sold, revenue ₹, and stock-level pill (emerald > 10, amber ≤ 10, red 0). Row click → SKU detail.
-  - Emerald "Export CSV" button above KPIs → downloads customer-ranking CSV.
-  - All existing Customer Ranking + Broker Commission tables retained unchanged.
-
-**Note on tool friction this session:** the Edit tool's JSON transport layer converts `₹` JS unicode escapes in my input strings to the literal `₹` char, so targeted Edit calls on lines containing the existing escape sequences repeatedly failed to match. Worked around by using a Python script to do the SalesTab rewrite directly. New code uses literal `₹` instead of `₹` escape — same runtime output, no future edit friction.
-
-**Files touched:**
-  - BE: `schemas/lot.py` imports InvoiceItem; `services/dashboard_service.py` (extended get_sales_report + 4 new sections); `api/dashboard.py` (new params on /sales-report, new /sales-report.csv endpoint).
-  - FE: `api/dashboard.js` (new `downloadSalesReportCSV` helper); `pages/ReportsPage.jsx` (upgraded KpiCard with delta+sparkline, new Sparkline + OrderFunnel + pctDelta helpers, rewritten SalesTab).
-  - Docs: `API_REFERENCE.md` (extended sales-report + new CSV endpoint); `REPORTS_AND_INVENTORY_PLAN.md` (Phase 5 added + all Tier 1 checkboxes ticked).
-
-**No migration.** Read-side aggregation only.
-
-**Tier 2/3 deferred** — per plan: customer-bar charts, geo cut, order-size buckets, churn risk, broker ROI, drill-down drawers, period compare toggle.
+**Prod deploy:** Run migration `j0k1l2m3n4o5` on EC2 (`alembic upgrade head`). No data dependency — new endpoints + new column.
 
 ---
 
-## Previous State (Session 115c — 2026-04-24) — CLOSED
+## Previous State (Session 115d — 2026-04-24) — CLOSED
 
-**P4.1: Inventory Reports professional overhaul — grouped by design, ₹ valuation, 8 KPIs, CSV export.**
+**Reports overhaul (P4.1 Inventory + P5 Tier 1 Sales) + UX polish.** Inventory tab expanded-row chips (Free/Locked/Out/Dead) + tunable Dead-days; Sales tab stuck-days filter + horizontal funnel; URL-synced active tab on both ReportsPage (`?tab=`) and InventoryPage (`?tab=`); OrdersPage `?status=` deep-link fix. Plan refs: REPORTS_AND_INVENTORY_PLAN.md §4 + §5. Commits `407ca6c` (P4.1) + `d9e9bf0` (P5 Tier 1) + polish (`9abf66b..902e839`) — deployed to prod.
 
-Rebuilt the `Inventory` tab in `ReportsPage` from a flat SKU movement table into a professional report surface matching the plan in `REPORTS_AND_INVENTORY_PLAN.md` § Phase 4.
-
-**Backend:**
-  - `dashboard_service.py::get_inventory_position(from_date, to_date, *, product_type, fabric_type, stock_status, min_value_inr, search, low_stock_threshold, dead_stock_days)` — single call returning `{kpis, groups[design → skus[]], totals, period}`. Reuses `SKUService.compute_wac_map` for AS-2 compliant valuation. Ageing = days since last `STOCK_OUT` event per SKU. 8 KPIs computed in-method (4 period + 4 position). Groups sorted by `value_inr` desc.
-  - New endpoints: `GET /dashboard/inventory-position` + `GET /dashboard/inventory-position.csv` (streaming text/csv with attachment disposition). Both filter-aware.
-  - `fabric_type` filter currently matches substring in `product_name` — SKUs don't have a fabric_type column. P4.5 (Raw Material sub-tab) is the real home for fabric-level grouping.
-  - `short_sku_count` uses a hard threshold of 5 as placeholder — P4.3 swaps this for per-SKU `reorder_level` column.
-
-**Frontend:**
-  - `ReportsPage.jsx::InventoryTab` completely rewritten. Self-fetches via `getInventoryPosition`. State: 5 filter fields + expanded-groups Set.
-  - 8 KPI cards in 2 rows (4+4): Stock In / Out / Returns / Net Change + Inventory Value / SKUs with Stock / Dead SKUs / Low Stock.
-  - Custom accordion (not DataTable — DataTable's expandedRows pattern doesn't fit sibling-row grouping cleanly). Design parent row shows aggregates + chevron; click expands nested SKU rows.
-  - Ageing badge colour logic extracted to `ageingBadgeClass(days)` helper: green <30d, amber 30-60d, orange 60-90d, red >90d, gray null.
-  - Filter bar: FilterSelect (product_type, stock_status) + numeric min-value input + SearchInput + Clear. Expand All / Collapse All links. Emerald "Export CSV" button right-aligned.
-  - Typography: strict `.typo-*` adherence per guardian.md Protocol 10 (`typo-page-title`, `typo-section-title`, `typo-th`, `typo-td`, `typo-td-secondary`, `typo-kpi`, `typo-kpi-label`, `typo-badge`, `typo-btn-sm`, `typo-caption`, `typo-empty`, `typo-input-sm`). Emerald-600 theme for all primary actions.
-  - Removed dead `movementData` state + `getMovement` import from parent.
-
-**Docs:**
-  - `API_REFERENCE.md`: both endpoints documented with full request/response shape, filter semantics, CSV column list, ageing/WAC notes.
-  - `REPORTS_AND_INVENTORY_PLAN.md`: P4.1 checklist ticked. `4.1j` (custom date-range popover) deferred to P4.8 (global period picker coordination).
-
-**Deferred in P4.1:**
-  - `4.1j` custom date-range popover — low-value alone; fold into P4.8 polish pass.
-  - `fabric_type` filter semantics — wait for P4.5.
-  - Per-SKU reorder_level — P4.3 scope.
-
-**Next up in Phase 4:** P4.5 (Raw Material sub-tab — biggest missing data gap), then P4.2 (Ageing & Dead Stock dedicated view).
-
-**No migration. Pure read-side aggregation over existing tables.**
+> **Detailed S115/S115b/S115c-i/S115c-ii/S115d notes** are condensed in the Session History table below. Plan checklist + API shapes live in [REPORTS_AND_INVENTORY_PLAN.md](REPORTS_AND_INVENTORY_PLAN.md).
 
 ---
 
-## Previous State (Session 115b — 2026-04-24) — CLOSED
+## Previous Sessions (S87-S115d) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels, Cost Accounting
 
-**Write-off UX polish: contextual helpers + bulk write-off on Remnant tab.**
-
-Follow-up on S115. Two user-driven additions:
-
-**1. Contextual helpers for write-off action:**
-  - Amber info strip below the status badge on roll detail (only when `status='remnant'`): "Too small or damaged? Click Write Off to retire it permanently — data stays for audit & wastage reports." Teaches first-time users without cluttering the UI.
-  - Enhanced write-off modal body with a blue "What happens next" card listing 6 effects (status → written_off, weight → 0, audit saved, hidden from pickers, visible in wastage report, irreversible).
-  - Existing `title` tooltip on the Write Off button retained.
-  - New gray "This roll has been written off" audit strip on detail page when `status='written_off'` — shows reason, timestamp, notes.
-
-**2. Bulk write-off from Remnant tab:**
-  - New backend endpoint `POST /rolls/bulk-write-off` — accepts `{roll_ids, reason, notes}`, per-roll FOR UPDATE + status guard. Ineligible rolls skipped (reported in `failed[]`), not aborted. All processed rolls share same `written_off_at` timestamp. Returns `{processed, processed_ids, failed}`.
-  - Frontend reuses the existing `selectedRolls` Set + floating bulk action bar pattern (same as bulk label print / Create Lot / Send for Processing). New amber "Write Off (N)" button appears in the toolbar ONLY when ALL selected rolls have `status='remnant'` — defence against mixing statuses.
-  - Modal is polymorphic: `bulkWriteOffTargets.length > 0` = bulk mode (shows target count + list preview + total weight); else single mode.
-  - Existing "Max wt" filter on Remnant tab (added pre-S115, not noticed until now) already serves as the threshold quick-select: user filters by Max wt, clicks header Select All, clicks Write Off. No new threshold UI needed.
-
-**Files touched:**
-  - Backend: `schemas/roll.py` (new `RollBulkWriteOffRequest`), `services/roll_service.py` (new `bulk_write_off_rolls`), `api/rolls.py` (new `POST /rolls/bulk-write-off`).
-  - Frontend: `api/rolls.js` (new `bulkWriteOffRolls` + mock), `pages/RollsPage.jsx` (detail info strips + written-off audit strip + enhanced modal + polymorphic single/bulk modes + Write Off button in floating toolbar with `allRemnant` guard).
-  - Docs: `API_REFERENCE.md` (new bulk endpoint documented).
-
-**No migration needed** — builds on S115 data model.
-
----
-
-## Previous State (Session 115 — 2026-04-24) — CLOSED
-
-**Cutting sheet palla override + remnant write-off (industry-standard wastage lifecycle).**
-
-Three slices shipped in one unit so stock/waste accounting stays consistent end-to-end.
-
-**1. Palla edit on cutting sheet (Option A + tooltip).** `PALLAS` column on `LotsPage` create overlay is now editable (was `floor(rem/pw)` read-only). User types fewer pallas → delta weight auto-flows into `waste`. Amber ↻ icon appears only when overridden (click resets to auto), amber-underline style on the input + amber-tinted waste cell as visual override indicator. Native `title` tooltip on the input shows `≈ {rem/pallas} kg/palla` — the real per-palla weight that shape would require. Clamped `[1, auto_max]`; server re-clamps as defence-in-depth. Matches the handwritten register: `CHIKU 31.260 kg` with auto=10 → user types 9 → 9×3.020=27.180 used, 4.080 waste, 171 pieces (instead of auto 10/30.200/1.060/190). Covered by:
-  - Backend: `LotRollInput.num_pallas: int | None = None` (optional override). `lot_service.create_lot` reads `roll_input.num_pallas`, clamps to `[1, floor(rem/pw)]`, recomputes `weight_used/waste_weight/pieces_from_roll` from the clamped value.
-  - Frontend: `rollCalcs` now tracks `num_pallas_override` per row. Reset via `resetRollPallas(i)` sets override to `null` (back to auto). `handleCreate` payload includes `num_pallas: r.num_pallas_override ?? null`.
-
-**2. Edit/Delete correctness after creation.** New `PATCH /lots/{lot_id}/rolls/{lot_roll_id}` endpoint (body `{num_pallas: int | null}`). Guard: `lot.status == 'open'` (matches existing `remove_roll_from_lot` rule). Service method `update_lot_roll` locks source roll FOR UPDATE, computes `fabric_available = roll.remaining_weight + lot_roll.weight_used` (self-consistent even after earlier edits), clamps, recomputes, deltas `roll.remaining_weight` back, flips `roll.status` (in_stock ↔ remnant ↔ in_cutting based on new waste), refreshes `lot.total_pallas/pieces/weight`. Detail overlay mirrors create UX: uncontrolled input with `key={lr.id}-${lr.num_pallas}` remount on server response; `onBlur` commits, `Enter` commits, `Escape` reverts. Read-only display when `status != 'open'` (can't edit after physical cutting has begun). Three-state truth enforced: `open` = plan (editable), `cutting/distributed` = committed (locked). Existing `remove_roll_from_lot` audited — `remaining = 4.080 + 27.180 = 31.260` cascade is correct even after an edit.
-
-**3. Roll write-off — industry-standard lifecycle exit.** Before this session, remnants lived forever in `status='remnant'` with no retirement path. Now: `POST /rolls/{id}/write-off` with `{reason: 'too_small' | 'damaged' | 'expired' | 'other', notes?}`. Guard: only `status='remnant'` → `status='written_off'`, `remaining_weight=0`, and 4 audit columns populated (`written_off_at`, `written_off_by`, `write_off_reason`, `write_off_notes`). Migration `i9j0k1l2m3n4_s115_roll_write_off` adds columns + expands `valid_status` CHECK constraint (drops both `ck_rolls_valid_status` and `valid_status` per the ck_-prefix memory). Written-off rolls excluded from all active pickers automatically: `LotsPage.fetchRolls` only queries `status: 'in_stock'` and `status: 'remnant'` (never `written_off`); `_ROLL_ACTIVE` tuple in `roll_service.py` already omits `written_off`; job_challan guard `status not in ("in_stock", "remnant")` blocks them. UI: amber "Write Off" button in `RollsPage` detail overlay header when `status === 'remnant'`. Modal with reason dropdown + optional notes. `ROLL_STATUS_LABELS` gains `written_off: 'Written Off'` + `returned: 'Returned'` entries.
-
-**Files touched:**
-  - Backend: `schemas/lot.py` (added `num_pallas` to `LotRollInput`, new `LotRollUpdate`), `schemas/roll.py` (new `RollWriteOffRequest`), `services/lot_service.py` (`create_lot` clamp logic, new `update_lot_roll`), `services/roll_service.py` (new `write_off_roll`, import `InvalidStateTransitionError`), `api/lots.py` (new PATCH /lots/{id}/rolls/{lot_roll_id}), `api/rolls.py` (new POST /rolls/{id}/write-off), `models/roll.py` (4 write-off columns + expanded CHECK), `migrations/versions/i9j0k1l2m3n4_s115_roll_write_off.py`.
-  - Frontend: `api/lots.js` (new `updateLotRoll`), `api/rolls.js` (new `writeOffRoll`), `pages/LotsPage.jsx` (editable PALLAS on create overlay + detail overlay, ↻ reset, tooltip, keyboard hint updated), `pages/RollsPage.jsx` (Write Off button + modal, `ROLL_STATUS_LABELS` updated).
-  - Docs: `API_REFERENCE.md` — documented `rolls[].num_pallas` override on POST /lots, new PATCH /lots/{lot_id}/rolls/{lot_roll_id}, new POST /rolls/{id}/write-off.
-
-**S115 deferred to S116:**
-  1. Wastage Report (Reports page tab) — cutting waste + damage waste + write-off waste, FY-scoped, monthly, ₹ valuation via WAC
-  2. Remnant tab polish — age column + suggest-write-off inline button for tiny remnants
-  3. MRP bulk backfill tool (carry-over since S112)
-  4. ChallansPage 4d scan-to-receive refinement (open since S109)
-
-**Prod deploy:** Requires running migration `i9j0k1l2m3n4` on EC2 (SSH → alembic upgrade head).
-
----
-
-## Previous State (Session 114 — 2026-04-18) — CLOSED
-
-**Unified Credit Note picker + full print-suite redesign (sales + purchase).**
-
-Two things shipped this session:
-
-**1. Unified CN workflow picker (NetSuite/Zoho pattern).** Two entry points for customer returns (Invoice page, Order page) + Returns page now all open the same `CreditNotePickerModal` — user picks `⚡ Fast-track` (1-click, financial adjustment, closes immediately) or `🔍 With QC` (5-step inspection workflow). Button labels stay contextual per page ("Create Credit Note" on Invoice, "Credit Note / Sales Return" with inline slash on Order, "New Sales Return" on Returns page — Tally-style: document name for accounting, event name for ops). SalesReturn gains `workflow_type` column (migration `h8i9j0k1l2m3`) so the Returns list badges each row `⚡ Fast-track` or `🔍 With QC`. CN-0001 retro-patched. Emojis swapped for Heroicons-style inline SVGs with emerald/amber gradient tiles (no new deps). Several polish iterations on the picker typography + icon sizing + button hint chips before settling on a single inline-slash button on Orders detail.
-
-**2. Full print suite redesign — sales + purchase symmetry.** Four print components rewritten:
-  - `CreditNotePrint` → A4 half-page GST summary. Cut line at A4 midpoint (148.5mm), top-half locked to 138.5mm. No SKU list (per GST Rule 53(1A), not required on the tax document itself). FROM/TO GSTINs, Original Invoice reference, Amount-in-Words, Tax breakup card (Taxable → Discount → CGST → SGST → TOTAL CREDIT), one-line pointer to SalesReturn for itemized goods. Fixed triple-padding bug (38mm wasted → 14mm). Fixed `overflow: hidden` clipping the signature block.
-  - `SalesReturnPrint` → Full-page warehouse/QC ops doc. Dropped redundant columns (Description, Reason). Added: 4-card summary bar (Items / Pieces / Restocked-Damaged / Value), condition chip (G/D/R circle), Rate + Amount columns, verify-box column, 3-way signature footer (Received By / Inspected By / Authorised Signatory). TOTALS moved out of `<tfoot>` (was duplicating on every printed page) into single post-table div. Page counter "Page X of Y" in @page bottom-center.
-  - `DebitNotePrint` → Purchase-side mirror of CreditNote. TOTAL DEBIT, FROM (Buyer) / TO (Supplier), points to Return Note.
-  - `ReturnNotePrint` → Purchase-side mirror of SalesReturn. Dynamic table (roll_return → Roll Code/Fabric/Color/Weight; sku_return → SKU Code/Size/Qty). 3-way signature (Dispatched By / Acknowledged By / Authorised Signatory).
-
-Button labels across the new print buttons:
-  - Sales: `Print Sales Return` (full-page) + `Print Credit Note` (half-page)
-  - Purchase: `Print Return Note` (full-page) + `Print Debit Note` (half-page)
-
-**Commits this session:** `114da8f 83d4973 7d965c9 2e43108 505f97d 8663de0 51755bd 4a830ea 31a6e6e 626ecf4 dac23ee da588e7 7e7da4b 815695b 6b96e9b` (15 commits).
-
-**S115 queue (carry-over + unchanged from S113-close):**
-1. MRP bulk backfill tool (1/1697 SKUs have MRP)
-2. ChallansPage 4d scan-to-receive refinement (open since S109)
-
----
-
-## Previous State (Session 113 — 2026-04-18) — CLOSED
-
-**RES code collision hotfix + Order-edit bloat + Invoice cancel / Credit Note overhaul (Tally model).**
-
-Morning: prod PATCH /orders crashed with `UniqueViolationError` on `reservation_code=RES-10000`. Two root causes: (A) `_max_code` sort was lexicographic — `'RES-9999' > 'RES-10000'` → generator collided; fixed with `ORDER BY LENGTH(col) DESC, col DESC` (future-proofs all generators). (B) `update_order` released ALL reservations + recreated ALL for every edit — burned 45 RES rows per 23-line edit; rewrote as diff-based (only release+create for rows where `sku_id` or `qty` actually changed). Full-order edits now 1 new RES row, not 23.
-
-Afternoon: **invoice cancel / CN flow overhaul**, Tally/Zoho model end-to-end.
-- **Phase 1 (Cancel audit):** Invoice gains `cancel_reason` / `cancel_notes` / `cancelled_at` / `cancelled_by` (migration `e5f6g7h8i9j0`). `POST /invoices/{id}/cancel` now requires a reason (6-code enum + `other`+notes). Red banner on invoice detail shows reason + who + when.
-- **Phase 2:** Amber banner on order detail whenever any linked invoice is cancelled. Invoice buttons go grey+strikethrough for cancelled invoices.
-- **Phase 3 (Fast-track CN):** `SalesReturn.invoice_id` FK + `SalesReturn.discount_amount` column (migrations `f6g7h8i9j0k1`, `g7h8i9j0k1l2`). `POST /invoices/{id}/credit-note` creates SR in `closed` state directly (skips 5-step QC), assigns both SRN+CN codes, posts single ledger credit, fires inventory events per-line restore-stock flag, updates `returned_qty` on linked order_items. Modal: items pre-filled + tri-state Select-All + proportional discount inheritance (share = cn_subtotal / invoice_subtotal).
-- **Phase 4 (Full reversal):** Rejected — not industry-standard. Shipments don't un-ship. CN with restore_stock handles goods-return. Documented decision.
-- **Phase 5 (Cancel→CN chain):** Zoho pattern. Cancel modal gains "Also issue a Credit Note" checkbox (default on). One click = cancel + auto-open CN modal pre-filled with invoice lines, restore_stock=true, cancel notes carried over. Button relabels to "Cancel + Create CN" when chaining on.
-
-Critical bug fixes along the way:
-- `cancel_invoice` no longer posts ledger reversal — was causing double-credit when a CN was later issued (saw −₹39,486.30 phantom debt on ORD-0021). **Tally model:** cancel = status flip only; CN is the sole ledger reversal document.
-- MissingGreenlet in `create_credit_note_from_invoice` — `sr` was freshly added so `sr.customer` / `sr.order` weren't loaded; `_emit` triggered lazy load → 500. Fix: reload via `_get_or_404` before emitting.
-- MissingGreenlet in orders list after CN-0001 created — `sales_returns.items` not eager-loaded; added `.selectinload(SalesReturn.items)` to both query paths.
-- Invoice cancel gained retroactive patch route — existing pre-S113 cancelled invoices can have reason/notes backfilled via SQL (did this for INV-0009 mirroring CN-0001's reason).
-
-Navigation cross-links fully wired:
-- Invoice detail shows "Credit Notes" card (amber) listing all CNs against it, clickable.
-- Order detail shows each linked invoice as a button (strikethrough if cancelled).
-- SKU inventory history resolves `sales_return` reference to `CN-XXXX · INV-XXXX` with deep-link to CN.
-- Party ledger Particular column is now clickable — deep-links to invoice / CN / purchase / return / challan based on `reference_type`.
-
-Also fixed: LotsPage QuickMasterModal was rendered only in list view (unreachable from create + detail overlays due to early-return JSX) — added mount points inside both overlays so Shift+M in the Cutting Sheet's Design column actually shows the modal.
-
-One-off prod SQL operations: patched CN-0001 amount mismatch (was ₹41,564.25 without discount → corrected to ₹39,486.30 matching invoice); deleted duplicate `invoice_cancel` ledger entry for INV-0009; retro-patched INV-0009.cancel_reason from CN-0001's reason.
-
-**Commits this session:** `33b7cf1 94a8a96 5615fd4 501a862 144a77e c3b7ef5 d4f5c69 29e9aa6 c8a1e7f 7782c15 8cfaeab c04c268 c9d7c2c da674c8` (14 commits).
-
-**S114 queue (carry-over):**
-1. MRP bulk backfill tool (1/1697 SKUs have MRP)
-2. ChallansPage 4d scan-to-receive refinement (open since S109)
-3. Optional polish: "Full Sales Return (with QC)" entry point on invoice page; Print button on CN creation success.
-
----
-
-## Previous Sessions (S87-S114) — Invoice, Shipping, Returns, FY, Reports, SKU, Thermal Labels, Cost Accounting
-
-- **S114:** Unified Credit Note picker + full print-suite redesign. `CreditNotePickerModal` shared across Invoice/Order/Returns pages (fast-track vs with-QC workflow). `SalesReturn.workflow_type` column (migration `h8i9j0k1l2m3`). Contextual button names (CN in accounting contexts, Sales Return in ops). All 4 return prints rewritten for symmetry: **CreditNote + DebitNote** = A4 half-page GST summary (cut line at midpoint, no SKU list per Rule 53); **SalesReturn + ReturnNote** = A4 full-page warehouse/ops doc (summary bar, condition chips, 3-way signature, page counter, TOTALS-out-of-tfoot to avoid multi-page duplication). Fixed CN padding stacking (38mm → 14mm), overflow clipping the signature. Emojis → inline SVG icons with emerald/amber gradient tiles. 15 commits `114da8f..6b96e9b`.
-- **S113:** Hotfix RES code collision (lex vs numeric sort in `_max_code` — `'RES-9999'>'RES-10000'` in strings) + diff-based `update_order` (was burning N+N RES rows per edit, now O(changed)). **Invoice cancel / CN overhaul — Tally model:** cancel = status flip + audit (reason/by/when), CN is sole ledger reversal. Fast-track `POST /invoices/{id}/credit-note` → closed SR in one call, SRN+CN generated, proportional discount inheritance, per-line restore_stock. Cancel→CN chain checkbox (Zoho pattern). `SalesReturn.invoice_id` + `SalesReturn.discount_amount` columns. 3 migrations `e5f6…` `f6g7…` `g7h8…`. Invoice detail shows linked CNs; order detail amber-banners cancelled invoices; SKU history resolves sales_return refs; ledger Particular column deep-links. Phase 4 (full shipment reversal) rejected — not industry-standard. Prod SQL cleanup: CN-0001 amount fix, duplicate cancel-ledger entry removed, INV-0009 reason backfilled. 14 commits `33b7cf1..c9d7c2c`.
-- **S112:** SKU infra overhaul. `GET /skus/grouped` + `/skus/summary`. Last Cost vs WAC split (`base_price` = latest stock-in, overwritten always; WAC derived from events via `compute_wac_map`; FY closing + dashboard use WAC — AS-2 compliant). No backfill — write-path handles all new events. SKU detail WOW: 3-block hero, merged sectioned card, `typo-input-sm` compact inputs. Bulk label print (per-design icons, SKU-level checkbox selection with 3-state parent + cross-design via `skuIndex`, Orders modal with A4/Thermal × per-piece/per-SKU toggle). Orders/Invoices `pickDefaultRate(sku)` helper + `price_source` tracking + amber "⚠ Last Cost" warning when fallback hits `base_price`. "Price" → "Sale Rate" everywhere; sizes sorted canonically. 15 commits `cd9d86e..798ed3f`.
+- **S115d:** Reports tab polish — Inventory chips (Free/Locked/Out/Dead) + tunable dead-days; Sales stuck-days filter + horizontal funnel; ReportsPage `?tab=` + InventoryPage `?tab=` URL persistence; OrdersPage `?status=` deep-link fix. Refs: REPORTS_AND_INVENTORY_PLAN.md §4 + §5. 14 commits `9abf66b..902e839`.
+- **S115c-ii:** P5 Tier 1 Sales Report — `get_sales_report` extended (`previous_period`, `stuck_orders`, `top_products`, `revenue_daily`) + params `stuck_days`/`top_n` + `GET /dashboard/sales-report.csv`. KpiCard with delta+sparkline (no deps), OrderFunnel 5-stage, Top Products. No migration. Ref: §5. Commit `d9e9bf0`. **Edit-tool gotcha:** JSON transport converts JS `₹` → literal `₹` — use literal in source.
+- **S115c-i:** P4.1 Inventory Report — `get_inventory_position(filters...)` + `GET /dashboard/inventory-position` + `.csv`. Payload `{kpis, groups[design→skus], totals, period}`. WAC via `compute_wac_map` (AS-2). 8 KPIs (4 period + 4 position). Custom accordion (DataTable expandedRows didn't fit). `fabric_type` substring placeholder → P4.5. `short_sku_count` threshold 5 → P4.3. No migration. Ref: §4. Commit `407ca6c`.
+- **S115b:** Bulk write-off + contextual UX. `POST /rolls/bulk-write-off` (per-roll FOR UPDATE, ineligible skipped not aborted). Floating bulk-bar gated on `allRemnant`. Polymorphic modal (single vs bulk via `bulkWriteOffTargets.length`). Detail: amber teaching strip on remnant, gray audit on written_off. No migration.
+- **S115:** Cutting sheet palla override + remnant write-off. (1) PALLAS editable on lot create + detail (status='open' guard). New `LotRollInput.num_pallas` + `PATCH /lots/{lot_id}/rolls/{lot_roll_id}`. Service: lock FOR UPDATE, `fabric_available = roll.remaining_weight + lot_roll.weight_used` (self-consistent across edits). (2) `POST /rolls/{id}/write-off` — `remnant→written_off`, weight=0, 4 audit cols. Migration `i9j0k1l2m3n4_s115_roll_write_off` (drops both `ck_rolls_valid_status` AND `valid_status`). Written-off excluded from active pickers. **Prod deploy:** `alembic upgrade head` on EC2.
+- **S114:** Unified CN picker (`CreditNotePickerModal` shared on Invoice/Order/Returns: Fast-track vs With-QC). `SalesReturn.workflow_type` col (migration `h8i9j0k1l2m3`). All 4 return prints rewritten — CN/DebitNote = A4 half-page GST summary (no SKU list per Rule 53(1A)); SalesReturn/ReturnNote = full-page warehouse doc (3-way signature, page counter, TOTALS out of `<tfoot>`). Inline SVG icons. 15 commits `114da8f..6b96e9b`.
+- **S113:** RES code collision hotfix (`_max_code` sort: LENGTH DESC, col DESC — `'RES-9999'>'RES-10000'` lex bug) + diff-based `update_order` (was N+N RES rows/edit, now O(changed)). **Invoice cancel/CN overhaul — Tally model:** cancel = status flip + audit; CN is sole ledger reversal. Fast-track `POST /invoices/{id}/credit-note` → closed SR in one call (SRN+CN, proportional discount, per-line restore_stock). Cancel→CN chain checkbox. `SalesReturn.invoice_id` + `discount_amount` cols. 3 migrations `e5f6…` `f6g7…` `g7h8…`. Phase 4 (full shipment reversal) rejected. 14 commits `33b7cf1..c9d7c2c`.
+- **S112:** SKU infra overhaul. `GET /skus/grouped` + `/skus/summary`. **Last Cost vs WAC split:** `base_price` = latest stock-in (always overwritten); WAC derived from events via `compute_wac_map` for FY closing + valuation (AS-2). No backfill — write-path handles new events. SKU detail WOW (3-block hero). Bulk label print (3-state parent, A4/Thermal × per-piece/per-SKU). Orders/Invoices `pickDefaultRate(sku)` + amber Last Cost warning. "Price" → "Sale Rate". 15 commits `cd9d86e..798ed3f`.
 - **S111:** SKU Open Demand card (`9c65254`). `GET /skus/{id}/open-demand` filters `fulfilled_qty < quantity AND status != 'cancelled'`. Card between Source Batches + Inventory History on detail, clickable deep-link to `/orders?open={id}`.
 - **S110:** SKU thermal V3 + Orders UX + pricing cleanup. Thermal SKU body rebuilt: full `sku_code` top strip + `D.NO {design_no}` (2-line wrap) + MRP + bordered SIZE chip. `ThermalLabelSheet.jsx` gained `wrap` + `chip` row types (CSS lives in BOTH print `pageStyle` AND screen `<style>` blocks — one `replace_all` won't hit both). Orders KPIs fetch full list via `page_size:0` into `allOrders` (was computing on 20-row slice); clickable "Total Orders" resets filters, "With Shortage" client-filters. Dupe-SKU check on manual color/size dropdowns mirrors scan path. `has_shortage` narrowed to `fulfilled_qty < quantity`; ship auto-zeros `short_qty` on full fulfilment. SKU Inventory History clickable Reference column (resolves shipment/batch/purchase refs, batch-loaded no N+1). Latent `create_event` bug fixed: `metadata=` → `metadata_=` (historical rows NULL). Order form default flipped to `sale_rate → mrp → base_price → 0`. Opening stock form gained Sale Rate + MRP cols (order: Qty→Sale→MRP→Cost). Prod SQL: 1696 SKUs `base_price → sale_rate` + zeroed base_price; ORD-0004 stale short_qty zeroed. 10 commits `9fdf1df..95aa654`.
 - **S109:** Thermal Label Boarding Pass redesign. TSC TTP-345 driver calibrated to new stock `DRS-54*40` (54×40mm Die-Cut, Landscape 180°). 4-sided layout: hero code top strip + vertical `DRS BLOUSE`/`SCAN TO VIEW` bars + 30mm QR (+125% scan area) + `drsblouse.com` bottom strip. 1mm safe margin survives TSC ~0.5mm feed variance. Smart Minimal: SKU drops DES/COL/SIZE/TYPE (all in sku_code) → 18pt SIZE hero + MRP/RATE; Roll drops SR/FAB/COL → stacked big weight + small unit (kg/m auto) + INV/DT; Batch keeps 6 rows (batch_code encodes nothing), parses `color_breakdown` JSON. Field fixes: roll uses flat `fabric_type`/`color`, batch has no `color` column, SKU has no `design_no` field (parse from code), date DD Mon. Renderers return `{hero, qrValue, rows}` — wrapper composes chrome. Commits `9371fb3 c3a0249 c539302`.
@@ -486,6 +313,11 @@ One-off prod SQL operations: patched CN-0001 amount mismatch (was ₹41,564.25 w
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S115d | Reports tab polish + URL persistence | Inventory tab chips (Free/Locked/Out/Dead) + tunable dead-days threshold; Sales tab stuck-days filter + horizontal funnel; ReportsPage `?tab=` + InventoryPage `?tab=` URL persistence; OrdersPage `?status=` deep-link fix from stuck-orders banner. Refs: REPORTS_AND_INVENTORY_PLAN.md §4 + §5. 14 commits `9abf66b..902e839` |
+| S115c-ii | P5 Tier 1 Sales Report WOW | `dashboard_service.get_sales_report` extended with `previous_period`/`stuck_orders`/`top_products`/`revenue_daily` + params `stuck_days`/`top_n` + new `GET /dashboard/sales-report.csv`. Frontend: KpiCard with delta+sparkline (no deps), OrderFunnel 5-stage horizontal bars, Top Products table, Export CSV. Tier 2/3 deferred (geo/churn/broker ROI). No migration. Ref: §5. Commit `d9e9bf0`. **Edit-tool gotcha:** JSON transport converts JS `₹` → literal `₹` — use literal `₹` in source |
+| S115c-i | P4.1 Inventory Report overhaul | `dashboard_service.get_inventory_position(filters...)` + `GET /dashboard/inventory-position` + `.csv`. Payload `{kpis, groups[design→skus], totals, period}`. WAC via `SKUService.compute_wac_map` (AS-2). 8 KPIs (4 period + 4 position). Custom accordion (DataTable expandedRows didn't fit sibling-row grouping). `fabric_type` is substring placeholder — proper home P4.5. `short_sku_count` hard threshold 5 — P4.3 swaps for per-SKU `reorder_level`. No migration. Ref: §4. Commit `407ca6c` |
+| S115b | Write-off contextual UX + bulk write-off | New `POST /rolls/bulk-write-off` (per-roll FOR UPDATE, ineligible skipped not aborted, returns `{processed, processed_ids, failed}`). Floating bulk-bar Write Off button gated on `allRemnant`. Polymorphic modal (single vs bulk via `bulkWriteOffTargets.length`). Detail page: amber teaching strip on remnant, gray audit strip on written_off. No migration |
+| S115 | Cutting sheet palla override + remnant write-off | (1) PALLAS editable on lot create + detail (status='open' guard). New `LotRollInput.num_pallas` + `PATCH /lots/{lot_id}/rolls/{lot_roll_id}`. Service: lock FOR UPDATE, `fabric_available = roll.remaining_weight + lot_roll.weight_used` (self-consistent across edits — see memory `feedback_lot_roll_fabric_available`). (2) `POST /rolls/{id}/write-off` — `remnant→written_off`, weight=0, 4 audit cols (`written_off_at/by/reason/notes`). Migration `i9j0k1l2m3n4_s115_roll_write_off` (drops both `ck_rolls_valid_status` AND `valid_status` per ck_-prefix memory). Written-off excluded from all active pickers. **Prod deploy:** `alembic upgrade head` on EC2 |
 | S114 | Unified CN picker + Print suite redesign (sales + purchase symmetry) | `CreditNotePickerModal` shared across Invoice/Order/Returns pages — ⚡ Fast-track vs 🔍 With QC cards, contextual button labels per page (CN vs Sales Return per Tally convention). `SalesReturn.workflow_type` column (migration `h8i9j0k1l2m3`) drives list badges. All 4 return print templates rewritten: **CreditNotePrint + DebitNotePrint** = A4 half-page GST summary (cut line at 148.5mm midpoint, top-half locked to 138.5mm, Amount-in-Words, emerald-tinted tax breakup card, NO SKU list per GST Rule 53(1A), single signature); **SalesReturnPrint + ReturnNotePrint** = A4 full-page warehouse/ops (4-card summary bar, condition chip G/D/R circle, verify-box column, 3-way signature — Received/Inspected/Authorised for sales, Dispatched/Acknowledged/Authorised for purchase, dynamic table columns for roll vs SKU returns, TOTALS as post-table div not `<tfoot>` to stop multi-page duplication, page counter `Page X of Y` via `@page @bottom-center`). Fixed CN print padding stacking (38mm → 14mm), `overflow: hidden` clipping the signature block, duplicate TOTALS on multi-page SR. Emojis → inline SVG icons (bolt/clipboard-check) with gradient tiles, zero new deps. Button labels: `Print Credit Note` / `Print Sales Return` / `Print Debit Note` / `Print Return Note`. 15 commits `114da8f..6b96e9b` |
 | S113 | RES hotfix + Order-edit diff + Cancel/CN overhaul (Tally model) | `_max_code` sort: `LENGTH DESC, col DESC` — fixes `RES-10000` collision + future-proofs all generators. `update_order` rewritten diff-based — only touches reservations for rows where `sku_id`/`qty` actually changed. **Invoice cancel overhaul**: audit fields (reason/by/when), red banner, reason enum + `other`+notes. **Fast-track CN**: `POST /invoices/{id}/credit-note` → closed SalesReturn in one call, SRN+CN assigned, proportional discount from invoice, per-line restore_stock with tri-state Select-All. **Tally model**: cancel = status flip only, CN = sole ledger reversal (was double-crediting). **Cancel→CN chain** checkbox (Zoho pattern). `SalesReturn.invoice_id` + `discount_amount` cols (migrations `e5f6g7h8i9j0`, `f6g7h8i9j0k1`, `g7h8i9j0k1l2`). Navigation: invoice↔CN card, order amber banner + strikethrough, SKU history resolves sales_return → CN+INV+deep-link, ledger Particular clickable. Phase 4 (un-ship) rejected — shipments don't reverse, CN handles it. Prod SQL: INV-0009 patched cancel_reason, duplicate cancel-ledger removed, CN-0001 amount corrected. 14 commits `33b7cf1..c9d7c2c` |
 | S112 | SKU infra + Last Cost/WAC split + Bulk Label Print | `GET /skus/grouped` + `/skus/summary` (consistent design-rows + global KPIs, fixes S110-class bug). `sku.base_price` redefined as Last Cost (overwritten every stock-in, pricing signal); WAC derived from events via `SKUService.compute_wac_map()` for FY closing + valuation (AS-2). No backfill needed — write-path sets `base_price` on purchase/opening/pack. SKU detail WOW redesign (3-block hero + merged sectioned card + `typo-input-sm` compact). Bulk print — per-design icons + SKU-level checkbox with 3-state design parent + Orders modal with A4/Thermal × per-piece/per-SKU. Orders/Invoices `pickDefaultRate(sku)` + amber "⚠ Last Cost" warning. "Price" → "Sale Rate". Sizes sorted S→4XL. 15 commits `cd9d86e..798ed3f` |

@@ -849,6 +849,8 @@ class RollService:
                 f"Only remnant rolls can be written off (current status: '{roll.status}')"
             )
 
+        # Snapshot remaining_weight before zeroing (S116 — needed by Wastage Report).
+        roll.weight_at_write_off = roll.remaining_weight
         roll.status = "written_off"
         roll.remaining_weight = 0
         roll.write_off_reason = reason
@@ -891,6 +893,8 @@ class RollService:
                 })
                 continue
 
+            # Snapshot remaining_weight before zeroing (S116 — Wastage Report).
+            roll.weight_at_write_off = roll.remaining_weight
             roll.status = "written_off"
             roll.remaining_weight = 0
             roll.write_off_reason = reason

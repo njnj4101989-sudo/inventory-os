@@ -124,6 +124,24 @@ export function downloadSalesReportCSV(params = {}) {
   document.body.appendChild(a); a.click(); a.remove()
 }
 
+// P4.7 — Wastage report (cutting + VA damage + sales-return damage + write-off)
+export async function getWastageReport(params = {}) {
+  return client.get('/dashboard/wastage-report', { params })
+}
+
+export function downloadWastageReportCSV(params = {}) {
+  const qs = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.append(k, v)
+  })
+  const base = client.defaults.baseURL || ''
+  const url = `${base}/dashboard/wastage-report.csv?${qs.toString()}`
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a); a.click(); a.remove()
+}
+
 export async function getProductionReport(params = {}) {
   if (USE_MOCK) {
     return mockResponse(productionReport)

@@ -12,7 +12,8 @@
 | **P2** — VA Processing + Purchases & Suppliers | ✅ COMPLETE | S95 |
 | **P3** — Returns Analysis + Inventory Enhancements + Polish | ✅ COMPLETE | S95 |
 | **P4.1** — Structural rebuild (grouped + ₹ + ageing + CSV) | ✅ COMPLETE (1 deferred: 4.1j) | S115c (commit `407ca6c`) |
-| **P4.2–4.8** — Remaining sub-phases (Ageing / Reorder / ABC / Raw Material / Variance / Wastage / UX) | 🟡 QUEUED | S116+ |
+| **P4.7** — Wastage Report (cutting + VA damage + sales-return damage + write-off; ₹ via WAC + cost_per_unit) | ✅ COMPLETE | S116 |
+| **P4.2–4.6, 4.8** — Remaining sub-phases (Ageing / Reorder / ABC / Raw Material / Variance / UX) | 🟡 QUEUED | S116+ |
 | **P5** — Sales & Orders Report WOW Overhaul (Tier 1 COMPLETE: banner + delta KPIs + sparkline + funnel + top products + CSV) | ✅ Tier 1 DONE | S115d |
 
 ---
@@ -638,24 +639,38 @@ After all 3 phases: **44 of 42 tables** represented in reports (some tables cont
 
 ---
 
-### P4.7 — Wastage Report sub-tab
+### P4.7 — Wastage Report sub-tab ✅ COMPLETE (S116)
 
-**Goal:** Carries over from S116 queue. Unify three waste streams into one ₹ picture.
+**Goal:** Unify all waste streams into one ₹ picture, AS-2 valued.
 
-#### Backend
+**Deviations from original spec (architectural — recorded for future readers):**
+1. **WAC for SKU damage, not `base_price`** — per the Last Cost vs WAC split (S112 + memory `feedback_last_cost_vs_wac`), valuation must use `SKUService.compute_wac_map`. `base_price` is Last Cost (pricing signal), never inventory valuation.
+2. **`Roll.cost_per_unit` for fabric waste** — per-kg purchase cost, since rolls aren't SKU commodities and have no WAC. This is the rate fabric was bought at.
+3. **Includes `RollProcessing.weight_damaged`** — original spec only counted return-note + sales-return damage. VA damage on the roll side was missing (largest damage stream operationally).
+4. **Excludes `return_note_items.pieces_damaged`** — that field doesn't exist on `ReturnNoteItem`; supplier returns are credit recovery, not damage waste.
+5. **Top-level Reports tab (not Inventory sub-tab)** — sub-tab infrastructure (P4.2d) deferred. Will fold in when next inventory sub-tab lands.
+6. **Data gap closed:** S115 wrote off rolls without snapshotting `remaining_weight`. S116 migration `j0k1l2m3n4o5_s116_writeoff_snapshot` adds `Roll.weight_at_write_off` + backfills historical rows via reconstruction. Service writes the snapshot on every new write-off going forward.
 
-- [ ] **4.7a** Service method `get_wastage_report(fy_id, from_date, to_date)` — aggregates:
-  1. **Cutting waste** — SUM(`lot_rolls.waste_weight × roll.base_price`) per lot
-  2. **Damage waste** — SUM(`return_note_items.pieces_damaged × sku.base_price`) + SUM(`sales_return_items.pieces_damaged × sku.base_price`)
-  3. **Write-off waste** — SUM rolls where `status='written_off'` of `remaining_weight_at_writeoff × base_price` (snapshot at write-off time — for now use `write_off_notes` or query InventoryEvent; fallback: `total_weight × base_price` if no snapshot)
-  - Group by month. Total wastage ₹, wastage % (waste / total consumption)
-- [ ] **4.7b** New endpoint `GET /dashboard/wastage-report?from=&to=`
-- [ ] **4.7c** Document in `API_REFERENCE.md`
+#### Backend ✅
 
-#### Frontend
+- [x] **4.7a** Service method `dashboard_service.get_wastage_report(from_date, to_date, *, category, va_party_id, product_type, search)` — aggregates 5 streams:
+  1. **Cutting** — `lot_rolls.waste_weight × roll.cost_per_unit` (date: `lots.lot_date`)
+  2. **Roll VA Damage** — `roll_processing.weight_damaged × roll.cost_per_unit` (date: `roll_processing.received_date`)
+  3. **Batch VA Damage** — `batch_processing.pieces_damaged × WAC[batch.sku_id]` via `BatchChallan` (date: `batch_challans.received_date`)
+  4. **Sales Return Damage** — `sales_return_items.quantity_damaged × WAC[sku_id]` (date: `COALESCE(restocked_date, received_date)`)
+  5. **Write-off** — `rolls.weight_at_write_off × roll.cost_per_unit` (date: `rolls.written_off_at`)
+  Returns `{kpis, monthly[YYYY-MM], groups{cat→{label,unit,count,weight_kg,pieces,value_inr,rows[]}}, totals, period}`
+- [x] **4.7b** New endpoints `GET /dashboard/wastage-report` + `GET /dashboard/wastage-report.csv` — filter-aware (category, va_party_id, product_type, search) + period/from/to
+- [x] **4.7c** Documented in `API_REFERENCE.md`
 
-- [ ] **4.7d** `WastageTab` component: 4 KPIs (Cutting Waste ₹, Damage ₹, Write-off ₹, Total Wastage %). Monthly breakdown table + stacked bar chart (optional, defer if tight)
-- [ ] **4.7e** CSV export
+#### Frontend ✅
+
+- [x] **4.7d** `WastageTab` in `ReportsPage.jsx` — 4 KPIs (Cutting ₹, Damage ₹, Write-off ₹, Total ₹), monthly stacked-bar trend (no chart deps), 5-category accordion with drill-down rows, FilterSelect (category + product type) + SearchInput. Strict `typo-*` + emerald-600 theme per Protocol 10.
+- [x] **4.7e** CSV export — emerald button, single sheet, all categories.
+
+#### Migration ✅
+
+- [x] `migrations/versions/j0k1l2m3n4o5_s116_writeoff_snapshot.py` — adds `Roll.weight_at_write_off NUMERIC(10,3)` + backfill for existing `status='written_off'` rows. Multi-tenant (iterates all `co_*` schemas).
 
 #### Deploy gate
 

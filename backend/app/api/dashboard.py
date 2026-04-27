@@ -377,6 +377,87 @@ async def closing_stock_report(
     return {"success": True, "data": result}
 
 
+@router.get("/wastage-report", response_model=None)
+async def wastage_report(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    category: str | None = Query(None, regex="^(cutting|damage_roll|damage_batch|damage_sales|write_off)?$"),
+    va_party_id: str | None = Query(None),
+    product_type: str | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """P4.7 — Unified wastage report: cutting, VA damage (roll + batch), sales-return
+    damage, roll write-offs. ₹ valuation via WAC for SKU damage, roll cost_per_unit
+    for fabric waste.
+    """
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_wastage_report(
+        fd, td,
+        category=category,
+        va_party_id=va_party_id,
+        product_type=product_type,
+        search=search,
+    )
+    return {"success": True, "data": result}
+
+
+@router.get("/wastage-report.csv", response_model=None)
+async def wastage_report_csv(
+    period: str | None = Query(None),
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    category: str | None = Query(None, regex="^(cutting|damage_roll|damage_batch|damage_sales|write_off)?$"),
+    va_party_id: str | None = Query(None),
+    product_type: str | None = Query(None),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("report_view"),
+):
+    """CSV export — unified wastage rows across all categories. Same filters as JSON."""
+    fd, td = _resolve_period(period, from_date, to_date)
+    svc = DashboardService(db)
+    result = await svc.get_wastage_report(
+        fd, td,
+        category=category,
+        va_party_id=va_party_id,
+        product_type=product_type,
+        search=search,
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Category", "Date", "Reference", "Fabric / Design", "Color",
+        "Weight (kg)", "Pieces", "Rate (₹)", "Value (₹)", "Reason", "Party",
+    ])
+    for cat_key, g in result["groups"].items():
+        for r in g["rows"]:
+            writer.writerow([
+                g["label"],
+                r.get("date") or "",
+                r.get("ref_code") or "",
+                r.get("fabric_or_design") or "",
+                r.get("color") or "",
+                f"{r['weight_kg']:.3f}" if r.get("weight_kg") else "",
+                r.get("pieces") if r.get("pieces") is not None else "",
+                f"{r['rate_inr']:.2f}",
+                f"{r['value_inr']:.2f}",
+                r.get("reason") or "",
+                r.get("party") or "",
+            ])
+    buf.seek(0)
+    filename = f"wastage-report_{fd.isoformat()}_{td.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/returns-report", response_model=None)
 async def returns_report(
     period: str | None = Query(None),

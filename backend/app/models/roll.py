@@ -62,6 +62,9 @@ class Roll(Base):
     )
     write_off_reason: Mapped[str | None] = mapped_column(String(30))
     write_off_notes: Mapped[str | None] = mapped_column(Text)
+    # S116: snapshot of remaining_weight at the moment of write-off (kg). Needed
+    # for wastage valuation since remaining_weight is zeroed by the same call.
+    weight_at_write_off: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
 
     # Relationships
     color_obj: Mapped[Color | None] = relationship(foreign_keys=[color_id])

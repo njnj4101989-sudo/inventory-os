@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV, downloadSalesReportCSV } from '../api/dashboard'
+import { getTailorPerf, getProductionReport, getFinancialReport, getSalesReport, getAccountingReport, getVAReport, getPurchaseReport, getReturnsReport, getClosingStockReport, getInventoryPosition, downloadInventoryPositionCSV, downloadSalesReportCSV, getWastageReport, downloadWastageReportCSV } from '../api/dashboard'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import FilterSelect from '../components/common/FilterSelect'
 import SearchInput from '../components/common/SearchInput'
@@ -16,6 +16,7 @@ const TABS = [
   { key: 'va', label: 'VA Processing', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
   { key: 'purchases', label: 'Purchases', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z' },
   { key: 'returns', label: 'Returns', icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6' },
+  { key: 'wastage', label: 'Wastage', icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3' },
   { key: 'closing_stock', label: 'Closing Stock', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { key: 'tailor', label: 'Tailor Performance', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
@@ -577,6 +578,256 @@ function InventoryTab({ period }) {
                 </tr>
               </tfoot>
             )}
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════
+//  WASTAGE TAB (P4.7) — Cutting + VA damage + Sales-return damage + Write-off
+// ═══════════════════════════════════════════════════════
+const WASTAGE_CATEGORIES = [
+  { key: 'cutting',      label: 'Cutting Waste',        icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8', color: 'bg-amber-500',   tint: 'bg-amber-50/60',   accent: 'text-amber-700',   border: 'border-amber-100' },
+  { key: 'damage_roll',  label: 'Roll VA Damage',       icon: 'M13 10V3L4 14h7v7l9-11h-7z',     color: 'bg-orange-500',  tint: 'bg-orange-50/60',  accent: 'text-orange-700',  border: 'border-orange-100' },
+  { key: 'damage_batch', label: 'Batch VA Damage',      icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4', color: 'bg-red-500', tint: 'bg-red-50/60', accent: 'text-red-700', border: 'border-red-100' },
+  { key: 'damage_sales', label: 'Sales Return Damage',  icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',  color: 'bg-rose-500',    tint: 'bg-rose-50/60',    accent: 'text-rose-700',    border: 'border-rose-100' },
+  { key: 'write_off',    label: 'Roll Write-off',       icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3', color: 'bg-slate-600', tint: 'bg-slate-50/60', accent: 'text-slate-700', border: 'border-slate-200' },
+]
+
+function WastageTab({ period }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Filters
+  const [category, setCategory] = useState('')
+  const [productType, setProductType] = useState('')
+  const [search, setSearch] = useState('')
+
+  // Expanded category groups (default: all open — there are only 5 buckets)
+  const [expanded, setExpanded] = useState(new Set(WASTAGE_CATEGORIES.map(c => c.key)))
+
+  const fetchData = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const params = { period }
+      if (category) params.category = category
+      if (productType) params.product_type = productType
+      if (search.trim()) params.search = search.trim()
+      const res = await getWastageReport(params)
+      setData(res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load wastage report')
+    } finally { setLoading(false) }
+  }, [period, category, productType, search])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const toggleGroup = (key) => setExpanded(s => {
+    const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n
+  })
+  const expandAll = () => setExpanded(new Set(WASTAGE_CATEGORIES.map(c => c.key)))
+  const collapseAll = () => setExpanded(new Set())
+
+  const clearFilters = () => { setCategory(''); setProductType(''); setSearch('') }
+  const activeFilters = [category, productType, search].filter(v => v !== '' && v != null).length
+
+  const handleCSV = () => {
+    const params = { period }
+    if (category) params.category = category
+    if (productType) params.product_type = productType
+    if (search.trim()) params.search = search.trim()
+    downloadWastageReportCSV(params)
+  }
+
+  if (loading && !data) return <div className="py-12"><LoadingSpinner size="lg" text="Loading wastage report..." /></div>
+  if (error) return <ErrorAlert message={error} onDismiss={() => setError(null)} />
+  if (!data) return <p className="typo-empty py-8 text-center">No data.</p>
+
+  const { kpis, monthly, groups, totals } = data
+  const monthlyMax = Math.max(...monthly.map(m => m.total_inr), 1)
+
+  // Discover product_types from cutting rows (only category that has product_type today)
+  const productTypeSet = new Set()
+  for (const r of (groups.cutting?.rows || [])) {
+    if (r.product_type) productTypeSet.add(r.product_type)
+  }
+  for (const r of (groups.damage_sales?.rows || [])) {
+    if (r.product_type) productTypeSet.add(r.product_type)
+  }
+  const productTypeOptions = [
+    { value: '', label: 'All Product Types' },
+    ...Array.from(productTypeSet).sort().map(v => ({ value: v, label: v })),
+  ]
+  const categoryOptions = [
+    { value: '', label: 'All Categories' },
+    ...WASTAGE_CATEGORIES.map(c => ({ value: c.key, label: c.label })),
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* ── KPI grid: 4 ₹ cards ── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Cutting Waste" value={formatINR(kpis.cutting_inr)} sub={`${kpis.cutting_kg.toFixed(1)} kg lost in cutting`}
+          color="bg-amber-500" icon="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+        <KpiCard label="Damage Waste" value={formatINR(kpis.damage_inr)} sub={`${kpis.damage_roll_kg.toFixed(1)} kg + ${kpis.damage_batch_pcs + kpis.damage_sales_pcs} pcs damaged`}
+          color="bg-red-500" icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <KpiCard label="Write-off Waste" value={formatINR(kpis.write_off_inr)} sub={`${kpis.write_off_kg.toFixed(1)} kg retired`}
+          color="bg-slate-600" icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+        <KpiCard label="Total Wastage" value={formatINR(kpis.total_inr)} sub="₹ value across all sources"
+          color="bg-violet-500" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </div>
+
+      {/* ── Monthly trend (stacked bars: cutting + damage + write-off per month) ── */}
+      {monthly.length > 0 && (
+        <div className="rounded-xl bg-white p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="typo-section-title">Monthly Trend</h3>
+            <div className="flex items-center gap-3 typo-caption">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Cutting</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-red-500"></span>Damage</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-slate-600"></span>Write-off</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {monthly.map((m) => {
+              const pctC = (m.cutting_inr / monthlyMax) * 100
+              const pctD = (m.damage_inr / monthlyMax) * 100
+              const pctW = (m.write_off_inr / monthlyMax) * 100
+              return (
+                <div key={m.month} className="flex items-center gap-3">
+                  <div className="w-20 typo-caption font-medium text-gray-700">{m.month}</div>
+                  <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden flex">
+                    {pctC > 0 && <div className="bg-amber-500 h-full" style={{ width: `${pctC}%` }} title={`Cutting: ${formatINR(m.cutting_inr)}`}></div>}
+                    {pctD > 0 && <div className="bg-red-500 h-full" style={{ width: `${pctD}%` }} title={`Damage: ${formatINR(m.damage_inr)}`}></div>}
+                    {pctW > 0 && <div className="bg-slate-600 h-full" style={{ width: `${pctW}%` }} title={`Write-off: ${formatINR(m.write_off_inr)}`}></div>}
+                  </div>
+                  <div className="w-28 text-right typo-data font-semibold text-gray-900 tabular-nums">{formatINR(m.total_inr)}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Filter bar ── */}
+      <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterSelect value={category} onChange={setCategory} options={categoryOptions} />
+          <FilterSelect value={productType} onChange={setProductType} options={productTypeOptions} />
+          <div className="flex-1 max-w-sm">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search reference, fabric, color, party..." />
+          </div>
+          {activeFilters > 0 && (
+            <button onClick={clearFilters}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 typo-btn-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              Clear ({activeFilters})
+            </button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={expandAll} className="typo-btn-sm text-gray-500 hover:text-emerald-700 underline">Expand All</button>
+            <span className="text-gray-300">·</span>
+            <button onClick={collapseAll} className="typo-btn-sm text-gray-500 hover:text-emerald-700 underline">Collapse All</button>
+            <button onClick={handleCSV}
+              title="Download CSV"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 typo-btn-sm text-white hover:bg-emerald-700 transition-colors shadow-sm">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Grouped Accordion (5 categories) ── */}
+      <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="typo-section-title">Wastage Detail (by Category)</h3>
+          <span className="typo-caption">{totals.events} event{totals.events !== 1 ? 's' : ''} · {formatINR(totals.value_inr)}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50 text-left">
+                <th className="py-2 px-3 typo-th w-6"></th>
+                <th className="py-2 px-3 typo-th">Category / Reference</th>
+                <th className="py-2 px-3 typo-th">Date</th>
+                <th className="py-2 px-3 typo-th">Fabric / Design</th>
+                <th className="py-2 px-3 typo-th">Color</th>
+                <th className="py-2 px-3 typo-th text-right">Weight (kg)</th>
+                <th className="py-2 px-3 typo-th text-right">Pieces</th>
+                <th className="py-2 px-3 typo-th text-right">Rate</th>
+                <th className="py-2 px-3 typo-th text-right">Value (₹)</th>
+                <th className="py-2 px-3 typo-th">Reason</th>
+                <th className="py-2 px-3 typo-th">Party</th>
+              </tr>
+            </thead>
+            <tbody>
+              {totals.events === 0 && (
+                <tr><td colSpan={11} className="py-8 text-center"><span className="typo-empty">No wastage events match the current filters.</span></td></tr>
+              )}
+              {WASTAGE_CATEGORIES.map((cat) => {
+                const g = groups[cat.key]
+                if (!g || g.count === 0) return null
+                const isOpen = expanded.has(cat.key)
+                return (
+                  <React.Fragment key={cat.key}>
+                    {/* Category parent row — colored accent per category */}
+                    <tr onClick={() => toggleGroup(cat.key)}
+                      className={`border-b-2 ${cat.border} ${isOpen ? cat.tint : cat.tint + ' opacity-80'} hover:opacity-100 cursor-pointer transition-colors`}>
+                      <td className="py-3 px-3">
+                        <svg className={`h-4 w-4 ${cat.accent} transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </td>
+                      <td className="py-3 px-3 typo-td font-bold text-gray-900 text-base">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded ${cat.color}`}>
+                            <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={cat.icon} />
+                            </svg>
+                          </span>
+                          {cat.label}
+                          <span className={`typo-caption ml-1 ${cat.accent}`}>({g.count} event{g.count !== 1 ? 's' : ''})</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                      <td className="py-3 px-3 text-right typo-td font-bold text-gray-900 tabular-nums">{g.weight_kg > 0 ? g.weight_kg.toFixed(2) : '—'}</td>
+                      <td className="py-3 px-3 text-right typo-td font-bold text-gray-900 tabular-nums">{g.pieces > 0 ? g.pieces : '—'}</td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                      <td className={`py-3 px-3 text-right typo-td font-bold tabular-nums ${cat.accent}`}>{formatINR(g.value_inr)}</td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                      <td className="py-3 px-3 typo-td-secondary">—</td>
+                    </tr>
+                    {/* Drill-down rows */}
+                    {isOpen && g.rows.map((r) => (
+                      <tr key={`${cat.key}-${r.id}`} className="border-b border-gray-50 hover:bg-gray-50/60">
+                        <td className="py-2 px-3"></td>
+                        <td className="py-2 px-3 typo-td pl-10">
+                          <span className="font-medium text-gray-800">{r.ref_code || '—'}</span>
+                          {r.sku_code && <span className="typo-caption ml-2 text-gray-500">{r.sku_code}{r.size ? ` · ${r.size}` : ''}</span>}
+                        </td>
+                        <td className="py-2 px-3 typo-td-secondary tabular-nums">{r.date || '—'}</td>
+                        <td className="py-2 px-3 typo-td-secondary">{r.fabric_or_design || '—'}</td>
+                        <td className="py-2 px-3 typo-td-secondary">{r.color || '—'}</td>
+                        <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.weight_kg ? r.weight_kg.toFixed(3) : '—'}</td>
+                        <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.pieces != null ? r.pieces : '—'}</td>
+                        <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.rate_inr ? formatINR(r.rate_inr) : '—'}</td>
+                        <td className="py-2 px-3 text-right typo-td font-semibold text-gray-900 tabular-nums">{formatINR(r.value_inr)}</td>
+                        <td className="py-2 px-3 typo-td-secondary">{r.reason || '—'}</td>
+                        <td className="py-2 px-3 typo-td-secondary">{r.party || '—'}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                )
+              })}
+            </tbody>
           </table>
         </div>
       </div>
@@ -1971,7 +2222,7 @@ function ClosingStockTab({ data }) {
 export default function ReportsPage() {
   // Persist active tab in URL (?tab=sales etc.) so refresh preserves the user's context
   const [reportSearchParams, setReportSearchParams] = useSearchParams()
-  const validTabs = ['production', 'sales', 'inventory', 'financial', 'accounting', 'va', 'purchases', 'returns', 'closing_stock', 'tailor']
+  const validTabs = ['production', 'sales', 'inventory', 'financial', 'accounting', 'va', 'purchases', 'returns', 'wastage', 'closing_stock', 'tailor']
   const initialTab = validTabs.includes(reportSearchParams.get('tab')) ? reportSearchParams.get('tab') : 'production'
   const [activeTab, setActiveTabInternal] = useState(initialTab)
   const setActiveTab = (next) => {
@@ -2026,6 +2277,8 @@ export default function ReportsPage() {
       } else if (activeTab === 'returns') {
         const res = await getReturnsReport(params)
         setReturnsData(res.data.data)
+      } else if (activeTab === 'wastage') {
+        // WastageTab self-fetches via getWastageReport (P4.7)
       } else if (activeTab === 'closing_stock') {
         const res = await getClosingStockReport()
         setClosingStockData(res.data.data)
@@ -2111,6 +2364,7 @@ export default function ReportsPage() {
             {activeTab === 'va' && <VATab data={vaData} />}
             {activeTab === 'purchases' && <PurchaseTab data={purchaseData} />}
             {activeTab === 'returns' && <ReturnsTab data={returnsData} />}
+            {activeTab === 'wastage' && <WastageTab period={period} />}
             {activeTab === 'closing_stock' && <ClosingStockTab data={closingStockData} />}
             {activeTab === 'tailor' && <TailorTab data={tailorData} />}
           </>

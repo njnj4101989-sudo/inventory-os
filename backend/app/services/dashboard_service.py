@@ -618,6 +618,416 @@ class DashboardService:
             },
         }
 
+    async def get_wastage_report(
+        self,
+        from_date: date,
+        to_date: date,
+        *,
+        category: str | None = None,  # 'cutting' | 'damage_roll' | 'damage_batch' | 'damage_sales' | 'write_off'
+        va_party_id: str | None = None,
+        product_type: str | None = None,
+        search: str | None = None,
+    ) -> dict:
+        """P4.7 — Unified wastage report across cutting, VA damage (roll + batch),
+        sales-return damage, and roll write-offs. ₹ valued (AS-2): rolls priced
+        at `Roll.cost_per_unit` (per-kg purchase cost); SKU-based damage priced
+        at WAC via `SKUService.compute_wac_map`.
+
+        Returns: {kpis, monthly: [{month, cutting_inr, damage_inr, write_off_inr,
+          total_inr}], groups: {category: {label, count, weight_kg, pieces, value_inr,
+          rows: [...]}}, totals, period}
+        """
+        from collections import defaultdict
+        from app.services.sku_service import SKUService
+
+        # ── Cutting waste — lot_rolls.waste_weight × roll.cost_per_unit ──
+        cutting_rows: list[dict] = []
+        if category in (None, "cutting"):
+            stmt = (
+                select(
+                    LotRoll.id.label("lr_id"),
+                    LotRoll.waste_weight,
+                    Lot.lot_code,
+                    Lot.lot_date,
+                    Lot.product_type,
+                    Roll.id.label("roll_id"),
+                    Roll.roll_code,
+                    Roll.fabric_type,
+                    Roll.color,
+                    Roll.cost_per_unit,
+                )
+                .join(Lot, Lot.id == LotRoll.lot_id)
+                .join(Roll, Roll.id == LotRoll.roll_id)
+                .where(
+                    Lot.lot_date >= from_date,
+                    Lot.lot_date <= to_date,
+                    LotRoll.waste_weight > 0,
+                )
+            )
+            if product_type:
+                stmt = stmt.where(Lot.product_type == product_type)
+            for r in (await self.db.execute(stmt)).all():
+                weight = float(r.waste_weight or 0)
+                cost = float(r.cost_per_unit or 0)
+                value = round(weight * cost, 2)
+                row = {
+                    "id": str(r.lr_id),
+                    "date": r.lot_date.isoformat() if r.lot_date else None,
+                    "ref_code": r.lot_code,
+                    "ref_kind": "lot",
+                    "ref_id": None,  # lot_id not selected; lot_code is sufficient for display
+                    "product_type": r.product_type,
+                    "fabric_or_design": r.fabric_type,
+                    "color": r.color,
+                    "weight_kg": weight,
+                    "pieces": None,
+                    "rate_inr": round(cost, 2),
+                    "value_inr": value,
+                    "reason": None,
+                    "party": None,
+                    "roll_code": r.roll_code,
+                }
+                if search:
+                    s = search.lower()
+                    if s not in (r.lot_code or "").lower() and s not in (r.roll_code or "").lower() and s not in (r.fabric_type or "").lower() and s not in (r.color or "").lower():
+                        continue
+                cutting_rows.append(row)
+
+        # ── Damage waste — RollProcessing.weight_damaged ──
+        damage_roll_rows: list[dict] = []
+        if category in (None, "damage_roll"):
+            stmt = (
+                select(
+                    RollProcessing.id.label("rp_id"),
+                    RollProcessing.weight_damaged,
+                    RollProcessing.damage_reason,
+                    RollProcessing.received_date,
+                    RollProcessing.va_party_id,
+                    Roll.roll_code,
+                    Roll.fabric_type,
+                    Roll.color,
+                    Roll.cost_per_unit,
+                    VAParty.name.label("party_name"),
+                )
+                .join(Roll, Roll.id == RollProcessing.roll_id)
+                .outerjoin(VAParty, VAParty.id == RollProcessing.va_party_id)
+                .where(
+                    RollProcessing.received_date >= from_date,
+                    RollProcessing.received_date <= to_date,
+                    RollProcessing.weight_damaged > 0,
+                )
+            )
+            if va_party_id:
+                from uuid import UUID as UUIDType
+                try:
+                    stmt = stmt.where(RollProcessing.va_party_id == UUIDType(va_party_id))
+                except ValueError:
+                    pass
+            for r in (await self.db.execute(stmt)).all():
+                weight = float(r.weight_damaged or 0)
+                cost = float(r.cost_per_unit or 0)
+                value = round(weight * cost, 2)
+                row = {
+                    "id": str(r.rp_id),
+                    "date": r.received_date.isoformat() if r.received_date else None,
+                    "ref_code": r.roll_code,
+                    "ref_kind": "roll_processing",
+                    "ref_id": None,
+                    "product_type": None,
+                    "fabric_or_design": r.fabric_type,
+                    "color": r.color,
+                    "weight_kg": weight,
+                    "pieces": None,
+                    "rate_inr": round(cost, 2),
+                    "value_inr": value,
+                    "reason": r.damage_reason,
+                    "party": r.party_name,
+                    "roll_code": r.roll_code,
+                }
+                if search:
+                    s = search.lower()
+                    if s not in (r.roll_code or "").lower() and s not in (r.fabric_type or "").lower() and s not in (r.color or "").lower() and s not in (r.party_name or "").lower():
+                        continue
+                damage_roll_rows.append(row)
+
+        # ── Damage waste — BatchProcessing.pieces_damaged (via BatchChallan) ──
+        damage_batch_rows: list[dict] = []
+        batch_sku_ids_needed: set = set()
+        if category in (None, "damage_batch"):
+            stmt = (
+                select(
+                    BatchProcessing.id.label("bp_id"),
+                    BatchProcessing.pieces_damaged,
+                    BatchProcessing.damage_reason,
+                    BatchChallan.received_date,
+                    BatchChallan.va_party_id,
+                    BatchChallan.challan_no,
+                    Batch.batch_code,
+                    Batch.sku_id,
+                    Batch.design_no,
+                    VAParty.name.label("party_name"),
+                )
+                .join(BatchChallan, BatchChallan.id == BatchProcessing.batch_challan_id)
+                .join(Batch, Batch.id == BatchProcessing.batch_id)
+                .outerjoin(VAParty, VAParty.id == BatchChallan.va_party_id)
+                .where(
+                    BatchChallan.received_date >= from_date,
+                    BatchChallan.received_date <= to_date,
+                    BatchProcessing.pieces_damaged > 0,
+                )
+            )
+            if va_party_id:
+                from uuid import UUID as UUIDType
+                try:
+                    stmt = stmt.where(BatchChallan.va_party_id == UUIDType(va_party_id))
+                except ValueError:
+                    pass
+            batch_rows_raw = (await self.db.execute(stmt)).all()
+            for r in batch_rows_raw:
+                if r.sku_id:
+                    batch_sku_ids_needed.add(r.sku_id)
+
+        # ── Damage waste — SalesReturnItem.quantity_damaged ──
+        sales_damage_rows_raw: list = []
+        sales_sku_ids_needed: set = set()
+        if category in (None, "damage_sales"):
+            stmt = (
+                select(
+                    SalesReturnItem.id.label("sri_id"),
+                    SalesReturnItem.quantity_damaged,
+                    SalesReturnItem.reason,
+                    SalesReturn.srn_no,
+                    SalesReturn.received_date,
+                    SalesReturn.restocked_date,
+                    SalesReturnItem.sku_id,
+                    SKU.sku_code,
+                    SKU.product_name,
+                    SKU.product_type,
+                    SKU.color,
+                    SKU.size,
+                    Customer.name.label("customer_name"),
+                )
+                .join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id)
+                .join(SKU, SKU.id == SalesReturnItem.sku_id)
+                .outerjoin(Customer, Customer.id == SalesReturn.customer_id)
+                .where(SalesReturnItem.quantity_damaged > 0)
+            )
+            sales_damage_rows_raw = (await self.db.execute(stmt)).all()
+            # Period filter on COALESCE(restocked_date, received_date) — filter in Python
+            # so we can apply COALESCE without dialect-specific SQL.
+            sales_damage_rows_raw = [
+                r for r in sales_damage_rows_raw
+                if (r.restocked_date or r.received_date) is not None
+                and from_date <= (r.restocked_date or r.received_date) <= to_date
+            ]
+            for r in sales_damage_rows_raw:
+                sales_sku_ids_needed.add(r.sku_id)
+
+        # ── WAC for SKU-based damage (batch + sales) ──
+        sku_ids_needed = list(batch_sku_ids_needed | sales_sku_ids_needed)
+        wac_map = {}
+        if sku_ids_needed:
+            wac_map = await SKUService(self.db).compute_wac_map(sku_ids_needed)
+
+        # Now finalize batch + sales rows with WAC
+        if category in (None, "damage_batch"):
+            for r in batch_rows_raw:
+                pcs = int(r.pieces_damaged or 0)
+                wac = float(wac_map.get(r.sku_id, 0)) if r.sku_id else 0.0
+                value = round(pcs * wac, 2)
+                row = {
+                    "id": str(r.bp_id),
+                    "date": r.received_date.isoformat() if r.received_date else None,
+                    "ref_code": r.batch_code,
+                    "ref_kind": "batch_processing",
+                    "ref_id": None,
+                    "product_type": None,
+                    "fabric_or_design": r.design_no,
+                    "color": None,
+                    "weight_kg": None,
+                    "pieces": pcs,
+                    "rate_inr": round(wac, 2),
+                    "value_inr": value,
+                    "reason": r.damage_reason,
+                    "party": r.party_name,
+                    "roll_code": None,
+                }
+                if product_type:
+                    continue  # batch rows have no product_type column to filter
+                if search:
+                    s = search.lower()
+                    if s not in (r.batch_code or "").lower() and s not in (r.design_no or "").lower() and s not in (r.party_name or "").lower():
+                        continue
+                damage_batch_rows.append(row)
+
+        damage_sales_rows: list[dict] = []
+        if category in (None, "damage_sales"):
+            for r in sales_damage_rows_raw:
+                pcs = int(r.quantity_damaged or 0)
+                wac = float(wac_map.get(r.sku_id, 0))
+                value = round(pcs * wac, 2)
+                anchor = r.restocked_date or r.received_date
+                row = {
+                    "id": str(r.sri_id),
+                    "date": anchor.isoformat() if anchor else None,
+                    "ref_code": r.srn_no,
+                    "ref_kind": "sales_return",
+                    "ref_id": None,
+                    "product_type": r.product_type,
+                    "fabric_or_design": r.product_name,
+                    "color": r.color,
+                    "weight_kg": None,
+                    "pieces": pcs,
+                    "rate_inr": round(wac, 2),
+                    "value_inr": value,
+                    "reason": r.reason,
+                    "party": r.customer_name,
+                    "roll_code": None,
+                    "sku_code": r.sku_code,
+                    "size": r.size,
+                }
+                if product_type and r.product_type != product_type:
+                    continue
+                if search:
+                    s = search.lower()
+                    if s not in (r.srn_no or "").lower() and s not in (r.sku_code or "").lower() and s not in (r.product_name or "").lower() and s not in (r.color or "").lower() and s not in (r.customer_name or "").lower():
+                        continue
+                damage_sales_rows.append(row)
+
+        # ── Write-off waste — Roll.weight_at_write_off × cost_per_unit ──
+        write_off_rows: list[dict] = []
+        if category in (None, "write_off"):
+            stmt = (
+                select(
+                    Roll.id,
+                    Roll.roll_code,
+                    Roll.fabric_type,
+                    Roll.color,
+                    Roll.weight_at_write_off,
+                    Roll.cost_per_unit,
+                    Roll.write_off_reason,
+                    Roll.write_off_notes,
+                    Roll.written_off_at,
+                    Supplier.name.label("supplier_name"),
+                )
+                .outerjoin(Supplier, Supplier.id == Roll.supplier_id)
+                .where(
+                    Roll.status == "written_off",
+                    func.date(Roll.written_off_at) >= from_date,
+                    func.date(Roll.written_off_at) <= to_date,
+                )
+            )
+            for r in (await self.db.execute(stmt)).all():
+                weight = float(r.weight_at_write_off or 0)
+                cost = float(r.cost_per_unit or 0)
+                value = round(weight * cost, 2)
+                row = {
+                    "id": str(r.id),
+                    "date": r.written_off_at.date().isoformat() if r.written_off_at else None,
+                    "ref_code": r.roll_code,
+                    "ref_kind": "roll",
+                    "ref_id": str(r.id),
+                    "product_type": None,
+                    "fabric_or_design": r.fabric_type,
+                    "color": r.color,
+                    "weight_kg": weight,
+                    "pieces": None,
+                    "rate_inr": round(cost, 2),
+                    "value_inr": value,
+                    "reason": r.write_off_reason,
+                    "party": r.supplier_name,
+                    "roll_code": r.roll_code,
+                    "notes": r.write_off_notes,
+                }
+                if search:
+                    s = search.lower()
+                    if s not in (r.roll_code or "").lower() and s not in (r.fabric_type or "").lower() and s not in (r.color or "").lower() and s not in (r.supplier_name or "").lower():
+                        continue
+                write_off_rows.append(row)
+
+        # ── Build groups (always emit all four; counts/value drive the UI) ──
+        def _group(label: str, rows: list[dict], unit: str) -> dict:
+            return {
+                "label": label,
+                "unit": unit,
+                "count": len(rows),
+                "weight_kg": round(sum((r.get("weight_kg") or 0) for r in rows), 3),
+                "pieces": sum((r.get("pieces") or 0) for r in rows),
+                "value_inr": round(sum(r["value_inr"] for r in rows), 2),
+                "rows": sorted(rows, key=lambda x: (x["date"] or ""), reverse=True),
+            }
+
+        groups = {
+            "cutting": _group("Cutting Waste", cutting_rows, "kg"),
+            "damage_roll": _group("Roll VA Damage", damage_roll_rows, "kg"),
+            "damage_batch": _group("Batch VA Damage", damage_batch_rows, "pcs"),
+            "damage_sales": _group("Sales Return Damage", damage_sales_rows, "pcs"),
+            "write_off": _group("Roll Write-off", write_off_rows, "kg"),
+        }
+
+        # ── Monthly trend (cutting + damage + write-off ₹ rollups) ──
+        monthly_buckets: dict = defaultdict(lambda: {
+            "cutting_inr": 0.0, "damage_inr": 0.0, "write_off_inr": 0.0, "total_inr": 0.0,
+        })
+        def _month_key(iso_date: str | None) -> str | None:
+            return iso_date[:7] if iso_date else None  # 'YYYY-MM'
+
+        for r in cutting_rows:
+            mk = _month_key(r["date"])
+            if mk:
+                monthly_buckets[mk]["cutting_inr"] += r["value_inr"]
+        for r in damage_roll_rows + damage_batch_rows + damage_sales_rows:
+            mk = _month_key(r["date"])
+            if mk:
+                monthly_buckets[mk]["damage_inr"] += r["value_inr"]
+        for r in write_off_rows:
+            mk = _month_key(r["date"])
+            if mk:
+                monthly_buckets[mk]["write_off_inr"] += r["value_inr"]
+
+        monthly = []
+        for mk in sorted(monthly_buckets.keys()):
+            b = monthly_buckets[mk]
+            b["total_inr"] = round(b["cutting_inr"] + b["damage_inr"] + b["write_off_inr"], 2)
+            b["cutting_inr"] = round(b["cutting_inr"], 2)
+            b["damage_inr"] = round(b["damage_inr"], 2)
+            b["write_off_inr"] = round(b["write_off_inr"], 2)
+            monthly.append({"month": mk, **b})
+
+        # ── KPIs ──
+        cutting_inr = groups["cutting"]["value_inr"]
+        damage_inr = round(
+            groups["damage_roll"]["value_inr"]
+            + groups["damage_batch"]["value_inr"]
+            + groups["damage_sales"]["value_inr"],
+            2,
+        )
+        write_off_inr = groups["write_off"]["value_inr"]
+        total_inr = round(cutting_inr + damage_inr + write_off_inr, 2)
+
+        kpis = {
+            "cutting_inr": cutting_inr,
+            "damage_inr": damage_inr,
+            "write_off_inr": write_off_inr,
+            "total_inr": total_inr,
+            "cutting_kg": groups["cutting"]["weight_kg"],
+            "damage_roll_kg": groups["damage_roll"]["weight_kg"],
+            "damage_batch_pcs": groups["damage_batch"]["pieces"],
+            "damage_sales_pcs": groups["damage_sales"]["pieces"],
+            "write_off_kg": groups["write_off"]["weight_kg"],
+        }
+
+        return {
+            "kpis": kpis,
+            "monthly": monthly,
+            "groups": groups,
+            "totals": {
+                "events": sum(g["count"] for g in groups.values()),
+                "value_inr": total_inr,
+            },
+            "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+        }
+
     async def get_inventory_summary(self) -> dict:
         """Inventory KPI cards — matches API_REFERENCE.md §12 inventory-summary."""
         # Total SKUs

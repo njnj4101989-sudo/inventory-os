@@ -1,7 +1,7 @@
 # API_REFERENCE.md — The Single Source of Truth
 
 > **Generated from:** `frontend/src/api/mock.js` + all 25 API modules
-> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-03-30 (Session 96 — +8 dashboard endpoints: enhanced, sales-report, accounting-report, raw-material-summary, wip-summary, va-report, purchase-report, returns-report)
+> **Date:** 2026-02-17 (Session 18) | **Updated:** 2026-04-27 (Session 116 — +2 dashboard endpoints: wastage-report + wastage-report.csv [P4.7])
 > **Purpose:** Backend MUST return these EXACT shapes. No interpretation, no guessing.
 
 ---
@@ -1413,7 +1413,7 @@ When `sku` is present:
 > | Page | Endpoints |
 > |------|-----------|
 > | **DashboardPage** | `summary`, `enhanced` |
-> | **ReportsPage** (9 tabs) | `production-report`, `financial-report`, `tailor-performance`, `inventory-movement`, `sales-report`, `accounting-report`, `va-report`, `purchase-report`, `returns-report` |
+> | **ReportsPage** (11 tabs) | `production-report`, `financial-report`, `tailor-performance`, `inventory-movement`, `inventory-position`, `sales-report`, `accounting-report`, `va-report`, `purchase-report`, `returns-report`, `wastage-report`, `closing-stock-report` |
 > | **InventoryPage** (3 tabs) | `inventory-summary`, `raw-material-summary`, `wip-summary` |
 
 ### GET `/dashboard/summary`
@@ -1806,6 +1806,83 @@ When `sku` is present:
 **Query:** same as `/sales-report` (period + from/to)
 **Response:** `text/csv` attachment. Filename: `sales-report_<from>_<to>.csv`
 **Columns:** Rank, Customer, Orders, Revenue (₹), Returns (₹), Net Revenue (₹), Avg Order (₹) — one row per customer from the ranking.
+
+### GET `/dashboard/wastage-report` (P4.7)
+**Auth:** `report_view`
+**Query:**
+  - `period` (`7d`|`30d`|`90d`) **or** `from`+`to` dates
+  - `category` — `cutting` | `damage_roll` | `damage_batch` | `damage_sales` | `write_off` (omit for all)
+  - `va_party_id` — UUID, scopes damage rows to a single VA party
+  - `product_type` — filters cutting + sales-return rows
+  - `search` — substring match on ref code, fabric/design, color, party name
+
+**Response:**
+```json
+{
+  "kpis": {
+    "cutting_inr": 4250.50,
+    "damage_inr": 1820.00,
+    "write_off_inr": 980.00,
+    "total_inr": 7050.50,
+    "cutting_kg": 8.5,
+    "damage_roll_kg": 1.2,
+    "damage_batch_pcs": 3,
+    "damage_sales_pcs": 2,
+    "write_off_kg": 1.96
+  },
+  "monthly": [
+    { "month": "2026-04", "cutting_inr": 4250.50, "damage_inr": 1820.00, "write_off_inr": 980.00, "total_inr": 7050.50 }
+  ],
+  "groups": {
+    "cutting":      { "label": "Cutting Waste",       "unit": "kg",  "count": 12, "weight_kg": 8.5,  "pieces": 0, "value_inr": 4250.50, "rows": [...] },
+    "damage_roll":  { "label": "Roll VA Damage",      "unit": "kg",  "count": 2,  "weight_kg": 1.2,  "pieces": 0, "value_inr": 600.00,  "rows": [...] },
+    "damage_batch": { "label": "Batch VA Damage",     "unit": "pcs", "count": 1,  "weight_kg": 0,    "pieces": 3, "value_inr": 720.00,  "rows": [...] },
+    "damage_sales": { "label": "Sales Return Damage", "unit": "pcs", "count": 1,  "weight_kg": 0,    "pieces": 2, "value_inr": 500.00,  "rows": [...] },
+    "write_off":    { "label": "Roll Write-off",      "unit": "kg",  "count": 3,  "weight_kg": 1.96, "pieces": 0, "value_inr": 980.00,  "rows": [...] }
+  },
+  "totals": { "events": 19, "value_inr": 7050.50 },
+  "period": { "from": "2026-04-01", "to": "2026-04-27" }
+}
+```
+
+**Row shape (per group):**
+```json
+{
+  "id": "<uuid>",
+  "date": "2026-04-15",
+  "ref_code": "LT-FBL-0001",      // lot_code | roll_code | batch_code | srn_no
+  "ref_kind": "lot",              // lot | roll_processing | batch_processing | sales_return | roll
+  "product_type": "FBL",          // null where not applicable
+  "fabric_or_design": "Cotton",
+  "color": "Pink",
+  "weight_kg": 0.500,             // null for batch/sales (use pieces)
+  "pieces": null,                 // null for cutting/roll-VA/write-off (use weight_kg)
+  "rate_inr": 850.00,             // ₹ per unit (per-kg cost for rolls; WAC per piece for SKUs)
+  "value_inr": 425.00,
+  "reason": "too_small",          // free-text or enum, source-dependent
+  "party": "Sonu Embroidery",     // VA party (for damage), supplier (for write-off), customer (for sales-return)
+  "roll_code": "1-COT-PINK/07-01" // present on roll-derived rows
+}
+```
+
+**Valuation rules (AS-2 compliant):**
+  - **Fabric waste** (cutting, roll VA damage, write-off) — `weight_kg × Roll.cost_per_unit` (per-kg purchase cost).
+  - **SKU damage** (batch VA, sales return) — `pieces × WAC` from `SKUService.compute_wac_map`. Batch rows where `batch.sku_id IS NULL` (not yet finalized) value at 0 but still contribute to event count + pieces total.
+
+**Date anchors:**
+  - Cutting → `lots.lot_date`
+  - Roll VA damage → `roll_processing.received_date`
+  - Batch VA damage → `batch_challans.received_date`
+  - Sales return damage → `COALESCE(sales_returns.restocked_date, sales_returns.received_date)`
+  - Write-off → `rolls.written_off_at::date`
+
+**Snapshot column dependency:** write-off valuation reads `rolls.weight_at_write_off`, populated by S116 migration `j0k1l2m3n4o5`. Pre-S116 written-off rolls are backfilled best-effort via `total_weight - SUM(lot_rolls.weight_used + waste_weight) - SUM(roll_processing.weight_damaged)` clamped ≥ 0.
+
+### GET `/dashboard/wastage-report.csv` (P4.7)
+**Auth:** `report_view`
+**Query:** same as `/wastage-report`
+**Response:** `text/csv` attachment. Filename: `wastage-report_<from>_<to>.csv`
+**Columns:** Category, Date, Reference, Fabric / Design, Color, Weight (kg), Pieces, Rate (₹), Value (₹), Reason, Party — one row per wastage event across all (filter-matching) categories.
 
 ### GET `/dashboard/accounting-report`
 **Auth:** `report_view`
