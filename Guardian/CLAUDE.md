@@ -35,121 +35,13 @@
 
 ---
 
-## Current State (Session 126 — 2026-04-27) — IN PROGRESS
+## Current State (Session 126 — 2026-04-27) — CLOSED
 
-**Receipt cancel flow.** Closes the last operational gap on the payments module — users can now void a recorded receipt with full ledger reversal + audit trail (Tally voucher-cancel pattern). Pulled from PAYMENTS_AND_ALLOCATIONS_PLAN Phase 4.
+**Payments module — feature-complete.** S123-S126 collectively shipped the Tally-style bill-wise receipt voucher: customer / supplier / VA party (polymorphic), multi-bill allocation, partial payments, on-account residue, A4 receipt print, and now S126 receipt cancel with full ledger reversal + audit trail. Plus same-day UI polish: Max button rename, PaymentsPage layout fix, tagline normalization across 17 pages, RollsPage totals-row repaint.
 
-**Backend:**
-  - `models/payment_receipt.py` — +5 cols: `status VARCHAR(20) NOT NULL DEFAULT 'active'` (CHECK `pr_valid_status` IN active/cancelled), `cancel_reason VARCHAR(50)`, `cancel_notes TEXT`, `cancelled_at TIMESTAMPTZ`, `cancelled_by UUID FK public.users(id) ON DELETE SET NULL`. New `cancelled_by_user` relationship.
-  - `schemas/payment_receipt.py` — new `PaymentReceiptCancelRequest` with 7-reason enum (`wrong_customer`/`wrong_amount`/`duplicate`/`bounced_cheque`/`payment_reversed`/`data_entry_error`/`other`). Filter params extended with `status` (default `active`, accepts `cancelled` / `all`). Response surfaces `status`/`cancel_reason`/`cancel_notes`/`cancelled_at`/`cancelled_by_name`.
-  - `services/payment_receipt_service.py` — new `cancel_receipt(receipt_id, req, user_id)`: locks receipt + bills FOR UPDATE, validates status='active', decrements `bill.amount_paid` per allocation, walks back invoice status (paid → partially_paid → issued) from remaining live amount_paid, posts compensating Dr/Cr `LedgerEntry` per allocation (reference_type='payment_receipt_cancel'), reverses on-account residue + TDS/TCS lines, sets `receipt.status='cancelled'` + audit cols. `get_on_account_balance` filters to status='active' so cancelled credit doesn't bleed into balance. List view defaults to active-only.
-  - `api/payment_receipts.py` — new `POST /payment-receipts/{id}/cancel` (permission `invoice_manage`).
+→ Full plan + per-phase detail: [PAYMENTS_AND_ALLOCATIONS_PLAN.md](PAYMENTS_AND_ALLOCATIONS_PLAN.md) (Phase 1-3 ✅, S126 cancel ✅, Phase 4: only aging report remains active).
 
-**Migration:** `q7r8s9t0u1v2_s126_payment_receipt_cancel.py` — tenant-iterating, `col_exists` + `constraint_exists` + `index_exists` guarded. Adds 5 cols + CHECK + 2 indexes. No backfill needed (status defaults to 'active' which is correct for all extant rows). Round-trip safe.
-
-**Frontend:**
-  - `api/paymentReceipts.js` — new `cancelPaymentReceipt(id, data)` with mock branch that walks back invoice status correctly.
-  - `pages/PaymentsPage.jsx` — red "Cancel Receipt" button in detail header opens **confirmation modal** (NOT one-click); modal requires reason from dropdown + optional notes; "Confirm Cancel" disabled until reason picked; "Keep Receipt" / outside-click dismisses. Cancelled receipts: red banner on detail with reason + by + when + notes + reversal note; "Cancelled" status pill in list view (rose); Status filter (Active/Cancelled/All) added to filter bar, defaults to Active.
-
-**Industry alignment:** matches Tally voucher cancel (Alt+X / Alt+D in voucher chronicle), Zoho Books "Void Payment", QuickBooks "Void Payment". Original receipt + allocations retained for audit; reversal posted as new ledger rows (never edit/delete history).
-
-**Pending:** local migration ✅, backend imports ✅ (236 routes), vite build ✅. Commit + push.
-
----
-
-## Previous State (Session 125 — 2026-04-27) — CLOSED
-
-**Phase 3 of PAYMENTS_AND_ALLOCATIONS_PLAN — Supplier + VA bill-wise payments.** Closes the loop opened in S123 (customer receipt voucher) and S124 (frontend) by extending the same Tally-style allocation model to supplier invoices + VA challans (job + batch). Refactor is **polymorphic** — `PaymentAllocation` swaps `invoice_id` FK for `bill_type` + `bill_id` + CHECK constraint `pa_valid_bill_type`. The receipt voucher now serves all four bill kinds with a single service method.
-
-**Production audit before fix:** 0 payment_receipts, 0 payment_allocations, 12 supplier_invoices, 0 challans → polymorphic refactor is safely destructive (no rows to preserve when dropping `invoice_id` FK).
-
-**Backend:**
-  - `models/supplier_invoice.py` + `models/job_challan.py` + `models/batch_challan.py` — added `amount_paid: Numeric(12,2) NOT NULL DEFAULT 0` on each. Bumped by `PaymentReceiptService.record()` per-allocation; outstanding = total − paid.
-  - `models/payment_allocation.py` — replaced `invoice_id` FK with `bill_type VARCHAR(30)` + `bill_id UUID` (no FK — Postgres can't FK across N tables; service validates under FOR UPDATE). New CHECK `pa_valid_bill_type IN ('invoice','supplier_invoice','job_challan','batch_challan')` + indexes `ix_pa_receipt_bill` / `ix_pa_bill`.
-  - `schemas/payment_receipt.py` — `PaymentAllocationInput` and `PaymentAllocationBrief` use `bill_type`/`bill_id`/`bill_no`. New `OpenBillBrief` replaces `OpenInvoiceBrief`.
-  - `services/payment_receipt_service.py` — rewrite around `_BILL_MODELS` registry + `_PARTY_BILL_MAP` cross-party guard. `record()` locks all referenced bills FOR UPDATE per type, validates outstanding, bumps `bill.amount_paid`; only `invoice` flips status `partially_paid`/`paid`. `get_open_bills_for_party()` is the unified picker — invoices for customers, supplier_invoices for suppliers, JC + BC unioned for va_parties (only `received`/`partially_received` challans — work-done gate).
-  - `services/invoice_service.py` — `mark_paid` passes `bill_type="invoice"` + `bill_id=invoice.id` (signature update for the polymorphic shape).
-  - `api/customers.py` — `/customers/{id}/open-invoices` now calls unified `get_open_bills_for_party`.
-  - `api/suppliers.py` — new `GET /suppliers/{id}/open-bills` + `/on-account-balance`.
-  - `api/masters.py` — new `GET /masters/va-parties/{id}/open-bills` + `/on-account-balance`.
-
-**Migration:** `p6q7r8s9t0u1_s125_payments_polymorphic.py` — tenant-iterating, `col_exists` + `_table_exists` guarded. Adds amount_paid on SI/JC/BC. On payment_allocations: adds `bill_type`+`bill_id`, backfills any extant rows from `invoice_id` (prod has 0), drops invoice FK + col + legacy index, adds CHECK + new indexes, tightens to NOT NULL. Round-trip safe.
-
-**Frontend:**
-  - `api/paymentReceipts.js` — `getOpenBillsForParty(partyType, partyId)` polymorphic + back-compat `getOpenInvoicesForCustomer` shim. `getOnAccountBalance` accepts `(partyType, partyId)` with single-arg fallback.
-  - `components/payments/RecordPaymentForm.jsx` — props `partyType` + `parties[]` + `defaultPartyId/BillType/BillId`. UI flips per partyType: Receipt↔Payment, On-Account↔Advance, "invoices"↔"bills"↔"challans". Per-row bill chips: `roll`/`garment` for JC/BC.
-  - `pages/PaymentsPage.jsx` — 3 tabs (Customer Receipts / Supplier Payments / VA Payments) with URL persistence (`?tab=`). KPIs adapt (Total Received vs Total Paid; On-Account vs Advance). Allocation table renders `bill_no` with type chip + deep-links per `bill_type` (`/invoices?open=`, `/rolls?si=`, `/challans?open=`). Cross-tab detail-overlay routing on `?open=<receipt_id>`.
-  - `components/common/LedgerPanel.jsx` — on-account balance now loaded for **all** party types (was customer-only since S123). Description regex extended to match `JC-XXXX`/`BC-XXXX` codes with deep-link to `/challans?open=`.
-  - `pages/InvoicesPage.jsx` — Mark-as-Paid call site updated to new prop names (`partyType="customer"`, `defaultBillType="invoice"`, `defaultBillId`).
-
-**Industry alignment:** matches Tally Receipt Voucher (F6) + Payment Voucher (F5) where both sides of cash flow share the same bill-wise allocation engine. Zoho Books "Apply Credits", QuickBooks "Receive Payment"/"Bill Payment" — same UX, single form, party-side toggle.
-
-**Pending:** commit + push. Local `alembic upgrade head` clean. Backend imports clean (235 routes). Vite build clean (PaymentsPage 25kB).
-
----
-
-## Previous State (Session 124 — 2026-04-27) — CLOSED
-
-**Phase 2 of PAYMENTS_AND_ALLOCATIONS_PLAN — Frontend.** Closes the Tally Receipt Voucher loop end-to-end. The customer story works fully now: open Payments page → click Record Payment → pick Ramesh → enter ₹50,000 → his 4 open invoices auto-load FIFO-sorted → click Auto FIFO (or per-row Full / manual amounts) → see live counter Allocated ₹50k vs Allocatable + on-account residue → Save → invoices flip to partially_paid/paid, ledger gets per-allocation rows, A4 half-page receipt prints. Mark-as-Paid on InvoicesPage now opens the same form pre-locked to one invoice.
-
-**Frontend (additive, all new + 4 light edits):**
-  - `api/paymentReceipts.js` — NEW. 5 functions matching backend shape (recordPayment, getPaymentReceipts, getPaymentReceipt, getOpenInvoicesForCustomer, getOnAccountBalance) with full mock branch that mutates invoice.amount_paid + status flip.
-  - `pages/PaymentsPage.jsx` — NEW. List + KPIs (Receipts/Total Received/On-Account/Avg) + filters (search/customer/mode/date) + detail overlay (4-card summary + customer + allocations with deep-link to invoice + Print Receipt) + create overlay (RecordPaymentForm). URL deep-link `?open=<id>`.
-  - `components/payments/RecordPaymentForm.jsx` — NEW. Compact form per `feedback_compact_forms` memory. Customer FilterSelect (locks when defaultInvoiceId provided), reuses PaymentForm for date/mode/ref/TDS/TCS, allocation table with checkbox + per-row Apply input + Auto FIFO + per-row Full + Clear. Live counter footer with colour states (emerald=fully allocated, sky=on-account positive, rose=over-allocated). On-account chip shows existing customer credit when present.
-  - `components/common/ReceiptVoucherPrint.jsx` — NEW. A4 half-page (138.5mm top half + cut line at A4 midpoint). Mirrors S114 CN/DN discipline. Received By + Received From cards, mode/ref/notes strip, allocations table, totals card (Gross − TDS + TCS = NET), amount-in-words, Authorised Signatory. forwardRef so parent's useReactToPrint targets it.
-  - `routes/routes.js` — +`/payments` (admin+billing roles).
-  - `components/layout/Sidebar.jsx` — +"Payments" entry under Commerce, between Invoices and Returns.
-  - `components/common/StatusBadge.jsx` — +`partially_paid` colour (sky-100/sky-700).
-  - `components/common/LedgerPanel.jsx` — Outstanding label for customer balance + On-Account ₹X pill (pulled from new endpoint), `deepLinkFor` extended for `payment_receipt`, `payment_allocation` rows render embedded INV-XXXX as inline click-through (reference_id is allocation_id not receipt_id, so we parse the description).
-  - `pages/InvoicesPage.jsx` — +Pending column on list (derived from total − amount_paid), +`Partial` filter tab, +Paid So Far / Outstanding rows in detail Invoice Info card when partially_paid, +Mark-as-Paid modal swapped to RecordPaymentForm wrapper (locks customer + invoice; allocation amount stays editable), +button label flips to "Record Next Payment" on partially_paid, +action panel now shows for both `issued` and `partially_paid` (cancel only on `issued`).
-  - `api/mock.js` — `paymentReceipts` array seeded empty.
-
-**Build:** Vite production build clean. `PaymentsPage` chunk 22.31kB / 6.13kB gzip. No new dependencies. Existing patterns reused: `typo-input-sm`/`typo-th`/`typo-td`, FilterSelect with `searchable`/`data-master`/`autoFocus`, gradient header overlay, fixed `inset-0 z-50`, useQuickMaster for Shift+M Customer creation.
-
-**UI density:** per new memory `feedback_compact_forms`. RecordPaymentForm uses `gap-2`/`gap-3` max, `typo-input-sm` throughout, allocation table inputs aligned to cell width, footer counter inline (no separate card padding). Matches RollsPage / OrdersPage rhythm.
-
-**Pending:** commit + push (Vercel auto-rebuilds in ~60s; backend already live since S123).
-
----
-
-## Previous State (Session 123 — 2026-04-27) — CLOSED
-
-**Phase 1 of PAYMENTS_AND_ALLOCATIONS_PLAN — Tally bill-wise receipt voucher backend.** Replaces S119's binary Mark-as-Paid with full multi-invoice allocation + on-account credit + partial-paid invoice status. The backend now supports the use case the user described: "customer sends ₹50,000 against ₹105,000 outstanding, allocate ₹20k+₹20k+₹10k across 3 bills, with one of them partially settled."
-
-**Backend (additive only — zero behavioural regression):**
-  - `models/payment_receipt.py` — new model. Polymorphic `party_type`/`party_id` (mirrors LedgerEntry), full TDS/TCS columns (gross at header, mirrors S119 / LedgerService.PaymentCreate), `on_account_amount` stored. CHECK constraints: `pr_valid_party_type` (customer/supplier/va_party), `pr_amount_positive`.
-  - `models/payment_allocation.py` — new model. CASCADE on receipt delete, RESTRICT on invoice delete. Composite index `(payment_receipt_id, invoice_id)`. CHECK `pa_amount_positive`.
-  - `models/invoice.py` — +`amount_paid` Numeric(12,2) NOT NULL DEFAULT 0; status check extended to include `partially_paid`.
-  - `core/code_generator.py` — `next_receipt_number(fy_id)` produces `PAY-XXXX` with the same `_max_code` LENGTH-DESC pattern as RES (S113 fix).
-  - `services/payment_receipt_service.py` — new service. `record()` is the single mutating entry point: locks all referenced invoices `FOR UPDATE`, validates `SUM(allocations) <= amount − tds + tcs`, validates each `allocation <= invoice.outstanding_amount` and same-customer ownership, creates receipt + allocations atomically, generates ledger entries (one per allocation with `reference_type='payment_allocation'`, plus one for on-account residue with `reference_type='payment_receipt'`), bumps `invoice.amount_paid` and flips status `issued → partially_paid → paid` based on outstanding. TDS/TCS posted as separate ledger lines (matches S119 LedgerService pattern). Best-effort SSE emit `payment_received`. Q3-Q7 design locks honoured (FIFO oldest-first via `issued_at asc nulls_last`, on-account balance via `SUM(on_account_amount)`).
-  - `services/invoice_service.py:mark_paid` — refactored as thin wrapper. Now calls `PaymentReceiptService.record()` with one allocation = current outstanding. Handles partially_paid invoices (settles remainder, not full). Issue-on-demand for draft. Same `MarkPaidRequest` shape — UI/UX unchanged.
-  - `services/invoice_service.py:_to_response` — adds `amount_paid` + `outstanding_amount` to InvoiceResponse.
-  - `api/payment_receipts.py` — new router. `POST /payment-receipts` (record), `GET /payment-receipts` (list with party/mode/date/search filters), `GET /payment-receipts/{id}` (detail). All `invoice_manage` permission.
-  - `api/customers.py` — +`GET /customers/{id}/open-invoices` (FIFO sorted, only invoices with `outstanding > 0`) + `GET /customers/{id}/on-account-balance`.
-  - `schemas/payment_receipt.py` — full Create/Response/Filter schemas; `OpenInvoiceBrief`, `PaymentAllocationBrief`, `PartyBrief`, `OnAccountBalance`. Field validators on `amount > 0`, `amount_applied > 0`, `party_type` enum.
-  - `api/router.py` — registered new router. Route count 226 → 231 (+5 endpoints).
-
-**Migration:** `o5p6q7r8s9t0_s123_payment_receipts` — tenant-iterating, fully idempotent. Adds `invoices.amount_paid` (DEFAULT 0 NOT NULL), extends `ck_invoices_inv_valid_status` to allow `partially_paid` (drops both ck_-prefixed and bare names per memory), creates `payment_receipts` + `payment_allocations` tables with all FKs/indexes/CHECKs declared inline. `_table_exists` helper added inline (not in tenant_utils — kept local to keep helpers minimal). **No data backfill** — production has 0 paid invoices (verified pre-migration via RDS query 2026-04-27), so historical synthesis is moot. Round-trip safe: downgrade demotes `partially_paid` → `issued` before re-narrowing the CHECK, then drops tables in CASCADE-safe order (allocations first).
-
-**Behaviour preserved:**
-  - Existing `Mark as Paid` button on invoice detail flows through the new service underneath; same payload, same modal — internally one PaymentReceipt + one PaymentAllocation are created per click instead of a single LedgerEntry.
-  - Old "issued" → "paid" path still works (full payment = one allocation = paid).
-  - All existing ledger/customer-balance reports pick up the new entries automatically (LedgerEntry table is shared; `reference_type` is the only new value).
-  - GST math unchanged. TDS/TCS handling identical to S119 LedgerService.
-
-**Math reference (the new contract):**
-```
-allocatable = amount − tds_amount + tcs_amount
-SUM(allocations.amount_applied) <= allocatable
-on_account_amount = allocatable − SUM(allocations)
-
-per allocation:
-  invoice.amount_paid += amount_applied
-  if outstanding ≈ 0:  status = 'paid', set paid_at
-  else:                status = 'partially_paid'
-```
-
-**Pending:** commit + push (CI auto-applies migration on EC2). S124 (frontend Payments page + Mark-as-Paid form upgrade + LedgerPanel deep-links) is the next session.
+**Latest migration:** `q7r8s9t0u1v2_s126_payment_receipt_cancel`. Backend = 236 routes. Last commit `71b42b7`.
 
 ---
 
@@ -602,6 +494,10 @@ Sales-return CN inherits all three (subtotal, discount, additional) proportional
 | S99 | design_id FK Wiring | design_id on Batch+SKU, FilterSelect for Design master, backfill migration |
 | S100 | Backup System + Prod Wipe | S3 backup (6 scripts), EC2 infra, sales return audit, FY 2026-27 LIVE |
 | S101 | Prod Bug Fixes + SKU Accordion | 5 bug fixes, grouped accordion by design, fixed column widths |
+| S123 | Payments — backend (PAYMENTS_AND_ALLOCATIONS_PLAN Phase 1) | Tally bill-wise receipt voucher: PaymentReceipt + PaymentAllocation models, `record()` service, FY-scoped open-invoices picker, partial_paid invoice status. Migration `o5p6q7r8s9t0`. Commit `3d2037b` |
+| S124 | Payments — frontend (Phase 2) | PaymentsPage, RecordPaymentForm, ReceiptVoucherPrint A4 half-page, LedgerPanel deep-links, InvoicesPage Mark-as-Paid swap. Commit `1fdd830` |
+| S125 | Payments — polymorphic supplier + VA (Phase 3) | PaymentAllocation `bill_type`+`bill_id` polymorphic, `amount_paid` on SI/JC/BC, unified `get_open_bills_for_party`, PaymentsPage 3 tabs (Customer/Supplier/VA). Migration `p6q7r8s9t0u1`. Commit `edd6f04`. Plus same-day UI polish: Max button, layout fix, tagline normalize 9 pages, RollsPage emerald totals rows |
+| S126 | Payments — receipt cancel + UI polish close-out | Tally voucher-cancel pattern: status flip + audit cols + ledger reversal. Cancel modal (NOT one-click), 7-reason enum, status filter on list. Migration `q7r8s9t0u1v2`. Commit `1ea4793` |
 | S115d | Reports tab polish + URL persistence | Inventory tab chips (Free/Locked/Out/Dead) + tunable dead-days threshold; Sales tab stuck-days filter + horizontal funnel; ReportsPage `?tab=` + InventoryPage `?tab=` URL persistence; OrdersPage `?status=` deep-link fix from stuck-orders banner. Refs: REPORTS_AND_INVENTORY_PLAN.md §4 + §5. 14 commits `9abf66b..902e839` |
 | S115c-ii | P5 Tier 1 Sales Report WOW | `dashboard_service.get_sales_report` extended with `previous_period`/`stuck_orders`/`top_products`/`revenue_daily` + params `stuck_days`/`top_n` + new `GET /dashboard/sales-report.csv`. Frontend: KpiCard with delta+sparkline (no deps), OrderFunnel 5-stage horizontal bars, Top Products table, Export CSV. Tier 2/3 deferred (geo/churn/broker ROI). No migration. Ref: §5. Commit `d9e9bf0`. **Edit-tool gotcha:** JSON transport converts JS `₹` → literal `₹` — use literal `₹` in source |
 | S115c-i | P4.1 Inventory Report overhaul | `dashboard_service.get_inventory_position(filters...)` + `GET /dashboard/inventory-position` + `.csv`. Payload `{kpis, groups[design→skus], totals, period}`. WAC via `SKUService.compute_wac_map` (AS-2). 8 KPIs (4 period + 4 position). Custom accordion (DataTable expandedRows didn't fit sibling-row grouping). `fabric_type` is substring placeholder — proper home P4.5. `short_sku_count` hard threshold 5 — P4.3 swaps for per-SKU `reorder_level`. No migration. Ref: §4. Commit `407ca6c` |
