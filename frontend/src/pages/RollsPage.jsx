@@ -3550,17 +3550,17 @@ export default function RollsPage() {
                         )}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-gray-800 text-white font-semibold text-sm">
+                        <tr className="bg-emerald-50 text-emerald-900 font-semibold text-sm border-t-2 border-emerald-600">
                           <td className="py-2 px-4" colSpan={2}>
-                            <span className="text-gray-300">Original:</span> <span className="font-bold">{origWt} {rateUnit === 'm' ? 'm' : 'kg'}</span>
+                            <span className="text-emerald-700">Original:</span> <span className="font-bold">{origWt} {rateUnit === 'm' ? 'm' : 'kg'}</span>
                           </td>
                           <td className="py-2 px-4" colSpan={2}>
-                            <span className="text-gray-300">Remaining:</span> <span className="font-bold text-emerald-300">{remainQty} {rateUnit === 'm' ? 'm' : 'kg'}</span>
-                            <span className="ml-2 text-gray-400">({pct.toFixed(0)}%)</span>
+                            <span className="text-emerald-700">Remaining:</span> <span className="font-bold">{remainQty} {rateUnit === 'm' ? 'm' : 'kg'}</span>
+                            <span className="ml-2 text-emerald-600">({pct.toFixed(0)}%)</span>
                           </td>
                           <td className="py-2 px-4" colSpan={2}>
                             {Math.abs(wtDelta) >= 0.001 && (
-                              <><span className="text-gray-300">Change:</span> <span className={`font-bold ${wtDelta > 0 ? 'text-green-300' : 'text-red-300'}`}>{wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(3)} {rateUnit === 'm' ? 'm' : 'kg'}</span></>
+                              <><span className="text-emerald-700">Change:</span> <span className={`font-bold ${wtDelta > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{wtDelta > 0 ? '+' : ''}{wtDelta.toFixed(3)} {rateUnit === 'm' ? 'm' : 'kg'}</span></>
                             )}
                           </td>
                         </tr>
@@ -3924,9 +3924,9 @@ export default function RollsPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-800 text-white font-semibold text-sm">
-                        <td colSpan={5} className="px-4 py-2 text-right border-r border-gray-700">Total: {bulkSendRolls.length} roll{bulkSendRolls.length > 1 ? 's' : ''}</td>
-                        <td className="px-4 py-2 text-right text-emerald-300">{totalSendWt.toFixed(3)} kg</td>
+                      <tr className="bg-emerald-50 text-emerald-900 font-semibold text-sm border-t-2 border-emerald-600">
+                        <td colSpan={5} className="px-4 py-2 text-right border-r border-emerald-200">Total: {bulkSendRolls.length} roll{bulkSendRolls.length > 1 ? 's' : ''}</td>
+                        <td className="px-4 py-2 text-right text-emerald-800 font-bold tabular-nums">{totalSendWt.toFixed(3)} kg</td>
                         <td></td>
                       </tr>
                     </tfoot>
@@ -4110,10 +4110,10 @@ export default function RollsPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-800 text-white font-semibold text-sm">
-                        <td colSpan={5} className="px-3 py-2 text-right border-r border-gray-700">{checkedItems.length} of {items.length} rolls</td>
-                        <td className="px-3 py-2 text-right border-r border-gray-700 text-emerald-300">{totalRecvWt.toFixed(3)} kg</td>
-                        <td className="px-3 py-2 text-right text-amber-300">{subtotal > 0 ? `₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+                      <tr className="bg-emerald-50 text-emerald-900 font-semibold text-sm border-t-2 border-emerald-600">
+                        <td colSpan={5} className="px-3 py-2 text-right border-r border-emerald-200">{checkedItems.length} of {items.length} rolls</td>
+                        <td className="px-3 py-2 text-right border-r border-emerald-200 text-emerald-800 font-bold tabular-nums">{totalRecvWt.toFixed(3)} kg</td>
+                        <td className="px-3 py-2 text-right text-amber-700 font-bold tabular-nums">{subtotal > 0 ? `₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                       </tr>
                     </tfoot>
                   </table>
