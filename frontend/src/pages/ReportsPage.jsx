@@ -756,10 +756,27 @@ function WastageTab({ period }) {
           <span className="typo-caption">{totals.events} event{totals.events !== 1 ? 's' : ''} · {formatINR(totals.value_inr)}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          {/* table-fixed + colgroup locks column widths so expand/collapse doesn't
+              reflow the table. Numeric/date columns are minimal; Category/Reference
+              gets the remainder. Total fixed cols ≈ 876px so a 1100px parent leaves
+              ~220px for Category — enough to fit the lot row content on one line. */}
+          <table className="w-full text-sm table-fixed" style={{ minWidth: 1100 }}>
+            <colgroup>
+              <col style={{ width: 32 }} />
+              <col />{/* Category / Reference — flex remainder */}
+              <col style={{ width: 96 }} />{/* Date */}
+              <col style={{ width: 110 }} />{/* Fabric / Design */}
+              <col style={{ width: 100 }} />{/* Color */}
+              <col style={{ width: 88 }} />{/* Weight (kg) */}
+              <col style={{ width: 64 }} />{/* Pieces */}
+              <col style={{ width: 80 }} />{/* Rate */}
+              <col style={{ width: 96 }} />{/* Value (₹) */}
+              <col style={{ width: 100 }} />{/* Reason */}
+              <col style={{ width: 110 }} />{/* Party */}
+            </colgroup>
             <thead>
               <tr className="border-b bg-gray-50 text-left">
-                <th className="py-2 px-3 typo-th w-6"></th>
+                <th className="py-2 px-3 typo-th"></th>
                 <th className="py-2 px-3 typo-th">Category / Reference</th>
                 <th className="py-2 px-3 typo-th">Date</th>
                 <th className="py-2 px-3 typo-th">Fabric / Design</th>
