@@ -1,6 +1,6 @@
 # PAYMENTS_AND_ALLOCATIONS_PLAN — Partial Payment + Bill-wise Receipt System
 
-> **Status:** 🔒 DESIGN LOCKED (awaiting first build session)
+> **Status:** 🔒 DESIGN LOCKED — all 7 questions resolved 2026-04-27. Ready for S123 build.
 > **Origin:** Phase 4.5 of FINANCIAL_SYMMETRY_PLAN — promoted to dedicated plan because of scope.
 > **Estimated effort:** 2 sessions (S123 backend + S124 frontend), ~1 day each.
 > **Industry pattern:** Tally Receipt Voucher (F6) — the Indian accounting standard.
@@ -297,11 +297,11 @@ Every settled architectural choice. Don't re-debate.
 
 - [x] **Q1 (scope):** customer-only UI first, supplier+VA later — **YES** (model supports all 3, frontend tab-builds customer first)
 - [x] **Q2 (on-account):** allow over-receipt, book residue as on-account — **YES** (Option B)
-- [ ] **Q3 (FIFO auto-allocate):** when user clicks [Auto], should it apply oldest-first or largest-first? — *default: oldest-first (Tally convention). Confirm or override.*
-- [ ] **Q4 (on-account application):** when creating a NEW invoice for a customer who has on-account credit, should we (a) auto-apply silently, (b) prompt "Apply ₹X on-account credit to this invoice?", or (c) require explicit allocation through the Payments page? — *recommend (b) for transparency, defer to v2 if too much for v1.*
-- [ ] **Q5 (ledger entry for receipt header):** confirm we don't need a "PAY-XXXX received ₹50,000" header LedgerEntry — only per-allocation entries. *(Tally-style: bill-wise receipt voucher = N journal lines, no header journal. Confirm with CA if available.)*
-- [ ] **Q6 (cancel-then-CN cascade):** if an invoice with `partially_paid` status is cancelled (per S113), what happens to the existing payment? — *recommend: PaymentAllocation rows stay (immutable history), invoice goes to `cancelled`, customer ledger shows the historical receipt + a separate cancellation reversal entry. Defer detailed flow to S125 if it gets messy.*
-- [ ] **Q7 (synthetic backfill of S119 payments):** include in S123 migration or skip? — *recommend: skip in v1. Old payments visible via customer ledger; new Payments page list starts fresh from go-live. Saves migration complexity. Revisit if user notices.*
+- [x] **Q3 (FIFO auto-allocate):** **oldest-invoice-first by `invoice_date asc, id asc`** (Tally convention). Locked S123 design 2026-04-27.
+- [x] **Q4 (on-account application):** **allow on-account in v1.** Excess receipt money sits as on-account credit. On the next receipt entry for that party, surface as "Available Credit ₹X" pill at the top of the allocation table; user can click it to consume against the new allocations. Auto-application against new invoices deferred to v2.
+- [x] **Q5 (ledger entry for receipt header):** **confirmed — no header LedgerEntry.** Each allocation is one ledger row keyed `reference_type='payment_allocation'`. On-account residue gets one ledger row with `reference_type='payment_receipt'` (not allocation, because no invoice anchor) — this is the only "header-ish" entry, and it represents real money credited to the party.
+- [x] **Q6 (cancel-then-CN cascade):** **option (a) with mandatory warning modal.** When user cancels a `partially_paid` invoice: cancel handler computes `amount_paid` on that invoice, opens a confirmation modal showing "₹X already received against this invoice will be converted to on-account credit for {customer_name}. Continue?". On confirm: PaymentAllocation rows stay (immutable history), but a reversal ledger entry credits the party + an on-account credit row is booked. Invoice goes to `cancelled`. Same warning fires on cancel-then-CN chain.
+- [x] **Q7 (synthetic backfill of S119 payments):** **no backfill needed — production has 0 paid invoices, 0 paid_at rows** (confirmed via prod query 2026-04-27). S123 instead refactors `mark_paid` to call `PaymentReceiptService.record()` underneath, so every invoice paid from S123 onwards has full receipt+allocation rows. Migration only needs to add the `amount_paid` column with default 0 — no UPDATE backfill.
 
 ---
 
@@ -362,7 +362,7 @@ Every settled architectural choice. Don't re-debate.
   - [ ] `col_exists` guard on `invoices.amount_paid`
   - [ ] Existence check before creating `payment_receipts` + `payment_allocations` tables
   - [ ] `constraint_exists` guard on `invoice_valid_status` recreation
-  - [ ] Backfill: `UPDATE invoices SET amount_paid = total_amount WHERE status='paid'`
+  - [ ] No data backfill needed (Q7 — prod has 0 paid invoices). Column lands with `server_default='0'`.
   - [ ] FK + index declarations match models exactly
 - [ ] Local dev: `alembic upgrade head` clean
 - [ ] Local dev: `alembic downgrade -1` clean (round-trip safety)
