@@ -316,13 +316,18 @@ export default function RecordPaymentForm({
                     <th className="typo-th px-2 py-1.5 text-right">Paid</th>
                     <th className="typo-th px-2 py-1.5 text-right">Outstanding</th>
                     <th className="typo-th px-2 py-1.5 text-right w-32">Apply</th>
-                    <th className="typo-th px-2 py-1.5 w-12"></th>
+                    <th className="typo-th px-2 py-1.5 w-14"></th>
+                    <th className="typo-th px-2 py-1.5 text-left w-28">After</th>
                   </tr>
                 </thead>
                 <tbody>
                   {openBills.map((bill) => {
                     const k = billKey(bill)
                     const checked = allocations[k] !== undefined
+                    const applied = Number(allocations[k]) || 0
+                    const remainingAfter = round2(bill.outstanding_amount - applied)
+                    const settles = applied > 0 && remainingAfter <= 0.005
+                    const isPartial = applied > 0 && remainingAfter > 0.005
                     const isLockedRow =
                       lockedBill &&
                       !(bill.bill_type === defaultBillType && bill.bill_id === defaultBillId)
@@ -391,11 +396,27 @@ export default function RecordPaymentForm({
                             type="button"
                             onClick={() => setFullForRow(bill)}
                             disabled={isLockedRow}
-                            className="typo-caption text-emerald-700 hover:text-emerald-900 disabled:opacity-40"
-                            title="Apply outstanding"
+                            className="typo-caption px-1.5 py-0.5 rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-emerald-700 hover:border-emerald-300 disabled:opacity-40"
+                            title="Fill with full outstanding"
                           >
-                            Full
+                            Max
                           </button>
+                        </td>
+                        <td className="px-2 py-1 typo-caption">
+                          {settles ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-700">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Settles
+                            </span>
+                          ) : isPartial ? (
+                            <span className="text-sky-700 tabular-nums">
+                              {fmt(remainingAfter)} left
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
                         </td>
                       </tr>
                     )
