@@ -22,6 +22,7 @@
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) — COMPLETE | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
 | `FINANCIAL_SYMMETRY_PLAN.md` | Totals stack symmetry across sales/purchase/VA (Phases 1, 2, 3 ✅; Phase 4 deferred) | Before any totals/discount/additional/tax work |
+| `PAYMENTS_AND_ALLOCATIONS_PLAN.md` | Partial payments + bill-wise receipt voucher (S123 backend + S124 frontend) | Before any payment/allocation/receipt work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |

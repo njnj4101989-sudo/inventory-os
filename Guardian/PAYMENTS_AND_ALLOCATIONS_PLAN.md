@@ -1,0 +1,607 @@
+# PAYMENTS_AND_ALLOCATIONS_PLAN — Partial Payment + Bill-wise Receipt System
+
+> **Status:** 🔒 DESIGN LOCKED (awaiting first build session)
+> **Origin:** Phase 4.5 of FINANCIAL_SYMMETRY_PLAN — promoted to dedicated plan because of scope.
+> **Estimated effort:** 2 sessions (S123 backend + S124 frontend), ~1 day each.
+> **Industry pattern:** Tally Receipt Voucher (F6) — the Indian accounting standard.
+> **Last updated:** 2026-04-27 (S122 close)
+
+---
+
+## 0. Resume Protocol
+
+Anyone picking this up mid-stream — start here:
+
+1. Read this whole doc top to bottom (~5 min)
+2. Check the **Phase Checklist** below to see which boxes are ticked
+3. Check `git log --oneline | grep -E "S12[34]"` to see which sub-commits landed
+4. Read the most recent entry in the **Decisions Log** so you don't re-debate settled choices
+5. Resume at the first unticked box
+
+**Closing a session:** before logging off, ensure
+- [ ] every code change is committed + pushed (no dirty working tree)
+- [ ] this doc has the latest checkbox state
+- [ ] CLAUDE.md "Current State" entry mentions which sub-checkbox you stopped at
+- [ ] no half-applied migrations on local dev (alembic upgrade head + downgrade -1 + upgrade head test)
+
+---
+
+## 1. Goal & Scope
+
+### What this builds
+A proper receipt-and-allocation system where one incoming customer payment can be **split across multiple invoices** (with optional partial settlement on any of them), and any unallocated remainder becomes **on-account credit** for future application.
+
+### Concrete user story
+> Customer Ramesh has 4 open invoices totalling ₹105,000. He sends ₹50,000 (NEFT, UTR-12345). User opens "Record Payment", picks Ramesh, enters ₹50,000. System auto-loads Ramesh's open invoices. User allocates: ₹20,000 to INV-0001 (full), ₹20,000 to INV-0002 (full), ₹10,000 to INV-0003 (partial — ₹15,000 still due). System creates 1 PaymentReceipt + 3 PaymentAllocations + 4 LedgerEntries + flips invoice statuses + updates `amount_paid` on each invoice.
+
+### What changes for the user
+- New top-level page **"Payments"** (sidebar under Commerce, between Invoices and Returns)
+- New **"Record Payment"** form with customer picker + open-invoices allocation table
+- **InvoicesPage** gains a "Pending ₹X" column and `partially_paid` status badge
+- Existing **Mark-as-Paid** button on invoice detail keeps working — just opens the new form pre-filled with that single invoice
+- **Customer detail / LedgerPanel** shows outstanding receivable + on-account credit balance prominently
+
+### What stays exactly the same
+- Order → Invoice flow (unchanged)
+- Cancel / CN flow (unchanged — S113 still owns this)
+- Existing `paid` invoices in production stay paid (backfilled `amount_paid = total_amount`)
+- Tax math, GST, totals, ledger debit/credit conventions
+- All other reports, prints, dashboards
+
+### Out of scope (deferred unless explicitly added later)
+- Supplier-side bill-wise payment booking (data model supports it, frontend defers)
+- VA-party bill-wise payment booking (same — model supports, FE defers)
+- Bank/Cash chart-of-accounts (Phase 4.4 — separate plan)
+- Foreign currency receipts
+- TDS deduction at receipt time (S119 already handles TDS at the LedgerEntry level — same pattern flows through)
+- Auto-reconciliation against bank statement (post-4.4)
+
+---
+
+## 2. Architecture
+
+### 2.1 Data model
+
+**Two new tables.** Both tenant-schema.
+
+```python
+class PaymentReceipt(Base):
+    __tablename__ = "payment_receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "party_type IN ('customer', 'supplier', 'va_party')",
+            name="pr_valid_party_type",
+        ),
+    )
+    receipt_no: Mapped[str]              # PAY-0001, auto-sequential per FY
+    party_type: Mapped[str]              # customer | supplier | va_party
+    party_id: Mapped[UUID]               # polymorphic — service resolves to customers/suppliers/va_parties table
+    payment_date: Mapped[date]
+    payment_mode: Mapped[str]            # neft | upi | cash | cheque | card
+    reference_no: Mapped[str | None]     # UTR / cheque no
+    total_amount: Mapped[Decimal]        # what was received
+    allocated_amount: Mapped[Decimal]    # SUM(allocations.amount_applied) — denormalised for fast list queries
+    on_account_amount: Mapped[Decimal]   # total_amount − allocated_amount (≥ 0)
+    notes: Mapped[str | None]
+    fy_id: Mapped[UUID]
+    created_by_id: Mapped[UUID]
+    created_at: Mapped[datetime]
+    # Relationships
+    allocations = relationship("PaymentAllocation", back_populates="receipt")
+    created_by_user = relationship("User", foreign_keys=[created_by_id])
+
+class PaymentAllocation(Base):
+    __tablename__ = "payment_allocations"
+    payment_receipt_id: Mapped[UUID]     # FK ON DELETE CASCADE
+    invoice_id: Mapped[UUID | None]      # FK — nullable for pure on-account
+    amount_applied: Mapped[Decimal]
+    created_at: Mapped[datetime]
+    # Relationships
+    receipt = relationship("PaymentReceipt", back_populates="allocations")
+    invoice = relationship("Invoice")
+```
+
+**One column added to existing `invoices` table:**
+```sql
+ALTER TABLE invoices ADD COLUMN amount_paid NUMERIC(12,2) DEFAULT 0 NOT NULL;
+```
+
+**One CHECK constraint widened on `invoices`:**
+```sql
+-- old: status IN ('draft','issued','paid','cancelled')
+-- new: status IN ('draft','issued','partially_paid','paid','cancelled')
+ALTER TABLE invoices DROP CONSTRAINT invoice_valid_status;
+ALTER TABLE invoices ADD CONSTRAINT invoice_valid_status
+    CHECK (status IN ('draft','issued','partially_paid','paid','cancelled'));
+```
+
+### 2.2 Status state machine on `Invoice`
+
+```
+draft ──issue──→ issued ──pay (full)──→ paid
+                    │                     │
+                    │                     ↓
+                    └──pay (partial)──→ partially_paid ──pay (rest)──→ paid
+
+Any state ──cancel──→ cancelled (S113 audit trail)
+```
+
+- `partially_paid` is a new in-between state when `0 < amount_paid < total_amount`
+- Auto-transition to `paid` when `amount_paid >= total_amount`
+- Cancel from `partially_paid` requires CN per S113 model (existing rule stays)
+
+### 2.3 Ledger booking pattern
+
+Each PaymentAllocation produces one LedgerEntry (debit invoice clearing, credit customer). One additional "header" entry per receipt is **not** created — the customer's running balance is computed from invoice + allocation entries directly.
+
+For each allocation:
+```
+LedgerEntry {
+  party_type='customer', party_id=receipt.party_id,
+  entry_type='payment',
+  reference_type='payment_allocation', reference_id=allocation.id,
+  debit=allocation.amount_applied,   # reduces customer's open balance
+  credit=0,
+  description='PAY-XXXX → INV-YYYY ₹{amount}'
+  (TDS/TCS sub-entries handled exactly like S119 if applicable)
+}
+```
+
+For pure on-account (invoice_id NULL):
+```
+LedgerEntry {
+  reference_type='payment_allocation', reference_id=allocation.id,
+  debit=allocation.amount_applied,
+  credit=0,
+  description='PAY-XXXX on-account credit ₹{amount}'
+}
+```
+
+This keeps every payment auditable and traceable: customer ledger panel can show "PAY-0001 cleared INV-0003 ₹10,000" with deep-links both ways.
+
+### 2.4 Service surface
+
+```python
+class PaymentReceiptService:
+    async def record(
+        party_type: str,
+        party_id: UUID,
+        payment_date: date,
+        payment_mode: str,
+        reference_no: str | None,
+        total_amount: Decimal,
+        allocations: list[{invoice_id: UUID | None, amount_applied: Decimal}],
+        notes: str | None,
+        tds_*: ...,   # mirrors S119 PaymentForm fields
+        tcs_*: ...,
+        fy_id: UUID,
+        created_by: UUID,
+    ) -> dict:
+        """
+        Atomic transaction:
+        1. Validate SUM(allocations) <= total_amount
+        2. Lock target invoices FOR UPDATE
+        3. Validate each allocation.amount_applied <= invoice.outstanding
+        4. Create PaymentReceipt
+        5. Create N PaymentAllocations
+        6. Per allocation: invoice.amount_paid += amount; flip status if needed
+        7. Per allocation: LedgerEntry (debit clear, credit customer)
+        8. On-account residue: 1 final LedgerEntry with invoice_id=None
+        9. SSE event 'payment_recorded'
+        Returns: receipt_response with allocations + invoice statuses
+        """
+
+    async def list_receipts(filters, pagination): ...
+    async def get_receipt(receipt_id): ...
+    async def get_open_invoices_for_party(party_type, party_id) -> [{invoice_no, date, total, paid, outstanding}]
+    async def get_on_account_balance(party_type, party_id) -> Decimal
+```
+
+S119's `InvoiceService.mark_paid()` becomes a thin wrapper:
+```python
+async def mark_paid(invoice_id, req: MarkPaidRequest, fy_id, user_id):
+    # Backward-compat — calls record() with single full allocation
+    invoice = await self._get_or_404(invoice_id)
+    return await PaymentReceiptService(self.db).record(
+        party_type='customer',
+        party_id=invoice.customer_id,
+        payment_date=req.payment_date,
+        payment_mode=req.payment_mode,
+        reference_no=req.reference_no,
+        total_amount=invoice.total_amount - invoice.amount_paid,  # outstanding only
+        allocations=[{invoice_id: invoice.id, amount_applied: outstanding}],
+        notes=req.notes,
+        tds_*=req.tds_*, tcs_*=req.tcs_*,
+        fy_id=fy_id, created_by=user_id,
+    )
+```
+
+### 2.5 API surface
+
+```
+POST   /payment-receipts                         create receipt + allocations
+GET    /payment-receipts                         list (paginated, filter: party, date, status)
+GET    /payment-receipts/{id}                    detail with allocations
+GET    /customers/{id}/open-invoices             [{invoice_no, total, paid, outstanding}]
+GET    /customers/{id}/on-account-balance        {balance: Decimal}
+POST   /invoices/{id}/mark-paid                  (UNCHANGED — backward-compat wrapper)
+```
+
+Future expansion: `/suppliers/{id}/open-bills`, `/va-parties/{id}/open-bills` — same shape, different join.
+
+### 2.6 Frontend layout
+
+**New file:** `frontend/src/pages/PaymentsPage.jsx`
+- Sidebar entry: under Commerce, between Invoices and Returns
+- Tabs at top: "All" | "On Account" | "Recent"
+- List view: `receipt_no | date | party | mode | total | allocated | on_account | status_badge`
+- Detail overlay: receipt header + allocations table + ledger entries link
+
+**New file:** `frontend/src/components/payments/RecordPaymentForm.jsx` (large modal or full-page)
+- Customer FilterSelect (Quick Master Shift+M support)
+- Amount + date + mode + ref# + notes (reuse `PaymentForm.jsx` from S119 where possible)
+- Open invoices auto-load on customer select
+- Allocation rows: checkbox, invoice link, amount input with [Auto] [Full] helpers
+- Live counter: `Allocated ₹X / ₹Y · On Account ₹Z`
+- Save → POST /payment-receipts → close → refresh
+
+**Modified files:**
+- `pages/InvoicesPage.jsx` — pending column, partial badge, list filter
+- `components/common/LedgerPanel.jsx` — add "Outstanding ₹X" + "On Account ₹Y" tiles
+- `pages/InvoicesPage.jsx` Mark-as-Paid button — opens new form pre-filled
+- `components/layout/Sidebar.jsx` — add Payments entry
+
+**New print template:** `components/common/ReceiptVoucherPrint.jsx`
+- A4 half-page (mirrors CN/DN style)
+- PAY-XXXX header, customer, date/mode/ref
+- Allocations table
+- "Amount in words" line
+- Single signature line (Authorised)
+
+### 2.7 Migration
+
+`backend/migrations/versions/o5p6q7r8s9t0_s123_payment_receipts.py`
+
+Tenant-iterating, `col_exists` + `constraint_exists` guarded:
+1. Create `payment_receipts` table (with FY FK, party CHECK)
+2. Create `payment_allocations` table (with cascade on receipt delete)
+3. Add `invoices.amount_paid NUMERIC(12,2) DEFAULT 0 NOT NULL`
+4. Drop + recreate `invoice_valid_status` CHECK to include `partially_paid`
+5. Backfill: `UPDATE invoices SET amount_paid = total_amount WHERE status='paid'`
+6. Synthetic backfill of historical S119 payments — for each `LedgerEntry` with `reference_type='invoice' AND debit=0` (the customer credit row from S119), create a synthetic `PaymentReceipt` + `PaymentAllocation` so the new Payments page lists them. (Can defer this — old payments still appear in customer ledger via existing entries; only the new Payments page list would be empty for historical rows.)
+
+**Idempotent re-runs** via existence guards on every step.
+
+---
+
+## 3. Decisions Log
+
+Every settled architectural choice. Don't re-debate.
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-04-27 | **Two new tables** (PaymentReceipt + PaymentAllocation) instead of stuffing into LedgerEntry | LedgerEntry is the journal; receipts are domain objects. Separation keeps ledger pure (one row per accounting effect) and lets receipts carry their own metadata (mode, ref, allocation breakdown). |
+| 2026-04-27 | **One LedgerEntry per allocation** (no "receipt header" entry) | Customer's running balance is correct without it. Adding a header entry would either double-count or need a contra-entry — both fragile. |
+| 2026-04-27 | **`amount_paid` denormalised on `invoices`** | Reads (list view: "Outstanding ₹X") happen 100× more than writes. Computing from SUM(allocations) every read = slow + needs subquery on every list query. Trigger keeps it in sync (or service-level update; FOR UPDATE protects against races). |
+| 2026-04-27 | **`partially_paid` is a real status, not derived** | Filter queries (`WHERE status='partially_paid'`) need an index path. Computed status would force LEFT JOIN allocations on every list query. |
+| 2026-04-27 | **On-account allowed (Option B from design discussion)** | Real Indian businesses receive advances, round amounts, settle later. Strict-allocation mode is older Tally; modern Zoho/QB/Marg all allow over-receipt and on-account credit. |
+| 2026-04-27 | **`party_type` polymorphic on PaymentReceipt** (customer/supplier/va_party) | Symmetry — same model serves all 3. Frontend builds customer-only first; supplier/va_party tabs follow without schema change. |
+| 2026-04-27 | **S119 `mark_paid` becomes thin wrapper, button stays** | Zero migration of UX. Existing button on invoice detail keeps working — just routes through the new service internally. Backward-compat for any external callers of the API. |
+| 2026-04-27 | **Receipt counter `PAY-XXXX` scoped per FY** | Same pattern as INV / ORD / CN / SRN. FY counter reset rules (S77) auto-apply. |
+| 2026-04-27 | **TDS/TCS handled at allocation level via S119's existing PaymentForm fields** | Reuses already-tested LedgerService logic; no new TDS code path. |
+| 2026-04-27 | **Cancel of receipt = manual reversal entry, no `cancel_receipt` endpoint in v1** | Cancel-payment creates ledger asymmetry (was the bank money returned? was it ever there?). Defer to a future "Reverse Receipt" feature with audit. v1 = receipts are immutable records of fact. |
+
+---
+
+## 4. Open Questions (resolve before coding)
+
+- [x] **Q1 (scope):** customer-only UI first, supplier+VA later — **YES** (model supports all 3, frontend tab-builds customer first)
+- [x] **Q2 (on-account):** allow over-receipt, book residue as on-account — **YES** (Option B)
+- [ ] **Q3 (FIFO auto-allocate):** when user clicks [Auto], should it apply oldest-first or largest-first? — *default: oldest-first (Tally convention). Confirm or override.*
+- [ ] **Q4 (on-account application):** when creating a NEW invoice for a customer who has on-account credit, should we (a) auto-apply silently, (b) prompt "Apply ₹X on-account credit to this invoice?", or (c) require explicit allocation through the Payments page? — *recommend (b) for transparency, defer to v2 if too much for v1.*
+- [ ] **Q5 (ledger entry for receipt header):** confirm we don't need a "PAY-XXXX received ₹50,000" header LedgerEntry — only per-allocation entries. *(Tally-style: bill-wise receipt voucher = N journal lines, no header journal. Confirm with CA if available.)*
+- [ ] **Q6 (cancel-then-CN cascade):** if an invoice with `partially_paid` status is cancelled (per S113), what happens to the existing payment? — *recommend: PaymentAllocation rows stay (immutable history), invoice goes to `cancelled`, customer ledger shows the historical receipt + a separate cancellation reversal entry. Defer detailed flow to S125 if it gets messy.*
+- [ ] **Q7 (synthetic backfill of S119 payments):** include in S123 migration or skip? — *recommend: skip in v1. Old payments visible via customer ledger; new Payments page list starts fresh from go-live. Saves migration complexity. Revisit if user notices.*
+
+---
+
+## 5. Phase Checklist
+
+### Phase 0 — Pre-flight (✅ done at design lock)
+
+- [x] Design doc created (this file)
+- [x] Linked from CLAUDE.md document directory
+- [x] Linked from FINANCIAL_SYMMETRY_PLAN as 4.5's home
+- [x] Q1, Q2 resolved at architecture session
+
+### Phase 1 (S123) — Backend foundation
+
+> **Resume rule:** all checkboxes in this phase belong to a single commit OR a clean sequence of commits each leaving the system runnable. Don't commit a half-applied migration.
+
+#### 1.1 Models
+- [ ] `backend/app/models/payment_receipt.py` — new file, `PaymentReceipt` + relationships
+- [ ] `backend/app/models/payment_allocation.py` — new file, `PaymentAllocation` + relationships
+- [ ] `backend/app/models/invoice.py` — add `amount_paid: Mapped[Decimal]` column with default 0, server_default 0, NOT NULL
+- [ ] `backend/app/models/invoice.py` — extend status check constraint to include `partially_paid`
+- [ ] Verify `python -c "from app.main import app; print(len(app.routes))"` still loads (226+)
+
+#### 1.2 Schemas
+- [ ] `backend/app/schemas/payment_receipt.py` — new file with:
+  - [ ] `PaymentAllocationInput` (invoice_id: UUID | None, amount_applied: Decimal)
+  - [ ] `PaymentReceiptCreate` (party + amount + allocations[] + mode + ref + tds/tcs)
+  - [ ] `PaymentReceiptResponse` (full receipt + allocations + party brief)
+  - [ ] `PaymentAllocationBrief` (for nesting in invoice + ledger responses)
+  - [ ] `OpenInvoiceBrief` (invoice_no, date, total, paid, outstanding)
+- [ ] `backend/app/schemas/invoice.py` — add `amount_paid`, `outstanding_amount` (derived) to `InvoiceResponse`
+
+#### 1.3 Service layer
+- [ ] `backend/app/services/payment_receipt_service.py` — new file:
+  - [ ] `_next_receipt_no(fy_id)` — generates `PAY-XXXX` per FY (mirrors `_next_invoice_no`)
+  - [ ] `record(...)` — full atomic transaction (lock invoices, validate, create receipt + allocations + ledger entries, update invoice statuses, SSE emit)
+  - [ ] `list_receipts(params, fy_id)` — paginated with party + date + status filters
+  - [ ] `get_receipt(id)` — full detail with allocations + party brief + linked invoices
+  - [ ] `get_open_invoices_for_party(party_type, party_id)` — `[{invoice_no, total_amount, amount_paid, outstanding, date, status}]` filtering on `status IN ('issued','partially_paid')`
+  - [ ] `get_on_account_balance(party_type, party_id)` — `SUM(receipt.on_account_amount)` minus consumed (when on-account application lands in v2 — for now just sum)
+  - [ ] `_to_response(receipt)` — consistent shape across list + detail
+- [ ] `backend/app/services/invoice_service.py:mark_paid` — refactor to thin wrapper calling `PaymentReceiptService.record()` with single full allocation
+- [ ] Verify backend imports clean
+
+#### 1.4 API endpoints
+- [ ] `backend/app/api/payment_receipts.py` — new file:
+  - [ ] `POST /payment-receipts` — `PaymentReceiptCreate` → `PaymentReceiptResponse`
+  - [ ] `GET /payment-receipts` — paginated list
+  - [ ] `GET /payment-receipts/{id}` — detail
+- [ ] `backend/app/api/customers.py` — add:
+  - [ ] `GET /customers/{id}/open-invoices` → `list[OpenInvoiceBrief]`
+  - [ ] `GET /customers/{id}/on-account-balance` → `{balance: Decimal}`
+- [ ] `backend/app/main.py` — register new router
+- [ ] Verify route count climbs by ~5 (was 226)
+
+#### 1.5 Migration
+- [ ] `backend/migrations/versions/o5p6q7r8s9t0_s123_payment_receipts.py` — tenant-iterating, idempotent
+  - [ ] `col_exists` guard on `invoices.amount_paid`
+  - [ ] Existence check before creating `payment_receipts` + `payment_allocations` tables
+  - [ ] `constraint_exists` guard on `invoice_valid_status` recreation
+  - [ ] Backfill: `UPDATE invoices SET amount_paid = total_amount WHERE status='paid'`
+  - [ ] FK + index declarations match models exactly
+- [ ] Local dev: `alembic upgrade head` clean
+- [ ] Local dev: `alembic downgrade -1` clean (round-trip safety)
+- [ ] Local dev: `alembic upgrade head` clean again (idempotent)
+- [ ] Verify `co_drs_blouse.payment_receipts` + `co_drs_blouse.payment_allocations` exist via psql
+- [ ] Verify `co_drs_blouse.invoices.amount_paid` populated for existing `paid` rows
+
+#### 1.6 Tests / smoke
+- [ ] `pytest backend/tests/services/test_payment_receipt_service.py` — at minimum:
+  - [ ] Single full allocation
+  - [ ] Multi-invoice split (3 invoices, FIFO)
+  - [ ] Partial allocation (1 invoice, less than total)
+  - [ ] Over-receipt → on-account residue
+  - [ ] Validation: SUM(allocations) > total_amount → 400
+  - [ ] Validation: allocation.amount > invoice.outstanding → 400
+  - [ ] Concurrency: 2 simultaneous receipts on same invoice → second blocks/fails (FOR UPDATE)
+  - [ ] Status transitions: issued → partially_paid → paid
+- [ ] `curl POST /payment-receipts` round-trip with auth cookie returns valid JSON
+- [ ] Existing `POST /invoices/{id}/mark-paid` still works (backward-compat wrapper smoke)
+
+#### 1.7 Docs
+- [ ] `Guardian/API_REFERENCE.md` — new section "Payment Receipts" with:
+  - [ ] POST shape + example
+  - [ ] Response shape
+  - [ ] List filters
+  - [ ] Open invoices endpoint shape
+  - [ ] On-account endpoint shape
+- [ ] `Guardian/API_REFERENCE.md` — Invoice section: add `amount_paid` + `partially_paid` status note
+- [ ] `Guardian/CLAUDE.md` — S123 entry under Current State
+- [ ] This doc — tick all 1.x boxes, update Decisions Log if anything shifted
+
+#### 1.8 Commit + push
+- [ ] `git status` clean of unintended files
+- [ ] Single commit (or 2 — model+migration first, then service+api+docs) with conventional message
+- [ ] `git push origin main`
+- [ ] CI confirms migration runs on prod EC2 deploy
+- [ ] Tick this entire phase complete in Decisions Log + CLAUDE.md
+
+---
+
+### Phase 2 (S124) — Frontend
+
+> **Resume rule:** UI changes are independent per-file. Each file's checkbox is one PR-worthy unit.
+
+#### 2.1 API client
+- [ ] `frontend/src/api/paymentReceipts.js` — new file:
+  - [ ] `recordPayment(data)` — POST
+  - [ ] `getPaymentReceipts(params)` — GET list
+  - [ ] `getPaymentReceipt(id)` — GET detail
+  - [ ] `getOpenInvoicesForCustomer(customerId)` — GET
+  - [ ] `getOnAccountBalance(customerId)` — GET
+  - [ ] Mock branch for `VITE_USE_MOCK=true` (mirror real shape)
+
+#### 2.2 New page — PaymentsPage
+- [ ] `frontend/src/pages/PaymentsPage.jsx`:
+  - [ ] Header with breadcrumb + "Record Payment" CTA
+  - [ ] KPI cards: Total Received (period) · Open Receipts · On Account Total · Avg Receipt Size
+  - [ ] Filter bar: party search · date range · mode · status
+  - [ ] List table: PAY-XXXX · date · customer · mode · total · allocated · on-account · status badge
+  - [ ] URL-synced active tab via `?tab=` (S115d pattern)
+  - [ ] Click row → detail overlay (full-page `fixed inset-0 z-50`)
+  - [ ] Detail overlay: receipt header + allocations table + linked ledger entries + Print Receipt CTA
+- [ ] `frontend/src/App.jsx` — add `/payments` route
+- [ ] `frontend/src/components/layout/Sidebar.jsx` — add "Payments" entry under Commerce, between Invoices and Returns
+
+#### 2.3 New form — RecordPaymentForm
+- [ ] `frontend/src/components/payments/RecordPaymentForm.jsx`:
+  - [ ] Customer FilterSelect (data-master="customer", Quick Master Shift+M support per S58)
+  - [ ] On customer change → fetch open invoices + on-account balance, show summary chip
+  - [ ] Reuse `PaymentForm.jsx` (S119) for date / mode / ref / TDS / TCS / notes
+  - [ ] Allocations table:
+    - [ ] Header: ☐ · Invoice · Date · Total · Paid · Outstanding · Apply · Helpers
+    - [ ] Per row: checkbox enables `Apply ₹___` input
+    - [ ] [Auto] button — distributes receipt amount oldest-first (FIFO) — default per Q3
+    - [ ] [Full] per row — fills outstanding amount
+    - [ ] On-Account remainder shown when SUM(applied) < amount
+  - [ ] Live counter footer: `Allocated ₹X / ₹Y · On Account ₹Z`
+  - [ ] Colour states: green when allocated == amount · blue when on-account positive · red when over-allocated (block save)
+  - [ ] Save button disabled until valid
+  - [ ] On save: POST → close → refresh list + toast
+  - [ ] Cancel + ESC + outside-click guards (S58/S90 patterns)
+
+#### 2.4 InvoicesPage updates
+- [ ] `frontend/src/pages/InvoicesPage.jsx`:
+  - [ ] List: add "Pending" column showing `outstanding_amount` (derived)
+  - [ ] List: status filter dropdown gains `partially_paid`
+  - [ ] Status badge map gains `partially_paid` (sky/blue colour)
+  - [ ] Detail: replace single "Paid On" tile with allocation history (each receipt that touched this invoice, deep-linked)
+  - [ ] Detail: Mark-as-Paid button now opens RecordPaymentForm pre-filled with this single invoice (default amount = outstanding)
+  - [ ] Existing S119 `MarkPaidRequest` button still wired but now routes to the form
+
+#### 2.5 LedgerPanel updates
+- [ ] `frontend/src/components/common/LedgerPanel.jsx` (customer party):
+  - [ ] Add "Outstanding ₹X" tile (sum of unpaid invoices)
+  - [ ] Add "On Account ₹Y" tile (sum of unallocated receipts)
+  - [ ] Particular column: payment-type rows now show `PAY-XXXX → INV-YYYY` with deep-links
+
+#### 2.6 Print template
+- [ ] `frontend/src/components/common/ReceiptVoucherPrint.jsx`:
+  - [ ] A4 half-page (mirrors CN/DN print discipline from S114)
+  - [ ] Company header with logo + GST + address
+  - [ ] PAY-XXXX large + date
+  - [ ] Customer block with name, GSTIN, address
+  - [ ] Allocations table: Invoice · Date · Total · Applied
+  - [ ] Total received + on-account residue
+  - [ ] Amount in words (reuse helper from InvoicePrint)
+  - [ ] T&C strip (small)
+  - [ ] Single signature line — Authorised
+  - [ ] Print preview opens via Ctrl+P or Print button
+  - [ ] No emojis (S114 rule)
+
+#### 2.7 Mock data
+- [ ] `frontend/src/api/mock.js` — sample paymentReceipts array + allocation rows
+- [ ] Mock toggle works for full Payments page browsing
+
+#### 2.8 Smoke + manual test
+- [ ] Vite build clean (~12s, no errors)
+- [ ] Dev server boot: `/payments` route loads, Customer picker works
+- [ ] Customer with 4 open invoices: form auto-loads them, Auto button distributes correctly
+- [ ] Save → list refreshes, invoices flip to partially_paid/paid
+- [ ] Print Receipt opens A4 preview cleanly
+- [ ] InvoicesPage Mark-as-Paid still works (single-invoice path)
+- [ ] Ledger panel shows outstanding + on-account correctly
+
+#### 2.9 Docs
+- [ ] `Guardian/CLAUDE.md` — S124 entry
+- [ ] This doc — tick all 2.x boxes
+- [ ] FINANCIAL_SYMMETRY_PLAN — mark 4.5 closed (link here)
+
+#### 2.10 Commit + push
+- [ ] Single commit (or split: api + page + form + invoice updates + print)
+- [ ] `git push origin main`
+- [ ] Vercel rebuild confirms
+
+---
+
+### Phase 3 (post-S124) — Polish & follow-ups (deferred)
+
+- [ ] **On-account application UX (Q4):** when creating new invoice for a customer with on-account balance, prompt "Apply ₹X on-account credit?"
+- [ ] **Supplier-side payments:** new tab on Payments page for supplier bill-wise payment booking
+- [ ] **VA-party payments:** same — new tab
+- [ ] **Outstanding receivables aging report:** dashboard tile + dedicated report (0–30 / 31–60 / 61–90 / 90+ days)
+- [ ] **Synthetic backfill of pre-S123 payments (Q7):** if user wants historical receipts visible in new Payments list
+- [ ] **Receipt cancel flow:** with proper ledger reversal + audit trail (Q10 — only if real cancel case appears)
+- [ ] **Bank reconciliation (post-4.4):** when chart-of-accounts lands, allow matching receipts to bank statement lines
+
+---
+
+## 6. Migration Safety Checklist
+
+> Production audit done at design time (2026-04-27): 0 invoices in `paid` status with non-zero amount paid, 0 partial payments, 0 receipts. Production has no live receipt data — fix is pure additive.
+
+- [ ] Pre-deploy: backup prod DB via existing S100 cron snapshot system (verify cron ran ≤24h ago)
+- [ ] Migration file passes `alembic upgrade head` + `alembic downgrade -1` round-trip on local dev
+- [ ] CI auto-runs `alembic upgrade head` on EC2 push (per S117 confirmation)
+- [ ] Post-deploy verify: `psql co_drs_blouse -c "SELECT COUNT(*) FROM payment_receipts"` returns 0 (clean install)
+- [ ] Post-deploy verify: `SELECT COUNT(*) FROM invoices WHERE amount_paid > 0` matches paid-invoice count
+- [ ] Post-deploy smoke: log into prod, open existing paid invoice → status still shows correctly, Mark-as-Paid button on a draft → opens new form, save → ledger updates
+
+## 7. Rollback Plan
+
+If S123 deploy goes bad:
+1. `git revert <commit_sha>` and force push (branch is protected — coordinate)
+2. EC2 redeploy auto-runs migration; alembic detects new HEAD as previous migration
+3. New columns + tables remain in DB but unused — harmless (no production data lost)
+4. Manually run `alembic downgrade <previous>` only if cleanup truly needed (drops payment_receipts + payment_allocations + amount_paid column)
+5. Existing S119 Mark-as-Paid path keeps working throughout — no user disruption
+
+If S124 deploy goes bad:
+1. `git revert` frontend commit, Vercel rebuilds in ~60s
+2. Backend keeps the new endpoints registered — harmless without UI calls
+3. No data loss; UI is the only thing that disappears
+
+---
+
+## 8. File Map (forward reference)
+
+```
+backend/app/models/
+    payment_receipt.py           NEW
+    payment_allocation.py        NEW
+    invoice.py                   modified — +amount_paid, status check
+
+backend/app/schemas/
+    payment_receipt.py           NEW
+    invoice.py                   modified — +amount_paid in response
+
+backend/app/services/
+    payment_receipt_service.py   NEW
+    invoice_service.py           modified — mark_paid → wrapper
+
+backend/app/api/
+    payment_receipts.py          NEW
+    customers.py                 modified — open-invoices + on-account-balance
+    main.py                      modified — register router
+
+backend/migrations/versions/
+    o5p6q7r8s9t0_s123_payment_receipts.py  NEW
+
+backend/tests/services/
+    test_payment_receipt_service.py        NEW
+
+frontend/src/api/
+    paymentReceipts.js           NEW
+    mock.js                      modified — sample data
+
+frontend/src/pages/
+    PaymentsPage.jsx             NEW
+    InvoicesPage.jsx             modified — pending col, partial badge, mark-as-paid rewire
+
+frontend/src/components/
+    payments/RecordPaymentForm.jsx   NEW
+    common/LedgerPanel.jsx           modified — outstanding + on-account tiles
+    common/ReceiptVoucherPrint.jsx   NEW
+    layout/Sidebar.jsx               modified — Payments entry
+
+frontend/src/App.jsx             modified — /payments route
+
+Guardian/
+    API_REFERENCE.md             modified — Payment Receipts section
+    CLAUDE.md                    modified — S123 + S124 entries
+    PAYMENTS_AND_ALLOCATIONS_PLAN.md  this doc — tick checkboxes as work progresses
+    FINANCIAL_SYMMETRY_PLAN.md   modified — mark 4.5 closed
+```
+
+---
+
+## 9. Industry Reference
+
+For reviewers / new contributors:
+
+- **Tally Receipt Voucher (F6):** the canonical Indian pattern — one receipt → multiple bill allocations → ledger journal lines per allocation
+- **Tally bill-wise:** customer ledger maintains running outstanding per invoice; receipts allocate against specific bills
+- **Tally on-account:** unallocated receipt = customer credit balance; consumed when a future invoice is allocated against it
+- **Zoho Books "Apply Credits":** on-account credit can be applied to future invoices via a dedicated "Apply" button
+- **QuickBooks "Receive Payment":** customer + amount + auto-loaded open invoices with checkbox + apply column = same exact UX we're building
+
+Our model = Tally semantic (multi-allocation receipt) + Zoho UX (open-invoices auto-load with allocation table) + QB clarity (live counter showing allocated / on-account).
+
+---
+
+**End of plan.** Update checkboxes as work progresses. Don't lose this file.
