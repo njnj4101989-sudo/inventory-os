@@ -608,6 +608,12 @@ function WastageTab({ period }) {
 
   // Expanded category groups (default: all open — there are only 5 buckets)
   const [expanded, setExpanded] = useState(new Set(WASTAGE_CATEGORIES.map(c => c.key)))
+  // Cutting waste only — lot-level sub-grouping. Default collapsed (lot summary
+  // is denser than per-roll noise; user clicks a lot to drill into rolls).
+  const [expandedLots, setExpandedLots] = useState(new Set())
+  const toggleLot = (lotKey) => setExpandedLots(s => {
+    const n = new Set(s); n.has(lotKey) ? n.delete(lotKey) : n.add(lotKey); return n
+  })
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null)
@@ -805,8 +811,86 @@ function WastageTab({ period }) {
                       <td className="py-3 px-3 typo-td-secondary">—</td>
                       <td className="py-3 px-3 typo-td-secondary">—</td>
                     </tr>
-                    {/* Drill-down rows */}
-                    {isOpen && g.rows.map((r) => (
+                    {/* Drill-down: cutting waste gets lot-level sub-grouping (3-level
+                        accordion) — same lot's rolls collapse into a summary row.
+                        Other categories render flat per-event. */}
+                    {isOpen && cat.key === 'cutting' && (() => {
+                      // Group rows by lot_code (ref_code). Preserve newest-first ordering.
+                      const lotMap = new Map()
+                      for (const r of g.rows) {
+                        const k = r.ref_code || '—'
+                        if (!lotMap.has(k)) lotMap.set(k, {
+                          lot_code: k,
+                          date: r.date,
+                          product_type: r.product_type,
+                          design: r.fabric_or_design,
+                          rolls: [],
+                          weight_kg: 0,
+                          value_inr: 0,
+                        })
+                        const sub = lotMap.get(k)
+                        sub.rolls.push(r)
+                        sub.weight_kg += r.weight_kg || 0
+                        sub.value_inr += r.value_inr || 0
+                        // Lot date is the lot row's date — use the latest seen
+                        if ((r.date || '') > (sub.date || '')) sub.date = r.date
+                      }
+                      const lots = Array.from(lotMap.values())
+                        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+                      return lots.map((lot) => {
+                        const lotKey = `${cat.key}::${lot.lot_code}`
+                        const lotOpen = expandedLots.has(lotKey)
+                        return (
+                          <React.Fragment key={lotKey}>
+                            {/* Lot summary row — clickable, amber-tinted (matches cutting accent) */}
+                            <tr onClick={() => toggleLot(lotKey)}
+                              className={`border-b ${cat.border} ${lotOpen ? cat.tint + ' opacity-90' : 'bg-white hover:' + cat.tint}`}
+                              style={{ cursor: 'pointer' }}>
+                              <td className="py-2 px-3"></td>
+                              <td className="py-2 px-3 typo-td pl-8">
+                                <span className="inline-flex items-center gap-2">
+                                  <svg className={`h-3.5 w-3.5 ${cat.accent} transition-transform ${lotOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="font-semibold text-gray-900">{lot.lot_code}</span>
+                                  <span className={`typo-caption ${cat.accent}`}>({lot.rolls.length} roll{lot.rolls.length !== 1 ? 's' : ''})</span>
+                                  {lot.product_type && <span className="typo-badge rounded bg-white border border-gray-200 px-1.5 py-0.5 text-gray-600">{lot.product_type}</span>}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 typo-td-secondary tabular-nums">{lot.date || '—'}</td>
+                              <td className="py-2 px-3 typo-td font-medium text-gray-700">{lot.design || '—'}</td>
+                              <td className="py-2 px-3 typo-td-secondary">—</td>
+                              <td className="py-2 px-3 text-right typo-td font-semibold text-gray-800 tabular-nums">{lot.weight_kg.toFixed(3)}</td>
+                              <td className="py-2 px-3 typo-td-secondary">—</td>
+                              <td className="py-2 px-3 typo-td-secondary">—</td>
+                              <td className={`py-2 px-3 text-right typo-td font-bold tabular-nums ${cat.accent}`}>{formatINR(lot.value_inr)}</td>
+                              <td className="py-2 px-3 typo-td-secondary">—</td>
+                              <td className="py-2 px-3 typo-td-secondary">—</td>
+                            </tr>
+                            {/* Per-roll rows — deeper indent, only when lot is expanded */}
+                            {lotOpen && lot.rolls.map((r) => (
+                              <tr key={`${lotKey}::${r.id}`} className="border-b border-gray-50 hover:bg-gray-50/60">
+                                <td className="py-2 px-3"></td>
+                                <td className="py-2 px-3 typo-td pl-16">
+                                  <span className="text-gray-700">{r.roll_code || r.ref_code || '—'}</span>
+                                </td>
+                                <td className="py-2 px-3 typo-td-secondary tabular-nums">{r.date || '—'}</td>
+                                <td className="py-2 px-3 typo-td-secondary">{r.fabric_or_design || '—'}</td>
+                                <td className="py-2 px-3 typo-td-secondary">{r.color || '—'}</td>
+                                <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.weight_kg ? r.weight_kg.toFixed(3) : '—'}</td>
+                                <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.pieces != null ? r.pieces : '—'}</td>
+                                <td className="py-2 px-3 text-right typo-td-secondary tabular-nums">{r.rate_inr ? formatINR(r.rate_inr) : '—'}</td>
+                                <td className="py-2 px-3 text-right typo-td font-semibold text-gray-900 tabular-nums">{formatINR(r.value_inr)}</td>
+                                <td className="py-2 px-3 typo-td-secondary">{r.reason || '—'}</td>
+                                <td className="py-2 px-3 typo-td-secondary">{r.party || '—'}</td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        )
+                      })
+                    })()}
+                    {/* Drill-down: flat rows for non-cutting categories */}
+                    {isOpen && cat.key !== 'cutting' && g.rows.map((r) => (
                       <tr key={`${cat.key}-${r.id}`} className="border-b border-gray-50 hover:bg-gray-50/60">
                         <td className="py-2 px-3"></td>
                         <td className="py-2 px-3 typo-td pl-10">
