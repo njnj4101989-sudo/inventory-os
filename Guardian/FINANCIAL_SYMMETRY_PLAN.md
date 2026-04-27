@@ -103,11 +103,11 @@ Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoic
 
 ---
 
-## Phase 4 — Minor Cleanups 🔒 DEFERRED (1 of 6 done)
+## Phase 4 — Minor Cleanups 🔒 DEFERRED (3 of 6 done)
 
 ### Scope
 - [ ] `PurchaseItem.gst_percent` — **kept as reserved field** (Option A, S122). Documented in code at `models/purchase_item.py`, `schemas/sku.py:PurchaseLineItem`, and `services/sku_service.py:purchase_stock`. Frontend doesn't collect per-line GST today; header `SupplierInvoice.gst_percent` drives all math. Wire it up only when a real mixed-HSN supplier invoice case appears (e.g. fabric @ 5% + trim @ 18% on one invoice). When that happens: add per-line input to `SKUsPage` purchase form + switch math to `SUM(line.qty × line.unit_price × line.gst_percent / 100)`.
-- [ ] `SKU.gst_percent` — currently inert (HSN drives GST in invoices); decide: drop or wire into `pickDefaultRate` chain
+- [x] `SKU.gst_percent` — **propagation fix shipped S122-3**. Was previously broken: `sku_service.purchase_stock` only checked per-line `item.gst_percent` (which the FE never sends per 4.1) and ignored header `req.gst_percent` — so SKUs from the purchase form silently landed with NULL GST despite the user entering a rate. Now: per-line wins if provided (forward-compat with 4.1 multi-rate), else falls back to header. Opening-stock SKUs correctly stay NULL (no supplier transaction). Math unchanged — Order/Invoice/SI `gst_percent` still drive all tax calculation; SKU.gst_percent is a per-SKU reference/display value that can later become a default-suggestion source for order forms. No migration needed (production has 0 purchase_items today).
 - [ ] Free-text `additional_label` on Order + Invoice + SupplierInvoice (e.g. "Freight" / "Cartage" / "Packing") — UX nice-to-have once Phase 2 is live
 - [ ] **Bank/Cash chart-of-accounts ("Deposit To" ledger)** — Zoho/QB pattern. Today `payment_mode` is a free string ("neft"/"cash"/etc.); industry-standard is to pick a specific bank ledger (HDFC Current / SBI / Petty Cash). Needs new `BankLedger` master + `bank_ledger_id` FK on payment ledger entries. Defer until a real chart-of-accounts is needed. Linked to S119 (invoice payment recording).
 - [ ] **Partial payment / On-Account tracking** — today Mark-as-Paid is binary (full only). Industry-standard: allow `amount ≤ invoice.total` → invoice goes to `partially_paid` status, customer ledger tracks running balance, next payment can be applied. Tally calls this "On Account" or "Bill-wise". Adds `Invoice.amount_paid` Numeric column + `partially_paid` status + balance-aware UI on invoice list/detail. Defer until a real partial-payment case appears in production. Linked to S119 (invoice payment recording — strict full-only for v1).

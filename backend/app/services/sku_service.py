@@ -622,12 +622,23 @@ class SKUService:
             sku.base_price = item.unit_price
             if item.hsn_code and not sku.hsn_code:
                 sku.hsn_code = item.hsn_code
-            # NOTE — item.gst_percent is RESERVED for future multi-rate invoicing
-            # (Phase 4.1, deferred). Today the form sends only header gst_percent,
-            # so this branch never fires in practice. Kept so that wiring up
-            # per-line GST later is a frontend-only change.
-            if item.gst_percent is not None and sku.gst_percent is None:
-                sku.gst_percent = item.gst_percent
+            # SKU.gst_percent inheritance (Phase 4.2 — S122-3 fix):
+            #   - Per-line `item.gst_percent` wins if provided (forward-compat
+            #     with Phase 4.1 multi-rate invoicing — see PurchaseItem model).
+            #   - Otherwise fall back to header `req.gst_percent` so SKUs
+            #     created via the purchase form inherit the SI's GST rate.
+            #   - Only fires on first creation — never overwrites a manually
+            #     edited rate (SKUsPage detail edit form).
+            #   - Opening-stock SKUs stay NULL (correct — no purchase = no GST).
+            #
+            # Math is unaffected: Order.gst_percent / Invoice.gst_percent /
+            # SupplierInvoice.gst_percent still drive all tax calculation.
+            # SKU.gst_percent is a per-SKU reference / display value that can
+            # later become a default-suggestion source for the order form.
+            if sku.gst_percent is None:
+                sku.gst_percent = (
+                    item.gst_percent if item.gst_percent is not None else req.gst_percent
+                )
 
             total_price = item.qty * item.unit_price
             pi = PurchaseItem(
