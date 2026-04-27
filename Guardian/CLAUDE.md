@@ -33,9 +33,21 @@
 
 ---
 
-## Current State (Session 116 — 2026-04-27) — IN PROGRESS
+## Current State (Session 117 — 2026-04-27) — IN PROGRESS
 
-**P4.7 Wastage Report** — closes the S115 write-off loop. New top-level Reports tab unifying 5 wastage streams (cutting, roll VA damage, batch VA damage, sales-return damage, write-off) into one ₹ picture (AS-2 valued).
+**Additional Amount column** on Order + Invoice grand totals. Mirrors `discount_amount` exactly — taxable = subtotal − discount + **additional** → +GST → total. Auto-copies order→invoice (full + proportional per-shipment). Proportionally reverses on credit-note (matches S113 discount pattern). Use cases: packing, freight, handling, labour. Client reference: per-line "Add Amt" in their accounting software simplified to single header-level field per UX request.
+
+**Files:**
+  - BE: `models/order.py` + `models/invoice.py` + `models/sales_return.py` (+`additional_amount` Numeric(12,2) default 0); `schemas/order.py` + `schemas/invoice.py` + `schemas/sales_return.py` (Create/Update/Response); `services/order_service.py` (create + update + response); `services/invoice_service.py` (4 paths: create_invoice, create_invoice_for_shipment proportional, create_standalone_invoice, update_invoice recalc + response); `services/sales_return_service.py` (fast-track CN proportional reverse + response).
+  - FE: `pages/OrdersPage.jsx` (form state + edit prefill + submit body + form totals input + detail breakdown row); `pages/InvoicesPage.jsx` (form state + submit + form totals row, grid bumped 6→7 cols + detail mini summary + A4 print totals block + CN picker proportional preview); `components/common/CreditNotePrint.jsx` + `components/common/SalesReturnPrint.jsx` (totals block additional row).
+  - Migration: `k1l2m3n4o5p6_s117_additional_amount` — single migration adds `additional_amount` to `orders`, `invoices`, `sales_returns` (tenant-iterating, idempotent via `col_exists`).
+  - Docs: `API_REFERENCE.md` (Order + Invoice request/response shapes), `mock.js` (sample data).
+  - **NOT touched:** `DebitNotePrint.jsx` / `ReturnNotePrint.jsx` (purchase-side, different model — out of scope).
+
+**S116 Wastage Report (still PENDING prod deploy):**
+Full spec → [REPORTS_AND_INVENTORY_PLAN.md § P4.7](REPORTS_AND_INVENTORY_PLAN.md). Files in S116 block above. Migration `j0k1l2m3n4o5` not yet run on EC2 — defer or batch with S117 deploy.
+
+**P4.7 Wastage Report (S116)** — closes the S115 write-off loop. New top-level Reports tab unifying 5 wastage streams (cutting, roll VA damage, batch VA damage, sales-return damage, write-off) into one ₹ picture (AS-2 valued).
 
 Full spec, deviations from original plan, file maps → [REPORTS_AND_INVENTORY_PLAN.md § P4.7](REPORTS_AND_INVENTORY_PLAN.md).
 
@@ -47,7 +59,17 @@ Full spec, deviations from original plan, file maps → [REPORTS_AND_INVENTORY_P
 
 **Architectural note:** S115's `write_off_roll` zeroed `remaining_weight` without snapshotting it — historical wastage was unrecoverable. S116 fixes this properly (no band-aid): new snapshot column, service captures pre-zero value, migration backfills via `total_weight - SUM(consumed) - SUM(va_damage)` clamped ≥ 0.
 
-**Prod deploy:** Run migration `j0k1l2m3n4o5` on EC2 (`alembic upgrade head`). No data dependency — new endpoints + new column.
+**Prod deploy (combined S116 + S117):** Run `alembic upgrade head` on EC2 to apply both `j0k1l2m3n4o5` (Roll.weight_at_write_off) and `k1l2m3n4o5p6` (additional_amount on orders/invoices/sales_returns). No data dependency for either — additive columns + new endpoints.
+
+**Math reference (the rule):**
+```
+order.total_amount   = sum(line items)            ← subtotal stays line-sum
+invoice.subtotal     = order.total_amount         ← copy or proportional per-shipment
+invoice.taxable      = subtotal − discount + additional
+invoice.tax_amount   = taxable × gst_pct / 100
+invoice.total_amount = taxable + tax_amount        ← debit ledger uses this
+```
+Sales-return CN inherits all three (subtotal, discount, additional) proportionally based on `cn_subtotal / invoice_subtotal` share — full credit ⇒ share=1 ⇒ CN total exactly equals invoice total.
 
 ---
 

@@ -48,9 +48,10 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
   const gstPct = Number(sr.gst_percent) || 0
   const subtotal = Number(sr.subtotal) || 0
   const discount = Number(sr.discount_amount) || 0
+  const additional = Number(sr.additional_amount) || 0
   const taxAmt = Number(sr.tax_amount) || 0
   const total = Number(sr.total_amount) || 0
-  const taxableValue = subtotal - discount
+  const taxableValue = subtotal - discount + additional
 
   const originalInvNo = sr.invoice?.invoice_number || sr.order?.invoice_number || null
 
@@ -161,6 +162,12 @@ export default function CreditNotePrint({ salesReturn, company, onClose }) {
                     <tr>
                       <td style={{ color: '#d97706', padding: '2px 0' }}>(Discount applied)</td>
                       <td style={{ textAlign: 'right', color: '#d97706', fontWeight: 600 }}>-{fmtCurrency(discount)}</td>
+                    </tr>
+                  )}
+                  {additional > 0 && (
+                    <tr>
+                      <td style={{ color: '#2563eb', padding: '2px 0' }}>(Additional)</td>
+                      <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 600 }}>+{fmtCurrency(additional)}</td>
                     </tr>
                   )}
                   {gstPct > 0 && (

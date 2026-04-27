@@ -160,7 +160,8 @@ class InvoiceService:
         subtotal = float(order.total_amount or 0)
         gst_rate = float(order.gst_percent or 0) / 100
         discount_amount = float(order.discount_amount or 0)
-        taxable = subtotal - discount_amount
+        additional_amount = float(order.additional_amount or 0)
+        taxable = subtotal - discount_amount + additional_amount
         tax_amount = round(taxable * gst_rate, 2)
         total_amount = taxable + tax_amount
 
@@ -179,6 +180,7 @@ class InvoiceService:
             subtotal=subtotal,
             tax_amount=tax_amount,
             discount_amount=discount_amount,
+            additional_amount=additional_amount,
             total_amount=total_amount,
             status="issued",
             issued_at=issued_at,
@@ -271,16 +273,18 @@ class InvoiceService:
         # Calculate subtotal for THIS shipment's items
         shipment_subtotal = sum(float(oi.unit_price) * qty for oi, qty in ship_items)
 
-        # Proportional discount: shipment_discount = order.discount × (shipment_subtotal / order_subtotal)
+        # Proportional discount + additional: each shipment carries its share of
+        # order-level discount/additional based on this shipment's value.
         order_subtotal = float(order.total_amount or 0)
         if order_subtotal > 0:
-            discount_ratio = shipment_subtotal / order_subtotal
+            ratio = shipment_subtotal / order_subtotal
         else:
-            discount_ratio = 0
-        discount_amount = round(float(order.discount_amount or 0) * discount_ratio, 2)
+            ratio = 0
+        discount_amount = round(float(order.discount_amount or 0) * ratio, 2)
+        additional_amount = round(float(order.additional_amount or 0) * ratio, 2)
 
         gst_rate = float(order.gst_percent or 0) / 100
-        taxable = shipment_subtotal - discount_amount
+        taxable = shipment_subtotal - discount_amount + additional_amount
         tax_amount = round(taxable * gst_rate, 2)
         total_amount = taxable + tax_amount
 
@@ -306,6 +310,7 @@ class InvoiceService:
             subtotal=shipment_subtotal,
             tax_amount=tax_amount,
             discount_amount=discount_amount,
+            additional_amount=additional_amount,
             total_amount=total_amount,
             status="issued",
             issued_at=issued_at,
@@ -407,7 +412,8 @@ class InvoiceService:
 
         subtotal = sum(float(item.quantity * item.unit_price) for item in req.items)
         discount_amount = float(req.discount_amount or 0)
-        taxable = subtotal - discount_amount
+        additional_amount = float(req.additional_amount or 0)
+        taxable = subtotal - discount_amount + additional_amount
         gst_rate = float(req.gst_percent or 0) / 100
         tax_amount = round(taxable * gst_rate, 2)
         total_amount = taxable + tax_amount
@@ -433,6 +439,7 @@ class InvoiceService:
             subtotal=subtotal,
             tax_amount=tax_amount,
             discount_amount=discount_amount,
+            additional_amount=additional_amount,
             total_amount=total_amount,
             status="issued",
             issued_at=issued_at,
@@ -515,11 +522,16 @@ class InvoiceService:
         for field, value in req.model_dump(exclude_unset=True).items():
             setattr(invoice, field, value)
 
-        # Recalculate tax if gst_percent or discount changed
-        if req.gst_percent is not None or req.discount_amount is not None:
+        # Recalculate tax if gst_percent / discount / additional changed
+        if (
+            req.gst_percent is not None
+            or req.discount_amount is not None
+            or req.additional_amount is not None
+        ):
             subtotal = float(invoice.subtotal)
             discount = float(invoice.discount_amount or 0)
-            taxable = subtotal - discount
+            additional = float(invoice.additional_amount or 0)
+            taxable = subtotal - discount + additional
             gst_rate = float(invoice.gst_percent or 0) / 100
             invoice.tax_amount = round(taxable * gst_rate, 2)
             invoice.total_amount = taxable + float(invoice.tax_amount)
@@ -666,6 +678,7 @@ class InvoiceService:
             "subtotal": float(inv.subtotal) if inv.subtotal else 0,
             "tax_amount": float(inv.tax_amount) if inv.tax_amount else 0,
             "discount_amount": float(inv.discount_amount) if inv.discount_amount else 0,
+            "additional_amount": float(inv.additional_amount) if inv.additional_amount else 0,
             "total_amount": float(inv.total_amount) if inv.total_amount else 0,
             "status": inv.status,
             "due_date": inv.due_date.isoformat() if inv.due_date else None,

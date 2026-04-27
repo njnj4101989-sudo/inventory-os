@@ -193,7 +193,7 @@ export default function OrdersPage() {
   const [skuLoading, setSKULoading] = useState(false)
   const [orderLines, setOrderLines] = useState([]) // [{ design_key, color, size, sku_id, qty, price }]
   const [nextOrderNo, setNextOrderNo] = useState('')
-  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '' })
+  const [customerForm, setCustomerForm] = useState({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '', additional_amount: '' })
   const [customers, setCustomers] = useState([])
   const [brokers, setBrokers] = useState([])
   const [transports, setTransports] = useState([])
@@ -675,7 +675,7 @@ export default function OrdersPage() {
     setSKULoading(true)
     setOrderLines([{ design_key: '', color: '', size: '', sku_id: null, qty: 0, price: 0 }])
     setNextOrderNo('')
-    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '' })
+    setCustomerForm({ customer_id: '', source: 'web', notes: '', order_date: new Date().toISOString().split('T')[0], broker_id: '', transport_id: '', gst_percent: '0', discount_amount: '', additional_amount: '' })
     setFormError(null)
     try {
       const [skuRes, custRes, numRes, brokersRes, transportsRes] = await Promise.all([
@@ -714,6 +714,7 @@ export default function OrdersPage() {
       transport_id: order.transport_id || '',
       gst_percent: String(order.gst_percent ?? '0'),
       discount_amount: order.discount_amount ? String(order.discount_amount) : '',
+      additional_amount: order.additional_amount ? String(order.additional_amount) : '',
     })
     setFormError(null)
     try {
@@ -850,6 +851,7 @@ export default function OrdersPage() {
         transport_id: customerForm.transport_id || null,
         gst_percent: parseFloat(customerForm.gst_percent) || 0,
         discount_amount: parseFloat(customerForm.discount_amount) || 0,
+        additional_amount: parseFloat(customerForm.additional_amount) || 0,
         notes: customerForm.notes.trim() || null,
         items,
       }
@@ -1106,7 +1108,8 @@ export default function OrdersPage() {
             {(() => {
               const sub = o.total_amount || 0
               const disc = o.discount_amount || 0
-              const taxable = sub - disc
+              const addl = o.additional_amount || 0
+              const taxable = sub - disc + addl
               const gst = o.gst_percent || 0
               const gstAmt = taxable * gst / 100
               return (
@@ -1120,6 +1123,12 @@ export default function OrdersPage() {
                       <div className="flex justify-between text-xs">
                         <span className="text-green-600">Discount</span>
                         <span className="text-green-600">-₹{disc.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {addl > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-blue-600">Additional</span>
+                        <span className="text-blue-600">+₹{addl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     )}
                     {gst > 0 && <>
@@ -1847,17 +1856,28 @@ export default function OrdersPage() {
                     <div className="flex justify-between items-center typo-td-secondary">
                       <span>Discount</span>
                       <div className="flex items-center gap-1">
-                        <span className="text-gray-400">₹</span>
+                        <span className="text-gray-400">-₹</span>
                         <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
                           value={customerForm.discount_amount}
                           onChange={(e) => setCustomerForm(f => ({ ...f, discount_amount: e.target.value }))}
                           placeholder="0.00" />
                       </div>
                     </div>
+                    <div className="flex justify-between items-center typo-td-secondary">
+                      <span>Additional</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400">+₹</span>
+                        <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
+                          value={customerForm.additional_amount}
+                          onChange={(e) => setCustomerForm(f => ({ ...f, additional_amount: e.target.value }))}
+                          placeholder="0.00" />
+                      </div>
+                    </div>
                     {(() => {
                       const gstPct = parseFloat(customerForm.gst_percent) || 0
                       const discountAmt = parseFloat(customerForm.discount_amount) || 0
-                      const taxable = grandTotal - discountAmt
+                      const additionalAmt = parseFloat(customerForm.additional_amount) || 0
+                      const taxable = grandTotal - discountAmt + additionalAmt
                       const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
                       return (<>
                         {gstPct > 0 && (<>

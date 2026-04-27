@@ -1220,6 +1220,7 @@ When `sku` is present:
   "has_shortage": false,
   "total_amount": 2250.0,
   "discount_amount": 0,
+  "additional_amount": 0,
   "invoices": [
     { "id": "uuid", "invoice_number": "INV-0001", "total_amount": 2520.0, "status": "issued" }
   ],
@@ -1262,6 +1263,7 @@ When `sku` is present:
   "transport_id": "uuid | null",
   "gst_percent": 12,
   "discount_amount": 0,
+  "additional_amount": 0,
   "items": [
     { "sku_id": "uuid", "quantity": 5, "unit_price": 450.0 }
   ],
@@ -1333,6 +1335,7 @@ When `sku` is present:
   "subtotal": 1500.0,
   "tax_amount": 270.0,
   "discount_amount": 0,
+  "additional_amount": 0,
   "total_amount": 1770.0,
   "status": "paid",
   "broker_id": "uuid | null",
@@ -1378,6 +1381,7 @@ When `sku` is present:
   "customer_address": "Surat",
   "gst_percent": 12,
   "discount_amount": 0,
+  "additional_amount": 0,
   "items": [
     { "sku_id": "uuid", "quantity": 5, "unit_price": 450.0 }
   ],

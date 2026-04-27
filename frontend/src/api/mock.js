@@ -410,7 +410,7 @@ export const invoices = [
   {
     id: uid('17'), invoice_number: 'INV-0001', gst_percent: 18,
     order: { id: uid('15'), order_number: 'ORD-0002', customer_name: 'Anita Verma', customer_phone: '9876543212', customer_address: '45, Textile Market, Ahmedabad 380002' },
-    subtotal: 1500.0, tax_amount: 270.0, discount_amount: 0,
+    subtotal: 1500.0, tax_amount: 270.0, discount_amount: 0, additional_amount: 0,
     total_amount: 1770.0, status: 'paid', notes: null,
     issued_at: '2026-02-07T15:00:00Z', paid_at: '2026-02-07T16:00:00Z',
     created_at: '2026-02-07T15:00:00Z',
@@ -424,8 +424,8 @@ export const invoices = [
   {
     id: uid('18'), invoice_number: 'INV-0002', gst_percent: 12,
     order: { id: uid('14'), order_number: 'ORD-0001', customer_name: 'Priya Sharma', customer_phone: '9876543210', customer_address: '12, Ring Road, Surat 395003' },
-    subtotal: 2250.0, tax_amount: 270.0, discount_amount: 100.0,
-    total_amount: 2555.0, status: 'issued', notes: 'Discount applied for bulk order',
+    subtotal: 2250.0, tax_amount: 270.0, discount_amount: 100.0, additional_amount: 50.0,
+    total_amount: 2611.0, status: 'issued', notes: 'Discount + packing charge applied',
     issued_at: '2026-02-08T08:30:00Z', paid_at: null,
     created_at: '2026-02-08T08:30:00Z',
     items: [

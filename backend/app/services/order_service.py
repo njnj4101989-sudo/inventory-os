@@ -158,6 +158,7 @@ class OrderService:
             status="pending",
             total_amount=total_amount,
             discount_amount=req.discount_amount,
+            additional_amount=req.additional_amount,
             notes=req.notes,
             created_by=created_by,
             fy_id=fy_id,
@@ -449,6 +450,8 @@ class OrderService:
             order.gst_percent = req.gst_percent
         if req.discount_amount is not None:
             order.discount_amount = req.discount_amount
+        if req.additional_amount is not None:
+            order.additional_amount = req.additional_amount
         if req.notes is not None:
             order.notes = req.notes
 
@@ -693,6 +696,7 @@ class OrderService:
             "status": o.status,
             "total_amount": float(o.total_amount) if o.total_amount else 0,
             "discount_amount": float(o.discount_amount) if o.discount_amount else 0,
+            "additional_amount": float(o.additional_amount) if o.additional_amount else 0,
             "notes": o.notes,
             "items": [
                 {

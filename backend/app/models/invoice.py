@@ -34,6 +34,9 @@ class Invoice(Base):
     discount_amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), default=0, server_default="0"
     )
+    additional_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(String(20), index=True)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

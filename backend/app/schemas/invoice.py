@@ -31,6 +31,7 @@ class InvoiceCreate(BaseModel):
     customer_address: str | None = None
     gst_percent: Decimal = Decimal("0")
     discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     payment_terms: str | None = None
     place_of_supply: str | None = None
     items: list[InvoiceItemInput]
@@ -54,6 +55,7 @@ class InvoiceUpdate(BaseModel):
     customer_address: str | None = None
     gst_percent: Decimal | None = None
     discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
     payment_terms: str | None = None
     place_of_supply: str | None = None
     notes: str | None = None
@@ -113,6 +115,7 @@ class InvoiceResponse(BaseSchema):
     subtotal: Decimal
     tax_amount: Decimal
     discount_amount: Decimal
+    additional_amount: Decimal = Decimal("0")
     total_amount: Decimal
     status: str
     due_date: date | None = None

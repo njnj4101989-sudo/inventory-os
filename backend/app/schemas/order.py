@@ -72,6 +72,7 @@ class OrderCreate(BaseModel):
     transport_id: UUID | None = None
     gst_percent: Decimal = Decimal("0")
     discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     items: list[OrderItemInput]
     notes: str | None = None
 
@@ -125,6 +126,7 @@ class OrderUpdate(BaseModel):
     transport_id: UUID | None = None
     gst_percent: Decimal | None = None
     discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
     notes: str | None = None
     items: list[OrderUpdateItem] | None = None
 
@@ -159,6 +161,7 @@ class OrderResponse(BaseSchema):
     has_shortage: bool = False
     total_amount: Decimal | None = None
     discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
     notes: str | None = None
     invoices: list[dict] = []
     shipments: list[dict] = []

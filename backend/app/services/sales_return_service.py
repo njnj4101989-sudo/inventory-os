@@ -345,20 +345,25 @@ class SalesReturnService:
                 oi.returned_qty = (oi.returned_qty or 0) + take
                 remaining -= take
 
-        # Proportional discount — credit the same fraction of the invoice's
-        # discount that the credited subtotal represents. Full-credit case:
-        # share = 1 → full discount copied → CN total == invoice total exactly.
+        # Proportional discount + additional — credit the same fraction of the
+        # invoice's discount and additional charge that the credited subtotal
+        # represents. Full-credit case: share = 1 → full discount + additional
+        # copied → CN total == invoice total exactly.
         invoice_subtotal = Decimal(str(float(invoice.subtotal))) if invoice.subtotal else Decimal("0")
         invoice_discount = Decimal(str(float(invoice.discount_amount))) if invoice.discount_amount else Decimal("0")
-        if invoice_subtotal > 0 and invoice_discount > 0 and total_amount > 0:
+        invoice_additional = Decimal(str(float(invoice.additional_amount))) if invoice.additional_amount else Decimal("0")
+        if invoice_subtotal > 0 and total_amount > 0:
             share = total_amount / invoice_subtotal
-            cn_discount = (invoice_discount * share).quantize(Decimal("0.01"))
+            cn_discount = (invoice_discount * share).quantize(Decimal("0.01")) if invoice_discount > 0 else Decimal("0")
+            cn_additional = (invoice_additional * share).quantize(Decimal("0.01")) if invoice_additional > 0 else Decimal("0")
         else:
             cn_discount = Decimal("0")
+            cn_additional = Decimal("0")
 
-        taxable = total_amount - cn_discount
+        taxable = total_amount - cn_discount + cn_additional
         sr.subtotal = total_amount
         sr.discount_amount = cn_discount
+        sr.additional_amount = cn_additional
         sr.tax_amount = (taxable * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
         sr.total_amount = taxable + sr.tax_amount
 
@@ -689,6 +694,7 @@ class SalesReturnService:
             "gst_percent": float(sr.gst_percent) if sr.gst_percent else 0,
             "subtotal": float(sr.subtotal) if sr.subtotal else 0,
             "discount_amount": float(sr.discount_amount) if sr.discount_amount else 0,
+            "additional_amount": float(sr.additional_amount) if sr.additional_amount else 0,
             "tax_amount": float(sr.tax_amount) if sr.tax_amount else 0,
             "total_amount": float(sr.total_amount) if sr.total_amount else 0,
             "credit_note_no": sr.credit_note_no,

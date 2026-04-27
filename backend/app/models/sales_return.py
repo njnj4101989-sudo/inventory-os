@@ -54,6 +54,9 @@ class SalesReturn(Base):
     discount_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 2), default=0, server_default="0"
     )
+    additional_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     credit_note_no: Mapped[str | None] = mapped_column(String(50))

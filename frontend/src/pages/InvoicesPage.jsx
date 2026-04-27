@@ -139,7 +139,7 @@ export default function InvoicesPage() {
   const [createMode, setCreateMode] = useState(false)
   const [customers, setCustomers] = useState([])
   const [allSKUs, setAllSKUs] = useState([])
-  const [invForm, setInvForm] = useState({ customer_id: '', gst_percent: '0', discount_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
+  const [invForm, setInvForm] = useState({ customer_id: '', gst_percent: '0', discount_amount: '', additional_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
   const [invItems, setInvItems] = useState([])
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -482,7 +482,7 @@ export default function InvoicesPage() {
   /* ── Create standalone invoice ── */
   const openCreate = async () => {
     setCreateMode(true)
-    setInvForm({ customer_id: '', gst_percent: '0', discount_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
+    setInvForm({ customer_id: '', gst_percent: '0', discount_amount: '', additional_amount: '', payment_terms: '', place_of_supply: '', notes: '' })
     setInvItems([{ sku_id: '', quantity: 1, unit_price: 0 }])
     setFormError(null)
     setIsDirty(false)
@@ -513,6 +513,7 @@ export default function InvoicesPage() {
         customer_address: cust?.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : null,
         gst_percent: parseFloat(invForm.gst_percent) || 0,
         discount_amount: parseFloat(invForm.discount_amount) || 0,
+        additional_amount: parseFloat(invForm.additional_amount) || 0,
         payment_terms: invForm.payment_terms?.trim() || null,
         place_of_supply: invForm.place_of_supply?.trim() || null,
         items: validItems.map(it => ({ sku_id: it.sku_id, quantity: it.quantity, unit_price: it.unit_price })),
@@ -985,6 +986,12 @@ export default function InvoicesPage() {
                     <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>-{fmtCurrency(inv.discount_amount)}</td>
                   </tr>
                 )}
+                {(inv.additional_amount || 0) > 0 && (
+                  <tr>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Additional</td>
+                    <td style={{ padding: '1px 5px', fontSize: '9px', textAlign: 'right', borderBottom: '1px solid #000' }}>+{fmtCurrency(inv.additional_amount)}</td>
+                  </tr>
+                )}
                 {(inv.gst_percent || 0) > 0 && (isIGST ? (
                   <tr>
                     <td style={{ padding: '1px 5px', fontSize: '9px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>IGST ({inv.gst_percent}%)</td>
@@ -1144,6 +1151,7 @@ export default function InvoicesPage() {
                 <div className="text-xs mt-0.5 space-y-0.5">
                   <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{fmtCurrency(inv.subtotal)}</span></div>
                   {(inv.discount_amount || 0) > 0 && <div className="flex justify-between"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(inv.discount_amount)}</span></div>}
+                  {(inv.additional_amount || 0) > 0 && <div className="flex justify-between"><span className="text-blue-600">Additional</span><span className="text-blue-600">+{fmtCurrency(inv.additional_amount)}</span></div>}
                   <div className="flex justify-between"><span className="text-gray-500">Tax ({inv.gst_percent || 0}%)</span><span>{fmtCurrency(inv.tax_amount)}</span></div>
                   <div className="flex justify-between font-bold border-t border-emerald-300 pt-0.5"><span>Total</span><span>{fmtCurrency(inv.total_amount)}</span></div>
                 </div>
@@ -1357,11 +1365,12 @@ export default function InvoicesPage() {
                               const cnSubtotal = cnForm.items.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_price), 0)
                               const invSubtotal = Number(inv.subtotal) || 0
                               const invDiscount = Number(inv.discount_amount) || 0
-                              // Match backend: proportional discount based on credit share of invoice.
-                              const cnDiscount = (invSubtotal > 0 && invDiscount > 0 && cnSubtotal > 0)
-                                ? +(invDiscount * (cnSubtotal / invSubtotal)).toFixed(2)
-                                : 0
-                              const taxable = cnSubtotal - cnDiscount
+                              const invAdditional = Number(inv.additional_amount) || 0
+                              // Match backend: proportional discount + additional based on credit share of invoice.
+                              const share = (invSubtotal > 0 && cnSubtotal > 0) ? cnSubtotal / invSubtotal : 0
+                              const cnDiscount = invDiscount > 0 ? +(invDiscount * share).toFixed(2) : 0
+                              const cnAdditional = invAdditional > 0 ? +(invAdditional * share).toFixed(2) : 0
+                              const taxable = cnSubtotal - cnDiscount + cnAdditional
                               const gstPct = Number(inv.gst_percent) || 0
                               const tax = +(taxable * gstPct / 100).toFixed(2)
                               const total = taxable + tax
@@ -1379,6 +1388,15 @@ export default function InvoicesPage() {
                                         Discount (proportional from invoice)
                                       </td>
                                       <td className="typo-td-secondary px-3 py-2 text-right text-amber-700">−₹{inr(cnDiscount)}</td>
+                                      <td />
+                                    </tr>
+                                  )}
+                                  {cnAdditional > 0 && (
+                                    <tr>
+                                      <td colSpan={4} className="typo-td-secondary px-3 py-2 text-right text-blue-700">
+                                        Additional (proportional from invoice)
+                                      </td>
+                                      <td className="typo-td-secondary px-3 py-2 text-right text-blue-700">+₹{inr(cnAdditional)}</td>
                                       <td />
                                     </tr>
                                   )}
@@ -1609,7 +1627,8 @@ export default function InvoicesPage() {
       {createMode && (() => {
         const subtotal = invItems.reduce((s, it) => s + (it.quantity * it.unit_price || 0), 0)
         const discount = parseFloat(invForm.discount_amount) || 0
-        const taxable = subtotal - discount
+        const additional = parseFloat(invForm.additional_amount) || 0
+        const taxable = subtotal - discount + additional
         const gstPct = parseFloat(invForm.gst_percent) || 0
         const gstAmt = Math.round(taxable * gstPct / 100 * 100) / 100
         const grandTotal = taxable + gstAmt
@@ -1654,7 +1673,7 @@ export default function InvoicesPage() {
                     <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-200 rounded text-[9px]">Shift+M</kbd> quick-add master</span>
                   </div>
                 </div>
-                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-7 gap-2">
                   <div className="col-span-2">
                     <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
                     <FilterSelect autoFocus searchable full data-master="customer" value={invForm.customer_id}
@@ -1674,11 +1693,19 @@ export default function InvoicesPage() {
                       options={GST_OPTIONS} />
                   </div>
                   <div>
-                    <label className="typo-label-sm">Discount (₹)</label>
+                    <label className="typo-label-sm">Discount (-₹)</label>
                     <input type="number" min="0" step="0.01" className="typo-input-sm"
                       value={invForm.discount_amount}
                       onChange={e => { setInvForm(f => ({ ...f, discount_amount: e.target.value })); setIsDirty(true) }}
                       placeholder="0.00" />
+                  </div>
+                  <div>
+                    <label className="typo-label-sm">Additional (+₹)</label>
+                    <input type="number" min="0" step="0.01" className="typo-input-sm"
+                      value={invForm.additional_amount}
+                      onChange={e => { setInvForm(f => ({ ...f, additional_amount: e.target.value })); setIsDirty(true) }}
+                      placeholder="0.00"
+                      title="Extra taxable charge — packing, freight, handling, labour" />
                   </div>
                   <div>
                     <label className="typo-label-sm">Payment Terms</label>
@@ -1767,6 +1794,7 @@ export default function InvoicesPage() {
                   <div className="w-56 space-y-1.5 border-t border-gray-200 pt-2">
                     <div className="flex justify-between typo-td"><span>Subtotal</span><span>{fmtCurrency(subtotal)}</span></div>
                     {discount > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(discount)}</span></div>}
+                    {additional > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-blue-600">Additional</span><span className="text-blue-600">+{fmtCurrency(additional)}</span></div>}
                     {gstPct > 0 && (<>
                       <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
                       <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
