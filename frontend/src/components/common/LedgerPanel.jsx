@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getLedger, getPartyBalance, recordPayment } from '../../api/ledger'
+import { getOnAccountBalance } from '../../api/paymentReceipts'
 import PaymentForm, { emptyPaymentForm } from './PaymentForm'
 
 // Map a ledger entry's reference_type + reference_id to a deep-link URL.
@@ -14,8 +15,44 @@ function deepLinkFor(entry) {
   if (t === 'purchase_invoice' || t === 'supplier_invoice') return `/rolls?tab=purchases&open=${id}`
   if (t === 'return_note') return `/returns?tab=purchase&open=${id}`
   if (t === 'job_challan' || t === 'challan') return `/challans?open=${id}`
-  // payment / opening / adjustment — no dedicated detail view
+  // S123: receipt-level entry (on-account residue, TDS/TCS) → open receipt detail
+  if (t === 'payment_receipt') return `/payments?open=${id}`
+  // S123: payment_allocation reference_id is the allocation row, not the
+  // receipt — we can't deep-link to that without a backend lookup. The
+  // description already contains the linked invoice number, so we render a
+  // textual INV-XXXX hyperlink in the description renderer instead.
   return null
+}
+
+// Render description with embedded INV-XXXX as a clickable link (S123 — for
+// payment_allocation rows where deepLinkFor returns null).
+function renderDescriptionWithInvLinks(description, navigate, onClose) {
+  if (!description) return null
+  const re = /\b(INV-\d{3,})\b/g
+  const parts = []
+  let last = 0
+  let m
+  while ((m = re.exec(description)) !== null) {
+    if (m.index > last) parts.push(description.slice(last, m.index))
+    const inv = m[1]
+    parts.push(
+      <button
+        key={`${inv}-${m.index}`}
+        type="button"
+        onClick={(ev) => {
+          ev.stopPropagation()
+          onClose?.()
+          navigate(`/invoices?open=${inv}`)
+        }}
+        className="text-emerald-700 hover:text-emerald-900 hover:underline font-mono"
+      >
+        {inv}
+      </button>,
+    )
+    last = m.index + inv.length
+  }
+  if (last < description.length) parts.push(description.slice(last))
+  return parts
 }
 
 const ENTRY_COLORS = {
@@ -37,6 +74,7 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
   const navigate = useNavigate()
   const [entries, setEntries] = useState([])
   const [balance, setBalance] = useState(null)
+  const [onAccount, setOnAccount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showPayment, setShowPayment] = useState(false)
   const [payForm, setPayForm] = useState(emptyPaymentForm())
@@ -53,9 +91,21 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
       ])
       setEntries(ledgerRes.data.data?.data || [])
       setBalance(balRes.data.data)
+      // S123: pull on-account residue for customers (other party types defer to v2)
+      if (partyType === 'customer') {
+        try {
+          const oaRes = await getOnAccountBalance(partyId)
+          setOnAccount(Number(oaRes.data?.data?.balance || 0))
+        } catch {
+          setOnAccount(0)
+        }
+      } else {
+        setOnAccount(0)
+      }
     } catch {
       setEntries([])
       setBalance(null)
+      setOnAccount(0)
     } finally {
       setLoading(false)
     }
@@ -135,12 +185,17 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
 
         {/* Balance summary */}
         {balance && (
-          <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-4 typo-caption shrink-0">
+          <div className="px-4 py-2 bg-gray-50 border-b flex items-center flex-wrap gap-x-4 gap-y-1 typo-caption shrink-0">
             <span className="text-gray-500">Debit: <strong className="typo-data text-gray-800">₹{fmt(balance.total_debit)}</strong></span>
             <span className="text-gray-500">Credit: <strong className="typo-data text-gray-800">₹{fmt(balance.total_credit)}</strong></span>
             <span className={`typo-data ${balance.balance_type === 'cr' ? 'text-red-600' : 'text-green-600'}`}>
-              Balance: ₹{fmt(balance.balance)} {balance.balance_type.toUpperCase()}
+              {partyType === 'customer' ? 'Outstanding' : 'Balance'}: ₹{fmt(balance.balance)} {balance.balance_type.toUpperCase()}
             </span>
+            {partyType === 'customer' && onAccount > 0.005 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-50 border border-sky-200 typo-data text-sky-700">
+                On-Account: <strong>₹{fmt(onAccount)}</strong>
+              </span>
+            )}
           </div>
         )}
 
@@ -193,17 +248,28 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
                         </span>
                         {(() => {
                           const href = deepLinkFor(e)
-                          return href ? (
-                            <button
-                              onClick={() => { onClose?.(); navigate(href) }}
-                              className="typo-td text-emerald-700 hover:text-emerald-900 hover:underline text-left"
-                              title="Open source document"
-                            >
-                              {e.description}
-                            </button>
-                          ) : (
-                            <span className="typo-td text-gray-800">{e.description}</span>
-                          )
+                          if (href) {
+                            return (
+                              <button
+                                onClick={() => { onClose?.(); navigate(href) }}
+                                className="typo-td text-emerald-700 hover:text-emerald-900 hover:underline text-left"
+                                title="Open source document"
+                              >
+                                {e.description}
+                              </button>
+                            )
+                          }
+                          // payment_allocation has no direct deep-link, but its
+                          // description carries INV-XXXX inline — render those
+                          // as click-throughs to the invoice detail.
+                          if (e.reference_type === 'payment_allocation') {
+                            return (
+                              <span className="typo-td text-gray-800">
+                                {renderDescriptionWithInvLinks(e.description, navigate, onClose)}
+                              </span>
+                            )
+                          }
+                          return <span className="typo-td text-gray-800">{e.description}</span>
                         })()}
                       </div>
                       {e.notes && <p className="typo-caption mt-0.5">{e.notes}</p>}

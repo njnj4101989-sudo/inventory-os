@@ -103,14 +103,14 @@ Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoic
 
 ---
 
-## Phase 4 — Minor Cleanups 🔒 DEFERRED (3 of 6 done)
+## Phase 4 — Minor Cleanups 🔒 DEFERRED (4 of 6 done)
 
 ### Scope
 - [ ] `PurchaseItem.gst_percent` — **kept as reserved field** (Option A, S122). Documented in code at `models/purchase_item.py`, `schemas/sku.py:PurchaseLineItem`, and `services/sku_service.py:purchase_stock`. Frontend doesn't collect per-line GST today; header `SupplierInvoice.gst_percent` drives all math. Wire it up only when a real mixed-HSN supplier invoice case appears (e.g. fabric @ 5% + trim @ 18% on one invoice). When that happens: add per-line input to `SKUsPage` purchase form + switch math to `SUM(line.qty × line.unit_price × line.gst_percent / 100)`.
 - [x] `SKU.gst_percent` — **propagation fix shipped S122-3**. Was previously broken: `sku_service.purchase_stock` only checked per-line `item.gst_percent` (which the FE never sends per 4.1) and ignored header `req.gst_percent` — so SKUs from the purchase form silently landed with NULL GST despite the user entering a rate. Now: per-line wins if provided (forward-compat with 4.1 multi-rate), else falls back to header. Opening-stock SKUs correctly stay NULL (no supplier transaction). Math unchanged — Order/Invoice/SI `gst_percent` still drive all tax calculation; SKU.gst_percent is a per-SKU reference/display value that can later become a default-suggestion source for order forms. No migration needed (production has 0 purchase_items today).
 - [ ] Free-text `additional_label` on Order + Invoice + SupplierInvoice (e.g. "Freight" / "Cartage" / "Packing") — UX nice-to-have once Phase 2 is live
 - [ ] **Bank/Cash chart-of-accounts ("Deposit To" ledger)** — Zoho/QB pattern. Today `payment_mode` is a free string ("neft"/"cash"/etc.); industry-standard is to pick a specific bank ledger (HDFC Current / SBI / Petty Cash). Needs new `BankLedger` master + `bank_ledger_id` FK on payment ledger entries. Defer until a real chart-of-accounts is needed. Linked to S119 (invoice payment recording).
-- [ ] **Partial payment / On-Account tracking + Bill-wise Receipt Voucher** — moved to dedicated plan: [`PAYMENTS_AND_ALLOCATIONS_PLAN.md`](PAYMENTS_AND_ALLOCATIONS_PLAN.md). Scope expanded beyond Mark-as-Paid: full Tally Receipt Voucher (F6) UX with multi-invoice allocation per receipt, on-account credit, and partial payment status. S119 will become a thin wrapper for the new payment service. Phase 1 (S123 backend) + Phase 2 (S124 frontend) split.
+- [x] **Partial payment / On-Account tracking + Bill-wise Receipt Voucher** — ✅ COMPLETE (S123 backend + S124 frontend, 2026-04-27). See [`PAYMENTS_AND_ALLOCATIONS_PLAN.md`](PAYMENTS_AND_ALLOCATIONS_PLAN.md). Tally Receipt Voucher (F6) UX with multi-invoice allocation, FIFO auto-allocate, on-account credit residue, partial-paid invoice status, A4 half-page receipt print. S119 Mark-as-Paid is now a thin wrapper that opens RecordPaymentForm pre-filled with the invoice's outstanding amount.
 - [x] **Roll.cost_per_unit double-count** — fixed S122. See "Known follow-up" under Phase 3 above.
 
 ---

@@ -39,9 +39,10 @@ const COLORS = {
   closed:             'bg-green-100 text-green-700',
 
   // Invoice statuses
-  issued:       'bg-yellow-100 text-yellow-700',
-  paid:         'bg-green-100 text-green-700',
-  overdue:      'bg-red-100 text-red-700',
+  issued:         'bg-yellow-100 text-yellow-700',
+  partially_paid: 'bg-sky-100 text-sky-700',
+  paid:           'bg-green-100 text-green-700',
+  overdue:        'bg-red-100 text-red-700',
 
   // Roll statuses
   in_stock:             'bg-green-100 text-green-700',

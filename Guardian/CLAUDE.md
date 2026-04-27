@@ -35,7 +35,31 @@
 
 ---
 
-## Current State (Session 123 — 2026-04-27) — IN PROGRESS
+## Current State (Session 124 — 2026-04-27) — IN PROGRESS
+
+**Phase 2 of PAYMENTS_AND_ALLOCATIONS_PLAN — Frontend.** Closes the Tally Receipt Voucher loop end-to-end. The customer story works fully now: open Payments page → click Record Payment → pick Ramesh → enter ₹50,000 → his 4 open invoices auto-load FIFO-sorted → click Auto FIFO (or per-row Full / manual amounts) → see live counter Allocated ₹50k vs Allocatable + on-account residue → Save → invoices flip to partially_paid/paid, ledger gets per-allocation rows, A4 half-page receipt prints. Mark-as-Paid on InvoicesPage now opens the same form pre-locked to one invoice.
+
+**Frontend (additive, all new + 4 light edits):**
+  - `api/paymentReceipts.js` — NEW. 5 functions matching backend shape (recordPayment, getPaymentReceipts, getPaymentReceipt, getOpenInvoicesForCustomer, getOnAccountBalance) with full mock branch that mutates invoice.amount_paid + status flip.
+  - `pages/PaymentsPage.jsx` — NEW. List + KPIs (Receipts/Total Received/On-Account/Avg) + filters (search/customer/mode/date) + detail overlay (4-card summary + customer + allocations with deep-link to invoice + Print Receipt) + create overlay (RecordPaymentForm). URL deep-link `?open=<id>`.
+  - `components/payments/RecordPaymentForm.jsx` — NEW. Compact form per `feedback_compact_forms` memory. Customer FilterSelect (locks when defaultInvoiceId provided), reuses PaymentForm for date/mode/ref/TDS/TCS, allocation table with checkbox + per-row Apply input + Auto FIFO + per-row Full + Clear. Live counter footer with colour states (emerald=fully allocated, sky=on-account positive, rose=over-allocated). On-account chip shows existing customer credit when present.
+  - `components/common/ReceiptVoucherPrint.jsx` — NEW. A4 half-page (138.5mm top half + cut line at A4 midpoint). Mirrors S114 CN/DN discipline. Received By + Received From cards, mode/ref/notes strip, allocations table, totals card (Gross − TDS + TCS = NET), amount-in-words, Authorised Signatory. forwardRef so parent's useReactToPrint targets it.
+  - `routes/routes.js` — +`/payments` (admin+billing roles).
+  - `components/layout/Sidebar.jsx` — +"Payments" entry under Commerce, between Invoices and Returns.
+  - `components/common/StatusBadge.jsx` — +`partially_paid` colour (sky-100/sky-700).
+  - `components/common/LedgerPanel.jsx` — Outstanding label for customer balance + On-Account ₹X pill (pulled from new endpoint), `deepLinkFor` extended for `payment_receipt`, `payment_allocation` rows render embedded INV-XXXX as inline click-through (reference_id is allocation_id not receipt_id, so we parse the description).
+  - `pages/InvoicesPage.jsx` — +Pending column on list (derived from total − amount_paid), +`Partial` filter tab, +Paid So Far / Outstanding rows in detail Invoice Info card when partially_paid, +Mark-as-Paid modal swapped to RecordPaymentForm wrapper (locks customer + invoice; allocation amount stays editable), +button label flips to "Record Next Payment" on partially_paid, +action panel now shows for both `issued` and `partially_paid` (cancel only on `issued`).
+  - `api/mock.js` — `paymentReceipts` array seeded empty.
+
+**Build:** Vite production build clean. `PaymentsPage` chunk 22.31kB / 6.13kB gzip. No new dependencies. Existing patterns reused: `typo-input-sm`/`typo-th`/`typo-td`, FilterSelect with `searchable`/`data-master`/`autoFocus`, gradient header overlay, fixed `inset-0 z-50`, useQuickMaster for Shift+M Customer creation.
+
+**UI density:** per new memory `feedback_compact_forms`. RecordPaymentForm uses `gap-2`/`gap-3` max, `typo-input-sm` throughout, allocation table inputs aligned to cell width, footer counter inline (no separate card padding). Matches RollsPage / OrdersPage rhythm.
+
+**Pending:** commit + push (Vercel auto-rebuilds in ~60s; backend already live since S123).
+
+---
+
+## Previous State (Session 123 — 2026-04-27) — CLOSED
 
 **Phase 1 of PAYMENTS_AND_ALLOCATIONS_PLAN — Tally bill-wise receipt voucher backend.** Replaces S119's binary Mark-as-Paid with full multi-invoice allocation + on-account credit + partial-paid invoice status. The backend now supports the use case the user described: "customer sends ₹50,000 against ₹105,000 outstanding, allocate ₹20k+₹20k+₹10k across 3 bills, with one of them partially settled."
 

@@ -13,6 +13,7 @@ import CreditNotePrint from '../components/common/CreditNotePrint'
 import FilterSelect from '../components/common/FilterSelect'
 import CreditNotePickerModal from '../components/common/CreditNotePickerModal'
 import PaymentForm, { emptyPaymentForm } from '../components/common/PaymentForm'
+import RecordPaymentForm from '../components/payments/RecordPaymentForm'
 import { colorHex, loadColorMap } from '../utils/colorUtils'
 import DataTable from '../components/common/DataTable'
 import Pagination from '../components/common/Pagination'
@@ -103,6 +104,12 @@ const COLUMNS = [
     <span className="inline-flex items-center rounded-full px-1.5 py-0.5 typo-badge bg-purple-100 text-purple-700">Direct</span>
   )},
   { key: 'total_amount', label: 'Total', render: (val) => <span className="font-bold">{fmtCurrency(val)}</span> },
+  { key: '__pending', label: 'Pending', render: (_v, row) => {
+    if (!row || row.status === 'cancelled') return <span className="text-gray-300">—</span>
+    const out = Number(row.outstanding_amount ?? ((Number(row.total_amount) || 0) - (Number(row.amount_paid) || 0)))
+    if (out <= 0.005) return <span className="typo-caption text-gray-300">—</span>
+    return <span className="font-medium tabular-nums text-amber-700">{fmtCurrency(out)}</span>
+  } },
   { key: 'due_date', label: 'Due', render: (val) => val ? fmtDate(val + 'T00:00:00') : <span className="text-gray-300">—</span> },
   { key: 'status', label: 'Status', render: (val) => <StatusBadge status={val} /> },
   { key: 'issued_at', label: 'Issued', render: (val) => fmtDate(val) },
@@ -111,6 +118,7 @@ const COLUMNS = [
 const TABS = [
   { key: '', label: 'All' },
   { key: 'issued', label: 'Unpaid' },
+  { key: 'partially_paid', label: 'Partial' },
   { key: 'paid', label: 'Paid' },
   { key: 'cancelled', label: 'Cancelled' },
 ]
@@ -363,10 +371,6 @@ export default function InvoicesPage() {
   const openMarkPaid = () => {
     if (!detailInvoice) return
     setPayError(null)
-    setPayForm({
-      ...emptyPaymentForm(),
-      amount: String(detailInvoice.total_amount || 0),  // locked, display only
-    })
     setConfirmMarkPaid(true)
   }
 
@@ -1130,6 +1134,12 @@ export default function InvoicesPage() {
                   <div><span className="text-gray-500">Status:</span> <StatusBadge status={inv.status} /></div>
                   <div><span className="text-gray-500">Type:</span> <span className="font-medium">{inv.order ? 'From Order' : 'Direct Sale'}{inv.shipment ? ` · ${inv.shipment.shipment_no}` : ''}</span></div>
                   {inv.paid_at && <div><span className="text-gray-500">Paid:</span> <span className="font-medium text-green-600">{fmtDate(inv.paid_at)}</span></div>}
+                  {(inv.status === 'partially_paid' || (Number(inv.amount_paid) > 0 && inv.status !== 'paid')) && (
+                    <>
+                      <div><span className="text-gray-500">Paid So Far:</span> <span className="font-medium text-emerald-700 tabular-nums">{fmtCurrency(inv.amount_paid)}</span></div>
+                      <div><span className="text-gray-500">Outstanding:</span> <span className="font-bold text-amber-700 tabular-nums">{fmtCurrency((Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0))}</span></div>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="bg-gray-50 rounded p-2">
@@ -1248,19 +1258,21 @@ export default function InvoicesPage() {
             )}
 
             {/* Actions */}
-            {inv.status === 'issued' && (
+            {(inv.status === 'issued' || inv.status === 'partially_paid') && (
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <button onClick={() => setConfirmCancel(true)} disabled={actioning}
-                  className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
-                  Cancel Invoice
-                </button>
+                {inv.status === 'issued' && (
+                  <button onClick={() => setConfirmCancel(true)} disabled={actioning}
+                    className="rounded border border-red-300 text-red-600 px-4 py-1.5 typo-btn-sm hover:bg-red-50 disabled:opacity-50 transition-colors">
+                    Cancel Invoice
+                  </button>
+                )}
                 <button onClick={openCreditNote} disabled={actioning}
                   className="rounded border border-amber-400 text-amber-700 px-4 py-1.5 typo-btn-sm hover:bg-amber-50 disabled:opacity-50 transition-colors">
                   Create Credit Note
                 </button>
                 <button onClick={openMarkPaid} disabled={actioning}
                   className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
-                  Mark as Paid
+                  {inv.status === 'partially_paid' ? 'Record Next Payment' : 'Mark as Paid'}
                 </button>
               </div>
             )}
@@ -1538,30 +1550,42 @@ export default function InvoicesPage() {
               </div>
             )}
 
-            {/* Mark-as-Paid confirm + payment receipt — uses shared PaymentForm.
-                v1 strict full-payment: amount locked to invoice.total_amount.
-                Posts to PATCH /invoices/{id}/pay which records a customer
-                payment ledger entry (Cr customer) linked back to this invoice
-                via reference_type='invoice'. */}
+            {/* Mark-as-Paid → opens RecordPaymentForm pre-filled with this invoice
+                (S124). Backend wraps PaymentReceiptService.record() under the
+                hood — bill-wise allocation now visible, partial-pay supported,
+                multi-invoice supported in one click if user toggles. */}
             {confirmMarkPaid && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
-                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmMarkPaid(false); setPayError(null) } }}>
-                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-2xl w-full mx-4 space-y-3">
-                  <h3 className="typo-data text-emerald-700">Record payment for {inv.invoice_number}?</h3>
-                  <p className="text-xs text-gray-500">
-                    Posts a payment receipt against {inv.customer_name || 'customer'} for the full invoice total.
-                    Customer ledger gets a credit entry (Cr) linked back to this invoice. Invoice flips to <strong>Paid</strong>.
-                  </p>
-                  <PaymentForm value={payForm} onChange={setPayForm} partyType="customer"
-                    amountReadOnly amountHelper="Locked to invoice total — full payment only (v1)"
-                    error={payError} />
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button onClick={() => { setConfirmMarkPaid(false); setPayError(null) }}
-                      className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button onClick={handleMarkPaid} disabled={actioning || !payForm.payment_date}
-                      className="rounded bg-green-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-green-700 disabled:opacity-50">
-                      {actioning ? 'Recording…' : 'Confirm Paid'}
-                    </button>
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+                onClick={(e) => { if (e.target === e.currentTarget) setConfirmMarkPaid(false) }}>
+                <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-auto">
+                  <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-white flex items-center justify-between rounded-t-xl">
+                    <div>
+                      <h3 className="typo-card-title text-white">Record payment — {inv.invoice_number}</h3>
+                      <p className="text-xs text-emerald-100 mt-0.5">
+                        Outstanding {fmtCurrency((Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0))} · {inv.customer_name || 'customer'}
+                      </p>
+                    </div>
+                    <button onClick={() => setConfirmMarkPaid(false)}
+                      className="rounded bg-white/20 px-2.5 py-1 typo-btn-sm hover:bg-white/30">Close</button>
+                  </div>
+                  <div className="p-4">
+                    <RecordPaymentForm
+                      customers={(customers && customers.length)
+                        ? customers
+                        : (inv.customer_id || inv.customer?.id)
+                          ? [{
+                              id: inv.customer_id || inv.customer?.id,
+                              name: inv.customer_name || inv.customer?.name || 'Customer',
+                              city: inv.customer?.city,
+                              phone: inv.customer_phone || inv.customer?.phone,
+                            }]
+                          : []}
+                      defaultCustomerId={inv.customer_id || inv.customer?.id}
+                      defaultInvoiceId={inv.id}
+                      defaultAmount={(Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0)}
+                      onSuccess={() => { setConfirmMarkPaid(false); setDetailInvoice(null); fetchData() }}
+                      onCancel={() => setConfirmMarkPaid(false)}
+                    />
                   </div>
                 </div>
               </div>

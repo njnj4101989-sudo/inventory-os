@@ -644,6 +644,9 @@ export const vaParties = [
   { id: 'vp-3', name: 'Raju Hand-stone Works', phone: '9876543210', city: 'Ahmedabad', gst_no: null, hsn_code: null, is_active: true },
 ]
 
+// ── Payment Receipts (S123) ───────────────────────────
+export const paymentReceipts = []
+
 // ── Mock Response Helper ───────────────────────────────
 export function mockResponse(data, message = 'OK') {
   return delay().then(() => ({
