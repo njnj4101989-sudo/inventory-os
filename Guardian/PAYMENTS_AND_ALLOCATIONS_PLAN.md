@@ -518,7 +518,12 @@ S123/S124 receipt voucher to all four bill kinds: `invoice`, `supplier_invoice`,
 - ~~**Synthetic backfill of pre-S123 payments:**~~ **REJECTED 2026-04-27 — no data to backfill.** Production verified at S123 deploy: 0 paid invoices, 0 partial payments. At S125 deploy: 0 payment_receipts, 0 payment_allocations. The Payments system was born on a clean slate; nothing historical to reconstruct.
 - [ ] **Outstanding aging report:** dashboard tile + dedicated report (0–30 / 31–60 / 61–90 / 90+ days) for receivables AND payables (mirror split now that all 3 party types have receipts)
 - [x] **Receipt cancel flow (S126 — 2026-04-27):** Tally voucher-cancel pattern. New `status` + `cancel_reason` + `cancel_notes` + `cancelled_at` + `cancelled_by` cols on `payment_receipts` + CHECK `pr_valid_status`. New `POST /payment-receipts/{id}/cancel`. Service atomically: (1) locks receipt + bills FOR UPDATE, (2) decrements `bill.amount_paid` per allocation, (3) walks back invoice status (paid → partially_paid → issued) from remaining live amount_paid, (4) posts compensating Dr/Cr LedgerEntry rows with `reference_type='payment_receipt_cancel'` (one per allocation + one for on-account residue + reversal lines for TDS/TCS), (5) sets receipt status=cancelled + audit cols. Frontend: red "Cancel Receipt" button on detail header (opens modal — not one-click); modal requires reason from 7-option enum (`wrong_customer`/`wrong_amount`/`duplicate`/`bounced_cheque`/`payment_reversed`/`data_entry_error`/`other`) + optional notes; "Confirm Cancel" disabled until reason picked; cancelled receipts get red banner on detail + "Cancelled" pill in list + `Status` filter (Active/Cancelled/All) defaulting to Active. `get_on_account_balance` + list view default to active-only so cancelled receipts don't bleed into reports. Migration `q7r8s9t0u1v2_s126_payment_receipt_cancel.py` — tenant-iterating, idempotent.
-- [ ] **Bank reconciliation (post-4.4):** when chart-of-accounts lands, allow matching receipts to bank statement lines
+
+---
+
+### Future / Out-of-Scope (not in active backlog)
+
+- **Bank reconciliation (Tally BRS / Zoho match-statement pattern).** Deferred 2026-04-27. Needs chart-of-accounts (FINANCIAL_SYMMETRY_PLAN Phase 4) — `BankLedger` master + `bank_ledger_id` FK on PaymentReceipt + LedgerEntry + reconciliation tables. **Why deferred for this client:** medium-ROI because monthly bank rec is currently done by the CA in Tally / Excel using the existing `payment_mode` + `reference_no` (UTR / cheque#) on receipts — the data already flows correctly into Tally. Re-evaluate when (a) client wants to fully replace Tally, (b) volume makes Excel rec painful, or (c) auditor asks for live BRS in this system.
 
 ---
 
