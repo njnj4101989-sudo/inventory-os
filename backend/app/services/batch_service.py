@@ -9,7 +9,7 @@ import math
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,6 +18,7 @@ from app.models.batch_assignment import BatchAssignment
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
 from app.models.batch_roll_consumption import BatchRollConsumption
+from app.models.job_challan import JobChallan
 from app.models.lot import Lot, LotRoll
 from app.models.roll import Roll, RollProcessing
 from app.models.sku import SKU
@@ -72,15 +73,26 @@ class BatchService:
             )).scalar() or 0
             material_per_piece = float(mat_rows) / lot_total_pieces
 
-        # 2. Roll VA cost: SUM(RollProcessing.processing_cost for lot rolls, status=received) / lot.total_pieces
+        # 2. Roll VA cost: SUM(RollProcessing.processing_cost × challan.taxable / challan.subtotal)
+        # for lot rolls (status=received) / lot.total_pieces. Per S121 — strip GST and
+        # apply discount/additional pro-rata so AS-2 inventory cost excludes input-creditable GST.
         roll_va_per_piece = 0.0
         if lot:
             lot_roll_ids = (await self.db.execute(
                 select(LotRoll.roll_id).where(LotRoll.lot_id == lot.id)
             )).scalars().all()
             if lot_roll_ids:
+                roll_va_effective = case(
+                    (JobChallan.subtotal > 0,
+                     RollProcessing.processing_cost
+                     * (JobChallan.subtotal - JobChallan.discount_amount + JobChallan.additional_amount)
+                     / JobChallan.subtotal),
+                    else_=RollProcessing.processing_cost,
+                )
                 roll_va_total = (await self.db.execute(
-                    select(func.coalesce(func.sum(RollProcessing.processing_cost), 0))
+                    select(func.coalesce(func.sum(roll_va_effective), 0))
+                    .select_from(RollProcessing)
+                    .outerjoin(JobChallan, JobChallan.id == RollProcessing.job_challan_id)
                     .where(RollProcessing.roll_id.in_(lot_roll_ids), RollProcessing.status == "received")
                 )).scalar() or 0
                 roll_va_per_piece = float(roll_va_total) / (lot.total_pieces or 1)
@@ -89,9 +101,18 @@ class BatchService:
         stitching_per_piece = 0.0
         # Will be set per-SKU when we have the SKU reference
 
-        # 4. Batch VA cost: SUM(BatchProcessing.cost for this batch, status=received) / piece_count
+        # 4. Batch VA cost: same GST-strip pattern as roll VA (S121).
+        batch_va_effective = case(
+            (BatchChallan.subtotal > 0,
+             BatchProcessing.cost
+             * (BatchChallan.subtotal - BatchChallan.discount_amount + BatchChallan.additional_amount)
+             / BatchChallan.subtotal),
+            else_=BatchProcessing.cost,
+        )
         batch_va_total = (await self.db.execute(
-            select(func.coalesce(func.sum(BatchProcessing.cost), 0))
+            select(func.coalesce(func.sum(batch_va_effective), 0))
+            .select_from(BatchProcessing)
+            .outerjoin(BatchChallan, BatchChallan.id == BatchProcessing.batch_challan_id)
             .where(BatchProcessing.batch_id == batch.id, BatchProcessing.status == "received")
         )).scalar() or 0
         batch_va_per_piece = float(batch_va_total) / piece_count

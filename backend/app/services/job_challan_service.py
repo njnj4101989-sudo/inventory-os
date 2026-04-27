@@ -2,6 +2,7 @@
 
 import math
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -16,6 +17,34 @@ from app.schemas.job_challan import (
     JobChallanCreate, JobChallanFilterParams, JobChallanReceive, JobChallanUpdate,
 )
 from app.core.exceptions import NotFoundError, BusinessRuleViolationError
+
+
+def _compute_jc_totals(challan: JobChallan) -> None:
+    """Recompute the totals stack on a JobChallan from its received logs.
+
+    subtotal = SUM(processing_logs.processing_cost where status='received')
+    taxable  = subtotal − discount + additional
+    tax      = taxable × gst_percent / 100
+    total    = taxable + tax
+
+    Mutates `challan` in place. Caller must flush.
+    """
+    subtotal = sum(
+        (Decimal(str(log.processing_cost)) for log in (challan.processing_logs or [])
+         if log.status == "received" and log.processing_cost),
+        start=Decimal("0"),
+    )
+    discount = Decimal(str(challan.discount_amount or 0))
+    additional = Decimal(str(challan.additional_amount or 0))
+    gst_pct = Decimal(str(challan.gst_percent or 0))
+    taxable = subtotal - discount + additional
+    if taxable < 0:
+        taxable = Decimal("0")
+    tax = (taxable * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+    total = taxable + tax
+    challan.subtotal = subtotal
+    challan.tax_amount = tax
+    challan.total_amount = total
 
 
 class JobChallanService:
@@ -99,6 +128,9 @@ class JobChallanService:
             notes=req.notes,
             created_by_id=created_by,
             fy_id=fy_id,
+            gst_percent=req.gst_percent or Decimal("0"),
+            discount_amount=req.discount_amount or Decimal("0"),
+            additional_amount=req.additional_amount or Decimal("0"),
         )
         self.db.add(challan)
         await self.db.flush()
@@ -365,14 +397,13 @@ class JobChallanService:
         if req.notes:
             challan.notes = (challan.notes + "\n" + req.notes) if challan.notes else req.notes
 
+        # Recompute totals stack from received logs + persisted gst/disc/add (S121)
+        _compute_jc_totals(challan)
+
         await self.db.flush()
 
-        # 7. Auto-create ledger entry for VA party (only when cost is known)
-        total_cost = sum(
-            float(log.processing_cost or 0)
-            for log in challan.processing_logs
-            if log.status == "received" and log.processing_cost
-        )
+        # 7. Auto-create ledger entry for VA party (gross — uses total_amount, S121)
+        total_cost = float(challan.total_amount or 0)
         if total_cost > 0 and challan.va_party_id:
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
@@ -598,6 +629,34 @@ class JobChallanService:
         if req.notes is not None:
             challan.notes = req.notes
 
+        # S121 — totals stack edits trigger recompute + ledger replace
+        totals_dirty = False
+        if req.gst_percent is not None:
+            challan.gst_percent = req.gst_percent
+            totals_dirty = True
+        if req.discount_amount is not None:
+            challan.discount_amount = req.discount_amount
+            totals_dirty = True
+        if req.additional_amount is not None:
+            challan.additional_amount = req.additional_amount
+            totals_dirty = True
+
+        if totals_dirty:
+            _compute_jc_totals(challan)
+            # Replace ledger credit if exists (challan-level, not damage)
+            if challan.va_party_id and float(challan.total_amount or 0) > 0:
+                existing = (await self.db.execute(
+                    select(LedgerEntry).where(
+                        LedgerEntry.reference_type == "job_challan",
+                        LedgerEntry.reference_id == challan.id,
+                    )
+                )).scalar_one_or_none()
+                if existing:
+                    received_count = sum(1 for log in challan.processing_logs if log.status == "received")
+                    va_name_str = challan.va_party.name if challan.va_party else "VA"
+                    existing.credit = float(challan.total_amount)
+                    existing.description = f"{challan.challan_no} {va_name_str} — {received_count} rolls, ₹{float(challan.total_amount):,.2f}"
+
         await self.db.flush()
         # Reload with fresh relationships (FK changes don't auto-refresh ORM objects)
         return await self.get_challan(challan_id)
@@ -630,6 +689,11 @@ class JobChallanService:
 
         total_weight = sum(rb.get("weight_sent") or rb["current_weight"] for rb in roll_briefs)
 
+        subtotal = float(challan.subtotal or 0)
+        discount = float(challan.discount_amount or 0)
+        additional = float(challan.additional_amount or 0)
+        taxable = max(0.0, subtotal - discount + additional)
+
         return {
             "id": str(challan.id),
             "challan_no": challan.challan_no,
@@ -656,4 +720,12 @@ class JobChallanService:
             "rolls": roll_briefs,
             "total_weight": round(total_weight, 3),
             "roll_count": len(roll_briefs),
+            # S121 — totals stack
+            "gst_percent": float(challan.gst_percent or 0),
+            "subtotal": round(subtotal, 2),
+            "discount_amount": round(discount, 2),
+            "additional_amount": round(additional, 2),
+            "taxable_amount": round(taxable, 2),
+            "tax_amount": float(challan.tax_amount or 0),
+            "total_amount": float(challan.total_amount or 0),
         }

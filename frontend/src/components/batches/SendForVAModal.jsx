@@ -19,6 +19,10 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
   const [nextChallanNo, setNextChallanNo] = useState('')
   const [scanMode, setScanMode] = useState(false)
   const [scanStatus, setScanStatus] = useState(null)
+  // S121 — totals stack inputs (subtotal locked at receive)
+  const [gstPercent, setGstPercent] = useState('')
+  const [discountAmount, setDiscountAmount] = useState('')
+  const [additionalAmount, setAdditionalAmount] = useState('')
 
   // ── Shift+M Quick Master ──
   const refreshVAList = useCallback(() => {
@@ -97,6 +101,9 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
       setVaPartyId('')
       setNotes('')
       setSelectedBatches({})
+      setGstPercent('')
+      setDiscountAmount('')
+      setAdditionalAmount('')
       setError(null)
     }
   }, [open])
@@ -142,6 +149,9 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
         value_addition_id: selectedVA,
         batches: Object.entries(selectedBatches).map(([batch_id, pieces_to_send]) => ({ batch_id, pieces_to_send })),
         notes: notes.trim() || null,
+        gst_percent: gstPercent ? Number(gstPercent) : null,
+        discount_amount: discountAmount ? Number(discountAmount) : null,
+        additional_amount: additionalAmount ? Number(additionalAmount) : null,
         _vaObj: vaObj ? { id: vaObj.id, name: vaObj.name, short_code: vaObj.short_code } : null,
         _batchMap: batchMap,
         _phase: phase,
@@ -213,6 +223,35 @@ export default function SendForVAModal({ open, onClose, batches, onSuccess, onPr
           <label className="typo-label">Notes</label>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes" className="typo-input" />
+        </div>
+
+        {/* S121 — Vendor Charges (gst/disc/add). Subtotal is locked at receive
+            from actual processing_cost; these three are header-level. */}
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <label className="typo-label-sm uppercase tracking-wide text-gray-600">Vendor Charges (Optional)</label>
+            <span className="typo-caption text-gray-400">Subtotal locks at receive · taxable = subtotal − discount + additional</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="typo-caption text-gray-500">GST %</label>
+              <input type="number" step="0.01" min="0" max="100" value={gstPercent}
+                onChange={(e) => setGstPercent(e.target.value)} placeholder="0"
+                className="typo-input-sm" />
+            </div>
+            <div>
+              <label className="typo-caption text-gray-500">Discount ₹</label>
+              <input type="number" step="0.01" min="0" value={discountAmount}
+                onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0"
+                className="typo-input-sm" />
+            </div>
+            <div>
+              <label className="typo-caption text-gray-500">Additional ₹</label>
+              <input type="number" step="0.01" min="0" value={additionalAmount}
+                onChange={(e) => setAdditionalAmount(e.target.value)} placeholder="0"
+                className="typo-input-sm" />
+            </div>
+          </div>
         </div>
 
         <div>

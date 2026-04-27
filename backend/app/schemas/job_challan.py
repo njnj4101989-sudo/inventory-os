@@ -29,6 +29,11 @@ class JobChallanCreate(BaseModel):
     sent_date: date
     notes: str | None = None
     rolls: list[JobChallanRollEntry]
+    # S121 — totals are computed at receive (subtotal = SUM(processing_cost)),
+    # but gst/disc/add are entered up-front so the VA party knows the math.
+    gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
 
 
 class JobChallanUpdate(BaseModel):
@@ -36,6 +41,9 @@ class JobChallanUpdate(BaseModel):
     value_addition_id: UUID | None = None
     sent_date: date | None = None
     notes: str | None = None
+    gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
 
 
 # --- Receive ---
@@ -83,3 +91,11 @@ class JobChallanResponse(BaseSchema):
     rolls: list[JobChallanRollBrief] = []
     total_weight: float = 0
     roll_count: int = 0
+    # S121 — totals stack
+    gst_percent: Decimal = Decimal("0")
+    subtotal: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
+    taxable_amount: Decimal = Decimal("0")  # derived: subtotal − discount + additional
+    tax_amount: Decimal = Decimal("0")
+    total_amount: Decimal = Decimal("0")

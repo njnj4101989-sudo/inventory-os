@@ -2500,6 +2500,9 @@ Creates a job challan and sends all specified rolls for processing atomically.
   "va_party_id": "uuid",
   "sent_date": "2026-02-09",
   "notes": "Chikan embroidery on all rolls",
+  "gst_percent": 5.0,
+  "discount_amount": 0,
+  "additional_amount": 0,
   "rolls": [
     { "roll_id": "uuid", "weight_to_send": 20.000 },
     { "roll_id": "uuid", "weight_to_send": null }
@@ -2510,6 +2513,7 @@ Creates a job challan and sends all specified rolls for processing atomically.
 - Same validation as individual send: `0 < weight_to_send <= remaining_weight`.
 - Each roll gets a `RollProcessing` log linked to the challan (`job_challan_id`).
 - Rolls with `remaining_weight > 0` after send stay `in_stock`.
+- `gst_percent` / `discount_amount` / `additional_amount` (S121, all optional, default 0): header-level vendor charges. `subtotal` is computed at receive from received `processing_cost` totals; the math runs on every receive: `taxable = subtotal − discount + additional`, `tax = taxable × gst_pct / 100`, `total = taxable + tax`. Editable post-create via PATCH (recomputes + replaces ledger).
 
 **Response:**
 ```json
@@ -2538,9 +2542,17 @@ Creates a job challan and sends all specified rolls for processing atomically.
     }
   ],
   "total_weight": 20.0,
-  "roll_count": 1
+  "roll_count": 1,
+  "gst_percent": 5.0,
+  "subtotal": 0,
+  "discount_amount": 0,
+  "additional_amount": 0,
+  "taxable_amount": 0,
+  "tax_amount": 0,
+  "total_amount": 0
 }
 ```
+> S121 — `subtotal` and `taxable_amount` are 0 until receive (when received `processing_cost` lines populate). `total_amount` is what we owe the VA party (gross, including GST). For inventory cost (AS-2), the cost engine uses `taxable_amount` so GST input-credit is excluded.
 
 ### GET `/job-challans` (List Job Challans)
 **Auth:** Required
@@ -2559,9 +2571,14 @@ Creates a job challan and sends all specified rolls for processing atomically.
   "va_party_id": "uuid",
   "value_addition_id": "uuid",
   "sent_date": "2026-02-09",
-  "notes": "Updated notes"
+  "notes": "Updated notes",
+  "gst_percent": 5.0,
+  "discount_amount": 0,
+  "additional_amount": 0
 }
 ```
+- Editing any of `gst_percent` / `discount_amount` / `additional_amount` (S121) triggers full totals recompute and replaces the existing ledger entry's credit + description with the new `total_amount` (no duplicate ledger row created on edit).
+
 **Response:** Updated challan object (same shape as create response).
 
 ### POST `/job-challans/{id}/receive` (Receive Rolls Back from VA) — NEW S71
@@ -2617,7 +2634,10 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
     { "batch_id": "uuid", "pieces_to_send": 15 },
     { "batch_id": "uuid", "pieces_to_send": 20 }
   ],
-  "notes": "Hand stones on neckline area"
+  "notes": "Hand stones on neckline area",
+  "gst_percent": 5.0,
+  "discount_amount": 0,
+  "additional_amount": 0
 }
 ```
 **Validates:**
@@ -2627,6 +2647,8 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 
 **Effect:** Creates `BatchChallan` + one `BatchProcessing` record per batch (atomic transaction). Each record gets `phase` = `'stitching'` (if batch `in_progress`) or `'post_qc'` (if batch `checked`). Auto-sequential `challan_no`: BC-001, BC-002...
 
+`gst_percent` / `discount_amount` / `additional_amount` (S121, all optional, default 0): header-level vendor charges. Same math as JobChallan — `subtotal` is computed at receive from received line `cost` totals, then `taxable = subtotal − discount + additional`, `tax = taxable × gst_pct / 100`, `total = taxable + tax`.
+
 **Response:**
 ```json
 {
@@ -2635,7 +2657,6 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
   "va_party": { "id": "uuid", "name": "Raju Hand-stone Works", "phone": "9876500001", "city": "Surat" },
   "value_addition": { "id": "uuid", "name": "Hand Stones", "short_code": "HST" },
   "total_pieces": 35,
-  "total_cost": null,
   "status": "sent",
   "sent_date": "2026-03-03T10:00:00Z",
   "received_date": null,
@@ -2661,9 +2682,17 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
       "status": "sent",
       "phase": "stitching"
     }
-  ]
+  ],
+  "gst_percent": 5.0,
+  "subtotal": 0,
+  "discount_amount": 0,
+  "additional_amount": 0,
+  "taxable_amount": 0,
+  "tax_amount": 0,
+  "total_amount": 0
 }
 ```
+> S121 — flat `total_cost` was dropped in favour of the totals stack. Migration backfilled `subtotal` from received `batch_processing.cost`, falling back to legacy `total_cost` for older challans.
 
 ### GET `/batch-challans` (List)
 **Auth:** Required
@@ -2681,9 +2710,14 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 {
   "va_party_id": "uuid",
   "value_addition_id": "uuid",
-  "notes": "Updated notes"
+  "notes": "Updated notes",
+  "gst_percent": 5.0,
+  "discount_amount": 0,
+  "additional_amount": 0
 }
 ```
+- Editing any of `gst_percent` / `discount_amount` / `additional_amount` (S121) triggers full totals recompute and replaces the existing ledger entry's credit + description with the new `total_amount`.
+
 **Response:** Updated challan object (same shape as create response).
 
 ### POST `/batch-challans/{id}/receive` (Receive Batches Back from VA)
@@ -2701,7 +2735,7 @@ Replaces sequential per-roll `receiveFromProcessing` calls.
 - `pieces_damaged`: optional (S92) — damaged piece count, triggers ledger debit against VA party
 - `damage_reason`: optional — `shrinkage`, `color_bleeding`, `stain`, `tear`, `wrong_process`, `lost`, `other`
 
-**Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). Challan status: all received → `'received'`, some received → `'partially_received'`. `total_cost` = sum of costs.
+**Effect:** Updates each `BatchProcessing` record (`status → 'received'`, fills `pieces_received`, `cost`, `received_date`). Challan status: all received → `'received'`, some received → `'partially_received'`. S121 — totals stack recomputes: `subtotal = SUM(cost)`, then `taxable = subtotal − discount + additional`, `tax = taxable × gst_pct / 100`, `total = taxable + tax`. Ledger credit on VA party uses stored `total_amount` (not gross `subtotal`).
 **Response:** Updated challan object
 
 ---

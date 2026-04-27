@@ -17,7 +17,6 @@ export async function createBatchChallan(data) {
       va_party: vaParty ? { id: vaParty.id, name: vaParty.name, phone: vaParty.phone, city: vaParty.city } : null,
       value_addition: data._vaObj || null,
       total_pieces: (data.batches || []).reduce((s, b) => s + (b.pieces_to_send || 0), 0),
-      total_cost: null,
       status: 'sent',
       sent_date: new Date().toISOString(),
       received_date: null,
@@ -33,6 +32,14 @@ export async function createBatchChallan(data) {
         status: 'sent',
         phase: data._phase || 'stitching',
       })),
+      // S121 — totals stack
+      gst_percent: Number(data.gst_percent || 0),
+      subtotal: 0,
+      discount_amount: Number(data.discount_amount || 0),
+      additional_amount: Number(data.additional_amount || 0),
+      taxable_amount: 0,
+      tax_amount: 0,
+      total_amount: 0,
     }
     mockBatchChallans.push(challan)
     return mockResponse(challan, 'Batch challan created')
@@ -93,19 +100,28 @@ export async function receiveBatchChallan(id, data) {
     const challan = mockBatchChallans.find((c) => c.id === id)
     if (!challan) throw { response: { data: { detail: 'Batch challan not found' } } }
     if (challan.status === 'received') throw { response: { data: { detail: 'Challan already received' } } }
-    let totalCost = 0
+    let subtotal = 0
     for (const entry of (data.batches || [])) {
       const item = challan.batch_items.find((i) => i.batch?.id === entry.batch_id)
       if (item) {
         item.pieces_received = entry.pieces_received
         item.cost = entry.cost || null
         item.status = 'received'
-        totalCost += entry.cost || 0
+        subtotal += Number(entry.cost) || 0
       }
     }
     challan.status = 'received'
     challan.received_date = new Date().toISOString()
-    challan.total_cost = totalCost || null
+    // S121 — recompute totals stack at receive
+    const disc = Number(challan.discount_amount || 0)
+    const add = Number(challan.additional_amount || 0)
+    const gst = Number(challan.gst_percent || 0)
+    const taxable = Math.max(0, subtotal - disc + add)
+    const tax = Math.round(taxable * gst) / 100
+    challan.subtotal = subtotal
+    challan.taxable_amount = taxable
+    challan.tax_amount = tax
+    challan.total_amount = taxable + tax
     if (data.notes) challan.notes = data.notes
     return mockResponse(challan, 'Batch challan received')
   }

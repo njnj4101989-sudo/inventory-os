@@ -273,16 +273,16 @@ async def va_party_summary(
     from app.models.batch_challan import BatchChallan
     from app.models.ledger_entry import LedgerEntry
 
-    # Challan counts + cost
+    # Challan counts + cost (S121 — total_amount supersedes legacy total_cost)
     jc_stmt = select(
         func.count().label("count"),
-        func.coalesce(func.sum(JobChallan.total_cost), 0).label("cost"),
+        func.coalesce(func.sum(JobChallan.total_amount), 0).label("cost"),
     ).where(JobChallan.va_party_id == party_id, JobChallan.status != "cancelled")
     jc = (await db.execute(jc_stmt)).one()
 
     bc_stmt = select(
         func.count().label("count"),
-        func.coalesce(func.sum(BatchChallan.total_cost), 0).label("cost"),
+        func.coalesce(func.sum(BatchChallan.total_amount), 0).label("cost"),
     ).where(BatchChallan.va_party_id == party_id, BatchChallan.status != "cancelled")
     bc = (await db.execute(bc_stmt)).one()
 

@@ -6,6 +6,7 @@ Auto-sequential challan_no: BC-001, BC-002, ...
 
 import math
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -15,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.models.batch import Batch
 from app.models.batch_challan import BatchChallan
 from app.models.batch_processing import BatchProcessing
+from app.models.ledger_entry import LedgerEntry
 from app.models.value_addition import ValueAddition
 from app.models.va_party import VAParty
 from app.schemas.batch_challan import (
@@ -28,6 +30,34 @@ from app.core.exceptions import (
     NotFoundError,
     ValidationError,
 )
+
+
+def _compute_bc_totals(challan: BatchChallan) -> None:
+    """Recompute the totals stack on a BatchChallan from received items.
+
+    subtotal = SUM(batch_items.cost where status='received')
+    taxable  = subtotal − discount + additional
+    tax      = taxable × gst_percent / 100
+    total    = taxable + tax
+
+    Mutates `challan` in place. Caller must flush.
+    """
+    subtotal = sum(
+        (Decimal(str(bp.cost)) for bp in (challan.batch_items or [])
+         if bp.status == "received" and bp.cost),
+        start=Decimal("0"),
+    )
+    discount = Decimal(str(challan.discount_amount or 0))
+    additional = Decimal(str(challan.additional_amount or 0))
+    gst_pct = Decimal(str(challan.gst_percent or 0))
+    taxable = subtotal - discount + additional
+    if taxable < 0:
+        taxable = Decimal("0")
+    tax = (taxable * gst_pct / Decimal("100")).quantize(Decimal("0.01"))
+    total = taxable + tax
+    challan.subtotal = subtotal
+    challan.tax_amount = tax
+    challan.total_amount = total
 
 
 class BatchChallanService:
@@ -104,6 +134,9 @@ class BatchChallanService:
             notes=req.notes,
             created_by_id=created_by,
             fy_id=fy_id,
+            gst_percent=req.gst_percent or Decimal("0"),
+            discount_amount=req.discount_amount or Decimal("0"),
+            additional_amount=req.additional_amount or Decimal("0"),
         )
         self.db.add(challan)
         await self.db.flush()
@@ -171,7 +204,6 @@ class BatchChallanService:
         # Build lookup of BatchProcessing items by batch_id
         bp_map = {bp.batch_id: bp for bp in challan.batch_items}
 
-        total_cost = 0
         for entry in req.batches:
             bp = bp_map.get(entry.batch_id)
             if not bp:
@@ -186,8 +218,6 @@ class BatchChallanService:
             bp.damage_reason = entry.damage_reason
             bp.cost = entry.cost
             bp.status = "received"
-            if entry.cost:
-                total_cost += float(entry.cost)
 
         # Check if all items received
         all_received = all(bp.status == "received" for bp in challan.batch_items)
@@ -198,17 +228,19 @@ class BatchChallanService:
         elif any_received:
             challan.status = "partially_received"
 
-        challan.total_cost = total_cost or challan.total_cost
+        # Recompute totals stack from received items + persisted gst/disc/add (S121)
+        _compute_bc_totals(challan)
+
         if req.notes:
             challan.notes = (challan.notes or "") + f"\nReceived: {req.notes}"
 
         await self.db.flush()
 
-        # Auto-create ledger entry for VA party (batch challan receive)
+        # Auto-create ledger entry for VA party (gross — uses total_amount, S121)
+        total_cost = float(challan.total_amount or 0)
         if total_cost > 0 and challan.va_party_id:
             from app.services.ledger_service import LedgerService
             from app.schemas.ledger import LedgerEntryCreate
-            from app.models.ledger_entry import LedgerEntry
             ledger_svc = LedgerService(self.db)
             existing = (await self.db.execute(
                 select(LedgerEntry).where(
@@ -443,6 +475,11 @@ class BatchChallanService:
                 "phase": bp.phase,
             })
 
+        subtotal = float(challan.subtotal or 0)
+        discount = float(challan.discount_amount or 0)
+        additional = float(challan.additional_amount or 0)
+        taxable = max(0.0, subtotal - discount + additional)
+
         return {
             "id": str(challan.id),
             "challan_no": challan.challan_no,
@@ -458,7 +495,6 @@ class BatchChallanService:
                 "short_code": va.short_code,
             } if va else None,
             "total_pieces": challan.total_pieces,
-            "total_cost": float(challan.total_cost) if challan.total_cost else None,
             "status": challan.status,
             "sent_date": challan.sent_date.isoformat() if challan.sent_date else None,
             "received_date": challan.received_date.isoformat() if challan.received_date else None,
@@ -469,10 +505,18 @@ class BatchChallanService:
             } if user else None,
             "created_at": challan.created_at.isoformat() if challan.created_at else None,
             "batch_items": batch_items,
+            # S121 — totals stack (replaces flat total_cost)
+            "gst_percent": float(challan.gst_percent or 0),
+            "subtotal": round(subtotal, 2),
+            "discount_amount": round(discount, 2),
+            "additional_amount": round(additional, 2),
+            "taxable_amount": round(taxable, 2),
+            "tax_amount": float(challan.tax_amount or 0),
+            "total_amount": float(challan.total_amount or 0),
         }
 
     async def update_challan(self, challan_id: UUID, req: BatchChallanUpdate) -> dict:
-        """Edit a batch challan (va_party, value_addition, notes)."""
+        """Edit a batch challan (va_party, value_addition, notes, totals)."""
         challan = await self._get_or_404(challan_id)
         if req.va_party_id is not None:
             challan.va_party_id = req.va_party_id
@@ -482,6 +526,34 @@ class BatchChallanService:
                 bp.value_addition_id = req.value_addition_id
         if req.notes is not None:
             challan.notes = req.notes
+
+        # S121 — totals stack edits trigger recompute + ledger replace
+        totals_dirty = False
+        if req.gst_percent is not None:
+            challan.gst_percent = req.gst_percent
+            totals_dirty = True
+        if req.discount_amount is not None:
+            challan.discount_amount = req.discount_amount
+            totals_dirty = True
+        if req.additional_amount is not None:
+            challan.additional_amount = req.additional_amount
+            totals_dirty = True
+
+        if totals_dirty:
+            _compute_bc_totals(challan)
+            if challan.va_party_id and float(challan.total_amount or 0) > 0:
+                existing = (await self.db.execute(
+                    select(LedgerEntry).where(
+                        LedgerEntry.reference_type == "batch_challan",
+                        LedgerEntry.reference_id == challan.id,
+                    )
+                )).scalar_one_or_none()
+                if existing:
+                    pieces = sum((bp.pieces_received or 0) for bp in challan.batch_items)
+                    va_name = challan.va_party.name if challan.va_party else "VA"
+                    existing.credit = float(challan.total_amount)
+                    existing.description = f"{challan.challan_no} {va_name} — {pieces} pcs, ₹{float(challan.total_amount):,.2f}"
+
         await self.db.flush()
         # Reload with fresh relationships (FK changes don't auto-refresh ORM objects)
         return await self.get_challan(challan_id)

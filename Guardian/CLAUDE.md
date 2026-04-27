@@ -21,7 +21,7 @@
 | `FY_TRANSITION_PLAN.md` | Opening stock + FY closing fixes + valuation + verification (6 phases) | Before any FY/opening stock work |
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) — COMPLETE | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
-| `FINANCIAL_SYMMETRY_PLAN.md` | Totals stack symmetry across sales/purchase/VA (Phase 1 ✅, Phase 2 next) | Before any totals/discount/additional/tax work |
+| `FINANCIAL_SYMMETRY_PLAN.md` | Totals stack symmetry across sales/purchase/VA (Phases 1, 2, 3 ✅; Phase 4 deferred) | Before any totals/discount/additional/tax work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |
@@ -34,7 +34,35 @@
 
 ---
 
-## Current State (Session 120 — 2026-04-27) — IN PROGRESS
+## Current State (Session 121 — 2026-04-27) — IN PROGRESS
+
+**Phase 3 of FINANCIAL_SYMMETRY_PLAN — VA Cost Flow.** Brings `JobChallan` (roll VA, JC-XXXX) and `BatchChallan` (garment VA, BC-XXXX) into the same totals symmetry as Order / Invoice / SupplierInvoice / ReturnNote. Every financial document in the system now uses identical math: `taxable = subtotal − discount + additional → +GST → total`. AS-2 fix on the cost engine: VA cost flowing into inventory now uses **taxable** (GST input-creditable, excluded from cost), not the gross paid amount.
+
+**Backend:**
+  - `models/job_challan.py` — +6 NOT NULL cols: `gst_percent` Numeric(5,2) + `subtotal/discount_amount/additional_amount/tax_amount/total_amount` Numeric(12,2). Math docstring inline.
+  - `models/batch_challan.py` — same 6 cols added; legacy flat `total_cost` Numeric(10,2) dropped (migration backfills subtotal first).
+  - `schemas/job_challan.py` + `schemas/batch_challan.py` — Create/Update accept `gst_percent` + `discount_amount` + `additional_amount` (optional, default 0). Response surfaces full stack incl. derived `taxable_amount = subtotal − discount + additional`.
+  - `services/job_challan_service.py` — module-level `_compute_jc_totals(challan)` helper. `create_challan` persists header gst/disc/add. `receive_challan` recomputes at every receive (idempotent — partial receives just re-derive). `update_challan` allows editing gst/disc/add post-create with recompute + ledger replace. Ledger credit at receive switched from on-the-fly `sum(processing_cost)` to stored `challan.total_amount`. `_to_response` returns full stack incl. `taxable_amount`.
+  - `services/batch_challan_service.py` — mirror: `_compute_bc_totals` helper, `create_challan` persists charges, `receive_challan` recomputes, `update_challan` extended, ledger uses `total_amount`, damage-debit `cost_per_piece` derives from `total_amount`.
+  - `services/batch_service.py` — `_compute_cost_breakdown` rewritten with `case()`-scaled `effective_cost = row.cost × (challan.taxable / challan.subtotal)` for both `roll_va_cost` (joins `JobChallan`) and `batch_va_cost` (joins `BatchChallan`). When `subtotal=0` (legacy), falls back to gross — safe for historical data. This is the single source for SKU costing → flows through `compute_wac_map` (FY closing + dashboard valuation + cost-history endpoint) automatically.
+  - `api/masters.py` — VA-party summary `func.sum(JobChallan.total_amount)` + `func.sum(BatchChallan.total_amount)` (response key `total_cost` kept for FE compat).
+
+**Migration:** `n4o5p6q7r8s9_s121_va_challan_totals` — tenant-iterating, `col_exists` guarded; 6 cols on each table (NOT NULL DEFAULT 0). Backfill: `job_challans.subtotal = SUM(roll_processing.processing_cost where status='received')` + `total_amount = subtotal` (gst/disc/add all 0 default for historical). `batch_challans.subtotal = SUM(batch_processing.cost where status='received')` then carries legacy `total_cost` forward where line-level was empty. Drops `batch_challans.total_cost` last. Idempotent via `COALESCE(subtotal, 0) = 0` skip.
+
+**Frontend:**
+  - `pages/RollsPage.jsx` — `bulkSendForm` state +3 fields (`gst_percent` / `discount_amount` / `additional_amount`); send modal gains "Vendor Charges (Optional)" card with 3 inputs and teaching strip. Bulk-receive overlay (`bulkRecvOpen`) hydrates challan totals via `getJobChallan(challanId)` on open and renders a live totals preview card below the rolls table — Subtotal · (Discount) · (Additional) · Taxable · GST · Total.
+  - `components/batches/SendForVAModal.jsx` — same 3 inputs in a "Vendor Charges (Optional)" card after Notes; submitted in payload.
+  - `components/batches/ReceiveFromVAModal.jsx` — live totals preview pulls challan-locked `gst_percent` / `discount_amount` / `additional_amount` and shows the full math; receive button text shows total.
+  - `pages/ChallansPage.jsx` — detail page replaces lone "Total Cost" KPI with formatted `total_amount`, plus a full Totals card (gradient header, ml-auto right-aligned, Subtotal → Total). List rows render `total_amount` for batch challans.
+  - `api/jobChallans.js` + `api/batchChallans.js` — mock branches updated to mirror real shape (totals stack instead of flat `total_cost`); receive recomputes derived fields.
+
+**Industry alignment:** matches Tally/Zoho/Busy where every challan/voucher carries the same totals discipline as a sales/purchase invoice. CAs accept; auditors trace `total_amount` to ledger row 1:1.
+
+**Pending:** commit + push. Vite build clean (181kB RollsPage, 51kB ChallansPage). Backend imports clean (226 routes). Migration ran clean on local `co_drs_blouse`. CI auto-runs `alembic upgrade head` on prod deploy.
+
+---
+
+## Previous State (Session 120 — 2026-04-27) — CLOSED
 
 **Order Cancel — confirm modal + GST-style audit trail (papercut → fix).** S119 closed the invoice-side accidental-cancel risk; S120 closes the same risk on the order side. User accidentally clicked Cancel on ORD-0153 (production), which fired the API immediately because the OrdersPage Cancel button had no confirmation. Reversed the cancel cleanly (3 UPDATEs: order → pending, reservation → active, inventory_state available/reserved math restored) with `updated_at = created_at` so there's no trace.
 

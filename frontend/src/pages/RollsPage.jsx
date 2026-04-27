@@ -516,7 +516,7 @@ export default function RollsPage() {
   const [showBulkThermal, setShowBulkThermal] = useState(false)
   const [bulkSendOpen, setBulkSendOpen] = useState(false)
   const [bulkSendRolls, setBulkSendRolls] = useState([])
-  const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '' })
+  const [bulkSendForm, setBulkSendForm] = useState({ value_addition_id: '', va_party_id: '', sent_date: '', notes: '', gst_percent: '', discount_amount: '', additional_amount: '' })
   const [bulkSendWeights, setBulkSendWeights] = useState({})
   const [bulkSendSaving, setBulkSendSaving] = useState(false)
   const [bulkSendError, setBulkSendError] = useState(null)
@@ -809,6 +809,9 @@ export default function RollsPage() {
         sent_date: bulkSendForm.sent_date,
         notes: bulkSendForm.notes.trim() || null,
         rolls: rollEntries,
+        gst_percent: bulkSendForm.gst_percent ? Number(bulkSendForm.gst_percent) : null,
+        discount_amount: bulkSendForm.discount_amount ? Number(bulkSendForm.discount_amount) : null,
+        additional_amount: bulkSendForm.additional_amount ? Number(bulkSendForm.additional_amount) : null,
         _rolls: bulkSendRolls, // for mock
         _vaObj: masterValueAdditions.find((va) => va.id === bulkSendForm.value_addition_id) || null,
       })
@@ -1521,7 +1524,7 @@ export default function RollsPage() {
   }
 
   // ── Bulk Receive (challan-based) ──
-  const openBulkReceive = (group) => {
+  const openBulkReceive = async (group) => {
     const today = new Date().toISOString().split('T')[0]
     const rows = {}
     for (const item of group.rolls) {
@@ -1532,7 +1535,21 @@ export default function RollsPage() {
         processing_cost: '',
       }
     }
-    setBulkRecvChallan(group)
+    // Hydrate gst/disc/add from challan so the receive overlay can show
+    // the locked vendor charges in its live totals preview.
+    let challanTotals = { gst_percent: 0, discount_amount: 0, additional_amount: 0 }
+    if (group.challanId) {
+      try {
+        const res = await getJobChallan(group.challanId)
+        const c = res.data?.data || res.data
+        challanTotals = {
+          gst_percent: Number(c.gst_percent || 0),
+          discount_amount: Number(c.discount_amount || 0),
+          additional_amount: Number(c.additional_amount || 0),
+        }
+      } catch { /* falls back to zeros */ }
+    }
+    setBulkRecvChallan({ ...group, ...challanTotals })
     setBulkRecvDate(today)
     setBulkRecvRows(rows)
     setBulkRecvError(null)
@@ -3943,6 +3960,36 @@ export default function RollsPage() {
                     <textarea value={bulkSendForm.notes} onChange={(e) => setBulkSendForm((f) => ({ ...f, notes: e.target.value }))}
                       rows={2} placeholder="Instructions for the vendor..." className="typo-input-sm" />
                   </div>
+                  {/* S121 — Vendor Charges (gst/disc/add). Subtotal locks at receive. */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="typo-label-sm uppercase tracking-wide text-gray-600">Vendor Charges (Optional)</label>
+                      <span className="typo-caption text-gray-400">Subtotal locks at receive · taxable = subtotal − discount + additional</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="typo-caption text-gray-500">GST %</label>
+                        <input type="number" step="0.01" min="0" max="100"
+                          value={bulkSendForm.gst_percent}
+                          onChange={(e) => setBulkSendForm((f) => ({ ...f, gst_percent: e.target.value }))}
+                          placeholder="0" className="typo-input-sm" />
+                      </div>
+                      <div>
+                        <label className="typo-caption text-gray-500">Discount ₹</label>
+                        <input type="number" step="0.01" min="0"
+                          value={bulkSendForm.discount_amount}
+                          onChange={(e) => setBulkSendForm((f) => ({ ...f, discount_amount: e.target.value }))}
+                          placeholder="0" className="typo-input-sm" />
+                      </div>
+                      <div>
+                        <label className="typo-caption text-gray-500">Additional ₹</label>
+                        <input type="number" step="0.01" min="0"
+                          value={bulkSendForm.additional_amount}
+                          onChange={(e) => setBulkSendForm((f) => ({ ...f, additional_amount: e.target.value }))}
+                          placeholder="0" className="typo-input-sm" />
+                      </div>
+                    </div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -3958,7 +4005,14 @@ export default function RollsPage() {
         const items = bulkRecvChallan.rolls
         const checkedItems = items.filter(item => bulkRecvRows[item.log.id]?.checked)
         const totalRecvWt = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.weight_after) || 0), 0)
-        const totalCost = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.processing_cost) || 0), 0)
+        // S121 — totals stack derived from per-roll cost inputs + challan-locked vendor charges
+        const subtotal = checkedItems.reduce((s, item) => s + (parseFloat(bulkRecvRows[item.log.id]?.processing_cost) || 0), 0)
+        const challanDisc = Number(bulkRecvChallan.discount_amount || 0)
+        const challanAdd = Number(bulkRecvChallan.additional_amount || 0)
+        const challanGst = Number(bulkRecvChallan.gst_percent || 0)
+        const taxable = Math.max(0, subtotal - challanDisc + challanAdd)
+        const taxAmount = Math.round(taxable * challanGst) / 100
+        const totalCost = taxable + taxAmount
         return (
           <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
             {/* ── Gradient header ── */}
@@ -4059,11 +4113,60 @@ export default function RollsPage() {
                       <tr className="bg-gray-800 text-white font-semibold text-sm">
                         <td colSpan={5} className="px-3 py-2 text-right border-r border-gray-700">{checkedItems.length} of {items.length} rolls</td>
                         <td className="px-3 py-2 text-right border-r border-gray-700 text-emerald-300">{totalRecvWt.toFixed(3)} kg</td>
-                        <td className="px-3 py-2 text-right text-amber-300">{totalCost > 0 ? `₹${totalCost.toLocaleString()}` : '—'}</td>
+                        <td className="px-3 py-2 text-right text-amber-300">{subtotal > 0 ? `₹${subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
+
+                {/* S121 — Live totals preview using challan-locked gst/disc/add */}
+                {subtotal > 0 && (
+                  <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="typo-label-sm uppercase tracking-wide text-gray-600">Totals (live preview)</span>
+                      <span className="typo-caption text-gray-400">
+                        {challanGst > 0 && `GST ${challanGst.toFixed(2)}%`}
+                        {challanDisc > 0 && ` · Disc ₹${challanDisc.toFixed(2)}`}
+                        {challanAdd > 0 && ` · Add ₹${challanAdd.toFixed(2)}`}
+                        {!challanGst && !challanDisc && !challanAdd && 'No vendor charges on challan'}
+                      </span>
+                    </div>
+                    <div className="ml-auto max-w-md space-y-1">
+                      <div className="flex items-center justify-between typo-data text-gray-700">
+                        <span>Subtotal</span>
+                        <span className="tabular-nums">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                      {challanDisc > 0 && (
+                        <div className="flex items-center justify-between typo-data text-rose-600">
+                          <span>(−) Discount</span>
+                          <span className="tabular-nums">₹{challanDisc.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      {challanAdd > 0 && (
+                        <div className="flex items-center justify-between typo-data text-gray-700">
+                          <span>(+) Additional</span>
+                          <span className="tabular-nums">₹{challanAdd.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      {(challanDisc > 0 || challanAdd > 0) && (
+                        <div className="flex items-center justify-between typo-data text-gray-800 border-t border-gray-200 pt-1">
+                          <span>Taxable</span>
+                          <span className="tabular-nums">₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      {taxAmount > 0 && (
+                        <div className="flex items-center justify-between typo-data text-gray-700">
+                          <span>GST</span>
+                          <span className="tabular-nums">₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between typo-data font-bold text-emerald-700 border-t-2 border-gray-300 pt-1.5">
+                        <span>Total Amount</span>
+                        <span className="tabular-nums">₹{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

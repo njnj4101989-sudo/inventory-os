@@ -34,6 +34,14 @@ export async function createJobChallan(data) {
       rolls: rollBriefs,
       total_weight: rollBriefs.reduce((s, r) => s + (r.weight_sent || 0), 0),
       roll_count: rollBriefs.length,
+      // S121 — totals stack
+      gst_percent: Number(data.gst_percent || 0),
+      subtotal: 0,
+      discount_amount: Number(data.discount_amount || 0),
+      additional_amount: Number(data.additional_amount || 0),
+      taxable_amount: 0,
+      tax_amount: 0,
+      total_amount: 0,
     }
     mockChallans.push(challan)
     return mockResponse(challan, 'Job challan created')

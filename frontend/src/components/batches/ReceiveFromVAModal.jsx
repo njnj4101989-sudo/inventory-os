@@ -57,7 +57,15 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
     }))
   }
 
-  const totalCost = Object.values(receiveData).reduce((s, d) => s + (parseFloat(d.cost) || 0), 0)
+  const subtotal = Object.values(receiveData).reduce((s, d) => s + (parseFloat(d.cost) || 0), 0)
+  const challanDisc = Number(selectedChallan?.discount_amount || 0)
+  const challanAdd = Number(selectedChallan?.additional_amount || 0)
+  const challanGst = Number(selectedChallan?.gst_percent || 0)
+  const taxable = Math.max(0, subtotal - challanDisc + challanAdd)
+  const taxAmount = Math.round(taxable * challanGst) / 100
+  const totalAmount = taxable + taxAmount
+  // Legacy alias kept so existing button text still works.
+  const totalCost = totalAmount
 
   const handleSubmit = async () => {
     if (!selectedChallan) { setError('Select a challan first'); return }
@@ -226,6 +234,55 @@ export default function ReceiveFromVAModal({ open, onClose, onSuccess }) {
                 </table>
               </div>
             </div>
+
+            {/* S121 — Live totals preview using challan-locked gst/disc/add */}
+            {subtotal > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="typo-label-sm uppercase tracking-wide text-gray-600">Totals (live preview)</span>
+                  <span className="typo-caption text-gray-400">
+                    {challanGst > 0 && `GST ${challanGst.toFixed(2)}%`}
+                    {challanDisc > 0 && ` · Disc ₹${challanDisc.toFixed(2)}`}
+                    {challanAdd > 0 && ` · Add ₹${challanAdd.toFixed(2)}`}
+                    {!challanGst && !challanDisc && !challanAdd && 'No vendor charges'}
+                  </span>
+                </div>
+                <div className="ml-auto max-w-sm space-y-1">
+                  <div className="flex items-center justify-between typo-data text-gray-700">
+                    <span>Subtotal</span>
+                    <span className="tabular-nums">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  {challanDisc > 0 && (
+                    <div className="flex items-center justify-between typo-data text-rose-600">
+                      <span>(−) Discount</span>
+                      <span className="tabular-nums">₹{challanDisc.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {challanAdd > 0 && (
+                    <div className="flex items-center justify-between typo-data text-gray-700">
+                      <span>(+) Additional</span>
+                      <span className="tabular-nums">₹{challanAdd.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {(challanDisc > 0 || challanAdd > 0) && (
+                    <div className="flex items-center justify-between typo-data text-gray-800 border-t border-gray-200 pt-1">
+                      <span>Taxable</span>
+                      <span className="tabular-nums">₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div className="flex items-center justify-between typo-data text-gray-700">
+                      <span>GST</span>
+                      <span className="tabular-nums">₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between typo-data font-bold text-emerald-700 border-t-2 border-gray-300 pt-1.5">
+                    <span>Total</span>
+                    <span className="tabular-nums">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="typo-label">Notes</label>

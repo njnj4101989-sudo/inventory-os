@@ -735,7 +735,7 @@ export default function ChallansPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
                 { value: isJob ? (detail.roll_count || (detail.rolls || []).length) : (detail.total_pieces || 0), label: isJob ? 'Rolls' : 'Pieces', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
-                { value: isJob ? `${(detail.total_weight || 0).toFixed(3)}` : (detail.total_cost ? `₹${detail.total_cost}` : '—'), label: isJob ? 'Weight (kg)' : 'Total Cost', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
+                { value: isJob ? `${(detail.total_weight || 0).toFixed(3)}` : `₹${Number(detail.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, label: isJob ? 'Weight (kg)' : 'Total Amount', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
                 { value: detail.value_addition?.short_code || '—', label: detail.value_addition?.name || 'VA Type', color: vc.text, bg: `${vc.bg} ${vc.border}` },
                 { value: st.label, label: 'Status', color: st.text, bg: `${st.bg} ${st.border}` },
               ].map((kpi, i) => (
@@ -745,6 +745,51 @@ export default function ChallansPage() {
                 </div>
               ))}
             </div>
+
+            {/* S121 — Totals stack card (visible after receive when subtotal locks) */}
+            {Number(detail.subtotal || 0) > 0 && (
+              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 rounded-t-xl">
+                  <span className="typo-label-sm text-white uppercase tracking-wider">Totals</span>
+                </div>
+                <div className="p-4">
+                  <div className="ml-auto max-w-md space-y-1.5">
+                    <div className="flex items-center justify-between typo-data text-gray-700">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">{`₹${Number(detail.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                    </div>
+                    {Number(detail.discount_amount || 0) > 0 && (
+                      <div className="flex items-center justify-between typo-data text-rose-600">
+                        <span>(−) Discount</span>
+                        <span className="tabular-nums">{`₹${Number(detail.discount_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                      </div>
+                    )}
+                    {Number(detail.additional_amount || 0) > 0 && (
+                      <div className="flex items-center justify-between typo-data text-gray-700">
+                        <span>(+) Additional</span>
+                        <span className="tabular-nums">{`₹${Number(detail.additional_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                      </div>
+                    )}
+                    {(Number(detail.discount_amount || 0) > 0 || Number(detail.additional_amount || 0) > 0) && (
+                      <div className="flex items-center justify-between typo-data text-gray-800 border-t border-gray-200 pt-1.5">
+                        <span>Taxable Value</span>
+                        <span className="tabular-nums">{`₹${Number(detail.taxable_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                      </div>
+                    )}
+                    {Number(detail.tax_amount || 0) > 0 && (
+                      <div className="flex items-center justify-between typo-data text-gray-700">
+                        <span>GST @ {Number(detail.gst_percent || 0).toFixed(2)}%</span>
+                        <span className="tabular-nums">{`₹${Number(detail.tax_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between typo-data font-bold text-emerald-700 border-t-2 border-gray-300 pt-2 mt-1">
+                      <span>Total Amount</span>
+                      <span className="tabular-nums">{`₹${Number(detail.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Notes */}
             {detail.notes && (
@@ -1235,7 +1280,7 @@ export default function ChallansPage() {
                       {isJob ? (c.roll_count || 0) : (c.total_pieces || 0)}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-gray-700">
-                      {isJob ? `${(c.total_weight || 0).toFixed(1)} kg` : (c.total_cost ? `₹${c.total_cost}` : '—')}
+                      {isJob ? `${(c.total_weight || 0).toFixed(1)} kg` : (Number(c.total_amount || 0) > 0 ? `₹${Number(c.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—')}
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">{c.sent_date || '—'}</td>
                     <td className="px-4 py-3 text-center">

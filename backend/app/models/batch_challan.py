@@ -33,13 +33,28 @@ class BatchChallan(Base):
         ForeignKey("value_additions.id", ondelete="RESTRICT"), index=True
     )
     total_pieces: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    total_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     sent_date: Mapped[datetime] = mapped_column(Date, server_default=func.now())
     received_date: Mapped[datetime | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(
         String(20), default="sent", server_default="'sent'", index=True
     )
     notes: Mapped[str | None] = mapped_column(Text)
+    # Totals stack (S121 — Phase 3 of FINANCIAL_SYMMETRY_PLAN). Mirrors
+    # JobChallan/SupplierInvoice/Invoice/Order — same rule everywhere:
+    #   taxable = subtotal − discount + additional
+    #   tax     = taxable × gst_pct / 100
+    #   total   = taxable + tax
+    # subtotal = SUM(batch_items.cost where status='received').
+    # On the cost engine side AS-2 valuation uses `taxable` (GST input-creditable
+    # so excluded from inventory cost) — total_amount is what we owe VA party.
+    # NOTE: legacy flat `total_cost` was dropped in S121 — superseded by this
+    # stack. Existing rows backfilled in migration n4o5p6q7r8s9.
+    gst_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0, server_default="0")
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    additional_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"))
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True

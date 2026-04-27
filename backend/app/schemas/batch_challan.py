@@ -76,12 +76,20 @@ class BatchChallanCreate(BaseModel):
     value_addition_id: UUID
     batches: list[BatchChallanBatchEntry]
     notes: str | None = None
+    # S121 — totals are computed at receive (subtotal = SUM(batch_items.cost)),
+    # but gst/disc/add are entered up-front so the VA party knows the math.
+    gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
 
 
 class BatchChallanUpdate(BaseModel):
     va_party_id: UUID | None = None
     value_addition_id: UUID | None = None
     notes: str | None = None
+    gst_percent: Decimal | None = None
+    discount_amount: Decimal | None = None
+    additional_amount: Decimal | None = None
 
 
 class BatchChallanReceive(BaseModel):
@@ -98,7 +106,6 @@ class BatchChallanResponse(BaseSchema):
     va_party: dict | None = None
     value_addition: dict | None = None  # { id, name, short_code }
     total_pieces: int
-    total_cost: Decimal | None = None
     status: str
     sent_date: date | None = None
     received_date: date | None = None
@@ -106,3 +113,11 @@ class BatchChallanResponse(BaseSchema):
     created_by_user: dict | None = None  # { id, full_name }
     created_at: datetime
     batch_items: list[BatchItemBrief] = []
+    # S121 — totals stack (replaces flat total_cost)
+    gst_percent: Decimal = Decimal("0")
+    subtotal: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    additional_amount: Decimal = Decimal("0")
+    taxable_amount: Decimal = Decimal("0")  # derived: subtotal − discount + additional
+    tax_amount: Decimal = Decimal("0")
+    total_amount: Decimal = Decimal("0")

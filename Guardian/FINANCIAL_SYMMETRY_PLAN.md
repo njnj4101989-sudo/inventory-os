@@ -84,15 +84,22 @@ Closes when: Order, Invoice, SalesReturn all carry the same totals stack with au
 
 ---
 
-## Phase 3 — VA Cost Flow 🔒 DEFERRED
+## Phase 3 — VA Cost Flow ✅ S121 (2026-04-27)
 
-**Why deferred:** touches the 5-component batch cost engine (S97). Needs its own design pass — VA partner GST handling, freight, returnable-after-VA semantics. Don't bundle with Phase 2.
+Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoice / SupplierInvoice / ReturnNote. AS-2 fix: VA cost flowing into inventory now uses `taxable` (GST input-creditable, excluded from cost), not gross paid amount.
 
-### Scope (when picked up)
-- [ ] `JobChallan` (roll VA) — add money fields: `gst_percent`, `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount`
-- [ ] `BatchChallan` (garment VA) — replace flat `total_cost` with full stack
-- [ ] Wire VA totals into `Batch` 5-component cost (material + roll_va + stitching + **batch_va** + other)
-- [ ] AS-2 valuation accuracy: VA-inclusive batch unit cost flows into closing-stock + WAC
+### Done
+- [x] `JobChallan` (roll VA) — added money fields: `gst_percent`, `subtotal`, `discount_amount`, `additional_amount`, `tax_amount`, `total_amount`
+- [x] `BatchChallan` (garment VA) — replaced flat `total_cost` with full stack (legacy column dropped in migration)
+- [x] Schemas — Create/Update accept `gst_percent` + `discount_amount` + `additional_amount`; Response surfaces full stack incl. derived `taxable_amount`
+- [x] Services — `_compute_jc_totals` / `_compute_bc_totals` recompute on every receive + every `update_challan` totals-edit; ledger debit uses stored `total_amount` (was on-the-fly `sum(processing_cost)`)
+- [x] Cost engine — `batch_service._compute_cost_breakdown` applies `effective_cost = row.cost × (taxable / subtotal)` for both `roll_va_cost` and `batch_va_cost`. AS-2 valuation now accurate; downstream WAC, FY closing, closing-stock report all benefit through `compute_wac_map` reading `cost_breakdown` metadata.
+- [x] Migration `n4o5p6q7r8s9_s121_va_challan_totals` — tenant-iterating, `col_exists` guarded; backfills subtotal from received logs + carries legacy `batch_challans.total_cost` forward before dropping it. Idempotent re-runs via `COALESCE(subtotal, 0) = 0` skip.
+- [x] Frontend — Send-for-VA modals (RollsPage bulk-send + `SendForVAModal` for batches) gain GST / Discount / Additional inputs. Receive flows (RollsPage bulk-receive overlay + `ReceiveFromVAModal`) show live totals preview pulling challan-locked vendor charges. ChallansPage detail card gains the full totals stack (Subtotal · Discount · Additional · Taxable · GST · Total).
+- [x] `masters.py` VA-party summary now sums `total_amount` instead of legacy `total_cost`.
+
+### Known follow-up (not blocking S121)
+- Roll-side `Roll.cost_per_unit` is still bumped by *gross* `processing_cost / weight_after` on receive (legacy S97 path). The 5-component breakdown's `roll_va_cost` is now AS-2 correct, but `material_cost` (which reads `cost_per_unit`) still carries gross VA — same legacy double-count that pre-dates S121. Tracking under Phase 4 cleanups.
 
 ---
 
