@@ -1072,8 +1072,11 @@ class RollService:
         roll.current_weight = (roll.current_weight or 0) + va_delta
         if req.length_after:
             roll.total_length = req.length_after
-        if req.processing_cost and roll.cost_per_unit and req.weight_after:
-            roll.cost_per_unit = float(roll.cost_per_unit) + (float(req.processing_cost) / float(req.weight_after))
+        # S122 — VA processing cost no longer mutates cost_per_unit.
+        # The 5-component cost engine (batch_service._compute_cost_breakdown)
+        # attributes roll VA via the dedicated roll_va_cost component
+        # (AS-2 taxable-only since S121); bumping cost_per_unit here would
+        # double-count it inside material_cost.
 
         # Status: check if roll has any remaining "sent" processing logs
         sent_logs_stmt = select(func.count()).select_from(RollProcessing).where(

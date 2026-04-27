@@ -357,11 +357,9 @@ class JobChallanService:
             va_delta = float(entry.weight_after) - float(log.weight_before)
             roll.current_weight = float(roll.current_weight or 0) + va_delta
 
-            # Adjust cost_per_unit if applicable
-            if entry.processing_cost and roll.cost_per_unit and entry.weight_after:
-                roll.cost_per_unit = float(roll.cost_per_unit) + (
-                    float(entry.processing_cost) / float(entry.weight_after)
-                )
+            # S122 — see roll_service.receive_from_processing for rationale on
+            # why we no longer bump cost_per_unit by VA processing_cost. VA cost
+            # flows into SKU cost via the cost engine's roll_va_cost component.
 
             received_count += 1
 

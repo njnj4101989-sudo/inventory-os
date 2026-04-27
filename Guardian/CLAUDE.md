@@ -34,7 +34,41 @@
 
 ---
 
-## Current State (Session 121 — 2026-04-27) — IN PROGRESS
+## Current State (Session 122 — 2026-04-27) — IN PROGRESS
+
+**Phase 4.6 of FINANCIAL_SYMMETRY_PLAN — Roll.cost_per_unit double-count fix.** Closes the legacy S97 path where VA receive bumped `roll.cost_per_unit += processing_cost / weight_after`. After S121's cost-engine refactor (which made `roll_va_cost` AS-2 taxable-only), the bump became a *second* path for VA cost — `material_cost` already included VA via the bumped `cost_per_unit`, then `roll_va_cost` added it again → double-count of ₹VA per piece in every packed batch's `cost_breakdown`.
+
+**Production audit before fix:**
+  - 189 rolls total, 15 ever sent for VA. **Zero** received logs had `processing_cost > 0`. **Zero** batches packed. **Zero** `ready_stock_in` events. The cost engine has never run on real data.
+  - Conclusion: bump never fired in prod → no historical revisionism needed → no migration → zero blast radius.
+
+**Backend (only):**
+  - `services/roll_service.py:receive_from_processing` — deleted the 2-line bump (`if req.processing_cost and roll.cost_per_unit and req.weight_after: roll.cost_per_unit = float(...) + ...`). Replaced with a 5-line comment pointing to S121 cost engine.
+  - `services/job_challan_service.py:receive_challan` — deleted the matching 5-line bump in the bulk-receive loop. Replaced with a 3-line comment.
+  - **Nothing else touched.** No model, no schema, no migration, no frontend.
+
+**Behavior preserved (everything still works exactly as before):**
+  - Send / receive / pack workflows unchanged
+  - `RollProcessing.processing_cost` still recorded on the log (untouched)
+  - VA party ledger still credits `JobChallan.total_amount` (S121 — untouched)
+  - 5-component cost breakdown still computes; `roll_va_cost` is now the single, audit-traceable path for roll VA into SKU cost
+  - All 40+ consumers of `cost_per_unit` (FY closing raw-material, supplier invoice subtotal recompute, dashboard purchase value, fabric-type breakdowns, cutting-waste valuation, write-off valuation) now read pure supplier-rate values — which is the originally-intended semantic
+
+**Math reference:**
+```
+Before (with bump):                After (no bump):
+cost_per_unit = supplier + VA      cost_per_unit = supplier (immutable)
+material_cost = fabric + VA        material_cost = fabric only
+roll_va_cost  = VA                 roll_va_cost  = VA
+                                                
+TOTAL          = fabric + 2×VA ❌  TOTAL          = fabric + VA ✓
+```
+
+**Pending:** commit + push. Backend imports clean (226 routes). No frontend / migration / schema work.
+
+---
+
+## Previous State (Session 121 — 2026-04-27) — CLOSED
 
 **Phase 3 of FINANCIAL_SYMMETRY_PLAN — VA Cost Flow.** Brings `JobChallan` (roll VA, JC-XXXX) and `BatchChallan` (garment VA, BC-XXXX) into the same totals symmetry as Order / Invoice / SupplierInvoice / ReturnNote. Every financial document in the system now uses identical math: `taxable = subtotal − discount + additional → +GST → total`. AS-2 fix on the cost engine: VA cost flowing into inventory now uses **taxable** (GST input-creditable, excluded from cost), not the gross paid amount.
 

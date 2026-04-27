@@ -98,12 +98,12 @@ Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoic
 - [x] Frontend — Send-for-VA modals (RollsPage bulk-send + `SendForVAModal` for batches) gain GST / Discount / Additional inputs. Receive flows (RollsPage bulk-receive overlay + `ReceiveFromVAModal`) show live totals preview pulling challan-locked vendor charges. ChallansPage detail card gains the full totals stack (Subtotal · Discount · Additional · Taxable · GST · Total).
 - [x] `masters.py` VA-party summary now sums `total_amount` instead of legacy `total_cost`.
 
-### Known follow-up (not blocking S121)
-- Roll-side `Roll.cost_per_unit` is still bumped by *gross* `processing_cost / weight_after` on receive (legacy S97 path). The 5-component breakdown's `roll_va_cost` is now AS-2 correct, but `material_cost` (which reads `cost_per_unit`) still carries gross VA — same legacy double-count that pre-dates S121. Tracking under Phase 4 cleanups.
+### Known follow-up — closed in S122 (2026-04-27)
+- ~~Roll-side `Roll.cost_per_unit` is still bumped by gross `processing_cost / weight_after` on receive~~ → **fixed S122**. Both bump sites (`roll_service.receive_from_processing` + `job_challan_service.receive_challan`) now leave `cost_per_unit` immutable as the supplier purchase rate. VA cost flows into SKU cost exclusively through `roll_va_cost` (cost engine), eliminating the double-count in `material_cost`. No migration needed — production audit confirmed zero rows had ever been bumped (15 rolls VA'd, all with NULL `processing_cost`; zero batches packed). All 40+ downstream consumers of `cost_per_unit` (FY closing, dashboard valuation, supplier invoice subtotal, fabric-type breakdowns) now read pure supplier-rate values, which is the originally-intended semantic.
 
 ---
 
-## Phase 4 — Minor Cleanups 🔒 DEFERRED
+## Phase 4 — Minor Cleanups 🔒 DEFERRED (1 of 6 done)
 
 ### Scope
 - [ ] `PurchaseItem.gst_percent` (per-line) vs `SupplierInvoice.gst_percent` (header) — pick one home, drop the other or aggregate consistently
@@ -111,6 +111,7 @@ Brings JobChallan + BatchChallan into the same totals symmetry as Order / Invoic
 - [ ] Free-text `additional_label` on Order + Invoice + SupplierInvoice (e.g. "Freight" / "Cartage" / "Packing") — UX nice-to-have once Phase 2 is live
 - [ ] **Bank/Cash chart-of-accounts ("Deposit To" ledger)** — Zoho/QB pattern. Today `payment_mode` is a free string ("neft"/"cash"/etc.); industry-standard is to pick a specific bank ledger (HDFC Current / SBI / Petty Cash). Needs new `BankLedger` master + `bank_ledger_id` FK on payment ledger entries. Defer until a real chart-of-accounts is needed. Linked to S119 (invoice payment recording).
 - [ ] **Partial payment / On-Account tracking** — today Mark-as-Paid is binary (full only). Industry-standard: allow `amount ≤ invoice.total` → invoice goes to `partially_paid` status, customer ledger tracks running balance, next payment can be applied. Tally calls this "On Account" or "Bill-wise". Adds `Invoice.amount_paid` Numeric column + `partially_paid` status + balance-aware UI on invoice list/detail. Defer until a real partial-payment case appears in production. Linked to S119 (invoice payment recording — strict full-only for v1).
+- [x] **Roll.cost_per_unit double-count** — fixed S122. See "Known follow-up" under Phase 3 above.
 
 ---
 
