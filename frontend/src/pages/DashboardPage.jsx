@@ -220,7 +220,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Dashboard</h1>
-          <p className="mt-1 text-sm font-medium text-gray-600">Real-time overview of your textile operations</p>
+          <p className="mt-1 typo-caption">Real-time overview of your textile operations</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="relative flex h-3 w-3">

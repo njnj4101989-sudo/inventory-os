@@ -587,7 +587,7 @@ export default function BatchesPage() {
       {/* Page header */}
       <div>
         <h1 className="typo-page-title">Batches</h1>
-        <p className="mt-1 typo-body text-gray-500">Production batches grouped by lot — track tailoring progress at a glance</p>
+        <p className="mt-1 typo-caption">Production batches grouped by lot — track tailoring progress at a glance</p>
       </div>
 
       {/* Pipeline KPI bar */}

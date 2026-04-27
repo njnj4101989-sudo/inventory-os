@@ -2117,7 +2117,7 @@ export default function ReturnsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Returns</h1>
-          <p className="typo-caption">{category === 'supplier' ? 'Supplier return notes — rolls & SKUs' : 'Customer sale returns'}</p>
+          <p className="mt-1 typo-caption">{category === 'supplier' ? 'Supplier return notes — rolls & SKUs' : 'Customer sale returns'}</p>
         </div>
         <button onClick={() => category === 'supplier' ? openSupplierCreate() : setShowCNPicker(true)}
           className="rounded bg-emerald-600 text-white px-4 py-2 typo-btn-sm hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"

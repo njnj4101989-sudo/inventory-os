@@ -1159,7 +1159,7 @@ export default function ChallansPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Challans</h1>
-          <p className="typo-caption">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
+          <p className="mt-1 typo-caption">VA processing history — Job Challans (rolls) & Batch Challans (garments)</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchData} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 typo-btn-sm text-gray-700 hover:bg-gray-50 shadow-sm transition-colors disabled:opacity-60">

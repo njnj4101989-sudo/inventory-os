@@ -354,7 +354,7 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Settings</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Company profile, financial years, and multi-company management</p>
+          <p className="mt-1 typo-caption">Company profile, financial years, and multi-company management</p>
         </div>
         {activeCompany && (
           <div className="flex items-center gap-2">

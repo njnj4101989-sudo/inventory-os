@@ -1821,7 +1821,7 @@ export default function RollsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Purchase & Inventory</h1>
-          <p className="mt-1 text-sm text-gray-500">Supplier invoices, roll stock, and value addition tracking</p>
+          <p className="mt-1 typo-caption">Supplier invoices, roll stock, and value addition tracking</p>
         </div>
         <div className="flex items-center gap-2">
           {lastSavedRolls.length > 0 && (

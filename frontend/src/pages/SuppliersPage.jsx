@@ -215,7 +215,7 @@ export default function SuppliersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Suppliers</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 typo-caption">
             Manage fabric and material suppliers
             {total > 0 && <span className="ml-2 text-gray-400">({total} total)</span>}
           </p>

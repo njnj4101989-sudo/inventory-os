@@ -748,7 +748,7 @@ export default function PartyMastersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Party Masters</h1>
-          <p className="text-xs text-gray-500">
+          <p className="mt-1 typo-caption">
             {labels.desc}
             {total > 0 && <span className="ml-2 text-gray-400">({total} total)</span>}
           </p>

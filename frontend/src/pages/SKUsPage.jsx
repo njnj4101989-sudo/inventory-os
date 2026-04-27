@@ -1599,7 +1599,7 @@ export default function SKUsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Finished Goods</h1>
-          <p className="mt-0.5 typo-caption">SKUs are auto-generated when batches are packed</p>
+          <p className="mt-1 typo-caption">SKUs are auto-generated when batches are packed</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={openOpening} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 typo-btn-sm text-amber-700 hover:bg-amber-100 transition-colors">

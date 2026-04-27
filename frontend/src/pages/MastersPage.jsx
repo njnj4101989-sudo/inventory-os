@@ -243,7 +243,7 @@ export default function MastersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Masters</h1>
-          <p className="text-xs text-gray-500">Manage product types, colors, fabrics, designs, and VA types</p>
+          <p className="mt-1 typo-caption">Manage product types, colors, fabrics, designs, and VA types</p>
         </div>
         <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 typo-btn-sm text-white hover:bg-emerald-700 shadow-sm transition-colors">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
