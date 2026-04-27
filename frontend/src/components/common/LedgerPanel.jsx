@@ -24,32 +24,36 @@ function deepLinkFor(entry) {
   return null
 }
 
-// Render description with embedded INV-XXXX as a clickable link (S123 — for
-// payment_allocation rows where deepLinkFor returns null).
+// Render description with embedded bill codes (INV/JC/BC) as clickable links
+// (S125 — for payment_allocation rows where deepLinkFor returns null since
+// reference_id points to the allocation, not the bill).
 function renderDescriptionWithInvLinks(description, navigate, onClose) {
   if (!description) return null
-  const re = /\b(INV-\d{3,})\b/g
+  const re = /\b(INV-\d{3,}|JC-\d{3,}|BC-\d{3,})\b/g
   const parts = []
   let last = 0
   let m
   while ((m = re.exec(description)) !== null) {
     if (m.index > last) parts.push(description.slice(last, m.index))
-    const inv = m[1]
+    const code = m[1]
+    const route = code.startsWith('INV-')
+      ? `/invoices?open=${code}`
+      : `/challans?open=${code}`
     parts.push(
       <button
-        key={`${inv}-${m.index}`}
+        key={`${code}-${m.index}`}
         type="button"
         onClick={(ev) => {
           ev.stopPropagation()
           onClose?.()
-          navigate(`/invoices?open=${inv}`)
+          navigate(route)
         }}
         className="text-emerald-700 hover:text-emerald-900 hover:underline font-mono"
       >
-        {inv}
+        {code}
       </button>,
     )
-    last = m.index + inv.length
+    last = m.index + code.length
   }
   if (last < description.length) parts.push(description.slice(last))
   return parts
@@ -91,15 +95,11 @@ export default function LedgerPanel({ open, onClose, partyType, partyId, partyNa
       ])
       setEntries(ledgerRes.data.data?.data || [])
       setBalance(balRes.data.data)
-      // S123: pull on-account residue for customers (other party types defer to v2)
-      if (partyType === 'customer') {
-        try {
-          const oaRes = await getOnAccountBalance(partyId)
-          setOnAccount(Number(oaRes.data?.data?.balance || 0))
-        } catch {
-          setOnAccount(0)
-        }
-      } else {
+      // S125: on-account residue available for all party types now
+      try {
+        const oaRes = await getOnAccountBalance(partyType, partyId)
+        setOnAccount(Number(oaRes.data?.data?.balance || 0))
+      } catch {
         setOnAccount(0)
       }
     } catch {

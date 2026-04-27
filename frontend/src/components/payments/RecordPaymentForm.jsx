@@ -3,25 +3,37 @@ import FilterSelect from '../common/FilterSelect'
 import PaymentForm, { emptyPaymentForm } from '../common/PaymentForm'
 import {
   getOnAccountBalance,
-  getOpenInvoicesForCustomer,
+  getOpenBillsForParty,
   recordPayment,
 } from '../../api/paymentReceipts'
 
 /**
- * Tally-style bill-wise receipt voucher form.
+ * Polymorphic Tally-style bill-wise receipt voucher form.
  *
- * Single customer per receipt → loads open invoices → user enters gross
- * amount → allocates with checkboxes / [Auto] FIFO / [Full] per-row →
- * residue lands as on-account credit.
+ * Picks one party (customer / supplier / va_party), loads their open bills
+ * (invoices / supplier_invoices / job+batch challans), allocates with
+ * checkboxes / [Auto] FIFO / [Full] per-row → residue lands as on-account
+ * credit.
  *
  * Props
- *   customers           — array { id, name, city, phone } for picker
- *   defaultCustomerId   — preselect (when launched from invoice "Mark as Paid")
- *   defaultInvoiceId    — preselect single invoice + lock-in (Mark-as-Paid)
- *   defaultAmount       — preselect gross amount (Mark-as-Paid: outstanding)
- *   onSuccess(receipt)  — fires after POST resolves
+ *   partyType            — 'customer' | 'supplier' | 'va_party'
+ *   parties              — array { id, name, city, phone } for picker
+ *   defaultPartyId       — preselect (when launched from a detail page)
+ *   defaultBillType      — preselect single bill (Mark-as-Paid / future)
+ *   defaultBillId
+ *   defaultAmount        — preselect gross amount
+ *   onSuccess(receipt)
  *   onCancel()
  */
+
+const PARTY_LABELS = {
+  customer: { single: 'Customer', billSingle: 'Invoice', billPlural: 'invoices', verb: 'received' },
+  supplier: { single: 'Supplier', billSingle: 'Bill', billPlural: 'bills', verb: 'paid' },
+  va_party: { single: 'VA Party', billSingle: 'Challan', billPlural: 'challans', verb: 'paid' },
+}
+
+const billKey = (b) => `${b.bill_type}:${b.bill_id}`
+
 const fmt = (v) =>
   `₹${(Number(v) || 0).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -31,67 +43,72 @@ const fmt = (v) =>
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
 export default function RecordPaymentForm({
-  customers = [],
-  defaultCustomerId = '',
-  defaultInvoiceId = null,
+  partyType = 'customer',
+  parties = [],
+  defaultPartyId = '',
+  defaultBillType = null,
+  defaultBillId = null,
   defaultAmount = '',
   onSuccess,
   onCancel,
 }) {
-  const [customerId, setCustomerId] = useState(defaultCustomerId)
-  const [openInvoices, setOpenInvoices] = useState([])
+  const labels = PARTY_LABELS[partyType] || PARTY_LABELS.customer
+
+  const [partyId, setPartyId] = useState(defaultPartyId)
+  const [openBills, setOpenBills] = useState([])
   const [onAccountBal, setOnAccountBal] = useState(0)
-  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [loadingBills, setLoadingBills] = useState(false)
   const [payment, setPayment] = useState(() => ({
     ...emptyPaymentForm(),
     payment_mode: 'neft',
     amount: defaultAmount || '',
   }))
-  const [allocations, setAllocations] = useState({}) // { invoice_id: amount_string }
+  const [allocations, setAllocations] = useState({}) // { 'bill_type:bill_id': amount_string }
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  // Fetch open invoices on customer change
+  // Fetch open bills on party change
   useEffect(() => {
     let cancelled = false
-    if (!customerId) {
-      setOpenInvoices([])
+    if (!partyId) {
+      setOpenBills([])
       setOnAccountBal(0)
       setAllocations({})
       return
     }
-    setLoadingInvoices(true)
+    setLoadingBills(true)
     Promise.all([
-      getOpenInvoicesForCustomer(customerId),
-      getOnAccountBalance(customerId),
+      getOpenBillsForParty(partyType, partyId),
+      getOnAccountBalance(partyType, partyId),
     ])
-      .then(([invRes, oaRes]) => {
+      .then(([billsRes, oaRes]) => {
         if (cancelled) return
-        const opens = invRes.data?.data || []
-        setOpenInvoices(opens)
+        const opens = billsRes.data?.data || []
+        setOpenBills(opens)
         setOnAccountBal(Number(oaRes.data?.data?.balance || 0))
 
-        // Lock in default invoice (Mark-as-Paid path)
-        if (defaultInvoiceId) {
-          const target = opens.find((iv) => iv.id === defaultInvoiceId)
+        if (defaultBillType && defaultBillId) {
+          const target = opens.find(
+            (b) => b.bill_type === defaultBillType && b.bill_id === defaultBillId,
+          )
           if (target) {
             setAllocations({
-              [defaultInvoiceId]: target.outstanding_amount.toFixed(2),
+              [billKey(target)]: target.outstanding_amount.toFixed(2),
             })
           }
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setOpenInvoices([])
+          setOpenBills([])
           setOnAccountBal(0)
         }
       })
-      .finally(() => !cancelled && setLoadingInvoices(false))
+      .finally(() => !cancelled && setLoadingBills(false))
     return () => {
       cancelled = true
     }
-  }, [customerId, defaultInvoiceId])
+  }, [partyType, partyId, defaultBillType, defaultBillId])
 
   // Math
   const grossAmount = round2(payment.amount)
@@ -115,40 +132,43 @@ export default function RecordPaymentForm({
   const overAllocated = totalAllocated > allocatable + 0.005
   const fullyAllocated = Math.abs(residue) < 0.005
 
-  const customerOptions = useMemo(
+  const partyOptions = useMemo(
     () => [
-      { value: '', label: 'Select customer (Shift+M to create)' },
-      ...customers.map((c) => ({
-        value: c.id,
-        label: `${c.name}${c.city ? ` — ${c.city}` : ''}${c.phone ? ` (${c.phone})` : ''}`,
+      { value: '', label: `Select ${labels.single.toLowerCase()} (Shift+M to create)` },
+      ...parties.map((p) => ({
+        value: p.id,
+        label: `${p.name}${p.city ? ` — ${p.city}` : ''}${p.phone ? ` (${p.phone})` : ''}`,
       })),
     ],
-    [customers],
+    [parties, labels.single],
   )
 
   // Allocation helpers
-  function setAllocation(invId, amount) {
+  function setAllocation(key, amount) {
     setAllocations((prev) => {
       const next = { ...prev }
-      if (amount === '' || amount === null) delete next[invId]
-      else next[invId] = amount
+      if (amount === '' || amount === null) delete next[key]
+      else next[key] = amount
       return next
     })
   }
-  function setFullForRow(inv) {
-    const remaining = round2(allocatable - (totalAllocated - (Number(allocations[inv.id]) || 0)))
-    const target = Math.min(inv.outstanding_amount, Math.max(0, remaining))
+  function setFullForRow(bill) {
+    const k = billKey(bill)
+    const remaining = round2(
+      allocatable - (totalAllocated - (Number(allocations[k]) || 0)),
+    )
+    const target = Math.min(bill.outstanding_amount, Math.max(0, remaining))
     if (target <= 0) return
-    setAllocation(inv.id, target.toFixed(2))
+    setAllocation(k, target.toFixed(2))
   }
   function autoAllocateFifo() {
     if (allocatable <= 0) return
     let pool = allocatable
     const next = {}
-    for (const inv of openInvoices) {
+    for (const bill of openBills) {
       if (pool <= 0.005) break
-      const apply = Math.min(inv.outstanding_amount, pool)
-      next[inv.id] = round2(apply).toFixed(2)
+      const apply = Math.min(bill.outstanding_amount, pool)
+      next[billKey(bill)] = round2(apply).toFixed(2)
       pool = round2(pool - apply)
     }
     setAllocations(next)
@@ -159,7 +179,7 @@ export default function RecordPaymentForm({
 
   async function submit() {
     setError('')
-    if (!customerId) return setError('Select a customer')
+    if (!partyId) return setError(`Select a ${labels.single.toLowerCase()}`)
     if (!grossAmount || grossAmount <= 0) return setError('Enter a positive amount')
     if (overAllocated)
       return setError(
@@ -167,8 +187,8 @@ export default function RecordPaymentForm({
       )
 
     const payload = {
-      party_type: 'customer',
-      party_id: customerId,
+      party_type: partyType,
+      party_id: partyId,
       payment_date: payment.payment_date,
       payment_mode: payment.payment_mode || 'cash',
       reference_no: payment.reference_no || null,
@@ -181,10 +201,10 @@ export default function RecordPaymentForm({
       tcs_section: payment.tcs_section || null,
       allocations: Object.entries(allocations)
         .filter(([, v]) => Number(v) > 0)
-        .map(([invoice_id, amount_applied]) => ({
-          invoice_id,
-          amount_applied: Number(amount_applied),
-        })),
+        .map(([key, amount_applied]) => {
+          const [bt, bid] = key.split(':')
+          return { bill_type: bt, bill_id: bid, amount_applied: Number(amount_applied) }
+        }),
       notes: payment.notes || null,
     }
 
@@ -204,34 +224,36 @@ export default function RecordPaymentForm({
     }
   }
 
-  const lockedInvoice = !!defaultInvoiceId
+  const lockedBill = !!(defaultBillType && defaultBillId)
+  const isCustomer = partyType === 'customer'
+  const onAccountLabel = isCustomer ? 'On-account credit' : 'Advance with party'
 
   return (
     <div className="space-y-3">
-      {/* Customer + on-account chip */}
+      {/* Party + on-account chip */}
       <div className="grid grid-cols-3 gap-2 items-end">
         <div className="col-span-2">
           <label className="typo-label-sm">
-            Customer <span className="text-red-500">*</span>
+            {labels.single} <span className="text-red-500">*</span>
           </label>
           <FilterSelect
             autoFocus
             searchable
             full
-            data-master="customer"
-            value={customerId}
-            onChange={setCustomerId}
-            options={customerOptions}
-            disabled={lockedInvoice}
+            data-master={partyType === 'va_party' ? 'va-party' : partyType}
+            value={partyId}
+            onChange={setPartyId}
+            options={partyOptions}
+            disabled={lockedBill}
           />
         </div>
         <div className="text-right">
-          {customerId && onAccountBal > 0 && (
+          {partyId && onAccountBal > 0 && (
             <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-sky-50 border border-sky-200 typo-data text-sky-700">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              On-account: <strong>{fmt(onAccountBal)}</strong>
+              {onAccountLabel}: <strong>{fmt(onAccountBal)}</strong>
             </span>
           )}
         </div>
@@ -242,26 +264,26 @@ export default function RecordPaymentForm({
         <PaymentForm
           value={payment}
           onChange={setPayment}
-          partyType="customer"
+          partyType={partyType}
           error=""
         />
       </div>
 
       {/* Allocation table */}
-      {customerId && (
+      {partyId && (
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
             <div className="flex items-center gap-2">
-              <span className="typo-card-title">Allocate to invoices</span>
+              <span className="typo-card-title">Allocate to {labels.billPlural}</span>
               <span className="typo-caption text-gray-500">
-                {openInvoices.length} open · FIFO oldest first
+                {openBills.length} open · FIFO oldest first
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={autoAllocateFifo}
-                disabled={allocatable <= 0 || openInvoices.length === 0}
+                disabled={allocatable <= 0 || openBills.length === 0}
                 className="typo-btn-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 px-2 py-1 rounded"
               >
                 Auto FIFO
@@ -276,11 +298,11 @@ export default function RecordPaymentForm({
             </div>
           </div>
 
-          {loadingInvoices ? (
-            <div className="px-3 py-6 typo-empty text-center">Loading open invoices…</div>
-          ) : openInvoices.length === 0 ? (
+          {loadingBills ? (
+            <div className="px-3 py-6 typo-empty text-center">Loading open {labels.billPlural}…</div>
+          ) : openBills.length === 0 ? (
             <div className="px-3 py-6 typo-empty text-center">
-              No open invoices for this customer.
+              No open {labels.billPlural} for this {labels.single.toLowerCase()}.
             </div>
           ) : (
             <div className="max-h-72 overflow-auto">
@@ -288,7 +310,7 @@ export default function RecordPaymentForm({
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="typo-th px-2 py-1.5 text-left w-8"></th>
-                    <th className="typo-th px-2 py-1.5 text-left">Invoice</th>
+                    <th className="typo-th px-2 py-1.5 text-left">{labels.billSingle}</th>
                     <th className="typo-th px-2 py-1.5 text-left">Date</th>
                     <th className="typo-th px-2 py-1.5 text-right">Total</th>
                     <th className="typo-th px-2 py-1.5 text-right">Paid</th>
@@ -298,63 +320,77 @@ export default function RecordPaymentForm({
                   </tr>
                 </thead>
                 <tbody>
-                  {openInvoices.map((inv) => {
-                    const checked = allocations[inv.id] !== undefined
+                  {openBills.map((bill) => {
+                    const k = billKey(bill)
+                    const checked = allocations[k] !== undefined
+                    const isLockedRow =
+                      lockedBill &&
+                      !(bill.bill_type === defaultBillType && bill.bill_id === defaultBillId)
                     return (
-                      <tr key={inv.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <tr key={k} className="border-t border-gray-100 hover:bg-gray-50">
                         <td className="px-2 py-1">
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={(e) => {
-                              if (e.target.checked) setFullForRow(inv)
-                              else setAllocation(inv.id, '')
+                              if (e.target.checked) setFullForRow(bill)
+                              else setAllocation(k, '')
                             }}
-                            disabled={lockedInvoice && inv.id !== defaultInvoiceId}
+                            disabled={isLockedRow}
                           />
                         </td>
                         <td className="typo-td px-2 py-1">
-                          <span className="font-mono">{inv.invoice_number}</span>
-                          {inv.status === 'partially_paid' && (
+                          <span className="font-mono">{bill.bill_no}</span>
+                          {bill.status === 'partially_paid' && (
                             <span className="ml-1 px-1 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 typo-caption">
                               partial
                             </span>
                           )}
+                          {bill.bill_type === 'job_challan' && (
+                            <span className="ml-1 px-1 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 typo-caption">
+                              roll
+                            </span>
+                          )}
+                          {bill.bill_type === 'batch_challan' && (
+                            <span className="ml-1 px-1 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 typo-caption">
+                              garment
+                            </span>
+                          )}
                         </td>
                         <td className="typo-td-secondary px-2 py-1">
-                          {inv.issued_at
-                            ? new Date(inv.issued_at).toLocaleDateString('en-IN', {
+                          {bill.bill_date
+                            ? new Date(bill.bill_date).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
                               })
                             : '—'}
                         </td>
                         <td className="typo-td px-2 py-1 text-right tabular-nums">
-                          {fmt(inv.total_amount)}
+                          {fmt(bill.total_amount)}
                         </td>
                         <td className="typo-td-secondary px-2 py-1 text-right tabular-nums">
-                          {fmt(inv.amount_paid)}
+                          {fmt(bill.amount_paid)}
                         </td>
                         <td className="typo-td px-2 py-1 text-right tabular-nums font-medium">
-                          {fmt(inv.outstanding_amount)}
+                          {fmt(bill.outstanding_amount)}
                         </td>
                         <td className="px-2 py-1">
                           <input
                             type="number"
                             min="0"
                             step="0.01"
-                            value={allocations[inv.id] ?? ''}
-                            onChange={(e) => setAllocation(inv.id, e.target.value)}
+                            value={allocations[k] ?? ''}
+                            onChange={(e) => setAllocation(k, e.target.value)}
                             placeholder="0.00"
                             className="typo-input-sm text-right tabular-nums"
-                            disabled={lockedInvoice && inv.id !== defaultInvoiceId}
+                            disabled={isLockedRow}
                           />
                         </td>
                         <td className="px-1 py-1">
                           <button
                             type="button"
-                            onClick={() => setFullForRow(inv)}
-                            disabled={lockedInvoice && inv.id !== defaultInvoiceId}
+                            onClick={() => setFullForRow(bill)}
+                            disabled={isLockedRow}
                             className="typo-caption text-emerald-700 hover:text-emerald-900 disabled:opacity-40"
                             title="Apply outstanding"
                           >
@@ -395,7 +431,7 @@ export default function RecordPaymentForm({
                       : 'text-gray-500'
                 }`}
               >
-                {residue >= 0 ? 'On Account' : 'Over by'}{' '}
+                {residue >= 0 ? (isCustomer ? 'On Account' : 'Advance') : 'Over by'}{' '}
                 <strong>{fmt(Math.abs(residue))}</strong>
               </span>
               {(tdsAmount > 0 || tcsAmount > 0) && (
@@ -428,10 +464,10 @@ export default function RecordPaymentForm({
         <button
           type="button"
           onClick={submit}
-          disabled={submitting || !customerId || !grossAmount || overAllocated}
+          disabled={submitting || !partyId || !grossAmount || overAllocated}
           className="typo-btn-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 rounded"
         >
-          {submitting ? 'Recording…' : `Record Receipt — ${fmt(grossAmount)}`}
+          {submitting ? 'Recording…' : `Record ${isCustomer ? 'Receipt' : 'Payment'} — ${fmt(grossAmount)}`}
         </button>
       </div>
     </div>

@@ -1,7 +1,11 @@
 """Payment Receipt schemas — Tally-style bill-wise receipt voucher.
 
-Mirrors `LedgerService.PaymentCreate` for TDS/TCS handling but adds the
-allocations[] list for splitting one receipt across multiple invoices.
+Polymorphic since S125: each allocation references a bill via `bill_type` +
+`bill_id`. Supported bill types:
+    invoice          — customer sale (party_type='customer')
+    supplier_invoice — purchase / stock-in (party_type='supplier')
+    job_challan      — roll-level VA (party_type='va_party')
+    batch_challan    — garment-level VA (party_type='va_party')
 """
 from __future__ import annotations
 
@@ -12,7 +16,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas import BaseSchema, PaginatedParams
-from app.schemas.customer import CustomerBrief
+
+
+_VALID_BILL_TYPES = ("invoice", "supplier_invoice", "job_challan", "batch_challan")
+_VALID_PARTY_TYPES = ("customer", "supplier", "va_party")
 
 
 # --- Filter Params ---
@@ -31,9 +38,10 @@ class PaymentReceiptFilterParams(PaginatedParams):
 
 
 class PaymentAllocationInput(BaseModel):
-    """Single allocation line — apply ₹X of this receipt to that invoice."""
+    """Single allocation line — apply ₹X of this receipt to that bill."""
 
-    invoice_id: UUID
+    bill_type: str  # invoice | supplier_invoice | job_challan | batch_challan
+    bill_id: UUID
     amount_applied: Decimal
 
     @field_validator("amount_applied")
@@ -41,6 +49,13 @@ class PaymentAllocationInput(BaseModel):
     def amount_positive(cls, v: Decimal) -> Decimal:
         if v <= 0:
             raise ValueError("amount_applied must be greater than 0")
+        return v
+
+    @field_validator("bill_type")
+    @classmethod
+    def bill_type_valid(cls, v: str) -> str:
+        if v not in _VALID_BILL_TYPES:
+            raise ValueError(f"bill_type must be one of: {', '.join(_VALID_BILL_TYPES)}")
         return v
 
 
@@ -58,7 +73,7 @@ class PaymentReceiptCreate(BaseModel):
     payment_mode: str  # neft | upi | cash | cheque | card
     reference_no: str | None = None  # UTR / cheque #
 
-    amount: Decimal  # gross amount received
+    amount: Decimal  # gross amount (received from customer / paid to supplier|VA)
 
     # TDS / TCS — same contract as LedgerService.PaymentCreate
     tds_applicable: bool = False
@@ -81,33 +96,39 @@ class PaymentReceiptCreate(BaseModel):
     @field_validator("party_type")
     @classmethod
     def party_type_valid(cls, v: str) -> str:
-        if v not in ("customer", "supplier", "va_party"):
-            raise ValueError("party_type must be one of: customer, supplier, va_party")
+        if v not in _VALID_PARTY_TYPES:
+            raise ValueError(f"party_type must be one of: {', '.join(_VALID_PARTY_TYPES)}")
         return v
 
 
 # --- Nested Briefs (used in responses) ---
 
 
-class OpenInvoiceBrief(BaseSchema):
-    """Single open invoice for the customer-payment allocation table."""
+class OpenBillBrief(BaseSchema):
+    """Single open bill (any of 4 types) for the allocation table.
 
-    id: UUID
-    invoice_number: str
-    issued_at: datetime | None = None
-    due_date: date | None = None
+    `bill_type` + `bill_id` is the polymorphic ref; `bill_no` is the
+    human-readable code (INV-XXXX / SI/Inv. # / JC-XXXX / BC-XXXX).
+    """
+
+    bill_type: str
+    bill_id: UUID
+    bill_no: str
+    bill_date: date | None = None  # invoice_date / sent_date / issued_at
+    due_date: date | None = None  # invoices only — None for SI/JC/BC
     total_amount: Decimal
     amount_paid: Decimal
     outstanding_amount: Decimal
-    status: str  # issued | partially_paid
+    status: str
 
 
 class PaymentAllocationBrief(BaseSchema):
     """Single allocation line in a receipt detail/list response."""
 
     id: UUID
-    invoice_id: UUID
-    invoice_number: str | None = None
+    bill_type: str
+    bill_id: UUID
+    bill_no: str | None = None
     amount_applied: Decimal
 
 
@@ -156,7 +177,7 @@ class PaymentReceiptResponse(BaseSchema):
 
 
 class OnAccountBalance(BaseSchema):
-    """GET /customers/{id}/on-account-balance response."""
+    """GET /<party-type>/{id}/on-account-balance response."""
 
     party_type: str
     party_id: UUID

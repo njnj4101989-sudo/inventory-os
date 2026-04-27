@@ -83,7 +83,7 @@ async def get_open_invoices(
     svc = PaymentReceiptService(db)
     return {
         "success": True,
-        "data": await svc.get_open_invoices_for_party("customer", customer_id, fy_id),
+        "data": await svc.get_open_bills_for_party("customer", customer_id, fy_id),
     }
 
 

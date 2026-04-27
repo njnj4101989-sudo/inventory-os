@@ -3338,9 +3338,11 @@ draft → received → inspected → restocked → closed
 
 ---
 
-## 26. Payment Receipts (`/api/v1/payment-receipts`) — NEW S123
+## 26. Payment Receipts (`/api/v1/payment-receipts`) — NEW S123 · S125 polymorphic
 
-Tally-style bill-wise receipt voucher. One inflow → one-or-more `PaymentAllocation` lines + optional on-account residue. Each allocation generates one `LedgerEntry` keyed `reference_type='payment_allocation'`. On-account residue gets one extra `LedgerEntry` keyed `reference_type='payment_receipt'`.
+Tally-style bill-wise receipt voucher. One inflow/outflow → one-or-more `PaymentAllocation` lines + optional on-account residue. Each allocation generates one `LedgerEntry` keyed `reference_type='payment_allocation'`. On-account residue gets one extra `LedgerEntry` keyed `reference_type='payment_receipt'`.
+
+**S125 polymorphic:** allocations now reference bills via (`bill_type`, `bill_id`) where `bill_type IN ('invoice', 'supplier_invoice', 'job_challan', 'batch_challan')`. The same endpoint serves customer receipts, supplier payments, and VA payouts.
 
 **Math contract:**
 ```
@@ -3379,9 +3381,9 @@ Request body:
   "tds_applicable": false,
   "tcs_applicable": false,
   "allocations": [
-    { "invoice_id": "uuid", "amount_applied": 20000 },
-    { "invoice_id": "uuid", "amount_applied": 20000 },
-    { "invoice_id": "uuid", "amount_applied": 10000 }
+    { "bill_type": "invoice", "bill_id": "uuid", "amount_applied": 20000 },
+    { "bill_type": "invoice", "bill_id": "uuid", "amount_applied": 20000 },
+    { "bill_type": "invoice", "bill_id": "uuid", "amount_applied": 10000 }
   ],
   "notes": "Partial settlement"
 }
@@ -3390,10 +3392,13 @@ Request body:
 Validation:
 - `amount > 0` (CHECK)
 - `allocations[].amount_applied > 0` (CHECK)
+- `bill_type IN ('invoice', 'supplier_invoice', 'job_challan', 'batch_challan')` (CHECK)
+- Allowed bill_type per party_type: `customer→invoice`, `supplier→supplier_invoice`, `va_party→job_challan|batch_challan`
 - `SUM(allocations) <= amount − tds + tcs`
-- Each `invoice.customer_id == party_id` (when `party_type='customer'`)
-- Each `invoice.status IN ('issued', 'partially_paid')`
-- Each `allocation.amount_applied <= invoice.outstanding_amount`
+- Each bill belongs to the party (`customer_id`/`supplier_id`/`va_party_id` match)
+- Invoice allocation requires status `IN ('issued', 'partially_paid')`
+- Job/Batch challan allocation requires status `IN ('received', 'partially_received')` (work-done gate)
+- Each `allocation.amount_applied <= bill.outstanding_amount`
 
 Returns: full `PaymentReceiptResponse` with allocations + party brief + derived `allocated_amount`/`net_amount`/`on_account_amount`.
 
@@ -3422,7 +3427,7 @@ Returns: same shape as POST.
   "on_account_amount": 0.00,
   "net_amount": 50000.00,
   "allocations": [
-    { "id": "uuid", "invoice_id": "uuid", "invoice_number": "INV-0042", "amount_applied": 20000.00 }
+    { "id": "uuid", "bill_type": "invoice", "bill_id": "uuid", "bill_no": "INV-0042", "amount_applied": 20000.00 }
   ],
   "notes": null,
   "fy_id": "uuid",
@@ -3430,17 +3435,24 @@ Returns: same shape as POST.
 }
 ```
 
-### GET `/customers/{id}/open-invoices` — NEW S123
+### GET `/customers/{id}/open-invoices` — NEW S123 (S125 returns polymorphic shape)
+### GET `/suppliers/{id}/open-bills` — NEW S125
+### GET `/masters/va-parties/{id}/open-bills` — NEW S125
 **Permission:** `invoice_manage` | **Auth:** Cookie | **FY-scoped**
 
-Returns FIFO-ordered (oldest `issued_at` first — Tally convention) list of customer invoices with `status IN ('issued', 'partially_paid')` and `outstanding_amount > 0`.
+Returns FIFO-ordered list of open bills for the party.
+- Customer → invoices with `status IN ('issued','partially_paid')` and `outstanding > 0`, ordered by `issued_at`
+- Supplier → supplier_invoices with `outstanding > 0`, ordered by `invoice_date`
+- VA Party → union of `job_challans` + `batch_challans` with `status IN ('received','partially_received')` and `outstanding > 0`, FIFO across both
 
+Polymorphic shape (works for all three endpoints):
 ```json
 [
   {
-    "id": "uuid",
-    "invoice_number": "INV-0042",
-    "issued_at": "2026-04-15T10:00:00Z",
+    "bill_type": "invoice",
+    "bill_id": "uuid",
+    "bill_no": "INV-0042",
+    "bill_date": "2026-04-15",
     "due_date": "2026-04-30",
     "total_amount": 25000.00,
     "amount_paid": 10000.00,
@@ -3451,6 +3463,8 @@ Returns FIFO-ordered (oldest `issued_at` first — Tally convention) list of cus
 ```
 
 ### GET `/customers/{id}/on-account-balance` — NEW S123
+### GET `/suppliers/{id}/on-account-balance` — NEW S125
+### GET `/masters/va-parties/{id}/on-account-balance` — NEW S125
 **Permission:** `invoice_manage` | **Auth:** Cookie | **FY-scoped**
 
 ```json

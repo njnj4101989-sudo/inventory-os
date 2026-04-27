@@ -491,13 +491,32 @@ Every settled architectural choice. Don't re-debate.
 
 ---
 
-### Phase 3 (post-S124) — Polish & follow-ups (deferred)
+### Phase 3 (S125) — Supplier + VA Bill-wise Payments — ✅ COMPLETE
 
-- [ ] **On-account application UX (Q4):** when creating new invoice for a customer with on-account balance, prompt "Apply ₹X on-account credit?"
-- [ ] **Supplier-side payments:** new tab on Payments page for supplier bill-wise payment booking
-- [ ] **VA-party payments:** same — new tab
-- [ ] **Outstanding receivables aging report:** dashboard tile + dedicated report (0–30 / 31–60 / 61–90 / 90+ days)
-- [ ] **Synthetic backfill of pre-S123 payments (Q7):** if user wants historical receipts visible in new Payments list
+Polymorphic refactor of `PaymentAllocation` (`bill_type` + `bill_id`) extends the
+S123/S124 receipt voucher to all four bill kinds: `invoice`, `supplier_invoice`,
+`job_challan`, `batch_challan`.
+
+- [x] Backend models: `amount_paid` Numeric(12,2) NOT NULL DEFAULT 0 on `SupplierInvoice` / `JobChallan` / `BatchChallan`
+- [x] Backend models: `PaymentAllocation` ditched FK `invoice_id`, added `bill_type VARCHAR(30)` + `bill_id UUID` + CHECK `pa_valid_bill_type` + indexes `ix_pa_receipt_bill` / `ix_pa_bill`
+- [x] Schemas: `PaymentAllocationInput` / `PaymentAllocationBrief` use `bill_type`/`bill_id`/`bill_no`; new `OpenBillBrief` replaces `OpenInvoiceBrief`
+- [x] Service: `record()` dispatches per-allocation across 4 bill types — locks bills FOR UPDATE, validates outstanding, bumps `bill.amount_paid` (only `invoice` flips status `partially_paid`/`paid`); `_PARTY_BILL_MAP` rejects cross-party allocation (e.g. `customer` → `job_challan`)
+- [x] Service: `get_open_bills_for_party(party_type, party_id, fy_id)` returns FIFO list — invoices for customers, supplier_invoices for suppliers, JC + BC unioned for va_parties (only `received`/`partially_received` challans — work has to be done before payment)
+- [x] API: `GET /suppliers/{id}/open-bills` + `/on-account-balance`; `GET /masters/va-parties/{id}/open-bills` + `/on-account-balance`; `/customers/{id}/open-invoices` reuses unified service method
+- [x] Migration `p6q7r8s9t0u1_s125_payments_polymorphic.py` — tenant-iterating, `col_exists` + `_table_exists` guarded, drops legacy `invoice_id` FK + col + indexes, adds polymorphic columns + CHECK + new indexes; verified prod has 0 receipts/0 allocations/0 challans → safe destructive ALTER
+- [x] Frontend: `RecordPaymentForm` accepts `partyType` prop + `parties[]` + `defaultPartyId/BillType/BillId` — same form serves customer/supplier/va_party; row chips show `roll`/`garment` for challans; CTA label flips Receipt↔Payment
+- [x] Frontend: `getOpenBillsForParty(partyType, partyId)` + polymorphic `getOnAccountBalance(partyType, partyId)` (back-compat single-arg signature kept for old call sites)
+- [x] Frontend: `PaymentsPage` 3 tabs (Customer Receipts / Supplier Payments / VA Payments) — tab persisted on URL `?tab=`, KPIs flip `On-Account` ↔ `Advance`, columns adapt, `+ Record Payment/Receipt` CTA per tab; allocation table renders `bill_no` with type chip + deep-links per `bill_type`
+- [x] Frontend: `LedgerPanel` reads on-account balance for all party types (was customer-only); description regex extended to JC-/BC- codes with route to `/challans?open=`
+- [x] Frontend: `InvoicesPage` Mark-as-Paid passes `partyType="customer"` + `defaultBillType="invoice"` (caller-side prop rename only)
+- [x] Local: alembic round-trip clean; backend imports = 235 routes; vite build clean (`PaymentsPage` 25kB)
+- [ ] CI deploy + post-deploy smoke
+
+### Phase 4 (post-S125) — Polish & follow-ups (deferred)
+
+- [ ] **On-account application UX (Q4):** when creating a new invoice/SI/challan for a party with positive on-account balance, prompt "Apply ₹X on-account?" — surfaces the residue chip already on the receipt form into the document forms (touches OrdersPage + InvoicesPage + RollsPage stock-in + ChallansPage)
+- [ ] **Outstanding aging report:** dashboard tile + dedicated report (0–30 / 31–60 / 61–90 / 90+ days) for receivables AND payables (mirror split now that all 3 party types have receipts)
+- [ ] **Synthetic backfill of pre-S123 payments (Q7):** if user wants historical S119 single-shot Mark-as-Paid receipts visible in new Payments list
 - [ ] **Receipt cancel flow:** with proper ledger reversal + audit trail (Q10 — only if real cancel case appears)
 - [ ] **Bank reconciliation (post-4.4):** when chart-of-accounts lands, allow matching receipts to bank statement lines
 

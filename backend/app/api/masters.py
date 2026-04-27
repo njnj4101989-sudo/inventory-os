@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas.master import (
     ProductTypeCreate, ProductTypeUpdate, ProductTypeResponse,
@@ -16,6 +16,7 @@ from app.schemas.master import (
     VAPartyCreate, VAPartyUpdate, VAPartyResponse,
 )
 from app.services.master_service import MasterService
+from app.services.payment_receipt_service import PaymentReceiptService
 
 router = APIRouter(prefix="/masters", tags=["Masters"])
 
@@ -331,3 +332,33 @@ async def update_va_party(
 ):
     obj = await MasterService.update_va_party(db, party_id, req)
     return {"success": True, "data": VAPartyResponse.model_validate(obj)}
+
+
+@router.get("/va-parties/{party_id}/open-bills", response_model=None)
+async def va_party_open_bills(
+    party_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Open job + batch challans for the receipt-allocation form (FIFO)."""
+    fy_id = get_fy_id(current_user)
+    svc = PaymentReceiptService(db)
+    return {
+        "success": True,
+        "data": await svc.get_open_bills_for_party("va_party", party_id, fy_id),
+    }
+
+
+@router.get("/va-parties/{party_id}/on-account-balance", response_model=None)
+async def va_party_on_account_balance(
+    party_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Sum of unallocated payment residue for this VA party in the current FY."""
+    fy_id = get_fy_id(current_user)
+    svc = PaymentReceiptService(db)
+    return {
+        "success": True,
+        "data": await svc.get_on_account_balance("va_party", party_id, fy_id),
+    }

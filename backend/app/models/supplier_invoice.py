@@ -37,6 +37,11 @@ class SupplierInvoice(Base):
     additional_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    # Bumped by PaymentReceiptService.record() on each PaymentAllocation
+    # whose bill_type='supplier_invoice' (S125). Outstanding = total − paid.
+    amount_paid: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     received_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -22,7 +22,7 @@
 | `MASTERS_AND_FY_PLAN.md` | Party Masters + Ledger + FY plan (Phases 1-4) — COMPLETE | Before any masters/FY work |
 | `MULTI_COMPANY_PLAN.md` | Schema-per-company + FY-at-login plan (4 phases) | Before any multi-company work |
 | `FINANCIAL_SYMMETRY_PLAN.md` | Totals stack symmetry across sales/purchase/VA (Phases 1, 2, 3 ✅; Phase 4 deferred) | Before any totals/discount/additional/tax work |
-| `PAYMENTS_AND_ALLOCATIONS_PLAN.md` | Partial payments + bill-wise receipt voucher (S123 backend + S124 frontend) | Before any payment/allocation/receipt work |
+| `PAYMENTS_AND_ALLOCATIONS_PLAN.md` | Partial payments + bill-wise receipt voucher (S123 BE customer · S124 FE customer · S125 polymorphic supplier+VA) | Before any payment/allocation/receipt work |
 | `STEP1_SYSTEM_OVERVIEW.md` | Role matrix, production flow | Architecture decisions |
 | `STEP2_DATA_MODEL.md` | 24 tables, columns, types, FKs | Model/migration changes |
 | `STEP3_EVENT_CONTRACTS.md` | Events, side effects, 7-state batch machine | Business logic |
@@ -35,7 +35,38 @@
 
 ---
 
-## Current State (Session 124 — 2026-04-27) — IN PROGRESS
+## Current State (Session 125 — 2026-04-27) — IN PROGRESS
+
+**Phase 3 of PAYMENTS_AND_ALLOCATIONS_PLAN — Supplier + VA bill-wise payments.** Closes the loop opened in S123 (customer receipt voucher) and S124 (frontend) by extending the same Tally-style allocation model to supplier invoices + VA challans (job + batch). Refactor is **polymorphic** — `PaymentAllocation` swaps `invoice_id` FK for `bill_type` + `bill_id` + CHECK constraint `pa_valid_bill_type`. The receipt voucher now serves all four bill kinds with a single service method.
+
+**Production audit before fix:** 0 payment_receipts, 0 payment_allocations, 12 supplier_invoices, 0 challans → polymorphic refactor is safely destructive (no rows to preserve when dropping `invoice_id` FK).
+
+**Backend:**
+  - `models/supplier_invoice.py` + `models/job_challan.py` + `models/batch_challan.py` — added `amount_paid: Numeric(12,2) NOT NULL DEFAULT 0` on each. Bumped by `PaymentReceiptService.record()` per-allocation; outstanding = total − paid.
+  - `models/payment_allocation.py` — replaced `invoice_id` FK with `bill_type VARCHAR(30)` + `bill_id UUID` (no FK — Postgres can't FK across N tables; service validates under FOR UPDATE). New CHECK `pa_valid_bill_type IN ('invoice','supplier_invoice','job_challan','batch_challan')` + indexes `ix_pa_receipt_bill` / `ix_pa_bill`.
+  - `schemas/payment_receipt.py` — `PaymentAllocationInput` and `PaymentAllocationBrief` use `bill_type`/`bill_id`/`bill_no`. New `OpenBillBrief` replaces `OpenInvoiceBrief`.
+  - `services/payment_receipt_service.py` — rewrite around `_BILL_MODELS` registry + `_PARTY_BILL_MAP` cross-party guard. `record()` locks all referenced bills FOR UPDATE per type, validates outstanding, bumps `bill.amount_paid`; only `invoice` flips status `partially_paid`/`paid`. `get_open_bills_for_party()` is the unified picker — invoices for customers, supplier_invoices for suppliers, JC + BC unioned for va_parties (only `received`/`partially_received` challans — work-done gate).
+  - `services/invoice_service.py` — `mark_paid` passes `bill_type="invoice"` + `bill_id=invoice.id` (signature update for the polymorphic shape).
+  - `api/customers.py` — `/customers/{id}/open-invoices` now calls unified `get_open_bills_for_party`.
+  - `api/suppliers.py` — new `GET /suppliers/{id}/open-bills` + `/on-account-balance`.
+  - `api/masters.py` — new `GET /masters/va-parties/{id}/open-bills` + `/on-account-balance`.
+
+**Migration:** `p6q7r8s9t0u1_s125_payments_polymorphic.py` — tenant-iterating, `col_exists` + `_table_exists` guarded. Adds amount_paid on SI/JC/BC. On payment_allocations: adds `bill_type`+`bill_id`, backfills any extant rows from `invoice_id` (prod has 0), drops invoice FK + col + legacy index, adds CHECK + new indexes, tightens to NOT NULL. Round-trip safe.
+
+**Frontend:**
+  - `api/paymentReceipts.js` — `getOpenBillsForParty(partyType, partyId)` polymorphic + back-compat `getOpenInvoicesForCustomer` shim. `getOnAccountBalance` accepts `(partyType, partyId)` with single-arg fallback.
+  - `components/payments/RecordPaymentForm.jsx` — props `partyType` + `parties[]` + `defaultPartyId/BillType/BillId`. UI flips per partyType: Receipt↔Payment, On-Account↔Advance, "invoices"↔"bills"↔"challans". Per-row bill chips: `roll`/`garment` for JC/BC.
+  - `pages/PaymentsPage.jsx` — 3 tabs (Customer Receipts / Supplier Payments / VA Payments) with URL persistence (`?tab=`). KPIs adapt (Total Received vs Total Paid; On-Account vs Advance). Allocation table renders `bill_no` with type chip + deep-links per `bill_type` (`/invoices?open=`, `/rolls?si=`, `/challans?open=`). Cross-tab detail-overlay routing on `?open=<receipt_id>`.
+  - `components/common/LedgerPanel.jsx` — on-account balance now loaded for **all** party types (was customer-only since S123). Description regex extended to match `JC-XXXX`/`BC-XXXX` codes with deep-link to `/challans?open=`.
+  - `pages/InvoicesPage.jsx` — Mark-as-Paid call site updated to new prop names (`partyType="customer"`, `defaultBillType="invoice"`, `defaultBillId`).
+
+**Industry alignment:** matches Tally Receipt Voucher (F6) + Payment Voucher (F5) where both sides of cash flow share the same bill-wise allocation engine. Zoho Books "Apply Credits", QuickBooks "Receive Payment"/"Bill Payment" — same UX, single form, party-side toggle.
+
+**Pending:** commit + push. Local `alembic upgrade head` clean. Backend imports clean (235 routes). Vite build clean (PaymentsPage 25kB).
+
+---
+
+## Previous State (Session 124 — 2026-04-27) — CLOSED
 
 **Phase 2 of PAYMENTS_AND_ALLOCATIONS_PLAN — Frontend.** Closes the Tally Receipt Voucher loop end-to-end. The customer story works fully now: open Payments page → click Record Payment → pick Ramesh → enter ₹50,000 → his 4 open invoices auto-load FIFO-sorted → click Auto FIFO (or per-row Full / manual amounts) → see live counter Allocated ₹50k vs Allocatable + on-account residue → Save → invoices flip to partially_paid/paid, ledger gets per-allocation rows, A4 half-page receipt prints. Mark-as-Paid on InvoicesPage now opens the same form pre-locked to one invoice.
 

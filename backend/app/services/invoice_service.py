@@ -605,7 +605,11 @@ class InvoiceService:
             tcs_rate=req.tcs_rate,
             tcs_section=req.tcs_section,
             allocations=[
-                PaymentAllocationInput(invoice_id=invoice.id, amount_applied=outstanding)
+                PaymentAllocationInput(
+                    bill_type="invoice",
+                    bill_id=invoice.id,
+                    amount_applied=outstanding,
+                )
             ],
             notes=req.notes,
         )

@@ -34,11 +34,12 @@ export async function recordPayment(data) {
   if (USE_MOCK) {
     const next = `PAY-${String(paymentReceipts.length + 1).padStart(4, '0')}`
     const allocations = (data.allocations || []).map((a) => {
-      const inv = invoices.find((iv) => iv.id === a.invoice_id)
+      const inv = invoices.find((iv) => iv.id === a.bill_id)
       return {
         id: crypto.randomUUID(),
-        invoice_id: a.invoice_id,
-        invoice_number: inv?.invoice_number || null,
+        bill_type: a.bill_type,
+        bill_id: a.bill_id,
+        bill_no: inv?.invoice_number || null,
         amount_applied: Number(a.amount_applied) || 0,
       }
     })
@@ -64,63 +65,93 @@ export async function recordPayment(data) {
       created_at: new Date().toISOString(),
     }
     paymentReceipts.push(newR)
-    // Bump invoice.amount_paid + status in mock
-    for (const a of allocations) {
-      const inv = invoices.find((iv) => iv.id === a.invoice_id)
-      if (!inv) continue
-      const paidNow = (Number(inv.amount_paid) || 0) + a.amount_applied
-      inv.amount_paid = paidNow
-      const total = Number(inv.total_amount) || 0
-      if (paidNow + 0.005 >= total) {
-        inv.status = 'paid'
-        inv.paid_at = new Date().toISOString()
-      } else {
-        inv.status = 'partially_paid'
+    if (data.party_type === 'customer') {
+      for (const a of allocations) {
+        const inv = invoices.find((iv) => iv.id === a.bill_id)
+        if (!inv) continue
+        const paidNow = (Number(inv.amount_paid) || 0) + a.amount_applied
+        inv.amount_paid = paidNow
+        const total = Number(inv.total_amount) || 0
+        if (paidNow + 0.005 >= total) {
+          inv.status = 'paid'
+          inv.paid_at = new Date().toISOString()
+        } else {
+          inv.status = 'partially_paid'
+        }
+        inv.outstanding_amount = Math.max(0, total - paidNow)
       }
-      inv.outstanding_amount = Math.max(0, total - paidNow)
     }
     return mockResponse(newR, 'Payment recorded')
   }
   return client.post('/payment-receipts', data)
 }
 
-export async function getOpenInvoicesForCustomer(customerId) {
+// ── Open bills (polymorphic — works for customer/supplier/va_party) ────────
+
+export async function getOpenBillsForParty(partyType, partyId) {
   if (USE_MOCK) {
-    const open = invoices
-      .filter(
-        (inv) =>
-          inv.order?.customer_id === customerId ||
-          inv.customer_id === customerId,
-      )
-      .filter((inv) => inv.status === 'issued' || inv.status === 'partially_paid')
-      .map((inv) => ({
-        id: inv.id,
-        invoice_number: inv.invoice_number,
-        issued_at: inv.issued_at,
-        due_date: inv.due_date,
-        total_amount: Number(inv.total_amount) || 0,
-        amount_paid: Number(inv.amount_paid) || 0,
-        outstanding_amount:
-          (Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0),
-        status: inv.status,
-      }))
-      .filter((row) => row.outstanding_amount > 0.005)
-      .sort((a, b) => (a.issued_at || '').localeCompare(b.issued_at || ''))
-    return mockResponse(open)
+    if (partyType === 'customer') {
+      const open = invoices
+        .filter(
+          (inv) =>
+            inv.order?.customer_id === partyId ||
+            inv.customer_id === partyId,
+        )
+        .filter((inv) => inv.status === 'issued' || inv.status === 'partially_paid')
+        .map((inv) => ({
+          bill_type: 'invoice',
+          bill_id: inv.id,
+          bill_no: inv.invoice_number,
+          bill_date: (inv.issued_at || '').slice(0, 10) || null,
+          due_date: inv.due_date,
+          total_amount: Number(inv.total_amount) || 0,
+          amount_paid: Number(inv.amount_paid) || 0,
+          outstanding_amount:
+            (Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0),
+          status: inv.status,
+        }))
+        .filter((row) => row.outstanding_amount > 0.005)
+        .sort((a, b) => (a.bill_date || '').localeCompare(b.bill_date || ''))
+      return mockResponse(open)
+    }
+    return mockResponse([])
   }
-  return client.get(`/customers/${customerId}/open-invoices`)
+  if (partyType === 'customer') {
+    return client.get(`/customers/${partyId}/open-invoices`)
+  }
+  if (partyType === 'supplier') {
+    return client.get(`/suppliers/${partyId}/open-bills`)
+  }
+  if (partyType === 'va_party') {
+    return client.get(`/masters/va-parties/${partyId}/open-bills`)
+  }
+  throw new Error(`Unsupported party_type: ${partyType}`)
 }
 
-export async function getOnAccountBalance(customerId) {
+// Back-compat alias for the original signature (LedgerPanel etc).
+export const getOpenInvoicesForCustomer = (customerId) =>
+  getOpenBillsForParty('customer', customerId)
+
+export async function getOnAccountBalance(partyType, partyId) {
+  // Back-compat: callers used to pass just (customerId).
+  if (partyId === undefined) {
+    partyId = partyType
+    partyType = 'customer'
+  }
   if (USE_MOCK) {
     const total = paymentReceipts
-      .filter((r) => r.party_type === 'customer' && r.party_id === customerId)
+      .filter((r) => r.party_type === partyType && r.party_id === partyId)
       .reduce((s, r) => s + (Number(r.on_account_amount) || 0), 0)
-    return mockResponse({
-      party_type: 'customer',
-      party_id: customerId,
-      balance: total,
-    })
+    return mockResponse({ party_type: partyType, party_id: partyId, balance: total })
   }
-  return client.get(`/customers/${customerId}/on-account-balance`)
+  if (partyType === 'customer') {
+    return client.get(`/customers/${partyId}/on-account-balance`)
+  }
+  if (partyType === 'supplier') {
+    return client.get(`/suppliers/${partyId}/on-account-balance`)
+  }
+  if (partyType === 'va_party') {
+    return client.get(`/masters/va-parties/${partyId}/on-account-balance`)
+  }
+  throw new Error(`Unsupported party_type: ${partyType}`)
 }

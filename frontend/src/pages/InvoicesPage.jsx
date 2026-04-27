@@ -1570,7 +1570,8 @@ export default function InvoicesPage() {
                   </div>
                   <div className="p-4">
                     <RecordPaymentForm
-                      customers={(customers && customers.length)
+                      partyType="customer"
+                      parties={(customers && customers.length)
                         ? customers
                         : (inv.customer_id || inv.customer?.id)
                           ? [{
@@ -1580,8 +1581,9 @@ export default function InvoicesPage() {
                               phone: inv.customer_phone || inv.customer?.phone,
                             }]
                           : []}
-                      defaultCustomerId={inv.customer_id || inv.customer?.id}
-                      defaultInvoiceId={inv.id}
+                      defaultPartyId={inv.customer_id || inv.customer?.id}
+                      defaultBillType="invoice"
+                      defaultBillId={inv.id}
                       defaultAmount={(Number(inv.total_amount) || 0) - (Number(inv.amount_paid) || 0)}
                       onSuccess={() => { setConfirmMarkPaid(false); setDetailInvoice(null); fetchData() }}
                       onCancel={() => setConfirmMarkPaid(false)}

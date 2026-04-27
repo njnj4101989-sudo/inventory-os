@@ -55,6 +55,11 @@ class BatchChallan(Base):
     additional_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, server_default="0")
+    # Bumped by PaymentReceiptService.record() on each PaymentAllocation
+    # whose bill_type='batch_challan' (S125). Outstanding = total − paid.
+    amount_paid: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("public.users.id", ondelete="RESTRICT"))
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True

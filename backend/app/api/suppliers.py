@@ -5,10 +5,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db, require_permission
+from app.dependencies import get_db, get_fy_id, require_permission
 from app.models.user import User
 from app.schemas import PaginatedParams
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
+from app.services.payment_receipt_service import PaymentReceiptService
 from app.services.supplier_service import SupplierService
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
@@ -49,3 +50,33 @@ async def update_supplier(
     svc = SupplierService(db)
     result = await svc.update_supplier(supplier_id, req)
     return {"success": True, "data": result}
+
+
+@router.get("/{supplier_id}/open-bills")
+async def get_open_bills(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Open supplier invoices for the receipt-allocation form (FIFO)."""
+    fy_id = get_fy_id(current_user)
+    svc = PaymentReceiptService(db)
+    return {
+        "success": True,
+        "data": await svc.get_open_bills_for_party("supplier", supplier_id, fy_id),
+    }
+
+
+@router.get("/{supplier_id}/on-account-balance")
+async def get_on_account_balance(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = require_permission("invoice_manage"),
+):
+    """Sum of unallocated payment residue for this supplier in the current FY."""
+    fy_id = get_fy_id(current_user)
+    svc = PaymentReceiptService(db)
+    return {
+        "success": True,
+        "data": await svc.get_on_account_balance("supplier", supplier_id, fy_id),
+    }
