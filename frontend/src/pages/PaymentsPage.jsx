@@ -565,7 +565,7 @@ export default function PaymentsPage() {
 
   // ── List ──
   return (
-    <div className="p-4 space-y-3">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Payments</h1>
