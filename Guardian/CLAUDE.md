@@ -59,7 +59,7 @@ Full spec, deviations from original plan, file maps → [REPORTS_AND_INVENTORY_P
 
 **Architectural note:** S115's `write_off_roll` zeroed `remaining_weight` without snapshotting it — historical wastage was unrecoverable. S116 fixes this properly (no band-aid): new snapshot column, service captures pre-zero value, migration backfills via `total_weight - SUM(consumed) - SUM(va_damage)` clamped ≥ 0.
 
-**Prod deploy (combined S116 + S117):** Run `alembic upgrade head` on EC2 to apply both `j0k1l2m3n4o5` (Roll.weight_at_write_off) and `k1l2m3n4o5p6` (additional_amount on orders/invoices/sales_returns). No data dependency for either — additive columns + new endpoints.
+**Prod deploy (S116 + S117) — ✅ DEPLOYED 2026-04-27 09:36 UTC.** CI/CD auto-ran `alembic upgrade head` as part of the EC2 deploy. Both `j0k1l2m3n4o5` (Roll.weight_at_write_off) and `k1l2m3n4o5p6` (additional_amount × 3 tables) live on `co_drs_blouse`. fastapi.service confirmed `active (running)`, health check 200.
 
 **Math reference (the rule):**
 ```
