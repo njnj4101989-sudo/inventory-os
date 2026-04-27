@@ -96,6 +96,22 @@ class ShipOrderRequest(BaseModel):
     notes: str | None = None
 
 
+class OrderCancelRequest(BaseModel):
+    """POST /orders/{id}/cancel — requires a reason code + optional notes (S120).
+
+    Reason codes (industry-standard):
+      - customer_cancelled : customer changed their mind / cancelled pre-delivery
+      - out_of_stock       : couldn't fulfil due to stock unavailability
+      - wrong_entry        : wrong qty / wrong customer / typo at entry
+      - duplicate          : duplicate order entered by mistake
+      - data_entry_error   : other clerical mistake
+      - other              : any reason not above (notes recommended)
+    """
+
+    reason: str
+    notes: str | None = None
+
+
 class UpdateShippingRequest(BaseModel):
     """PATCH /orders/{id}/shipping — DEPRECATED, use PATCH /shipments/{id} instead."""
     transport_id: UUID | None = None

@@ -67,6 +67,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
                 selectinload(Order.sales_returns).selectinload(SalesReturn.items),
+                selectinload(Order.cancelled_by_user),
             )
             .order_by(order)
         )
@@ -564,12 +565,33 @@ class OrderService:
         await self.db.flush()
         return await self.get_order(order_id)
 
-    async def cancel_order(self, order_id: UUID, user_id: UUID) -> dict:
+    async def cancel_order(self, order_id: UUID, req, user_id: UUID) -> dict:
+        """Cancel an order with a required reason code + optional notes (S120).
+
+        Mirrors invoice cancel (S113): reason is validated against an
+        industry-standard set; anything else is stored under 'other' so
+        the free-text notes carry the specifics. Audit columns
+        (cancel_reason / cancel_notes / cancelled_at / cancelled_by) are
+        populated for the GST-style trail.
+
+        Side effects: releases all active reservations + cascades cancel
+        to any draft/issued (not paid) invoices linked to this order.
+        """
         order = await self._get_or_404(order_id)
         if order.status not in ("pending", "processing"):
             raise InvalidStateTransitionError(
                 f"Cannot cancel order in '{order.status}' status"
             )
+
+        allowed_reasons = {
+            "customer_cancelled", "out_of_stock", "wrong_entry",
+            "duplicate", "data_entry_error", "other",
+        }
+        reason = (getattr(req, "reason", None) or "").strip()
+        if not reason:
+            raise ValidationError("Cancellation reason is required")
+        if reason not in allowed_reasons:
+            reason = "other"
 
         # Release all active reservations for this order
         from app.models.reservation import Reservation
@@ -584,18 +606,43 @@ class OrderService:
             await res_svc.release_reservation(res.id)
 
         order.status = "cancelled"
+        order.cancel_reason = reason
+        order.cancel_notes = (getattr(req, "notes", None) or None) or None
+        order.cancelled_at = datetime.now(timezone.utc)
+        order.cancelled_by = user_id
         await self.db.flush()
 
-        # Cascade: cancel any linked draft/issued invoices (not paid)
+        # Cascade: cancel any linked draft/issued invoices (not paid). Forward
+        # the order's reason + a "cascaded from order cancel" prefix on notes
+        # so the invoice's own audit trail records why it was cancelled too.
         from app.services.invoice_service import InvoiceService
+        from app.schemas.invoice import InvoiceCancelRequest
         inv_svc = InvoiceService(self.db)
         inv_stmt = select(Invoice).where(
             Invoice.order_id == order_id,
             Invoice.status.in_(("draft", "issued")),
         )
         inv_result = await self.db.execute(inv_stmt)
+        cascade_notes = f"[Cascaded from order cancel ({reason})]"
+        if order.cancel_notes:
+            cascade_notes = f"{cascade_notes} {order.cancel_notes}"
+        # Map order reason -> invoice reason where it makes sense; fall back
+        # to 'customer_cancelled' since order-cancel always implies the order
+        # didn't go through, which is the canonical invoice cancel reason.
+        order_to_inv_reason = {
+            "customer_cancelled": "customer_cancelled",
+            "out_of_stock": "customer_cancelled",
+            "wrong_entry": "data_entry_error",
+            "duplicate": "duplicate",
+            "data_entry_error": "data_entry_error",
+            "other": "other",
+        }
+        inv_req = InvoiceCancelRequest(
+            reason=order_to_inv_reason.get(reason, "other"),
+            notes=cascade_notes,
+        )
         for inv in inv_result.scalars().all():
-            await inv_svc.cancel_invoice(inv.id)
+            await inv_svc.cancel_invoice(inv.id, inv_req, user_id=user_id)
 
         return await self.get_order(order_id)
 
@@ -642,6 +689,7 @@ class OrderService:
                 selectinload(Order.shipments).selectinload(Shipment.transport_rel),
                 selectinload(Order.shipments).selectinload(Shipment.invoice),
                 selectinload(Order.sales_returns).selectinload(SalesReturn.items),
+                selectinload(Order.cancelled_by_user),
             )
         )
         result = await self.db.execute(stmt)
@@ -698,6 +746,15 @@ class OrderService:
             "discount_amount": float(o.discount_amount) if o.discount_amount else 0,
             "additional_amount": float(o.additional_amount) if o.additional_amount else 0,
             "notes": o.notes,
+            "cancel_reason": o.cancel_reason,
+            "cancel_notes": o.cancel_notes,
+            "cancelled_at": o.cancelled_at.isoformat() if o.cancelled_at else None,
+            "cancelled_by": str(o.cancelled_by) if o.cancelled_by else None,
+            "cancelled_by_user": {
+                "id": str(o.cancelled_by_user.id),
+                "username": o.cancelled_by_user.username,
+                "full_name": o.cancelled_by_user.full_name,
+            } if hasattr(o, 'cancelled_by_user') and o.cancelled_by_user else None,
             "items": [
                 {
                     "id": str(item.id),

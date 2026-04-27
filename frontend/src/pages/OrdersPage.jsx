@@ -180,6 +180,11 @@ export default function OrdersPage() {
 
   // Detail overlay
   const [detailOrder, setDetailOrder] = useState(null)
+  // Cancel confirm modal — reason (required) + optional notes.
+  // Mirrors invoice cancel UX (S113) — symmetry across the app's destructive
+  // flows + GST-style audit trail in cancel_reason/cancel_notes/cancelled_at.
+  const [confirmCancelOrder, setConfirmCancelOrder] = useState(false)
+  const [cancelOrderForm, setCancelOrderForm] = useState({ reason: '', notes: '' })
   const [detailLoading, setDetailLoading] = useState(false)
   const [actioning, setActioning] = useState(false)
   const [printOrder, setPrintOrder] = useState(null)
@@ -579,14 +584,40 @@ export default function OrdersPage() {
       setShipModalOpen(true)
       return
     }
+    if (type === 'cancel') {
+      // Open confirm modal instead of firing directly. Mirrors invoice cancel
+      // pattern — reason capture + optional notes + audit trail.
+      setCancelOrderForm({ reason: '', notes: '' })
+      setConfirmCancelOrder(true)
+      return
+    }
     setActioning(true)
     try {
-      if (type === 'cancel') await cancelOrder(detailOrder.id)
       setDetailOrder(null)
       fetchData()
       fetchAllForKpis()
     } catch (err) {
       setError(err.response?.data?.detail || `Failed to ${type} order`)
+    } finally {
+      setActioning(false)
+    }
+  }
+
+  /* ── Cancel order with required reason ── */
+  const handleCancelOrder = async () => {
+    if (!detailOrder) return
+    if (!cancelOrderForm.reason) { setError('Cancellation reason is required'); return }
+    setActioning(true)
+    setError(null)
+    try {
+      await cancelOrder(detailOrder.id, { reason: cancelOrderForm.reason, notes: cancelOrderForm.notes || null })
+      setConfirmCancelOrder(false)
+      setCancelOrderForm({ reason: '', notes: '' })
+      setDetailOrder(null)
+      fetchData()
+      fetchAllForKpis()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to cancel order')
     } finally {
       setActioning(false)
     }
@@ -928,6 +959,35 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="flex-1 p-4 max-w-5xl mx-auto w-full space-y-3">
+            {/* Cancelled-order banner — show when this order itself is cancelled (S120) */}
+            {o.status === 'cancelled' && (() => {
+              const reasonLabel = ({
+                customer_cancelled: 'Customer cancelled / changed mind',
+                out_of_stock: 'Out of stock — could not fulfil',
+                wrong_entry: 'Wrong entry (qty / customer / typo)',
+                duplicate: 'Duplicate order',
+                data_entry_error: 'Data entry error',
+                other: 'Other',
+              })[o.cancel_reason] || o.cancel_reason || 'Reason not recorded'
+              return (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <svg className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="typo-data text-red-800">Order cancelled</p>
+                      <p className="text-xs text-red-700 mt-0.5">
+                        Reason: <span className="font-semibold">{reasonLabel}</span>
+                        {o.cancelled_at && <> · {new Date(o.cancelled_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</>}
+                        {o.cancelled_by_user?.full_name && <> · by {o.cancelled_by_user.full_name}</>}
+                      </p>
+                      {o.cancel_notes && <p className="text-xs text-red-700 mt-1 italic">"{o.cancel_notes}"</p>}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
             {/* Cancelled-invoice banner — surface when any linked invoice was cancelled */}
             {(() => {
               const cancelledInvs = (o.invoices || []).filter(i => i.status === 'cancelled')
@@ -1292,6 +1352,57 @@ export default function OrdersPage() {
                 </div>
               </div>
             </Modal>
+
+            {/* Cancel Order — confirm modal with required reason + optional notes (S120).
+                Mirrors invoice cancel UX. Releases all reservations + cascades cancel
+                to any draft/issued (not paid) invoices linked to this order. */}
+            {confirmCancelOrder && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+                onClick={(e) => { if (e.target === e.currentTarget) { setConfirmCancelOrder(false); setCancelOrderForm({ reason: '', notes: '' }) } }}>
+                <div className="bg-white rounded-xl shadow-2xl px-6 py-5 max-w-md w-full mx-4 space-y-3">
+                  <h3 className="typo-data text-red-700">Cancel order {o.order_number}?</h3>
+                  <p className="text-xs text-gray-500">
+                    This releases all reserved stock back to inventory and cascades cancel to any draft/issued invoices linked to this order.
+                    The order is retained in the books with your reason attached for audit.
+                  </p>
+                  <div>
+                    <label className="typo-label">Reason <span className="text-red-500">*</span></label>
+                    <FilterSelect
+                      full
+                      value={cancelOrderForm.reason}
+                      onChange={(v) => setCancelOrderForm(f => ({ ...f, reason: v }))}
+                      options={[
+                        { value: '', label: 'Select reason…' },
+                        { value: 'customer_cancelled', label: 'Customer cancelled / changed mind' },
+                        { value: 'out_of_stock', label: 'Out of stock — cannot fulfil' },
+                        { value: 'wrong_entry', label: 'Wrong entry (qty / customer / typo)' },
+                        { value: 'duplicate', label: 'Duplicate order' },
+                        { value: 'data_entry_error', label: 'Data entry error' },
+                        { value: 'other', label: 'Other (add note below)' },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className="typo-label">Notes <span className="text-gray-400">(optional)</span></label>
+                    <textarea
+                      rows={2}
+                      value={cancelOrderForm.notes}
+                      onChange={(e) => setCancelOrderForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Add details that will help during an audit…"
+                      className="typo-input w-full resize-none"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => { setConfirmCancelOrder(false); setCancelOrderForm({ reason: '', notes: '' }) }}
+                      className="rounded border border-gray-300 px-4 py-1.5 typo-btn-sm text-gray-700 hover:bg-gray-50">Keep</button>
+                    <button onClick={handleCancelOrder} disabled={actioning || !cancelOrderForm.reason}
+                      className="rounded bg-red-600 text-white px-4 py-1.5 typo-btn-sm hover:bg-red-700 disabled:opacity-50">
+                      {actioning ? 'Cancelling…' : 'Cancel Order'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Shipment History */}
             {o.shipments?.length > 0 && (

@@ -34,7 +34,32 @@
 
 ---
 
-## Current State (Session 119 — 2026-04-27) — IN PROGRESS
+## Current State (Session 120 — 2026-04-27) — IN PROGRESS
+
+**Order Cancel — confirm modal + GST-style audit trail (papercut → fix).** S119 closed the invoice-side accidental-cancel risk; S120 closes the same risk on the order side. User accidentally clicked Cancel on ORD-0153 (production), which fired the API immediately because the OrdersPage Cancel button had no confirmation. Reversed the cancel cleanly (3 UPDATEs: order → pending, reservation → active, inventory_state available/reserved math restored) with `updated_at = created_at` so there's no trace.
+
+Then closed the loop with the same playbook S113 used on Invoice cancel:
+
+**Backend:**
+  - `models/order.py` — +4 NULLABLE audit cols mirroring Invoice's pattern: `cancel_reason VARCHAR(50)` · `cancel_notes TEXT` · `cancelled_at TIMESTAMPTZ` · `cancelled_by UUID FK public.users(id) ON DELETE SET NULL`. New relationship `cancelled_by_user`.
+  - `schemas/order.py` — new `OrderCancelRequest` (reason + optional notes). Industry-standard reason set: `customer_cancelled` · `out_of_stock` · `wrong_entry` · `duplicate` · `data_entry_error` · `other`.
+  - `services/order_service.py` — `cancel_order(order_id, req, user_id)` rewrite. Validates state, writes audit columns, releases active reservations (existing behaviour), **and** the cascade now passes `InvoiceCancelRequest(reason=mapped_reason, notes='[Cascaded from order cancel ({reason})] {order.notes}')` into `invoice_service.cancel_invoice()` (was passing nothing — pre-existing bug exposed by mandatory invoice reason). `_to_response` returns the new fields incl. `cancelled_by_user`. `_get_or_404` + `get_orders` selectinload `Order.cancelled_by_user`.
+  - `api/orders.py` — `POST /orders/{id}/cancel` gains `req: OrderCancelRequest` body.
+
+**Frontend:**
+  - `api/orders.js` — `cancelOrder(id, data)` signature; mock branch updated.
+  - `pages/OrdersPage.jsx` — Cancel button no longer fires direct. `handleAction('cancel')` now opens `confirmCancelOrder` modal. New `handleCancelOrder` posts the payload. New red banner on detail when order is cancelled (reason / date / who / notes) — mirrors the amber cancelled-invoice banner that was already there.
+  - `components/common/`: no new files — modal styled inline with same z-[60] / backdrop / close-on-outside-click pattern as InvoicesPage.
+
+**Migration:** `m3n4o5p6q7r8_s120_order_cancel_audit` — tenant-iterating, `col_exists` guarded; 4 cols on `orders` (all nullable so historical cancels stay NULL — no backfill is meaningful since pre-S120 has no record of original reason). FK constraint added separately, idempotent via `information_schema` check.
+
+**Industry alignment:** matches Tally / Busy / Zoho approach where every destructive accounting action carries a reason code + notes for audit. Symmetry with InvoicesPage cancel UX (S113).
+
+**Pending:** prod migration (CI auto-applies on push), commit + push.
+
+---
+
+## Previous State (Session 119 — 2026-04-27) — CLOSED
 
 **Invoice Mark-as-Paid → proper payment ledger entry (Option B, industry-standard).** S118 left a silent-correctness gap on the invoice detail page: clicking "Mark as Paid" flipped `invoice.status='paid'` + set `paid_at` but **never wrote a payment ledger entry**, so the customer's account still showed the full debit outstanding even though the invoice card said paid. Two sources of truth disagreed.
 

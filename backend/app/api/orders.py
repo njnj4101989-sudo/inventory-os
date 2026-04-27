@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission, get_fy_id
 from app.models.user import User
-from app.schemas.order import OrderCreate, OrderFilterParams, OrderUpdate, ShipOrderRequest, UpdateShippingRequest
+from app.schemas.order import OrderCancelRequest, OrderCreate, OrderFilterParams, OrderUpdate, ShipOrderRequest, UpdateShippingRequest
 from app.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -106,12 +106,18 @@ async def update_order(
 @router.post("/{order_id}/cancel", response_model=None)
 async def cancel_order(
     order_id: UUID,
+    req: OrderCancelRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = require_permission("order_manage"),
 ):
-    """Cancel order → release all reservations."""
+    """Cancel an order with a required reason + optional notes (S120).
+
+    Releases all active reservations and cascades cancel to any draft/issued
+    invoices linked to this order. Audit columns (cancel_reason / cancel_notes
+    / cancelled_at / cancelled_by) are populated for the GST-style trail.
+    """
     svc = OrderService(db)
-    result = await svc.cancel_order(order_id, current_user.id)
+    result = await svc.cancel_order(order_id, req, current_user.id)
     return {"success": True, "data": result}
 
 

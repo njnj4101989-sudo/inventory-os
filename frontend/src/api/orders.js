@@ -107,12 +107,18 @@ export async function updateOrder(id, data) {
   return client.patch(`/orders/${id}`, data)
 }
 
-export async function cancelOrder(id) {
+export async function cancelOrder(id, data) {
+  // data = { reason, notes? } — reason is required by the backend (S120).
   if (USE_MOCK) {
     const order = orders.find((o) => o.id === id)
-    if (order) order.status = 'cancelled'
+    if (order) {
+      order.status = 'cancelled'
+      order.cancel_reason = data?.reason
+      order.cancel_notes = data?.notes || null
+      order.cancelled_at = new Date().toISOString()
+    }
     return mockResponse(order, 'Order cancelled')
   }
-  return client.post(`/orders/${id}/cancel`)
+  return client.post(`/orders/${id}/cancel`, data)
 }
 

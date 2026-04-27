@@ -49,6 +49,14 @@ class Order(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("public.users.id", ondelete="SET NULL"), index=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cancellation audit trail — required reason + optional notes + who/when (S120).
+    # Mirrors Invoice's cancel audit (S113) so the same UX/symmetry holds.
+    cancel_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cancel_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("public.users.id", ondelete="SET NULL"), nullable=True
+    )
     fy_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("financial_years.id", ondelete="RESTRICT"), nullable=True, index=True
     )
@@ -58,6 +66,7 @@ class Order(Base):
     broker: Mapped[Broker | None] = relationship(foreign_keys=[broker_id])
     transport_rel: Mapped[Transport | None] = relationship(foreign_keys=[transport_id])
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by])
+    cancelled_by_user: Mapped[User | None] = relationship(foreign_keys=[cancelled_by])
     items: Mapped[list[OrderItem]] = relationship(back_populates="order")
     invoices: Mapped[list[Invoice]] = relationship(back_populates="order")
     shipments: Mapped[list[Shipment]] = relationship(back_populates="order")
