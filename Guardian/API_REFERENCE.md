@@ -3338,6 +3338,141 @@ draft → received → inspected → restocked → closed
 
 ---
 
+## 26. Payment Receipts (`/api/v1/payment-receipts`) — NEW S123
+
+Tally-style bill-wise receipt voucher. One inflow → one-or-more `PaymentAllocation` lines + optional on-account residue. Each allocation generates one `LedgerEntry` keyed `reference_type='payment_allocation'`. On-account residue gets one extra `LedgerEntry` keyed `reference_type='payment_receipt'`.
+
+**Math contract:**
+```
+allocatable = amount − tds_amount + tcs_amount
+SUM(allocations.amount_applied) <= allocatable
+on_account_amount = allocatable − SUM(allocations.amount_applied)
+```
+
+Status transitions on each allocation:
+- `outstanding > 0`  →  `partially_paid`
+- `outstanding ≈ 0`  →  `paid` (sets `paid_at`)
+
+### GET `/payment-receipts`
+**Permission:** `invoice_manage` | **Auth:** Cookie | **FY-scoped**
+
+Query params:
+- `party_type` — `customer` | `supplier` | `va_party`
+- `party_id` — UUID
+- `payment_mode` — `neft` | `upi` | `cash` | `cheque` | `card`
+- `date_from`, `date_to` — ISO date
+- `search` — matches `receipt_no` or `reference_no`
+- Standard `page`, `page_size` (`page_size=0` for all)
+
+### POST `/payment-receipts`
+**Permission:** `invoice_manage` | **Auth:** Cookie | **Status:** 201
+
+Request body:
+```json
+{
+  "party_type": "customer",
+  "party_id": "uuid",
+  "payment_date": "2026-04-27",
+  "payment_mode": "neft",
+  "reference_no": "UTR12345",
+  "amount": 50000,
+  "tds_applicable": false,
+  "tcs_applicable": false,
+  "allocations": [
+    { "invoice_id": "uuid", "amount_applied": 20000 },
+    { "invoice_id": "uuid", "amount_applied": 20000 },
+    { "invoice_id": "uuid", "amount_applied": 10000 }
+  ],
+  "notes": "Partial settlement"
+}
+```
+
+Validation:
+- `amount > 0` (CHECK)
+- `allocations[].amount_applied > 0` (CHECK)
+- `SUM(allocations) <= amount − tds + tcs`
+- Each `invoice.customer_id == party_id` (when `party_type='customer'`)
+- Each `invoice.status IN ('issued', 'partially_paid')`
+- Each `allocation.amount_applied <= invoice.outstanding_amount`
+
+Returns: full `PaymentReceiptResponse` with allocations + party brief + derived `allocated_amount`/`net_amount`/`on_account_amount`.
+
+### GET `/payment-receipts/{id}`
+**Permission:** `invoice_manage` | **Auth:** Cookie
+
+Returns: same shape as POST.
+
+### Response shape — `PaymentReceiptResponse`
+```json
+{
+  "id": "uuid",
+  "receipt_no": "PAY-0001",
+  "party_type": "customer",
+  "party_id": "uuid",
+  "party": { "id", "name", "phone", "city", "gst_no" },
+  "payment_date": "2026-04-27",
+  "payment_mode": "neft",
+  "reference_no": "UTR12345",
+  "amount": 50000.00,
+  "tds_applicable": false,
+  "tds_rate": null, "tds_section": null, "tds_amount": 0.00,
+  "tcs_applicable": false,
+  "tcs_rate": null, "tcs_section": null, "tcs_amount": 0.00,
+  "allocated_amount": 50000.00,
+  "on_account_amount": 0.00,
+  "net_amount": 50000.00,
+  "allocations": [
+    { "id": "uuid", "invoice_id": "uuid", "invoice_number": "INV-0042", "amount_applied": 20000.00 }
+  ],
+  "notes": null,
+  "fy_id": "uuid",
+  "created_at": "2026-04-27T10:00:00Z"
+}
+```
+
+### GET `/customers/{id}/open-invoices` — NEW S123
+**Permission:** `invoice_manage` | **Auth:** Cookie | **FY-scoped**
+
+Returns FIFO-ordered (oldest `issued_at` first — Tally convention) list of customer invoices with `status IN ('issued', 'partially_paid')` and `outstanding_amount > 0`.
+
+```json
+[
+  {
+    "id": "uuid",
+    "invoice_number": "INV-0042",
+    "issued_at": "2026-04-15T10:00:00Z",
+    "due_date": "2026-04-30",
+    "total_amount": 25000.00,
+    "amount_paid": 10000.00,
+    "outstanding_amount": 15000.00,
+    "status": "partially_paid"
+  }
+]
+```
+
+### GET `/customers/{id}/on-account-balance` — NEW S123
+**Permission:** `invoice_manage` | **Auth:** Cookie | **FY-scoped**
+
+```json
+{ "party_type": "customer", "party_id": "uuid", "balance": 5000.00 }
+```
+
+### Invoice Response Extension — S123
+`InvoiceResponse` now includes:
+```json
+{
+  "amount_paid": 10000.00,
+  "outstanding_amount": 15000.00,
+  "status": "partially_paid"
+}
+```
+`status` enum extended with `partially_paid`.
+
+### Mark-as-Paid (refactored S123)
+`PATCH /invoices/{id}/pay` (existing) is now a thin wrapper over `PaymentReceiptService.record()`. It allocates `outstanding_amount` against this single invoice and creates one `PaymentReceipt` + one `PaymentAllocation` underneath. Same request body (`MarkPaidRequest`).
+
+---
+
 ## Appendix A: All Permission Keys
 
 ```

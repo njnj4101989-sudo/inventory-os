@@ -14,7 +14,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'issued', 'paid', 'cancelled')",
+            "status IN ('draft', 'issued', 'partially_paid', 'paid', 'cancelled')",
             name="inv_valid_status",
         ),
     )
@@ -38,6 +38,13 @@ class Invoice(Base):
         Numeric(12, 2), default=0, server_default="0"
     )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Running total of payments applied via PaymentAllocation. Updated by
+    # PaymentReceiptService.record on every allocation insert + reversed on
+    # cancel-with-payment cascade. Drives `partially_paid` vs `paid` status
+    # transitions.
+    amount_paid: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=0, server_default="0"
+    )
     status: Mapped[str] = mapped_column(String(20), index=True)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

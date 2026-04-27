@@ -236,3 +236,13 @@ async def next_verification_number(db: AsyncSession, fy_id: UUID) -> str:
         "SV-",
     )
     return f"SV-{current + 1:04d}"
+
+
+async def next_receipt_number(db: AsyncSession, fy_id: UUID) -> str:
+    """Generate next PAY-XXXX code, scoped to financial year."""
+    from app.models.payment_receipt import PaymentReceipt
+    current = _extract_number(
+        await _max_code(db, PaymentReceipt.receipt_no, extra_where=PaymentReceipt.fy_id == fy_id),
+        "PAY-",
+    )
+    return f"PAY-{current + 1:04d}"

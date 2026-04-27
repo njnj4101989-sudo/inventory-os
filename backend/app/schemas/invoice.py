@@ -141,6 +141,8 @@ class InvoiceResponse(BaseSchema):
     discount_amount: Decimal
     additional_amount: Decimal = Decimal("0")
     total_amount: Decimal
+    amount_paid: Decimal = Decimal("0")
+    outstanding_amount: Decimal = Decimal("0")
     status: str
     due_date: date | None = None
     payment_terms: str | None = None

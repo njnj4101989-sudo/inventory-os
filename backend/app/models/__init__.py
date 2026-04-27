@@ -30,6 +30,8 @@ from app.models.customer import Customer
 from app.models.broker import Broker
 from app.models.transport import Transport
 from app.models.ledger_entry import LedgerEntry
+from app.models.payment_receipt import PaymentReceipt
+from app.models.payment_allocation import PaymentAllocation
 from app.models.company import Company
 from app.models.user_company import UserCompany
 from app.models.shipment import Shipment
@@ -73,6 +75,8 @@ __all__ = [
     "Broker",
     "Transport",
     "LedgerEntry",
+    "PaymentReceipt",
+    "PaymentAllocation",
     "Company",
     "UserCompany",
     "Shipment",

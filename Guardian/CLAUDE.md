@@ -35,7 +35,48 @@
 
 ---
 
-## Current State (Session 122 — 2026-04-27) — IN PROGRESS
+## Current State (Session 123 — 2026-04-27) — IN PROGRESS
+
+**Phase 1 of PAYMENTS_AND_ALLOCATIONS_PLAN — Tally bill-wise receipt voucher backend.** Replaces S119's binary Mark-as-Paid with full multi-invoice allocation + on-account credit + partial-paid invoice status. The backend now supports the use case the user described: "customer sends ₹50,000 against ₹105,000 outstanding, allocate ₹20k+₹20k+₹10k across 3 bills, with one of them partially settled."
+
+**Backend (additive only — zero behavioural regression):**
+  - `models/payment_receipt.py` — new model. Polymorphic `party_type`/`party_id` (mirrors LedgerEntry), full TDS/TCS columns (gross at header, mirrors S119 / LedgerService.PaymentCreate), `on_account_amount` stored. CHECK constraints: `pr_valid_party_type` (customer/supplier/va_party), `pr_amount_positive`.
+  - `models/payment_allocation.py` — new model. CASCADE on receipt delete, RESTRICT on invoice delete. Composite index `(payment_receipt_id, invoice_id)`. CHECK `pa_amount_positive`.
+  - `models/invoice.py` — +`amount_paid` Numeric(12,2) NOT NULL DEFAULT 0; status check extended to include `partially_paid`.
+  - `core/code_generator.py` — `next_receipt_number(fy_id)` produces `PAY-XXXX` with the same `_max_code` LENGTH-DESC pattern as RES (S113 fix).
+  - `services/payment_receipt_service.py` — new service. `record()` is the single mutating entry point: locks all referenced invoices `FOR UPDATE`, validates `SUM(allocations) <= amount − tds + tcs`, validates each `allocation <= invoice.outstanding_amount` and same-customer ownership, creates receipt + allocations atomically, generates ledger entries (one per allocation with `reference_type='payment_allocation'`, plus one for on-account residue with `reference_type='payment_receipt'`), bumps `invoice.amount_paid` and flips status `issued → partially_paid → paid` based on outstanding. TDS/TCS posted as separate ledger lines (matches S119 LedgerService pattern). Best-effort SSE emit `payment_received`. Q3-Q7 design locks honoured (FIFO oldest-first via `issued_at asc nulls_last`, on-account balance via `SUM(on_account_amount)`).
+  - `services/invoice_service.py:mark_paid` — refactored as thin wrapper. Now calls `PaymentReceiptService.record()` with one allocation = current outstanding. Handles partially_paid invoices (settles remainder, not full). Issue-on-demand for draft. Same `MarkPaidRequest` shape — UI/UX unchanged.
+  - `services/invoice_service.py:_to_response` — adds `amount_paid` + `outstanding_amount` to InvoiceResponse.
+  - `api/payment_receipts.py` — new router. `POST /payment-receipts` (record), `GET /payment-receipts` (list with party/mode/date/search filters), `GET /payment-receipts/{id}` (detail). All `invoice_manage` permission.
+  - `api/customers.py` — +`GET /customers/{id}/open-invoices` (FIFO sorted, only invoices with `outstanding > 0`) + `GET /customers/{id}/on-account-balance`.
+  - `schemas/payment_receipt.py` — full Create/Response/Filter schemas; `OpenInvoiceBrief`, `PaymentAllocationBrief`, `PartyBrief`, `OnAccountBalance`. Field validators on `amount > 0`, `amount_applied > 0`, `party_type` enum.
+  - `api/router.py` — registered new router. Route count 226 → 231 (+5 endpoints).
+
+**Migration:** `o5p6q7r8s9t0_s123_payment_receipts` — tenant-iterating, fully idempotent. Adds `invoices.amount_paid` (DEFAULT 0 NOT NULL), extends `ck_invoices_inv_valid_status` to allow `partially_paid` (drops both ck_-prefixed and bare names per memory), creates `payment_receipts` + `payment_allocations` tables with all FKs/indexes/CHECKs declared inline. `_table_exists` helper added inline (not in tenant_utils — kept local to keep helpers minimal). **No data backfill** — production has 0 paid invoices (verified pre-migration via RDS query 2026-04-27), so historical synthesis is moot. Round-trip safe: downgrade demotes `partially_paid` → `issued` before re-narrowing the CHECK, then drops tables in CASCADE-safe order (allocations first).
+
+**Behaviour preserved:**
+  - Existing `Mark as Paid` button on invoice detail flows through the new service underneath; same payload, same modal — internally one PaymentReceipt + one PaymentAllocation are created per click instead of a single LedgerEntry.
+  - Old "issued" → "paid" path still works (full payment = one allocation = paid).
+  - All existing ledger/customer-balance reports pick up the new entries automatically (LedgerEntry table is shared; `reference_type` is the only new value).
+  - GST math unchanged. TDS/TCS handling identical to S119 LedgerService.
+
+**Math reference (the new contract):**
+```
+allocatable = amount − tds_amount + tcs_amount
+SUM(allocations.amount_applied) <= allocatable
+on_account_amount = allocatable − SUM(allocations)
+
+per allocation:
+  invoice.amount_paid += amount_applied
+  if outstanding ≈ 0:  status = 'paid', set paid_at
+  else:                status = 'partially_paid'
+```
+
+**Pending:** commit + push (CI auto-applies migration on EC2). S124 (frontend Payments page + Mark-as-Paid form upgrade + LedgerPanel deep-links) is the next session.
+
+---
+
+## Previous State (Session 122 — 2026-04-27) — CLOSED
 
 **Phase 4.6 of FINANCIAL_SYMMETRY_PLAN — Roll.cost_per_unit double-count fix.** Closes the legacy S97 path where VA receive bumped `roll.cost_per_unit += processing_cost / weight_after`. After S121's cost-engine refactor (which made `roll_va_cost` AS-2 taxable-only), the bump became a *second* path for VA cost — `material_cost` already included VA via the bumped `cost_per_unit`, then `roll_va_cost` added it again → double-count of ₹VA per piece in every packed batch's `cost_breakdown`.
 

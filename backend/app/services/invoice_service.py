@@ -551,57 +551,68 @@ class InvoiceService:
         fy_id: UUID,
         user_id: UUID | None = None,
     ) -> dict:
-        """Record full payment receipt against the invoice.
+        """Single-invoice full payment — thin wrapper over PaymentReceiptService.
 
-        v1 is strict full-payment: posts a customer-side payment ledger
-        entry (Cr customer) for `invoice.total_amount`, optionally with
-        TDS/TCS split, then flips invoice.status = 'paid'. Ledger row is
-        linked back via `reference_type='invoice'` so it deep-links from
-        the customer ledger to this invoice.
+        Settles whatever is currently outstanding on this invoice in one
+        receipt. Allocates `outstanding = total_amount - amount_paid` against
+        this invoice; the receipt service flips status to `paid` (or stays
+        `partially_paid` if outstanding < total minus a rounding epsilon).
 
-        Partial payment / On-Account tracking is Phase 4 of
-        FINANCIAL_SYMMETRY_PLAN — strict full-payment for v1.
+        For multi-invoice payments + partial allocation use the new
+        `POST /payment-receipts` endpoint directly.
         """
+        from decimal import Decimal as _D
+
+        from app.schemas.payment_receipt import (
+            PaymentAllocationInput,
+            PaymentReceiptCreate,
+        )
+        from app.services.payment_receipt_service import PaymentReceiptService
+
         invoice = await self._get_or_404(invoice_id)
         if invoice.status == "paid":
             raise InvalidStateTransitionError("Invoice is already paid")
-        if invoice.status not in ("draft", "issued"):
+        if invoice.status not in ("draft", "issued", "partially_paid"):
             raise InvalidStateTransitionError(
-                f"Cannot mark invoice as paid in '{invoice.status}' status (only draft or issued)"
+                f"Cannot mark invoice as paid in '{invoice.status}' status"
             )
         if not invoice.customer_id:
             raise ValidationError("Invoice has no customer — cannot record payment")
 
-        # Build PaymentCreate from request + invoice context (full-payment v1)
-        payment = PaymentCreate(
+        # Issue draft on demand so the invoice is allocatable
+        if invoice.status == "draft":
+            invoice.status = "issued"
+            invoice.issued_at = datetime.now(timezone.utc)
+            await self.db.flush()
+
+        outstanding = (
+            _D(str(invoice.total_amount or 0)) - _D(str(invoice.amount_paid or 0))
+        ).quantize(_D("0.01"))
+        if outstanding <= _D("0.005"):
+            raise ValidationError("Invoice has no outstanding balance to settle")
+
+        receipt_req = PaymentReceiptCreate(
             party_type="customer",
             party_id=invoice.customer_id,
-            amount=invoice.total_amount or 0,
             payment_date=req.payment_date,
-            payment_mode=req.payment_mode,
+            payment_mode=req.payment_mode or "cash",
             reference_no=req.reference_no,
+            amount=outstanding,
             tds_applicable=req.tds_applicable,
             tds_rate=req.tds_rate,
             tds_section=req.tds_section,
             tcs_applicable=req.tcs_applicable,
             tcs_rate=req.tcs_rate,
             tcs_section=req.tcs_section,
+            allocations=[
+                PaymentAllocationInput(invoice_id=invoice.id, amount_applied=outstanding)
+            ],
             notes=req.notes,
         )
 
-        # Record payment ledger entry(s) linked back to this invoice
-        ledger_svc = LedgerService(self.db)
-        await ledger_svc.record_payment(
-            payment,
-            fy_id=fy_id,
-            created_by=user_id,
-            reference_type="invoice",
-            reference_id=invoice.id,
+        await PaymentReceiptService(self.db).record(
+            receipt_req, fy_id=fy_id, created_by=user_id
         )
-
-        invoice.status = "paid"
-        invoice.paid_at = datetime.now(timezone.utc)
-        await self.db.flush()
 
         return await self.get_invoice(invoice_id)
 
@@ -733,6 +744,10 @@ class InvoiceService:
             "discount_amount": float(inv.discount_amount) if inv.discount_amount else 0,
             "additional_amount": float(inv.additional_amount) if inv.additional_amount else 0,
             "total_amount": float(inv.total_amount) if inv.total_amount else 0,
+            "amount_paid": float(inv.amount_paid) if inv.amount_paid else 0,
+            "outstanding_amount": float(
+                (inv.total_amount or 0) - (inv.amount_paid or 0)
+            ),
             "status": inv.status,
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "payment_terms": inv.payment_terms,
