@@ -6,39 +6,113 @@ const NotificationContext = createContext(null)
 
 const MAX_NOTIFICATIONS = 50
 
+// Map every backend event_type to (a) a friendly message, (b) a colour for
+// the toast/bell pill, and (c) a deep-link route. Anything missing here
+// falls through to raw event_type text on the toast — keep the three maps
+// in sync. Source of truth for events: `grep -rn "event_bus.emit" backend/app`.
 const EVENT_MESSAGES = {
-  roll_stocked_in: (p) => `${p.roll_code || 'Roll'} stocked in (${p.weight ? p.weight + ' kg' : ''}${p.supplier ? ' from ' + p.supplier : ''})`,
+  // Rolls — single + bulk + opening stock + VA
+  roll_stocked_in: (p) => `${p.roll_code || 'Roll'} stocked in${p.weight ? ` (${p.weight} kg)` : ''}${p.supplier ? ` from ${p.supplier}` : ''}`,
+  bulk_stock_in: (p) => `${p.count || 0} roll${p.count === 1 ? '' : 's'} stocked in${p.supplier_invoice_no ? ` · invoice ${p.supplier_invoice_no}` : ''}${p.sr_no ? ` · sr ${p.sr_no}` : ''}`,
+  rolls_opening_stock: (p) => {
+    const parts = []
+    if (p.in_stock) parts.push(`${p.in_stock} in godown`)
+    if (p.at_va) parts.push(`${p.at_va} at VA`)
+    return `${p.count || 0} opening-stock roll${p.count === 1 ? '' : 's'} added${parts.length ? ` (${parts.join(' · ')})` : ''}`
+  },
+  va_sent: (p) => `${p.type === 'garment' ? 'Garment' : 'Roll'} VA sent to ${p.vendor || 'vendor'}${p.challan_no ? ` (${p.challan_no})` : ''}`,
+  va_received: (p) => p.challan_no
+    ? `VA received from ${p.vendor || 'vendor'} (${p.challan_no})`
+    : `VA received — ${p.roll_code || ''} ${p.va_name || ''}`.trim(),
+  va_cancelled: (p) => `${p.type === 'garment' ? 'Garment' : 'Roll'} VA cancelled${p.challan_no ? ` (${p.challan_no})` : ''}${p.vendor ? ` · ${p.vendor}` : ''}`,
+
+  // Lots
+  lot_distributed: (p) => `Lot ${p.lot_code} distributed → ${p.batch_count} batches`,
+
+  // Batches
   batch_claimed: (p) => `Batch ${p.batch_code} claimed`,
+  batch_unclaimed: (p) => `Batch ${p.batch_code} unclaimed`,
   batch_submitted: (p) => `Batch ${p.batch_code} submitted for QC`,
   batch_checked: (p) => `Batch ${p.batch_code} checked — ${p.approved || 0} approved, ${p.rejected || 0} rejected`,
   batch_packed: (p) => `Batch ${p.batch_code} packed`,
-  lot_distributed: (p) => `Lot ${p.lot_code} distributed → ${p.batch_count} batches`,
-  va_sent: (p) => `${p.type === 'garment' ? 'Garment' : 'Roll'} VA sent to ${p.vendor || 'vendor'} (${p.challan_no})`,
-  va_received: (p) => p.challan_no
-    ? `VA received from ${p.vendor || 'vendor'} (${p.challan_no})`
-    : `VA received — ${p.roll_code || ''} ${p.va_name || ''}`,
+
+  // Purchase Returns (return notes — supplier-side)
+  return_created: (p) => `Return Note ${p.return_note_no || ''} created${p.supplier ? ` · ${p.supplier}` : ''}`,
+  return_approved: (p) => `Return Note ${p.return_note_no || ''} approved`,
+  return_dispatched: (p) => `Return Note ${p.return_note_no || ''} dispatched${p.supplier ? ` to ${p.supplier}` : ''}`,
+  return_acknowledged: (p) => `Return Note ${p.return_note_no || ''} acknowledged${p.supplier ? ` by ${p.supplier}` : ''}`,
+  return_closed: (p) => `Return Note ${p.return_note_no || ''} closed`,
+  return_cancelled: (p) => `Return Note ${p.return_note_no || ''} cancelled`,
+
+  // Sales Returns (customer-side)
+  sales_return_created: (p) => `Sales Return ${p.srn_no || ''} created${p.customer ? ` · ${p.customer}` : ''}`,
+  sales_return_received: (p) => `Sales Return ${p.srn_no || ''} received${p.customer ? ` from ${p.customer}` : ''}`,
+  sales_return_inspected: (p) => `Sales Return ${p.srn_no || ''} inspected`,
+  sales_return_restocked: (p) => `Sales Return ${p.srn_no || ''} restocked`,
+  sales_return_closed: (p) => `Sales Return ${p.srn_no || ''} closed`,
+  sales_return_cancelled: (p) => `Sales Return ${p.srn_no || ''} cancelled`,
 }
 
 const EVENT_COLORS = {
+  // green = successful inbound / completion
   roll_stocked_in: 'green',
+  bulk_stock_in: 'green',
+  rolls_opening_stock: 'green',
+  batch_packed: 'green',
+  return_closed: 'green',
+  return_approved: 'green',
+  sales_return_restocked: 'green',
+  sales_return_closed: 'green',
+  // blue = state transition / handover
   batch_claimed: 'blue',
   batch_submitted: 'blue',
+  return_created: 'blue',
+  return_dispatched: 'blue',
+  return_acknowledged: 'blue',
+  sales_return_created: 'blue',
+  sales_return_received: 'blue',
+  sales_return_inspected: 'blue',
+  // amber = QC / warning / outbound to VA / cancel
   batch_checked: 'amber',
-  batch_packed: 'green',
-  lot_distributed: 'purple',
+  batch_unclaimed: 'amber',
   va_sent: 'amber',
   va_received: 'amber',
+  va_cancelled: 'amber',
+  return_cancelled: 'amber',
+  sales_return_cancelled: 'amber',
+  // purple = lot
+  lot_distributed: 'purple',
 }
 
 const EVENT_ROUTES = {
+  // Rolls land on /rolls (default tab is "All Rolls"; opening-stock + bulk also belong here)
   roll_stocked_in: '/rolls',
+  bulk_stock_in: '/rolls?tab=purchases',
+  rolls_opening_stock: '/rolls',
+  // VA lifecycle
+  va_sent: '/challans',
+  va_received: '/rolls',
+  va_cancelled: '/challans',
+  // Lots / Batches
+  lot_distributed: '/lots',
   batch_claimed: '/batches',
+  batch_unclaimed: '/batches',
   batch_submitted: '/batches',
   batch_checked: '/batches',
   batch_packed: '/batches',
-  lot_distributed: '/lots',
-  va_sent: '/batches',
-  va_received: '/rolls',
+  // Returns (purchase + sales)
+  return_created: '/returns?tab=purchase',
+  return_approved: '/returns?tab=purchase',
+  return_dispatched: '/returns?tab=purchase',
+  return_acknowledged: '/returns?tab=purchase',
+  return_closed: '/returns?tab=purchase',
+  return_cancelled: '/returns?tab=purchase',
+  sales_return_created: '/returns?tab=sales',
+  sales_return_received: '/returns?tab=sales',
+  sales_return_inspected: '/returns?tab=sales',
+  sales_return_restocked: '/returns?tab=sales',
+  sales_return_closed: '/returns?tab=sales',
+  sales_return_cancelled: '/returns?tab=sales',
 }
 
 export function NotificationProvider({ children }) {
@@ -52,7 +126,13 @@ export function NotificationProvider({ children }) {
 
   const addNotification = useCallback((event) => {
     const msgFn = EVENT_MESSAGES[event.type]
-    const message = msgFn ? msgFn(event.payload || {}) : `${event.type}`
+    // Fallback: humanize unknown snake_case event_type so we never show
+    // raw "bulk_stock_in" text again. Real fix is to add the event to the
+    // EVENT_MESSAGES map above; this just keeps the UX presentable.
+    const humanized = String(event.type || 'event')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+    const message = msgFn ? msgFn(event.payload || {}) : humanized
     const notification = {
       id: Date.now() + Math.random(),
       type: event.type,
