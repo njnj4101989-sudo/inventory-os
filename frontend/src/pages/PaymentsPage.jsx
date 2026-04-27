@@ -569,9 +569,7 @@ export default function PaymentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="typo-page-title">Payments</h1>
-          <p className="typo-caption text-gray-500">
-            Bill-wise receipts &amp; payouts · Tally-style allocation
-          </p>
+          <p className="mt-1 typo-caption">Bill-wise receipts &amp; payouts · Tally-style allocation</p>
         </div>
         <button
           onClick={() => setCreateMode(true)}
@@ -581,23 +579,20 @@ export default function PaymentsPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      {/* Tabs — match ReportsPage style */}
+      <div className="flex gap-6 border-b border-gray-200">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setActiveTab(t.id)}
-            className={`relative px-4 py-2 typo-btn-sm transition-colors ${
+            className={`inline-flex items-center gap-1.5 pb-2.5 typo-tab border-b-2 transition-colors ${
               activeTab === t.id
-                ? 'text-emerald-700'
-                : 'text-gray-500 hover:text-gray-800'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             {t.label}
-            {activeTab === t.id && (
-              <span className="absolute inset-x-2 -bottom-px h-0.5 bg-emerald-600 rounded-full" />
-            )}
           </button>
         ))}
       </div>
