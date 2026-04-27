@@ -1673,7 +1673,7 @@ export default function InvoicesPage() {
                     <span className="text-[10px] text-gray-400"><kbd className="px-1 py-0.5 font-mono bg-gray-100 border border-gray-200 rounded text-[9px]">Shift+M</kbd> quick-add master</span>
                   </div>
                 </div>
-                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-7 gap-2">
+                <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-5 gap-2">
                   <div className="col-span-2">
                     <label className="typo-label-sm">Customer <span className="text-red-500">*</span></label>
                     <FilterSelect autoFocus searchable full data-master="customer" value={invForm.customer_id}
@@ -1691,21 +1691,6 @@ export default function InvoicesPage() {
                     <FilterSelect full value={invForm.gst_percent}
                       onChange={v => { setInvForm(f => ({ ...f, gst_percent: v })); setIsDirty(true) }}
                       options={GST_OPTIONS} />
-                  </div>
-                  <div>
-                    <label className="typo-label-sm">Discount (-₹)</label>
-                    <input type="number" min="0" step="0.01" className="typo-input-sm"
-                      value={invForm.discount_amount}
-                      onChange={e => { setInvForm(f => ({ ...f, discount_amount: e.target.value })); setIsDirty(true) }}
-                      placeholder="0.00" />
-                  </div>
-                  <div>
-                    <label className="typo-label-sm">Additional (+₹)</label>
-                    <input type="number" min="0" step="0.01" className="typo-input-sm"
-                      value={invForm.additional_amount}
-                      onChange={e => { setInvForm(f => ({ ...f, additional_amount: e.target.value })); setIsDirty(true) }}
-                      placeholder="0.00"
-                      title="Extra taxable charge — packing, freight, handling, labour" />
                   </div>
                   <div>
                     <label className="typo-label-sm">Payment Terms</label>
@@ -1790,14 +1775,33 @@ export default function InvoicesPage() {
                 </table>
 
                 {/* Totals */}
-                <div className="mt-3 flex justify-end">
-                  <div className="w-56 space-y-1.5 border-t border-gray-200 pt-2">
-                    <div className="flex justify-between typo-td"><span>Subtotal</span><span>{fmtCurrency(subtotal)}</span></div>
-                    {discount > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-green-600">Discount</span><span className="text-green-600">-{fmtCurrency(discount)}</span></div>}
-                    {additional > 0 && <div className="flex justify-between typo-td-secondary"><span className="text-blue-600">Additional</span><span className="text-blue-600">+{fmtCurrency(additional)}</span></div>}
+                <div className="mt-3 flex justify-end border-t border-gray-200 pt-2">
+                  <div className="w-56 space-y-1.5">
+                    <div className="flex justify-between typo-td"><span>Subtotal</span><span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    <div className="flex justify-between items-center typo-td-secondary">
+                      <span>Discount</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400">-₹</span>
+                        <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
+                          value={invForm.discount_amount}
+                          onChange={(e) => { setInvForm(f => ({ ...f, discount_amount: e.target.value })); setIsDirty(true) }}
+                          placeholder="0.00" />
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center typo-td-secondary">
+                      <span>Additional</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400">+₹</span>
+                        <input type="number" min="0" step="0.01" className="typo-input-sm w-24 text-right"
+                          value={invForm.additional_amount}
+                          onChange={(e) => { setInvForm(f => ({ ...f, additional_amount: e.target.value })); setIsDirty(true) }}
+                          placeholder="0.00"
+                          title="Extra taxable charge — packing, freight, handling, labour" />
+                      </div>
+                    </div>
                     {gstPct > 0 && (<>
-                      <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
-                      <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>{fmtCurrency(gstAmt / 2)}</span></div>
+                      <div className="flex justify-between typo-td-secondary"><span>CGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between typo-td-secondary"><span>SGST ({gstPct / 2}%)</span><span>₹{(gstAmt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                     </>)}
                     <div className="flex justify-between typo-data text-base border-t border-gray-200 pt-2"><span>Grand Total</span><span>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                   </div>
