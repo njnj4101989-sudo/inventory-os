@@ -2652,19 +2652,19 @@ export default function RollsPage() {
                         })}
                       </div>
 
-                      {/* Group footer — dark totals row matching lot table */}
-                      <div className="bg-gray-800 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center border-x border-b border-gray-700 rounded-b-lg">
-                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
-                          Totals{grp.notes && <span className="ml-2 font-normal normal-case italic text-gray-400">{grp.notes}</span>}
+                      {/* Group footer — light emerald totals row matching header palette */}
+                      <div className="bg-emerald-50 px-4 py-2 grid grid-cols-[140px_1fr_60px_80px] gap-3 items-center border-x border-b border-emerald-200 border-t-2 border-t-emerald-600 rounded-b-lg">
+                        <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
+                          Totals{grp.notes && <span className="ml-2 font-normal normal-case italic text-emerald-600">{grp.notes}</span>}
                         </span>
-                        <span className="text-xs text-gray-300">
-                          {grpValue > 0 && <span className="font-semibold text-emerald-300">₹{grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
+                        <span className="text-xs text-emerald-700">
+                          {grpValue > 0 && <span className="font-semibold">₹{grpValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>}
                         </span>
                         <div className="text-center">
-                          <span className="text-xs font-bold text-white">{grp.rolls.length}</span>
+                          <span className="text-xs font-bold text-emerald-900 tabular-nums">{grp.rolls.length}</span>
                         </div>
                         <div className="text-right">
-                          <span className="text-sm font-bold text-white">{grpWeight.toFixed(3)} kg</span>
+                          <span className="text-sm font-bold text-emerald-900 tabular-nums">{grpWeight.toFixed(3)} kg</span>
                         </div>
                       </div>
                     </div>
